@@ -189,7 +189,7 @@ async function runTests() {
       'Migration defines unique index covering exact ON CONFLICT conflict target'
     );
     assert(
-      migrationSql.includes('CREATE UNIQUE INDEX IF NOT EXISTS'),
+      migrationSql.includes('IF NOT EXISTS idx_lead_inactivity_unique_incident'),
       'Migration uses IF NOT EXISTS for idempotent execution'
     );
     assert(
@@ -229,6 +229,93 @@ async function runTests() {
   } catch (err) {
     assert(false, 'Test 5 threw unexpected error', err.message);
   }
+
+  // --------------------------------------------------------------------------
+  // TEST 6: Backup Listing with Metadata Beyond 4096 Bytes and at Tail
+  // --------------------------------------------------------------------------
+  console.log(`\n--- [Test 6] Metadata Beyond 4096 Bytes & Tail Probing ---`);
+  const lateMetaPath = path.join(backupDir, 'controlroom_backup_9999-late-meta-test.json');
+  const tailMetaPath = path.join(backupDir, 'controlroom_backup_9999-tail-meta-test.json');
+  try {
+    // A. Metadata located at ~12KB offset (past the 4096 byte boundary)
+    const padding10k = ' '.repeat(10240);
+    const lateContent = `{\n  "system": "Control Room Enterprise ERP",\n  "note": "${padding10k}",\n  "createdAt": "2026-10-27T14:30:00.000Z",\n  "metadata": {\n    "totalStores": 26,\n    "totalRecords": 777,\n    "mediaCount": 5,\n    "mediaSizeFormatted": "1 MB"\n  },\n  "stores": {}\n}`;
+    fs.writeFileSync(lateMetaPath, lateContent, 'utf8');
+
+    const lateResult = readBackupHeader(lateMetaPath);
+    assert(
+      lateResult.createdAt === '2026-10-27T14:30:00.000Z',
+      'Extracted createdAt when located past 4096 bytes (Stage 2 extended probe)'
+    );
+    assert(
+      lateResult.metadata && lateResult.metadata.totalRecords === 777,
+      'Extracted metadata.totalRecords = 777 when located past 4096 bytes'
+    );
+
+    // B. Metadata located at the tail of a 100KB file (after stores)
+    const padding80k = '{"key":"val"},'.repeat(3000);
+    const tailContent = `{\n  "system": "Control Room Enterprise ERP",\n  "createdAt": "2026-10-27T15:00:00.000Z",\n  "stores": [${padding80k}{}],\n  "metadata": {\n    "totalStores": 12,\n    "totalRecords": 888,\n    "mediaCount": 2,\n    "mediaSizeFormatted": "500 KB"\n  }\n}`;
+    fs.writeFileSync(tailMetaPath, tailContent, 'utf8');
+
+    const tailResult = readBackupHeader(tailMetaPath);
+    assert(
+      tailResult.metadata && tailResult.metadata.totalRecords === 888,
+      'Extracted metadata.totalRecords = 888 from file tail (Stage 3 tail probe)'
+    );
+
+    // C. Verify listBackups() never omits any valid backup
+    const allBackups = listBackups();
+    const foundLate = allBackups.find(b => b.filename.includes('9999-late-meta-test.json'));
+    const foundTail = allBackups.find(b => b.filename.includes('9999-tail-meta-test.json'));
+    assert(Boolean(foundLate && foundLate.totalRecords === 777), 'listBackups() included backup with late metadata');
+    assert(Boolean(foundTail && foundTail.totalRecords === 888), 'listBackups() included backup with tail metadata');
+  } finally {
+    try { if (fs.existsSync(lateMetaPath)) fs.unlinkSync(lateMetaPath); } catch (_) {}
+    try { if (fs.existsSync(tailMetaPath)) fs.unlinkSync(tailMetaPath); } catch (_) {}
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 7: Benchmark on Actual Production Backup (418 MB File)
+  // --------------------------------------------------------------------------
+  console.log(`\n--- [Test 7] Actual 418 MB Production Backup Header Benchmark ---`);
+  const actual418MbBackup = path.join(backupDir, 'controlroom_backup_2026-10-06T04-44-22-609Z.json');
+  if (fs.existsSync(actual418MbBackup)) {
+    const t0 = process.hrtime.bigint();
+    const realResult = readBackupHeader(actual418MbBackup);
+    const t1 = process.hrtime.bigint();
+    const elapsedMs = Number(t1 - t0) / 1e6;
+
+    assert(
+      realResult.metadata && realResult.metadata.totalRecords === 1203,
+      `Real 418 MB backup header parsed correctly (Records: ${realResult.metadata?.totalRecords})`
+    );
+    assert(
+      elapsedMs < 20,
+      `Real 418 MB backup read took ${elapsedMs.toFixed(2)}ms (< 20ms target)`,
+      `Elapsed: ${elapsedMs.toFixed(2)}ms`
+    );
+  } else {
+    console.log(`ℹ️ [SKIP] Actual 418 MB backup file not present on this machine; skipped test 7.`);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 8: Migration SQL Concurrent Build Strategy Verification
+  // --------------------------------------------------------------------------
+  console.log(`\n--- [Test 8] PostgreSQL Migration Concurrency & Safety Directives ---`);
+  const migPath = path.join(__dirname, '../server/migrations/20261027_lead_inactivity_unique_constraint.sql');
+  const migContent = fs.readFileSync(migPath, 'utf8');
+  assert(
+    migContent.includes('CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_lead_inactivity_unique_incident'),
+    'Migration specifies CONCURRENT index creation to prevent write-blocking locks'
+  );
+  assert(
+    migContent.includes('SELECT lead_id, incident_type, salesperson_id, assigned_at, COUNT(*)'),
+    'Migration includes pre-flight duplicate audit query'
+  );
+  assert(
+    migContent.includes('indisvalid AS is_valid'),
+    'Migration includes post-creation index validity verification query'
+  );
 
   // --------------------------------------------------------------------------
   // SUMMARY

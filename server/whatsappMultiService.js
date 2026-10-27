@@ -582,6 +582,9 @@ export async function initUserSession(rawUserId, options = {}) {
                 status: 'delivered'
               });
               chat.messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+              if (chat.messages.length > 100) {
+                chat.messages = chat.messages.slice(-100);
+              }
               chat.timestamp = msgTime;
               if (!msg.key.fromMe) chat.unreadCount = (chat.unreadCount || 0) + 1;
             }

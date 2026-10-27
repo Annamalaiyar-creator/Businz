@@ -39,9 +39,9 @@ PUBLIC_URL="https://businz.com"
 
 APPROVED_BASELINE_COMMIT="04e0a5190ddebddbf8531909fcb64ca114d1832d"
 APPROVED_BASELINE_BRANCH="feature/crm-lead-management-system"
-TARGET_RELEASE_COMMIT="6c64c0f03d9131873a92f8c7f222eebeb827dc8d"
-if [ -n "${1:-}" ] && [[ ! "${1}" =~ ^-- ]]; then
-  TARGET_RELEASE_COMMIT="${1}"
+TARGET_RELEASE_COMMIT="${1:-}"
+if [ -z "${TARGET_RELEASE_COMMIT}" ] || [[ "${TARGET_RELEASE_COMMIT}" =~ ^-- ]]; then
+  TARGET_RELEASE_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo '09fd03a')"
 fi
 
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -795,7 +795,7 @@ cat << EOF > "${RESULT_FILE}"
 | **3. Exact Recovery Dir Binding** | **PASS** | Rollback bound strictly to \`${EXACT_RECOVERY_DIR}\` (no dynamic selection). |
 | **4. Staged Code Deployment** | **PASS** | Release built and staged in isolated directory; runtime JSON stores kept outside git operations. |
 | **5. Live Data Overwrite Prevention** | **PASS** | Zero automatic copying of backup archives over live data; concurrent writes 100% preserved. |
-| **6. Atomic Frontend Asset Retention** | **PASS** | New assets merged into \`dist/assets\` and \`assets/\`; index.html swapped atomically (zero 404s). |
+| **6. Atomic Frontend Asset Retention** | **PASS** | New assets merged into \`dist/assets\` and \`assets/\`; index.html swapped atomically (prevents asset 404s during transition). |
 | **7. Pre-Existing Index Preservation** | **PASS** | Recorded pre-existing state (BOM: ${PRE_EXISTING_BOM_IDX}, Leads: ${PRE_EXISTING_LEADS_IDX}); rollback drops only newly added indexes. |
 | **8. Comprehensive JSON Inventory** | **PASS** | Dynamically discovered and verified all ${BACKED_UP_COUNT} JSON stores with 100% SHA-256 match. |
 | **9. Untracked Artifact Preservation** | **PASS** | Preserved untracked 5.8 GB core dump and backup files untouched. |

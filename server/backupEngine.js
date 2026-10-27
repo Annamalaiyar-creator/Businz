@@ -157,8 +157,54 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
   const jobStartTime = recordJobStart('backupEngine');
 
   try {
-    // 5. Serialize and stream directly to disk in a single pass (avoids duplicate string buffers)
-    fs.writeFileSync(backupFilePath, JSON.stringify(backupData, null, 2), 'utf8');
+    // 5. Serialize and stream directly to disk incrementally to prevent giant contiguous JSON string buffers in V8 heap
+    const writeStream = fs.createWriteStream(backupFilePath, { encoding: 'utf8' });
+
+    const preamble = {
+      system: backupData.system,
+      version: backupData.version,
+      backupId: backupData.backupId,
+      createdAt: backupData.createdAt,
+      triggeredBy: backupData.triggeredBy,
+      metadata: backupData.metadata
+    };
+
+    let preambleStr = JSON.stringify(preamble, null, 2);
+    // Remove trailing closing brace to open envelope
+    preambleStr = preambleStr.slice(0, preambleStr.lastIndexOf('}'));
+    writeStream.write(preambleStr + ',\n  "stores": {\n');
+
+    const storeKeys = Object.keys(backupData.stores);
+    for (let i = 0; i < storeKeys.length; i++) {
+      const k = storeKeys[i];
+      const isLast = i === storeKeys.length - 1;
+      const serializedStore = JSON.stringify(backupData.stores[k], null, 2);
+      const indented = serializedStore.replace(/\n/g, '\n    ');
+      writeStream.write(`    "${k}": ${indented}${isLast ? '' : ','}\n`);
+      // Immediately release in-memory copy for this store
+      backupData.stores[k] = null;
+    }
+    writeStream.write('  },\n');
+    backupData.stores = null;
+
+    // Stream media cache and immediately release
+    writeStream.write('  "media": ');
+    const serializedMedia = JSON.stringify(backupData.media || {}, null, 2);
+    writeStream.write(serializedMedia.replace(/\n/g, '\n  '));
+    writeStream.write(',\n');
+    backupData.media = null;
+    mediaCache = null;
+
+    // Stream cloud users and finalize envelope
+    writeStream.write(`  "cloudUsers": ${JSON.stringify(backupData.cloudUsers || [], null, 2).replace(/\n/g, '\n  ')}\n}\n`);
+
+    await new Promise((resolve, reject) => {
+      writeStream.end((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
     const finalStat = fs.statSync(backupFilePath);
     backupData.metadata.backupSizeBytes = finalStat.size;
     backupData.metadata.backupSizeFormatted = formatBytes(finalStat.size);
@@ -182,16 +228,16 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
 }
 
 /**
- * Lightweight header reader: extracts metadata and timestamp from the first 4KB
- * of a backup JSON file without loading the entire multi-hundred-megabyte body into memory.
+ * Lightweight header reader: extracts metadata and timestamp using multi-stage probing
+ * (4KB fast-path -> 64KB extended -> 32KB tail probe).
+ * Guarantees zero full-file buffering and never silently omits valid backups.
  */
 export function readBackupHeader(fullPath) {
   let fd = null;
   try {
+    const stat = fs.statSync(fullPath);
+    const fileSize = stat.size;
     fd = fs.openSync(fullPath, 'r');
-    const buf = Buffer.alloc(4096);
-    const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
-    const chunk = buf.toString('utf8', 0, bytesRead);
 
     let metadata = {
       totalRecords: '—',
@@ -200,17 +246,54 @@ export function readBackupHeader(fullPath) {
     };
     let createdAt = null;
 
-    const createdMatch = chunk.match(/"createdAt"\s*:\s*"([^"]+)"/);
-    if (createdMatch) {
-      createdAt = createdMatch[1];
+    const extractFields = (text) => {
+      if (!createdAt) {
+        const createdMatch = text.match(/"createdAt"\s*:\s*"([^"]+)"/);
+        if (createdMatch) {
+          createdAt = createdMatch[1];
+        } else {
+          const bkpMatch = text.match(/"backupId"\s*:\s*"BKP-(\d+)"/);
+          if (bkpMatch) {
+            try {
+              createdAt = new Date(Number(bkpMatch[1])).toISOString();
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (metadata.totalRecords === '—') {
+        const metaMatch = text.match(/"metadata"\s*:\s*\{([^}]+)\}/);
+        if (metaMatch) {
+          try {
+            const parsedMeta = JSON.parse(`{${metaMatch[1]}}`);
+            metadata = { ...metadata, ...parsedMeta };
+          } catch (_) {}
+        }
+      }
+    };
+
+    // Stage 1: Probe first 4096 bytes (Fast path for standard backups)
+    const initialSize = Math.min(4096, fileSize);
+    const buf4k = Buffer.alloc(initialSize);
+    const read1 = fs.readSync(fd, buf4k, 0, initialSize, 0);
+    extractFields(buf4k.toString('utf8', 0, read1));
+
+    // Stage 2: If metadata or createdAt missing, probe up to 64KB from head
+    if ((metadata.totalRecords === '—' || !createdAt) && fileSize > 4096) {
+      const probeSize = Math.min(65536, fileSize);
+      const buf64k = Buffer.alloc(probeSize);
+      const read2 = fs.readSync(fd, buf64k, 0, probeSize, 0);
+      extractFields(buf64k.toString('utf8', 0, read2));
     }
 
-    const metaMatch = chunk.match(/"metadata"\s*:\s*\{([^}]+)\}/);
-    if (metaMatch) {
-      try {
-        const parsedMeta = JSON.parse(`{${metaMatch[1]}}`);
-        metadata = { ...metadata, ...parsedMeta };
-      } catch (_) {}
+    // Stage 3: If metadata still missing and file is large, probe the tail 32KB
+    // (covers cases where metadata is appended at the end of the JSON object)
+    if (metadata.totalRecords === '—' && fileSize > 65536) {
+      const tailSize = Math.min(32768, fileSize);
+      const tailOffset = fileSize - tailSize;
+      const bufTail = Buffer.alloc(tailSize);
+      const read3 = fs.readSync(fd, bufTail, 0, tailSize, tailOffset);
+      extractFields(bufTail.toString('utf8', 0, read3));
     }
 
     return { metadata, createdAt };
@@ -228,12 +311,13 @@ export function readBackupHeader(fullPath) {
 
 /**
  * List all available backups using lightweight header streaming (Zero full-file buffering)
+ * Guarantees that valid backups are never silently omitted.
  */
 export function listBackups() {
   if (!fs.existsSync(BACKUP_DIR)) return [];
   try {
     const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith('controlroom_backup_') && f.endsWith('.json'))
+      .filter(f => f.endsWith('.json') && (f.startsWith('controlroom_backup_') || f.startsWith('businz_backup_') || f.includes('backup')))
       .sort()
       .reverse();
 

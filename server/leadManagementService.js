@@ -15,7 +15,7 @@ export async function dbQuery(sql, params = []) {
  */
 export async function withTransaction(callback, options = {}) {
   const client = await pool.connect();
-  const timeoutMs = options.timeoutMs || 10000;
+  const timeoutMs = options.timeoutMs || 30000;
   try {
     await client.query('BEGIN');
     try {
@@ -1060,15 +1060,18 @@ export async function markNotificationRead(notificationId, employeeCode) {
   return { success: res.rows.length > 0 };
 }
 
-// Concurrency mutex and job duration tracking for Inactivity Engine
+// Concurrency mutex, epoch fencing and job duration tracking for Inactivity Engine
 let isInactivityCheckRunning = false;
+let currentRunEpoch = 0;
 let lastInactivityCheckStartedAt = null;
 let lastInactivityCheckDurationMs = 0;
 let overlappingInactivityRunsAttempted = 0;
+const INACTIVITY_JOB_MAX_EXECUTION_MS = 60000; // 60s hard ceiling
 
 export function getInactivityEngineStatus() {
   return {
     isRunning: isInactivityCheckRunning,
+    currentEpoch: currentRunEpoch,
     lastStartedAt: lastInactivityCheckStartedAt ? new Date(lastInactivityCheckStartedAt).toISOString() : null,
     lastDurationMs: lastInactivityCheckDurationMs,
     overlappingRunsSkipped: overlappingInactivityRunsAttempted
@@ -1086,13 +1089,23 @@ export function getInactivityEngineStatus() {
 export async function checkAndProcessLeadInactivity(options = {}) {
   const source = options.source || 'scheduled';
   if (isInactivityCheckRunning) {
-    overlappingInactivityRunsAttempted++;
-    recordJobOverlap('inactivityEngine');
-    console.warn(`[Inactivity Engine] Check already running (started ${lastInactivityCheckStartedAt ? new Date(lastInactivityCheckStartedAt).toISOString() : 'earlier'}); skipping overlapping execution requested by ${source}. Total skipped: ${overlappingInactivityRunsAttempted}.`);
-    return { skipped: true, reason: 'ALREADY_RUNNING', source, overlappingSkipped: overlappingInactivityRunsAttempted };
+    const elapsedSinceStart = lastInactivityCheckStartedAt ? (Date.now() - lastInactivityCheckStartedAt) : 0;
+    // Bounded execution check: strictly prevent any second job while active job is within normal window
+    if (elapsedSinceStart < INACTIVITY_JOB_MAX_EXECUTION_MS) {
+      overlappingInactivityRunsAttempted++;
+      recordJobOverlap('inactivityEngine');
+      console.warn(`[Inactivity Engine] Check already running (started ${lastInactivityCheckStartedAt ? new Date(lastInactivityCheckStartedAt).toISOString() : 'earlier'}); skipping overlapping execution requested by ${source}. Total skipped: ${overlappingInactivityRunsAttempted}.`);
+      return { skipped: true, reason: 'ALREADY_RUNNING', source, overlappingSkipped: overlappingInactivityRunsAttempted };
+    }
+
+    // Hard ceiling exceeded: Fenced cancellation (invalidates prior epoch so late responses cannot write alerts)
+    console.warn(`[Inactivity Engine] Prior run exceeded ${INACTIVITY_JOB_MAX_EXECUTION_MS / 1000}s execution ceiling. Fencing prior epoch ${currentRunEpoch} to prevent concurrent alert writes.`);
+    currentRunEpoch++;
+    isInactivityCheckRunning = false;
   }
 
   isInactivityCheckRunning = true;
+  const runEpoch = ++currentRunEpoch;
   lastInactivityCheckStartedAt = Date.now();
   const jobStartTime = recordJobStart('inactivityEngine');
 
@@ -1100,6 +1113,9 @@ export async function checkAndProcessLeadInactivity(options = {}) {
     const now = new Date();
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
     const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    // Fencing checkpoint 1: Verify this run is still authoritative
+    if (runEpoch !== currentRunEpoch) return { aborted: true, reason: 'FENCED_BY_NEWER_RUN', runEpoch };
 
   // 1. Query candidates for 2-Hour Inactivity / Status Unchanged Alert
   let candidates2h = { rows: [] };
@@ -1179,6 +1195,9 @@ export async function checkAndProcessLeadInactivity(options = {}) {
     console.warn('[Inactivity Engine] Disk store check notice:', diskErr.message);
   }
 
+  // Fencing checkpoint 2: Ensure epoch is active before writing 2h alerts
+  if (runEpoch !== currentRunEpoch) return { aborted: true, reason: 'FENCED_BY_NEWER_RUN', runEpoch };
+
   for (const lead of (candidates2h.rows || [])) {
     try {
       const incidentId = `INC-2H-${lead.id}-${Date.now()}`;
@@ -1241,6 +1260,9 @@ export async function checkAndProcessLeadInactivity(options = {}) {
       AND l.status IN ('New', 'Assigned')
   `, [fortyEightHoursAgo]);
 
+  // Fencing checkpoint 3: Ensure epoch is active before writing 48h alerts
+  if (runEpoch !== currentRunEpoch) return { aborted: true, reason: 'FENCED_BY_NEWER_RUN', runEpoch };
+
   for (const lead of candidates48.rows) {
     try {
       const incidentId = `INC-48H-${lead.id}-${Date.now()}`;
@@ -1294,6 +1316,9 @@ export async function checkAndProcessLeadInactivity(options = {}) {
     WHERE f.scheduled_at <= $1 AND f.status = 'PENDING'
   `, [now]);
 
+  // Fencing checkpoint 4: Ensure epoch is active before writing missed follow-ups
+  if (runEpoch !== currentRunEpoch) return { aborted: true, reason: 'FENCED_BY_NEWER_RUN', runEpoch };
+
   for (const f of missedFollowups.rows) {
     try {
       await dbQuery(`UPDATE public.lead_followups SET status = 'MISSED' WHERE id = $1`, [f.id]);
@@ -1310,6 +1335,9 @@ export async function checkAndProcessLeadInactivity(options = {}) {
 } finally {
   lastInactivityCheckDurationMs = Date.now() - jobStartTime;
   recordJobEnd('inactivityEngine', jobStartTime);
-  isInactivityCheckRunning = false;
+  // Only release mutex if this run is still the authoritative epoch
+  if (runEpoch === currentRunEpoch) {
+    isInactivityCheckRunning = false;
+  }
 }
 }

@@ -51,7 +51,7 @@ echo "✅ Live recovery archive secured."
 # 2. Revert Code Files Cleanly to Baseline Commit (Leaving server/*.json 100% untouched)
 echo "🔄 Reverting code files to baseline commit ${BASELINE_COMMIT}..."
 cd "${APP_DIR}"
-git checkout "${BASELINE_COMMIT}" -- server/index.js server/db.js server/leadManagementService.js server/bomDocumentService.js server/backupEngine.js server/runtimePaths.js server/migrations src/ package.json 2>/dev/null || true
+git checkout "${BASELINE_COMMIT}" -- server/index.js server/db.js server/leadManagementService.js server/bomDocumentService.js server/backupEngine.js server/runtimePaths.js server/memoryDiagnostics.js server/whatsappMultiService.js server/migrations src/ package.json 2>/dev/null || true
 git update-ref "refs/heads/${BASELINE_BRANCH}" "${BASELINE_COMMIT}"
 git symbolic-ref HEAD "refs/heads/${BASELINE_BRANCH}"
 echo "✅ Code files reverted to baseline. Live JSON transactional stores were NOT touched."
@@ -115,6 +115,15 @@ if [ "${PRE_EXISTING_LEADS_IDX}" -eq 0 ]; then
 else
   echo "   - Preserving pre-existing index: idx_leads_created_at"
 fi
+
+# Backward-compatible database schema policy:
+# Purely additive changes (such as 'idx_lead_inactivity_unique_incident') are preserved during ordinary code rollback.
+# Dropping the unique index is NOT performed automatically because baseline 04e0a51 also requires idempotency
+# on (lead_id, incident_type, salesperson_id, assigned_at) and dropping it risks re-introducing PostgreSQL 42P10 errors.
+# Dedicated database rollback requires explicit manual execution of the rollback migration script:
+#   psql -d businz -f server/migrations/20261027_lead_inactivity_unique_constraint_rollback.sql
+echo "   - Preserving backward-compatible index: idx_lead_inactivity_unique_incident"
+echo "   - Preserving 100% of incident and notification records."
 echo "✅ Database indexes reconciled. Table data and rows remain 100% untouched."
 
 # 5. Reload PM2 Process 'businz'

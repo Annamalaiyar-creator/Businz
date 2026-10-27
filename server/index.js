@@ -8950,6 +8950,14 @@ scheduleNextInactivityCheck();
 
 app.post('/api/crm/leads/check-inactivity', async (req, res) => {
   try {
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({ success: false, error: session?.error || 'Unauthorized: Authentication session required' });
+    }
+    if (!['Technical Administrator', 'Super Admin', 'CEO', 'Director', 'Admin', 'Sales Manager'].includes(session.role)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Insufficient privileges to trigger inactivity check' });
+    }
+
     const result = await checkAndProcessLeadInactivity({ source: 'manual-api' });
     if (result && result.skipped) {
       return res.status(200).json({
@@ -8976,7 +8984,10 @@ setInterval(() => {
 app.get('/api/system/diagnostics/memory', async (req, res) => {
   try {
     const session = await getVerifiedUserSession(req);
-    if (!session || !['Technical Administrator', 'Super Admin', 'CEO', 'Director', 'Admin'].includes(session.role)) {
+    if (!session || !session.valid) {
+      return res.status(401).json({ success: false, error: session?.error || 'Unauthorized: Authentication session required' });
+    }
+    if (!['Technical Administrator', 'Super Admin', 'CEO', 'Director', 'Admin'].includes(session.role)) {
       return res.status(403).json({ success: false, error: 'Forbidden: Admin access required for system diagnostics' });
     }
     const diagnostics = getSystemDiagnostics();
