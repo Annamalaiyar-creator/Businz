@@ -31,6 +31,7 @@ APPROVED_BASELINE_BRANCH="feature/crm-lead-management-system"
 
 APPROVED_RELEASE_TARGETS=(
   "35a7ee169bcd6cb760360cdc6e641be45c79c07d"
+  "2be898a3bd19f97c19afbc71488fc6e2a5bdf760"
 )
 if [ -n "${BUSINZ_APPROVED_TARGET:-}" ]; then
   APPROVED_RELEASE_TARGETS+=("${BUSINZ_APPROVED_TARGET}")
@@ -189,10 +190,11 @@ on_failure() {
   elif [ "${DEPLOY_PHASE}" = "MAINTENANCE" ] || [ "${DEPLOY_PHASE}" = "BACKUP" ]; then
     echo "ℹ️ Failure occurred during maintenance/backup (${DEPLOY_PHASE}) before production code or DB changes."
     echo "🔓 Releasing maintenance mode to restore normal operations..."
+    rm -f "${APP_DIR}/maintenance.flag" || true
     curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
       -H "Content-Type: application/json" \
-      -d '{"enabled": false}' >/dev/null 2>&1 || true
-    rm -f "${APP_DIR}/maintenance.flag" || true
+      -H "x-maintenance-key: ${DEPLOY_MAINT_TOKEN:-}" \
+      -d "{\"enabled\": false, \"secret\": \"${DEPLOY_MAINT_TOKEN:-}\"}" >/dev/null 2>&1 || true
     echo "✅ Maintenance mode released. Live application code was not modified."
   else
     echo "ℹ️ Failure occurred prior to cutover (${DEPLOY_PHASE}). Live application was not modified."
@@ -406,16 +408,47 @@ DEPLOY_PHASE="MAINTENANCE"
 echo ""
 echo "=== [Step 3] Activating Controlled Maintenance Mode & Write-Blocking ==="
 
-# 3.1 Create disk maintenance flag (used by Nginx and Node)
-touch "${APP_DIR}/maintenance.flag"
+# 3.1 Generate ephemeral deployment maintenance token
+DEPLOY_MAINT_TOKEN=$(openssl rand -hex 32)
 
-# 3.2 Activate Express write-blocking middleware via API toggle
+# 3.2 Verify security authorization guards on maintenance toggle (strictly reject unauthorized requests)
+echo "🛡️ Verifying maintenance toggle authorization security..."
+UNAUTH_CODE_1=$(curl -s -w "%{http_code}" -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}' || echo "000")
+if [ "${UNAUTH_CODE_1}" != "403" ]; then
+  echo "❌ CRITICAL SECURITY VULNERABILITY: Maintenance toggle accepted request without secret! HTTP: ${UNAUTH_CODE_1}"
+  exit 1
+fi
+
+UNAUTH_CODE_2=$(curl -s -w "%{http_code}" -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "secret": "unauthorized_probe_secret_bad_key"}' || echo "000")
+if [ "${UNAUTH_CODE_2}" != "403" ]; then
+  echo "❌ CRITICAL SECURITY VULNERABILITY: Maintenance toggle accepted request with invalid secret! HTTP: ${UNAUTH_CODE_2}"
+  exit 1
+fi
+echo "✅ Maintenance toggle authorization security verified: Unauthorized requests strictly return HTTP 403 Forbidden."
+
+# 3.3 Create authoritative disk maintenance flag (used by Node runtime across PM2 restarts and Nginx)
+cat <<EOF > "${APP_DIR}/maintenance.flag"
+{
+  "active": true,
+  "activatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "authMethod": "deployment-script",
+  "token": "${DEPLOY_MAINT_TOKEN}"
+}
+EOF
+chmod 600 "${APP_DIR}/maintenance.flag"
+
+# 3.4 Activate Express write-blocking middleware via authorized API toggle
 echo "🔒 Enabling write-blocking maintenance mode on live application..."
 MAINT_TOGGLE_RESP=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
   -H "Content-Type: application/json" \
-  -d '{"enabled": true}' || echo "{}")
+  -H "x-maintenance-key: ${DEPLOY_MAINT_TOKEN}" \
+  -d "{\"enabled\": true, \"secret\": \"${DEPLOY_MAINT_TOKEN}\"}" || echo "{}")
 
-# 3.3 Verify maintenance mode status
+# 3.5 Verify maintenance mode status
 MAINT_STATUS_RESP=$(curl -s "http://127.0.0.1:${PORT}/api/maintenance/status" || echo "{}")
 MAINT_ACTIVE=$(echo "${MAINT_STATUS_RESP}" | jq -r '.maintenance // false')
 if [ "${MAINT_ACTIVE}" != "true" ]; then
@@ -425,18 +458,37 @@ if [ "${MAINT_ACTIVE}" != "true" ]; then
 fi
 echo "✅ Maintenance mode active verified via /api/maintenance/status."
 
-# 3.4 Active write-blocking probe: verify mutating requests return HTTP 503
+# 3.6 Active write-blocking probe: verify mutating business requests return HTTP 503
 echo "🧪 Probing write-blocking enforcement on mutating business endpoints..."
 PROBE_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/boms" \
   -H "Content-Type: application/json" \
   -d '{"probe": true}' || echo "000")
 if [ "${PROBE_CODE}" != "503" ]; then
   echo "❌ CRITICAL: Write-blocking verification failed! POST /api/boms returned HTTP ${PROBE_CODE} (expected 503)."
-  curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" -H "Content-Type: application/json" -d '{"enabled": false}' || true
+  curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+    -H "Content-Type: application/json" \
+    -H "x-maintenance-key: ${DEPLOY_MAINT_TOKEN}" \
+    -d "{\"enabled\": false, \"secret\": \"${DEPLOY_MAINT_TOKEN}\"}" || true
   rm -f "${APP_DIR}/maintenance.flag"
   exit 1
 fi
-echo "✅ Write-blocking confirmed: Mutating endpoint strictly returned HTTP 503 Service Unavailable (Retry-After: 30)."
+echo "✅ Business API write-blocking confirmed: POST /api/boms strictly returned HTTP 503 Service Unavailable (Retry-After: 30)."
+
+# 3.7 Active write-blocking probe: verify legacy PostgREST write endpoints return HTTP 503
+echo "🧪 Probing write-blocking enforcement on legacy PostgREST endpoints..."
+REST_PROBE_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST "http://127.0.0.1:${PORT}/rest/v1/leads" \
+  -H "Content-Type: application/json" \
+  -d '{"probe": true}' || echo "000")
+if [ "${REST_PROBE_CODE}" != "503" ]; then
+  echo "❌ CRITICAL: Legacy PostgREST write-blocking verification failed! POST /rest/v1/leads returned HTTP ${REST_PROBE_CODE} (expected 503)."
+  curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+    -H "Content-Type: application/json" \
+    -H "x-maintenance-key: ${DEPLOY_MAINT_TOKEN}" \
+    -d "{\"enabled\": false, \"secret\": \"${DEPLOY_MAINT_TOKEN}\"}" || true
+  rm -f "${APP_DIR}/maintenance.flag"
+  exit 1
+fi
+echo "✅ Legacy PostgREST write-blocking confirmed: POST /rest/v1/ strictly returned HTTP 503 Service Unavailable."
 
 # 3.5 Quiesce active in-flight database transactions
 echo "⏳ Quiescing in-flight PostgreSQL transactions..."
@@ -592,6 +644,7 @@ cat << EOF > "${MANIFEST_FILE}"
   "baseline_branch": "${CURRENT_BRANCH}",
   "target_commit": "${TARGET_RELEASE_COMMIT}",
   "port": "${PORT}",
+  "deployment_maint_token": "${DEPLOY_MAINT_TOKEN}",
   "stores_count": ${BACKED_UP_COUNT},
   "pre_existing_bom_idx": ${PRE_EXISTING_BOM_IDX},
   "pre_existing_leads_idx": ${PRE_EXISTING_LEADS_IDX}
@@ -792,26 +845,37 @@ if ! pm2 reload businz --update-env; then
 fi
 sleep 3
 
-# 6. Release Maintenance Mode Post-Rollback
-echo "🔓 Releasing maintenance mode post-rollback..."
-curl -s -X POST "http://127.0.0.1:\${PORT}/api/maintenance/toggle" \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": false}' >/dev/null 2>&1 || true
-rm -f "\${APP_DIR}/maintenance.flag" || true
-echo "✅ Maintenance mode released."
-
-# 7. Verify Health Post-Rollback
+# 6. Verify Health Post-Rollback (performed while maintenance mode remains active)
+echo "🧪 Verifying application health post-rollback..."
 HEALTH=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:\${PORT}/api/db-status || echo "000")
 FRONTEND=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:\${PORT}/ || echo "000")
 NOTIFICATIONS_AUTH=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:\${PORT}/api/crm/leads/notifications || echo "000")
 
-if [ "\${HEALTH}" = "200" ] && [ "\${FRONTEND}" = "200" ] && [ "\${NOTIFICATIONS_AUTH}" = "401" ]; then
-  echo "🎉 ROLLBACK SUCCESSFUL: Application restored to baseline \${BASELINE_COMMIT} and confirmed healthy (DB: HTTP 200, UI: HTTP 200, Auth Guard: HTTP 401)."
-  echo "🛡️ Live transactional data and database records were 100% preserved without overwrite."
-else
+if [ "\${HEALTH}" != "200" ] || [ "\${FRONTEND}" != "200" ] || [ "\${NOTIFICATIONS_AUTH}" != "401" ]; then
   echo "🚨 CRITICAL: Application health check failed after rollback! (DB: HTTP \${HEALTH}, UI: HTTP \${FRONTEND}, Auth: HTTP \${NOTIFICATIONS_AUTH})"
+  echo "🔒 Maintenance mode remains active to prevent data corruption. Business writes are NOT reopened."
   exit 1
 fi
+echo "✅ Health checks passed post-rollback (DB: HTTP 200, UI: HTTP 200, Auth Guard: HTTP 401)."
+
+# 7. Release Maintenance Mode Post-Rollback (ONLY AFTER verification succeeds)
+echo "🔓 Releasing maintenance mode post-rollback..."
+ROLLBACK_TOKEN=""
+if [ -f "\${APP_DIR}/maintenance.flag" ]; then
+  ROLLBACK_TOKEN=\$(jq -r '.token // empty' "\${APP_DIR}/maintenance.flag" 2>/dev/null || true)
+fi
+if [ -z "\${ROLLBACK_TOKEN}" ]; then
+  ROLLBACK_TOKEN="${DEPLOY_MAINT_TOKEN}"
+fi
+rm -f "\${APP_DIR}/maintenance.flag" || true
+curl -s -X POST "http://127.0.0.1:\${PORT}/api/maintenance/toggle" \
+  -H "Content-Type: application/json" \
+  -H "x-maintenance-key: \${ROLLBACK_TOKEN}" \
+  -d "{\"enabled\": false, \"secret\": \"\${ROLLBACK_TOKEN}\"}" >/dev/null 2>&1 || true
+echo "✅ Maintenance mode released."
+
+echo "🎉 ROLLBACK SUCCESSFUL: Application restored to baseline \${BASELINE_COMMIT} and confirmed healthy (DB: HTTP 200, UI: HTTP 200, Auth Guard: HTTP 401)."
+echo "🛡️ Live transactional data and database records were 100% preserved without overwrite."
 ROLLBACK_EOF
 
 chmod 700 "${STANDALONE_ROLLBACK_SCRIPT}"
@@ -1081,6 +1145,25 @@ if [ "${RESTART_DELTA}" -gt 2 ]; then
 fi
 echo "✅ PM2 process '${PM2_TARGET}' is healthy and online (Post-reload restarts: ${POST_PM2_RESTARTS})."
 
+# 6.5 Verify Maintenance Mode Survived PM2 Reload & Process Restart
+echo "🔒 Verifying maintenance mode survived PM2 reload..."
+POST_RELOAD_MAINT_RESP=$(curl -s "http://127.0.0.1:${PORT}/api/maintenance/status" || echo "{}")
+POST_RELOAD_MAINT_ACTIVE=$(echo "${POST_RELOAD_MAINT_RESP}" | jq -r '.maintenance // false')
+if [ "${POST_RELOAD_MAINT_ACTIVE}" != "true" ]; then
+  echo "❌ CRITICAL: Maintenance mode failed to survive PM2 reload! Protection was prematurely opened during reload!"
+  echo "Response: ${POST_RELOAD_MAINT_RESP}"
+  exit 1
+fi
+
+POST_RELOAD_PROBE_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/boms" \
+  -H "Content-Type: application/json" \
+  -d '{"probe": true}' || echo "000")
+if [ "${POST_RELOAD_PROBE_CODE}" != "503" ]; then
+  echo "❌ CRITICAL: Write-blocking lost after PM2 reload! POST /api/boms returned HTTP ${POST_RELOAD_PROBE_CODE} (expected 503)."
+  exit 1
+fi
+echo "✅ Confirmed: Maintenance mode and write-blocking survived PM2 reload and remain authoritatively active."
+
 # ------------------------------------------------------------------------------
 # STEP 7: COMPREHENSIVE POST-DEPLOYMENT SMOKE TESTS
 # ------------------------------------------------------------------------------
@@ -1172,12 +1255,32 @@ else
   echo "   ⚠️ [Authenticated Session] NOT VERIFIED: Pre-authenticated test session (BUSINZ_SMOKE_SESSION_ID) not provided. Skipped without fabricating credentials."
 fi
 
-# 7.7 Release Controlled Maintenance Window
+# 7.7 Verify Security Protection on Maintenance Deactivation
+echo "🛡️ Verifying unauthorized deactivation requests are strictly rejected..."
+UNAUTH_DISABLE_1=$(curl -s -w "%{http_code}" -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}' || echo "000")
+if [ "${UNAUTH_DISABLE_1}" != "403" ]; then
+  echo "❌ CRITICAL SECURITY VULNERABILITY: Maintenance deactivation accepted missing credentials! HTTP: ${UNAUTH_DISABLE_1}"
+  exit 1
+fi
+
+UNAUTH_DISABLE_2=$(curl -s -w "%{http_code}" -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false, "secret": "unauthorized_deactivation_attempt"}' || echo "000")
+if [ "${UNAUTH_DISABLE_2}" != "403" ]; then
+  echo "❌ CRITICAL SECURITY VULNERABILITY: Maintenance deactivation accepted invalid credentials! HTTP: ${UNAUTH_DISABLE_2}"
+  exit 1
+fi
+echo "✅ Maintenance deactivation security confirmed: Unauthorized requests strictly return HTTP 403 Forbidden."
+
+# 7.8 Release Controlled Maintenance Window (Authorized)
 echo "🔓 Deactivating maintenance window and restoring normal business write operations..."
+rm -f "${APP_DIR}/maintenance.flag"
 MAINT_DISABLE_RESP=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
   -H "Content-Type: application/json" \
-  -d '{"enabled": false}' || echo "{}")
-rm -f "${APP_DIR}/maintenance.flag"
+  -H "x-maintenance-key: ${DEPLOY_MAINT_TOKEN}" \
+  -d "{\"enabled\": false, \"secret\": \"${DEPLOY_MAINT_TOKEN}\"}" || echo "{}")
 
 MAINT_POST_STATUS=$(curl -s "http://127.0.0.1:${PORT}/api/maintenance/status" || echo "{}")
 MAINT_ACTIVE=$(echo "${MAINT_POST_STATUS}" | jq -r '.maintenance // true')

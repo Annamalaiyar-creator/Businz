@@ -264,23 +264,34 @@ if ! pm2 reload businz --update-env; then
 fi
 sleep 3
 
-# 6. Release Maintenance Mode Post-Rollback
-echo "🔓 Releasing maintenance mode post-rollback..."
-curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": false}' >/dev/null 2>&1 || true
-rm -f "${APP_DIR}/maintenance.flag" || true
-echo "✅ Maintenance mode released."
-
-# 7. Verify Health Post-Rollback
+# 6. Verify Health Post-Rollback (performed while maintenance mode remains active)
+echo "🧪 Verifying application health post-rollback..."
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/api/db-status || echo "000")
 FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/ || echo "000")
 NOTIFICATIONS_AUTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/api/crm/leads/notifications || echo "000")
 
-if [ "${HEALTH}" = "200" ] && [ "${FRONTEND}" = "200" ] && [ "${NOTIFICATIONS_AUTH}" = "401" ]; then
-  echo "🎉 ROLLBACK SUCCESSFUL: Application restored to baseline ${BASELINE_COMMIT} and confirmed healthy (DB: HTTP 200, UI: HTTP 200, Auth Guard: HTTP 401)."
-  echo "🛡️ Live transactional data and database records were 100% preserved without overwrite."
-else
+if [ "${HEALTH}" != "200" ] || [ "${FRONTEND}" != "200" ] || [ "${NOTIFICATIONS_AUTH}" != "401" ]; then
   echo "🚨 CRITICAL: Application health check failed after rollback! (DB: HTTP ${HEALTH}, UI: HTTP ${FRONTEND}, Auth: HTTP ${NOTIFICATIONS_AUTH})"
+  echo "🔒 Maintenance mode remains active to prevent data corruption. Business writes are NOT reopened."
   exit 1
 fi
+echo "✅ Health checks passed post-rollback (DB: HTTP 200, UI: HTTP 200, Auth Guard: HTTP 401)."
+
+# 7. Release Maintenance Mode Post-Rollback (ONLY AFTER verification succeeds)
+echo "🔓 Releasing maintenance mode post-rollback..."
+ROLLBACK_TOKEN=""
+if [ -f "${APP_DIR}/maintenance.flag" ]; then
+  ROLLBACK_TOKEN=$(jq -r '.token // empty' "${APP_DIR}/maintenance.flag" 2>/dev/null || true)
+fi
+if [ -z "${ROLLBACK_TOKEN}" ]; then
+  ROLLBACK_TOKEN="${BUSINZ_MAINTENANCE_KEY:-${BUSINZ_ADMIN_SECRET:-${SUPABASE_SERVICE_ROLE_KEY:-}}}"
+fi
+rm -f "${APP_DIR}/maintenance.flag" || true
+curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+  -H "Content-Type: application/json" \
+  -H "x-maintenance-key: ${ROLLBACK_TOKEN}" \
+  -d "{\"enabled\": false, \"secret\": \"${ROLLBACK_TOKEN}\"}" >/dev/null 2>&1 || true
+echo "✅ Maintenance mode released."
+
+echo "🎉 ROLLBACK SUCCESSFUL: Application restored to baseline ${BASELINE_COMMIT} and confirmed healthy (DB: HTTP 200, UI: HTTP 200, Auth Guard: HTTP 401)."
+echo "🛡️ Live transactional data and database records were 100% preserved without overwrite."
