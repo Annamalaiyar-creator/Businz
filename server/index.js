@@ -32,6 +32,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import { createFullBackup, listBackups, restoreFromBackup } from './backupEngine.js';
+import { getSystemDiagnostics, logMemoryDiagnostic } from './memoryDiagnostics.js';
 import { checkTallyStatus, fetchTallyPnl, pushDirectVoucher } from './tallyService.js';
 import {
   uploadBomDocument,
@@ -8923,27 +8924,63 @@ app.get('/api/integrations/indiamart/logs', async (req, res) => {
   }
 });
 
-// Automatic 24h & 48h Inactivity Background Checker (Runs every 5 minutes and on startup)
+// Automatic 24h & 48h Inactivity Background Checker (Runs 5s after startup and 5m after each completion)
 setTimeout(async () => {
   try {
-    await checkAndProcessLeadInactivity();
+    await checkAndProcessLeadInactivity({ source: 'startup' });
   } catch (err) {
     console.warn('[Initial Lead Inactivity Check Error]:', err.message);
   }
 }, 5000);
 
-setInterval(async () => {
-  try {
-    await checkAndProcessLeadInactivity();
-  } catch (err) {
-    console.warn('[Background Lead Inactivity Check Error]:', err.message);
-  }
-}, 5 * 60 * 1000);
+let inactivityTimer = null;
+function scheduleNextInactivityCheck() {
+  inactivityTimer = setTimeout(async () => {
+    try {
+      await checkAndProcessLeadInactivity({ source: 'scheduler' });
+    } catch (err) {
+      console.warn('[Background Lead Inactivity Check Error]:', err.message);
+    } finally {
+      // Schedule next execution strictly AFTER previous run completes, preventing interval drift & overlap
+      scheduleNextInactivityCheck();
+    }
+  }, 5 * 60 * 1000);
+}
+scheduleNextInactivityCheck();
 
 app.post('/api/crm/leads/check-inactivity', async (req, res) => {
   try {
-    await checkAndProcessLeadInactivity();
+    const result = await checkAndProcessLeadInactivity({ source: 'manual-api' });
+    if (result && result.skipped) {
+      return res.status(200).json({
+        success: true,
+        message: 'Inactivity check is already in progress; skipped duplicate execution',
+        skipped: true,
+        overlappingSkipped: result.overlappingSkipped
+      });
+    }
     res.json({ success: true, message: 'Inactivity check completed successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Periodic lightweight memory diagnostic logger (Runs every 15 minutes)
+setInterval(() => {
+  try {
+    logMemoryDiagnostic('PERIODIC');
+  } catch (_) {}
+}, 15 * 60 * 1000);
+
+// Authenticated memory and background job diagnostics endpoint
+app.get('/api/system/diagnostics/memory', async (req, res) => {
+  try {
+    const session = await getVerifiedUserSession(req);
+    if (!session || !['Technical Administrator', 'Super Admin', 'CEO', 'Director', 'Admin'].includes(session.role)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Admin access required for system diagnostics' });
+    }
+    const diagnostics = getSystemDiagnostics();
+    res.json({ success: true, diagnostics });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -39,7 +39,7 @@ PUBLIC_URL="https://businz.com"
 
 APPROVED_BASELINE_COMMIT="04e0a5190ddebddbf8531909fcb64ca114d1832d"
 APPROVED_BASELINE_BRANCH="feature/crm-lead-management-system"
-TARGET_RELEASE_COMMIT="d11d5176bb252cfbe928bc5fbfa5e7ff380e3cc2"
+TARGET_RELEASE_COMMIT="6c64c0f03d9131873a92f8c7f222eebeb827dc8d"
 if [ -n "${1:-}" ] && [[ ! "${1}" =~ ^-- ]]; then
   TARGET_RELEASE_COMMIT="${1}"
 fi

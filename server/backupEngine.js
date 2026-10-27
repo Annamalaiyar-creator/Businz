@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getBackupDir, getStoreFilePath } from './runtimePaths.js';
+import { recordJobStart, recordJobEnd } from './memoryDiagnostics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -134,20 +135,17 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
 
   // 3. Collect Media Cache (All PDFs, images, proof documents, datasheets)
   let mediaCache = {};
+  let mediaSizeBytes = 0;
   const mediaPath = getStoreFilePath('media_cache.json');
   if (fs.existsSync(mediaPath)) {
     try {
+      const mediaStat = fs.statSync(mediaPath);
+      mediaSizeBytes = mediaStat.size;
       mediaCache = JSON.parse(fs.readFileSync(mediaPath, 'utf8'));
     } catch (_) {}
   }
   backupData.media = mediaCache;
-
   const mediaKeys = Object.keys(mediaCache);
-  let mediaSizeBytes = 0;
-  try {
-    const mediaRaw = JSON.stringify(mediaCache);
-    mediaSizeBytes = Buffer.byteLength(mediaRaw, 'utf8');
-  } catch (_) {}
 
   // 4. Update metadata
   backupData.metadata.totalStores = Object.keys(backupData.stores).length;
@@ -156,32 +154,80 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
   backupData.metadata.mediaSizeBytes = mediaSizeBytes;
   backupData.metadata.mediaSizeFormatted = formatBytes(mediaSizeBytes);
 
-  // 5. Serialize and write backup to disk
-  const backupJsonString = JSON.stringify(backupData, null, 2);
-  const totalSizeBytes = Buffer.byteLength(backupJsonString, 'utf8');
-  backupData.metadata.backupSizeBytes = totalSizeBytes;
-  backupData.metadata.backupSizeFormatted = formatBytes(totalSizeBytes);
+  const jobStartTime = recordJobStart('backupEngine');
 
-  // Re-write with updated size
-  fs.writeFileSync(backupFilePath, JSON.stringify(backupData, null, 2), 'utf8');
+  try {
+    // 5. Serialize and stream directly to disk in a single pass (avoids duplicate string buffers)
+    fs.writeFileSync(backupFilePath, JSON.stringify(backupData, null, 2), 'utf8');
+    const finalStat = fs.statSync(backupFilePath);
+    backupData.metadata.backupSizeBytes = finalStat.size;
+    backupData.metadata.backupSizeFormatted = formatBytes(finalStat.size);
 
-  console.log(`✅ [BackupEngine] Backup successfully written to ${filename}`);
-  console.log(`   Stores: ${backupData.metadata.totalStores} | Records: ${totalRecords} | Media: ${mediaKeys.length} files (${backupData.metadata.mediaSizeFormatted}) | Total: ${backupData.metadata.backupSizeFormatted}\n`);
+    console.log(`✅ [BackupEngine] Backup successfully written to ${filename}`);
+    console.log(`   Stores: ${backupData.metadata.totalStores} | Records: ${totalRecords} | Media: ${mediaKeys.length} files (${backupData.metadata.mediaSizeFormatted}) | Total: ${backupData.metadata.backupSizeFormatted}\n`);
 
-  // 6. Prune old backups (keep latest 15)
-  pruneOldBackups(15);
+    // 6. Prune old backups (keep latest 15)
+    pruneOldBackups(15);
 
-  return {
-    success: true,
-    filename,
-    filePath: backupFilePath,
-    metadata: backupData.metadata,
-    createdAt: timestamp
-  };
+    return {
+      success: true,
+      filename,
+      filePath: backupFilePath,
+      metadata: backupData.metadata,
+      createdAt: timestamp
+    };
+  } finally {
+    recordJobEnd('backupEngine', jobStartTime);
+  }
 }
 
 /**
- * List all available backups
+ * Lightweight header reader: extracts metadata and timestamp from the first 4KB
+ * of a backup JSON file without loading the entire multi-hundred-megabyte body into memory.
+ */
+export function readBackupHeader(fullPath) {
+  let fd = null;
+  try {
+    fd = fs.openSync(fullPath, 'r');
+    const buf = Buffer.alloc(4096);
+    const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+    const chunk = buf.toString('utf8', 0, bytesRead);
+
+    let metadata = {
+      totalRecords: '—',
+      mediaCount: '—',
+      mediaSizeFormatted: '—'
+    };
+    let createdAt = null;
+
+    const createdMatch = chunk.match(/"createdAt"\s*:\s*"([^"]+)"/);
+    if (createdMatch) {
+      createdAt = createdMatch[1];
+    }
+
+    const metaMatch = chunk.match(/"metadata"\s*:\s*\{([^}]+)\}/);
+    if (metaMatch) {
+      try {
+        const parsedMeta = JSON.parse(`{${metaMatch[1]}}`);
+        metadata = { ...metadata, ...parsedMeta };
+      } catch (_) {}
+    }
+
+    return { metadata, createdAt };
+  } catch (_) {
+    return {
+      metadata: { totalRecords: '—', mediaCount: '—', mediaSizeFormatted: '—' },
+      createdAt: null
+    };
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+  }
+}
+
+/**
+ * List all available backups using lightweight header streaming (Zero full-file buffering)
  */
 export function listBackups() {
   if (!fs.existsSync(BACKUP_DIR)) return [];
@@ -194,28 +240,16 @@ export function listBackups() {
     return files.map(file => {
       const fullPath = path.join(BACKUP_DIR, file);
       const stat = fs.statSync(fullPath);
-      let meta = {
-        totalRecords: '—',
-        mediaCount: '—',
-        mediaSizeFormatted: '—'
-      };
-
-      try {
-        // Read header/metadata quickly
-        const content = fs.readFileSync(fullPath, 'utf8');
-        const parsed = JSON.parse(content);
-        if (parsed.metadata) meta = parsed.metadata;
-        if (parsed.createdAt) meta.createdAt = parsed.createdAt;
-      } catch (_) {}
+      const { metadata, createdAt } = readBackupHeader(fullPath);
 
       return {
         filename: file,
         sizeBytes: stat.size,
         sizeFormatted: formatBytes(stat.size),
-        createdAt: meta.createdAt || stat.mtime.toISOString(),
-        totalRecords: meta.totalRecords,
-        mediaCount: meta.mediaCount,
-        mediaSizeFormatted: meta.mediaSizeFormatted
+        createdAt: createdAt || stat.mtime.toISOString(),
+        totalRecords: metadata.totalRecords || '—',
+        mediaCount: metadata.mediaCount || '—',
+        mediaSizeFormatted: metadata.mediaSizeFormatted || '—'
       };
     });
   } catch (err) {

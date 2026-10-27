@@ -442,6 +442,9 @@ export async function initPostgresDatabase() {
           details JSONB
         );
 
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
+          ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);
+
         CREATE TABLE IF NOT EXISTS public.lead_notifications (
           id TEXT PRIMARY KEY,
           lead_id TEXT REFERENCES public.leads(id) ON DELETE SET NULL,

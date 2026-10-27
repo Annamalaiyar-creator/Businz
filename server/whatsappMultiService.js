@@ -315,7 +315,7 @@ export async function initUserSession(rawUserId, options = {}) {
       logger: silentLogger,
       printQRInTerminal: false,
       browser: Browsers.ubuntu('Chrome'),
-      syncFullHistory: true,
+      syncFullHistory: false,
       defaultQueryTimeoutMs: 120000,
       keepAliveIntervalMs: 25000,
       markOnlineOnConnect: false,
@@ -484,6 +484,9 @@ export async function initUserSession(rawUserId, options = {}) {
       for (const chat of sessionObj.chats.values()) {
         if (chat.messages && chat.messages.length > 0) {
           chat.messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+          if (chat.messages.length > 100) {
+            chat.messages = chat.messages.slice(-100);
+          }
           const latestMsg = chat.messages[chat.messages.length - 1];
           if (latestMsg?.timestamp) {
             chat.timestamp = latestMsg.timestamp;

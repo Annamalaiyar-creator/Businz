@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { getStoreFilePath } from './runtimePaths.js';
 import { pool, query } from './db.js';
+import { recordJobStart, recordJobEnd, recordJobOverlap } from './memoryDiagnostics.js';
 
 /**
  * Execute a query with auto-connection handling
@@ -10,17 +11,21 @@ export async function dbQuery(sql, params = []) {
 }
 
 /**
- * Execute within a transaction
+ * Execute within a transaction with safe statement timeout
  */
-export async function withTransaction(callback) {
+export async function withTransaction(callback, options = {}) {
   const client = await pool.connect();
+  const timeoutMs = options.timeoutMs || 10000;
   try {
     await client.query('BEGIN');
+    try {
+      await client.query(`SET LOCAL statement_timeout = ${timeoutMs}`);
+    } catch (_) {}
     const result = await callback(client);
     await client.query('COMMIT');
     return result;
   } catch (err) {
-    await client.query('ROLLBACK');
+    try { await client.query('ROLLBACK'); } catch (_) {}
     throw err;
   } finally {
     try {
@@ -147,6 +152,9 @@ export async function ensureLeadsSchema() {
         resolution_type TEXT,
         details JSONB
       );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
+        ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);
 
       CREATE TABLE IF NOT EXISTS public.lead_notifications (
         id TEXT PRIMARY KEY,
@@ -1052,6 +1060,21 @@ export async function markNotificationRead(notificationId, employeeCode) {
   return { success: res.rows.length > 0 };
 }
 
+// Concurrency mutex and job duration tracking for Inactivity Engine
+let isInactivityCheckRunning = false;
+let lastInactivityCheckStartedAt = null;
+let lastInactivityCheckDurationMs = 0;
+let overlappingInactivityRunsAttempted = 0;
+
+export function getInactivityEngineStatus() {
+  return {
+    isRunning: isInactivityCheckRunning,
+    lastStartedAt: lastInactivityCheckStartedAt ? new Date(lastInactivityCheckStartedAt).toISOString() : null,
+    lastDurationMs: lastInactivityCheckDurationMs,
+    overlappingRunsSkipped: overlappingInactivityRunsAttempted
+  };
+}
+
 /**
  * Automatic 2-Hour Inactivity Monitoring Engine
  * Scans for leads where:
@@ -1060,10 +1083,23 @@ export async function markNotificationRead(notificationId, employeeCode) {
  * 3. No qualifying customer activity recorded within 2 hours
  * Idempotently creates incidents and alerts CEO & Tech Support
  */
-export async function checkAndProcessLeadInactivity() {
-  const now = new Date();
-  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-  const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+export async function checkAndProcessLeadInactivity(options = {}) {
+  const source = options.source || 'scheduled';
+  if (isInactivityCheckRunning) {
+    overlappingInactivityRunsAttempted++;
+    recordJobOverlap('inactivityEngine');
+    console.warn(`[Inactivity Engine] Check already running (started ${lastInactivityCheckStartedAt ? new Date(lastInactivityCheckStartedAt).toISOString() : 'earlier'}); skipping overlapping execution requested by ${source}. Total skipped: ${overlappingInactivityRunsAttempted}.`);
+    return { skipped: true, reason: 'ALREADY_RUNNING', source, overlappingSkipped: overlappingInactivityRunsAttempted };
+  }
+
+  isInactivityCheckRunning = true;
+  lastInactivityCheckStartedAt = Date.now();
+  const jobStartTime = recordJobStart('inactivityEngine');
+
+  try {
+    const now = new Date();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
   // 1. Query candidates for 2-Hour Inactivity / Status Unchanged Alert
   let candidates2h = { rows: [] };
@@ -1158,7 +1194,7 @@ export async function checkAndProcessLeadInactivity() {
           lead.id,
           lead.assigned_to_user_id || 'UNASSIGNED',
           lead.assigned_to_name || 'Unassigned',
-          lead.assigned_at || lead.created_at,
+          lead.assigned_at || lead.created_at || new Date().toISOString(),
           JSON.stringify({ leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source, status: lead.status })
         ]);
 
@@ -1219,7 +1255,7 @@ export async function checkAndProcessLeadInactivity() {
           lead.id,
           lead.assigned_to_user_id || 'UNASSIGNED',
           lead.assigned_to_name || 'Unassigned',
-          lead.assigned_at,
+          lead.assigned_at || lead.created_at || new Date().toISOString(),
           JSON.stringify({ leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source })
         ]);
 
@@ -1270,4 +1306,10 @@ export async function checkAndProcessLeadInactivity() {
       });
     } catch (_) {}
   }
+  return { success: true };
+} finally {
+  lastInactivityCheckDurationMs = Date.now() - jobStartTime;
+  recordJobEnd('inactivityEngine', jobStartTime);
+  isInactivityCheckRunning = false;
+}
 }
