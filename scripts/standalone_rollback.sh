@@ -19,24 +19,81 @@ PORT="${BUSINZ_PORT:-5001}"
 BASELINE_COMMIT="04e0a5190ddebddbf8531909fcb64ca114d1832d"
 BASELINE_BRANCH="feature/crm-lead-management-system"
 
-# Use specified recovery directory or read from deployment manifest
+# ------------------------------------------------------------------------------
+# PREFLIGHT: RECOVERY DIRECTORY RESOLUTION & METADATA VALIDATION
+# ------------------------------------------------------------------------------
 EXACT_RECOVERY_DIR="${1:-}"
-LATEST_MANIFEST=""
-if [ -z "${EXACT_RECOVERY_DIR}" ]; then
-  LATEST_MANIFEST=$(ls -t "${BACKUP_BASE}"/deployment_manifest_*.json 2>/dev/null | head -1 || true)
-  if [ -s "${LATEST_MANIFEST}" ]; then
-    EXACT_RECOVERY_DIR=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).recovery_dir);" "${LATEST_MANIFEST}" 2>/dev/null || true)
+RESOLVED_MANIFEST=""
+
+if [ -n "${EXACT_RECOVERY_DIR}" ]; then
+  if [ ! -d "${EXACT_RECOVERY_DIR}" ]; then
+    echo "❌ CRITICAL: Specified recovery directory does not exist: ${EXACT_RECOVERY_DIR}" >&2
+    exit 1
   fi
-  # Fallback to existing verified production recovery directory
-  if [ -z "${EXACT_RECOVERY_DIR}" ] || [ ! -d "${EXACT_RECOVERY_DIR}" ]; then
-    if [ -d "${BACKUP_BASE}/predeploy_20261027_112307" ]; then
-      EXACT_RECOVERY_DIR="${BACKUP_BASE}/predeploy_20261027_112307"
+  # Locate deployment manifest
+  if [ -f "${EXACT_RECOVERY_DIR}/deployment_manifest.json" ]; then
+    RESOLVED_MANIFEST="${EXACT_RECOVERY_DIR}/deployment_manifest.json"
+  else
+    for m in $(ls -t "${BACKUP_BASE}"/deployment_manifest_*.json 2>/dev/null || true); do
+      if [ -s "${m}" ]; then
+        target_dir=$(node -e "try { const d = JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).recovery_dir; console.log(d || ''); } catch(_) {}" "${m}" 2>/dev/null || true)
+        if [ "${target_dir}" = "${EXACT_RECOVERY_DIR}" ]; then
+          RESOLVED_MANIFEST="${m}"
+          break
+        fi
+      fi
+    done
+  fi
+else
+  # Resolve from latest valid deployment manifest
+  for m in $(ls -t "${BACKUP_BASE}"/deployment_manifest_*.json 2>/dev/null || true); do
+    if [ -s "${m}" ]; then
+      target_dir=$(node -e "try { const d = JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).recovery_dir; console.log(d || ''); } catch(_) {}" "${m}" 2>/dev/null || true)
+      if [ -n "${target_dir}" ] && [ -d "${target_dir}" ]; then
+        EXACT_RECOVERY_DIR="${target_dir}"
+        RESOLVED_MANIFEST="${m}"
+        break
+      fi
     fi
-  fi
+  done
 fi
 
 if [ -z "${EXACT_RECOVERY_DIR}" ] || [ ! -d "${EXACT_RECOVERY_DIR}" ]; then
-  echo "❌ CRITICAL: Bound recovery directory not found! (Target: ${EXACT_RECOVERY_DIR:-unset})"
+  echo "❌ CRITICAL: Could not resolve a valid deployment recovery directory!" >&2
+  echo "Usage: $0 [/var/backups/businz/recovery_YYYYMMDD_HHMMSS]" >&2
+  exit 1
+fi
+
+# Mandatory completeness check: Must contain frontend bundle
+if [ ! -f "${EXACT_RECOVERY_DIR}/dist_frontend/index.html" ] || [ ! -s "${EXACT_RECOVERY_DIR}/dist_frontend/index.html" ]; then
+  echo "❌ CRITICAL: Recovery directory '${EXACT_RECOVERY_DIR}' is INCOMPLETE!" >&2
+  echo "Missing mandatory frontend bundle: '${EXACT_RECOVERY_DIR}/dist_frontend/index.html'." >&2
+  echo "👉 A partial or database-only backup cannot be used for complete application rollback." >&2
+  exit 1
+fi
+
+# Mandatory index metadata validation: Must be defined and strictly 0 or 1. Never guess.
+PRE_EXISTING_BOM_IDX=""
+PRE_EXISTING_LEADS_IDX=""
+
+if [ -n "${RESOLVED_MANIFEST}" ] && [ -s "${RESOLVED_MANIFEST}" ]; then
+  PRE_EXISTING_BOM_IDX=$(node -e "try { const m = JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); if (typeof m.pre_existing_bom_idx === 'number') console.log(m.pre_existing_bom_idx); } catch(_) {}" "${RESOLVED_MANIFEST}" 2>/dev/null || true)
+  PRE_EXISTING_LEADS_IDX=$(node -e "try { const m = JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); if (typeof m.pre_existing_leads_idx === 'number') console.log(m.pre_existing_leads_idx); } catch(_) {}" "${RESOLVED_MANIFEST}" 2>/dev/null || true)
+fi
+
+if [ -z "${PRE_EXISTING_BOM_IDX}" ] && [ -n "${BUSINZ_PRE_EXISTING_BOM_IDX:-}" ]; then
+  PRE_EXISTING_BOM_IDX="${BUSINZ_PRE_EXISTING_BOM_IDX}"
+fi
+if [ -z "${PRE_EXISTING_LEADS_IDX}" ] && [ -n "${BUSINZ_PRE_EXISTING_LEADS_IDX:-}" ]; then
+  PRE_EXISTING_LEADS_IDX="${BUSINZ_PRE_EXISTING_LEADS_IDX}"
+fi
+
+if [[ ! "${PRE_EXISTING_BOM_IDX}" =~ ^[01]$ ]] || [[ ! "${PRE_EXISTING_LEADS_IDX}" =~ ^[01]$ ]]; then
+  echo "❌ CRITICAL: Missing or invalid required index metadata!" >&2
+  echo "PRE_EXISTING_BOM_IDX:   '${PRE_EXISTING_BOM_IDX:-undefined}' (expected 0 or 1)" >&2
+  echo "PRE_EXISTING_LEADS_IDX: '${PRE_EXISTING_LEADS_IDX:-undefined}' (expected 0 or 1)" >&2
+  echo "Manifest path:          '${RESOLVED_MANIFEST:-none}'" >&2
+  echo "👉 Aborting rollback immediately BEFORE modifying application files or database indexes." >&2
   exit 1
 fi
 
@@ -172,14 +229,8 @@ if [ -d "${EXACT_RECOVERY_DIR}/dist_frontend" ]; then
   echo "✅ Frontend release bundle restored atomically."
 fi
 
-# 4. Remove Only Newly Created Indexes (Reading manifest if available)
+# 4. Remove Only Newly Created Indexes (Validated in Preflight)
 echo "🗄️ Selectively rolling back performance indexes..."
-PRE_EXISTING_BOM_IDX=0
-PRE_EXISTING_LEADS_IDX=0
-if [ -n "${LATEST_MANIFEST:-}" ] && [ -s "${LATEST_MANIFEST}" ]; then
-  PRE_EXISTING_BOM_IDX=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).pre_existing_bom_idx || 0);" "${LATEST_MANIFEST}" 2>/dev/null || echo 0)
-  PRE_EXISTING_LEADS_IDX=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).pre_existing_leads_idx || 0);" "${LATEST_MANIFEST}" 2>/dev/null || echo 0)
-fi
 
 if [ "${PRE_EXISTING_BOM_IDX}" -eq 0 ]; then
   echo "   - Dropping newly created index: idx_bom_orders_created_at"

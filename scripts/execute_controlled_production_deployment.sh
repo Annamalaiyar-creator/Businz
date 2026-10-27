@@ -379,7 +379,20 @@ echo "🚨 Timestamp: \$(date)"
 echo "🚨 ==================================================================="
 
 if [ ! -d "\${EXACT_RECOVERY_DIR}" ]; then
-  echo "❌ CRITICAL: Bound recovery directory \${EXACT_RECOVERY_DIR} does not exist!"
+  echo "❌ CRITICAL: Bound recovery directory \${EXACT_RECOVERY_DIR} does not exist!" >&2
+  exit 1
+fi
+
+if [ ! -f "\${EXACT_RECOVERY_DIR}/dist_frontend/index.html" ] || [ ! -s "\${EXACT_RECOVERY_DIR}/dist_frontend/index.html" ]; then
+  echo "❌ CRITICAL: Bound recovery directory '\${EXACT_RECOVERY_DIR}' is INCOMPLETE!" >&2
+  echo "Missing mandatory frontend bundle: '\${EXACT_RECOVERY_DIR}/dist_frontend/index.html'." >&2
+  echo "👉 A partial or database-only backup cannot be used for complete application rollback." >&2
+  exit 1
+fi
+
+if [[ ! "\${PRE_EXISTING_BOM_IDX}" =~ ^[01]$ ]] || [[ ! "\${PRE_EXISTING_LEADS_IDX}" =~ ^[01]$ ]]; then
+  echo "❌ CRITICAL: Index metadata variables are undefined or invalid! (BOM: \${PRE_EXISTING_BOM_IDX}, Leads: \${PRE_EXISTING_LEADS_IDX})" >&2
+  echo "👉 Aborting rollback immediately BEFORE modifying application files or database indexes." >&2
   exit 1
 fi
 
@@ -560,13 +573,18 @@ chmod 700 "${EXACT_RECOVERY_DIR}"
 # 3.1 PostgreSQL Database Binary Dump
 echo "🛡️ [1/5] Dumping PostgreSQL database 'businz'..."
 DUMP_FILE="${EXACT_RECOVERY_DIR}/businz_db_${TIMESTAMP}.dump"
-sudo -u postgres pg_dump -d businz -F c -b -f "${DUMP_FILE}"
+
+# Fix: Execute pg_dump as postgres user while root shell owns output redirection to ${DUMP_FILE}
+sudo -u postgres pg_dump -d businz -F c -b > "${DUMP_FILE}"
+chmod 600 "${DUMP_FILE}"
 
 if [ ! -s "${DUMP_FILE}" ]; then
   echo "❌ CRITICAL: Database dump is empty or failed!"
   exit 1
 fi
-if ! sudo -u postgres pg_restore -l "${DUMP_FILE}" > /dev/null; then
+
+# Verify archive integrity using pg_restore executed in the root shell
+if ! pg_restore -l "${DUMP_FILE}" > /dev/null 2>&1; then
   echo "❌ CRITICAL: Database dump failed integrity inspection (pg_restore -l)!"
   exit 1
 fi
@@ -676,7 +694,9 @@ cat << EOF > "${MANIFEST_FILE}"
 }
 EOF
 chmod 600 "${MANIFEST_FILE}"
-echo "✅ Deployment manifest written to ${MANIFEST_FILE}."
+cp -p "${MANIFEST_FILE}" "${EXACT_RECOVERY_DIR}/deployment_manifest.json"
+chmod 600 "${EXACT_RECOVERY_DIR}/deployment_manifest.json"
+echo "✅ Deployment manifest written to ${MANIFEST_FILE} and ${EXACT_RECOVERY_DIR}/deployment_manifest.json."
 
 # ------------------------------------------------------------------------------
 # STEP 4: ISOLATED STAGED RELEASE BUILD & CODE VERIFICATION
