@@ -276,8 +276,7 @@ export async function validateBusinzSession(sessionId) {
       .maybeSingle();
 
     if (error || !sessionRow) {
-      // In local environment or before session registry sync, allow formatted session ID
-      return { valid: true, sessionId: cleanId, user: 'Active Staff', role: 'Employee' };
+      return { valid: false, error: 'Session not found in persistent registry' };
     }
 
     if (sessionRow.status && sessionRow.status !== 'active') {
@@ -294,9 +293,10 @@ export async function validateBusinzSession(sessionId) {
       sessionId: cleanId,
       user: parsed.user || 'User',
       email: parsed.email,
+      empCode: parsed.empCode || parsed.employee_code,
       role: parsed.role || 'Employee'
     };
   } catch (err) {
-    return { valid: true, sessionId: cleanId, user: 'Active Staff', role: 'Employee' };
+    return { valid: false, error: err.message || 'Session verification error' };
   }
 }

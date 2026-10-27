@@ -258,7 +258,7 @@ export default function LoginScreen({ onLoginSuccess }) {
     setErrorMsg('');
   };
 
-  const finalizeSuccessfulLogin = (roleName, empCode, emailStr, displayNameStr) => {
+  const finalizeSuccessfulLogin = (roleName, empCode, emailStr, displayNameStr, passwordStr = null) => {
     // Generate fresh session token so we never inherit a previously revoked session ID
     createNewSessionId();
 
@@ -269,7 +269,7 @@ export default function LoginScreen({ onLoginSuccess }) {
     localStorage.setItem('controlroom_logged_user_name', displayNameStr);
 
     try {
-      registerActiveSession(emailStr, empCode, displayNameStr, roleName);
+      registerActiveSession(emailStr, empCode, displayNameStr, roleName, passwordStr || passwordInput);
     } catch (e) {}
 
     setShowSuccessBanner(false);

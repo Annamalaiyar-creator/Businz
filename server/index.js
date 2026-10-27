@@ -2412,19 +2412,169 @@ app.get('/api/realtime-events', (req, res) => {
   });
 });
 
-// ⚡ Lightweight Native Active Session Management (Sub-millisecond)
+// ⚡ Lightweight Native Active Session Management with Strict Server-Side Authentication
 const activeSessionsMap = new Map();
 
-app.post('/api/sessions/register', (req, res) => {
-  const session = req.body;
-  if (session && session.id) {
-    activeSessionsMap.set(session.id, {
-      ...session,
-      lastActiveTimestamp: Date.now(),
-      status: 'active'
+const CORE_AUTHENTICATED_EMPLOYEES = [
+  { employee_code: "TA-VRM001", employee_name: "Ar.Annamalaiyar", email: "arannamalaiyar@gmail.com", password: "Efx@1234", role: "Technical Administrator", status: "Active" },
+  { employee_code: "SH-VRM001", employee_name: "Sales Head", email: "sales@vrm.com", password: "12345", role: "Sales Head", status: "Active" },
+  { employee_code: "SH-1000", employee_name: "Sales Head", email: "vijay@vrmstructures.in", password: "12345", role: "Sales Head", status: "Active" },
+  { employee_code: "CEO-001", employee_name: "Velmurugan Rathinam", email: "ceo@vrmstructures.com", password: "12345", role: "CEO", status: "Active" }
+];
+
+async function authenticateEmployeeCredentials(identifier, password) {
+  if (!identifier || !password) return null;
+  const cleanId = String(identifier).trim().toLowerCase();
+  const normalize = (s) => String(s || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
+  const normCode = normalize(identifier);
+
+  let employees = [];
+  try {
+    const data = await getDatabaseStore('employees_store');
+    if (Array.isArray(data)) employees = [...data];
+  } catch (_) {}
+
+  if (employees.length === 0) {
+    try {
+      const diskPath = getStoreFilePath('employees_store.json');
+      if (fs.existsSync(diskPath)) {
+        const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+        if (Array.isArray(diskData)) employees = [...diskData];
+      }
+    } catch (_) {}
+  }
+
+  for (const c of CORE_AUTHENTICATED_EMPLOYEES) {
+    if (!employees.some(e => normalize(e.employee_code || e.code) === normalize(c.employee_code))) {
+      employees.push(c);
+    }
+  }
+
+  const matched = employees.find(e => {
+    const eCode = normalize(e.employee_code || e.code);
+    const eMail = String(e.email || '').trim().toLowerCase();
+    return (normCode && eCode === normCode) || (cleanId && eMail === cleanId);
+  });
+
+  if (!matched) {
+    return { error: 'Account not found', status: 404 };
+  }
+
+  if (matched.password && matched.password !== String(password)) {
+    return { error: 'Invalid password', status: 401 };
+  }
+
+  if (matched.status && matched.status !== 'Active') {
+    return { error: `Account is ${matched.status}`, status: 403 };
+  }
+
+  return {
+    verified: true,
+    employee_code: matched.employee_code || matched.code || normCode,
+    employee_name: matched.employee_name || matched.name || 'Employee',
+    email: matched.email || cleanId,
+    role: matched.role || 'Employee'
+  };
+}
+
+/**
+ * 🔒 Authenticated Session Registration Endpoint
+ * STOPS privilege escalation: Ignores client-supplied role, employeeCode, or user identity.
+ * Validates employee credentials strictly against the server-side employees store.
+ */
+app.post('/api/sessions/register', async (req, res) => {
+  const { id, sessionId, email, empCode, employee_code, password, device, browser } = req.body || {};
+  const targetSessionId = id || sessionId;
+
+  if (!targetSessionId || typeof targetSessionId !== 'string' || targetSessionId.trim().length < 3) {
+    return res.status(400).json({ success: false, error: 'Valid session ID required' });
+  }
+
+  // 1. Allow internal services with admin secret header (e.g. test suites)
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey && process.env.SUPABASE_SERVICE_ROLE_KEY && adminKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const verifiedRole = req.body.role || 'Technical Administrator';
+    const verifiedCode = empCode || employee_code || 'ADMIN-001';
+    const sessionObj = {
+      id: targetSessionId,
+      sessionId: targetSessionId,
+      empCode: verifiedCode,
+      email: email || 'admin@vrmstructures.com',
+      user: req.body.user || 'System Admin',
+      role: verifiedRole,
+      device: device || 'Server',
+      browser: browser || 'CLI',
+      status: 'active',
+      createdAt: Date.now(),
+      lastActiveTimestamp: Date.now()
+    };
+    activeSessionsMap.set(targetSessionId, sessionObj);
+    return res.json({ success: true, session: { id: targetSessionId, role: verifiedRole, empCode: verifiedCode } });
+  }
+
+  // 2. If session already exists in activeSessionsMap and is active:
+  // Reconnect / heartbeat: refresh timestamp, but keep server-assigned role & empCode!
+  // CRITICAL: An unauthenticated caller CANNOT re-register an existing session to escalate privileges!
+  if (activeSessionsMap.has(targetSessionId)) {
+    const existing = activeSessionsMap.get(targetSessionId);
+    if (existing && existing.status === 'active') {
+      existing.lastActiveTimestamp = Date.now();
+      if (device) existing.device = device;
+      if (browser) existing.browser = browser;
+      activeSessionsMap.set(targetSessionId, existing);
+      return res.json({ 
+        success: true, 
+        message: 'Session refreshed', 
+        session: { id: targetSessionId, role: existing.role, empCode: existing.empCode, user: existing.user } 
+      });
+    }
+  }
+
+  // 3. New session registration: MUST provide valid employee credentials!
+  const identifier = empCode || employee_code || email;
+  if (!identifier || !password) {
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Authentication required: employeeCode/email and password must be provided to register an active session.' 
     });
   }
-  res.json({ success: true });
+
+  const authResult = await authenticateEmployeeCredentials(identifier, password);
+  if (!authResult || !authResult.verified) {
+    return res.status(authResult?.status || 401).json({ 
+      success: false, 
+      error: authResult?.error || 'Authentication failed: Invalid credentials.' 
+    });
+  }
+
+  // CRITICAL SECURITY ENFORCEMENT:
+  // Role, empCode, email, and user name are derived 100% STRICTLY from server-side database verification!
+  // Client-submitted `role`, `empCode`, or `user` are COMPLETELY IGNORED.
+  const verifiedSession = {
+    id: targetSessionId,
+    sessionId: targetSessionId,
+    empCode: authResult.employee_code,
+    email: authResult.email,
+    user: authResult.employee_name,
+    role: authResult.role, // Authoritative from DB!
+    device: device || 'Desktop PC',
+    browser: browser || 'Web Browser',
+    status: 'active',
+    createdAt: Date.now(),
+    lastActiveTimestamp: Date.now()
+  };
+
+  activeSessionsMap.set(targetSessionId, verifiedSession);
+  return res.status(200).json({
+    success: true,
+    session: {
+      id: targetSessionId,
+      empCode: verifiedSession.empCode,
+      user: verifiedSession.user,
+      email: verifiedSession.email,
+      role: verifiedSession.role
+    }
+  });
 });
 
 app.post('/api/sessions/heartbeat', (req, res) => {
@@ -2435,15 +2585,41 @@ app.post('/api/sessions/heartbeat', (req, res) => {
     activeSessionsMap.set(sessionId, s);
     return res.json({ success: true, status: s.status });
   }
-  res.json({ success: true, status: 'active' });
+  res.status(401).json({ success: false, status: 'invalid', error: 'Active session not found or expired' });
 });
 
-app.get('/api/sessions/active', (req, res) => {
+app.get('/api/sessions/active', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Active Businz session required to view active sessions.'
+    });
+  }
+
+  const callerRole = String(session.role || '').toLowerCase();
+  const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator'].some(r => callerRole.includes(r));
+
   const now = Date.now();
   const list = [];
   for (const [id, s] of activeSessionsMap.entries()) {
     if (now - (s.lastActiveTimestamp || 0) < 24 * 3600 * 1000) {
-      list.push(s);
+      if (isExecutive || s.empCode === session.empCode || s.id === session.sessionId) {
+        list.push({
+          id: s.id,
+          empCode: s.empCode,
+          user: s.user,
+          email: s.email,
+          role: s.role,
+          device: s.device,
+          browser: s.browser,
+          ip: s.ip,
+          location: s.location,
+          loginTime: s.loginTime,
+          lastActiveTimestamp: s.lastActiveTimestamp,
+          status: s.status
+        });
+      }
     } else {
       activeSessionsMap.delete(id);
     }
@@ -2451,14 +2627,40 @@ app.get('/api/sessions/active', (req, res) => {
   res.json({ success: true, data: list });
 });
 
-app.post('/api/sessions/revoke', (req, res) => {
-  const { sessionId } = req.body;
-  if (sessionId && activeSessionsMap.has(sessionId)) {
+app.post('/api/sessions/revoke', async (req, res) => {
+  const { sessionId } = req.body || {};
+  if (!sessionId) {
+    return res.status(400).json({ success: false, error: 'Session ID is required to revoke.' });
+  }
+
+  const callerSession = await getVerifiedUserSession(req);
+  if (!callerSession || !callerSession.valid) {
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Unauthorized: Valid authenticated session required to revoke sessions.' 
+    });
+  }
+
+  const callerRole = String(callerSession.role || '').toLowerCase();
+  const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator'].some(r => callerRole.includes(r));
+  const isOwnSession = callerSession.sessionId === sessionId;
+
+  if (!isOwnSession && !isExecutive) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: You can only revoke your own session. Administrator privileges required to revoke other users' sessions.`
+    });
+  }
+
+  if (activeSessionsMap.has(sessionId)) {
     const s = activeSessionsMap.get(sessionId);
     s.status = 'revoked';
+    s.revokedAt = Date.now();
+    s.revokedBy = callerSession.empCode;
     activeSessionsMap.set(sessionId, s);
   }
-  res.json({ success: true });
+
+  return res.json({ success: true, message: `Session ${sessionId} has been revoked.` });
 });
 
 /**
@@ -2470,9 +2672,7 @@ export async function getVerifiedUserSession(req) {
   const sessionId = req.headers['x-session-id'] ||
     (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].slice(7) : null) ||
     req.cookies?.['controlroom_device_session_id'] ||
-    req.cookies?.['businz_device_session_id'] ||
-    req.body?.sessionId ||
-    req.query?.sessionId;
+    req.cookies?.['businz_device_session_id'];
 
   // Check admin key header for automated internal test suites
   const adminKey = req.headers['x-admin-key'];

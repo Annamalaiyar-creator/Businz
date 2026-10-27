@@ -223,8 +223,8 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
     localStorage.setItem('controlroom_logged_user', cleanUsername);
     localStorage.setItem('controlroom_logged_user_name', finalDisplayName);
 
-    // Register active device session in cloud database
-    registerActiveSession(cleanUsername, cleanEmpId, finalDisplayName, finalRoleName);
+    // Register active device session in cloud database with verified credentials
+    registerActiveSession(cleanUsername, cleanEmpId, finalDisplayName, finalRoleName, cleanPassword);
   } catch (e) {
     console.error('Error saving login session to localStorage:', e);
   }

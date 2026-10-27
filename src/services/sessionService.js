@@ -61,17 +61,18 @@ export function getOrCreateSessionId() {
 /**
  * Register or update active session in backend session registry
  */
-export async function registerActiveSession(userEmail, empCode, displayName, userRole) {
-  if (!userEmail) return null;
+export async function registerActiveSession(userEmail, empCode, displayName, userRole, password = null) {
+  if (!userEmail && !empCode) return null;
   const sessionId = getOrCreateSessionId();
   const { device, browser } = getDeviceInfo();
 
   const sessionPayload = {
     id: sessionId,
-    email: userEmail.toLowerCase().trim(),
+    email: (userEmail || '').toLowerCase().trim(),
     empCode: empCode || 'EMP',
     user: displayName || userEmail,
     role: userRole || 'Employee',
+    ...(password ? { password: String(password) } : {}),
     device: device,
     browser: browser,
     ip: 'Live Client',
@@ -84,7 +85,10 @@ export async function registerActiveSession(userEmail, empCode, displayName, use
   try {
     await fetch('/api/sessions/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-session-id': sessionId
+      },
       body: JSON.stringify(sessionPayload)
     }).catch(() => null);
   } catch (err) {
