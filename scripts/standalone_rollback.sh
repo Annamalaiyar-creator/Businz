@@ -264,7 +264,15 @@ if ! pm2 reload businz --update-env; then
 fi
 sleep 3
 
-# 6. Verify Health Post-Rollback
+# 6. Release Maintenance Mode Post-Rollback
+echo "🔓 Releasing maintenance mode post-rollback..."
+curl -s -X POST "http://127.0.0.1:${PORT}/api/maintenance/toggle" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}' >/dev/null 2>&1 || true
+rm -f "${APP_DIR}/maintenance.flag" || true
+echo "✅ Maintenance mode released."
+
+# 7. Verify Health Post-Rollback
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/api/db-status || echo "000")
 FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/ || echo "000")
 NOTIFICATIONS_AUTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/api/crm/leads/notifications || echo "000")
