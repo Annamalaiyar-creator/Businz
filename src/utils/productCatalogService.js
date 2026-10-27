@@ -152,6 +152,16 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       } catch (_) {}
     }
 
+    // Fallback to centralInventoryStore if candidatePool is still empty
+    if (candidatePool.length === 0) {
+      try {
+        const centralPool = centralInventoryStore.getInventoryItems();
+        if (Array.isArray(centralPool) && centralPool.length > 0) {
+          candidatePool = centralPool;
+        }
+      } catch (_) {}
+    }
+
     // Trigger background sync if on browser and cache was empty
     if (typeof window !== 'undefined' && !serverItemsCache) {
       setTimeout(() => syncFullCatalogFromBackend(), 50);
@@ -237,7 +247,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     result.push(itemRecord);
   });
 
-  if (!hasDirectItems && result.length > 0) {
+  if (!hasDirectItems) {
     cachedBaseCatalog = result;
     lastCacheTime = now;
   }

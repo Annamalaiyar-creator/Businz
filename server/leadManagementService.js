@@ -898,11 +898,22 @@ export async function createLeadNotification({ leadId = null, incidentId = null,
   let recipientList = [];
 
   await withTransaction(async (client) => {
-    // 1. Create main notification
+    // 1. Verify lead exists to prevent foreign key constraint violation
+    let validLeadId = null;
+    if (leadId) {
+      try {
+        const leadCheck = await client.query('SELECT id FROM public.leads WHERE id = $1 LIMIT 1', [leadId]);
+        if (leadCheck.rows && leadCheck.rows.length > 0) {
+          validLeadId = leadId;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Create main notification
     await client.query(`
       INSERT INTO public.lead_notifications (id, lead_id, incident_id, type, title, message, metadata, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-    `, [notifId, leadId, incidentId, type, title, message, JSON.stringify(metadata)]);
+    `, [notifId, validLeadId, incidentId, type, title, message, JSON.stringify(metadata)]);
 
     // 2. Determine recipients
     let recipients = [];
@@ -1145,8 +1156,8 @@ export async function checkAndProcessLeadInactivity() {
         `, [
           incidentId,
           lead.id,
-          lead.assigned_to_user_id,
-          lead.assigned_to_name,
+          lead.assigned_to_user_id || 'UNASSIGNED',
+          lead.assigned_to_name || 'Unassigned',
           lead.assigned_at || lead.created_at,
           JSON.stringify({ leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source, status: lead.status })
         ]);
@@ -1206,8 +1217,8 @@ export async function checkAndProcessLeadInactivity() {
         `, [
           incidentId,
           lead.id,
-          lead.assigned_to_user_id,
-          lead.assigned_to_name,
+          lead.assigned_to_user_id || 'UNASSIGNED',
+          lead.assigned_to_name || 'Unassigned',
           lead.assigned_at,
           JSON.stringify({ leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source })
         ]);

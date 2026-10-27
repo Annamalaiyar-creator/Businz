@@ -86,7 +86,10 @@
     "estimated_kw": 50,
     "estimated_value": 0,
     "created_at": "2026-10-25T15:58:00.372Z",
-    "updated_at": "2026-10-25T16:35:14.263Z"
+    "updated_at": "2026-10-25T16:35:14.263Z",
+    "is_unattended_24h": true,
+    "is_unattended_2h": true,
+    "unattended_alert_sent_at": "2026-10-27T05:27:52.894Z"
   },
   {
     "id": "LEAD-1792757258916-gcjn",
@@ -118,7 +121,10 @@
     "estimated_kw": 50,
     "estimated_value": 0,
     "created_at": "2026-10-25T15:58:00.372Z",
-    "updated_at": "2026-10-25T16:35:14.263Z"
+    "updated_at": "2026-10-25T16:35:14.263Z",
+    "is_unattended_24h": true,
+    "is_unattended_2h": true,
+    "unattended_alert_sent_at": "2026-10-27T05:27:52.921Z"
   },
   {
     "id": "LEAD-1792669492583-lro0",
@@ -150,7 +156,10 @@
     "estimated_kw": 50,
     "estimated_value": 0,
     "created_at": "2026-10-25T15:58:00.372Z",
-    "updated_at": "2026-10-25T16:35:14.263Z"
+    "updated_at": "2026-10-25T16:35:14.263Z",
+    "is_unattended_24h": true,
+    "is_unattended_2h": true,
+    "unattended_alert_sent_at": "2026-10-27T05:27:52.923Z"
   },
   {
     "id": "LEAD-1792669203567-r8mi",
@@ -182,7 +191,10 @@
     "estimated_kw": 50,
     "estimated_value": 0,
     "created_at": "2026-10-25T15:58:00.372Z",
-    "updated_at": "2026-10-25T16:35:14.263Z"
+    "updated_at": "2026-10-25T16:35:14.263Z",
+    "is_unattended_24h": true,
+    "is_unattended_2h": true,
+    "unattended_alert_sent_at": "2026-10-27T05:27:52.925Z"
   },
   {
     "id": "LEAD-1792669203417-ujxw",
@@ -406,6 +418,9 @@
     "estimated_kw": 50,
     "estimated_value": 0,
     "created_at": "2026-10-25T15:58:00.372Z",
-    "updated_at": "2026-10-25T16:35:14.264Z"
+    "updated_at": "2026-10-25T16:35:14.264Z",
+    "is_unattended_24h": true,
+    "is_unattended_2h": true,
+    "unattended_alert_sent_at": "2026-10-27T05:27:52.928Z"
   }
 ]

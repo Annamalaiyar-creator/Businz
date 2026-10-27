@@ -106,6 +106,18 @@ dotenv.config();
 // Initialize persistent runtime storage (decouples JSON stores & uploads from Git working tree)
 initRuntimeStorage();
 
+// Non-blocking asynchronous JSON file persistence to prevent Node.js event-loop delays
+export const safeWriteJsonFileAsync = (filePath, data) => {
+  setImmediate(async () => {
+    try {
+      const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      await fs.promises.writeFile(filePath, content, 'utf8');
+    } catch (err) {
+      console.warn(`[safeWriteJsonFileAsync] Failed to write ${filePath}:`, err?.message || err);
+    }
+  });
+};
+
 // In-memory active cache for server stores
 let supabaseMemoryStore = {};
 
@@ -207,7 +219,7 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
       }
     }
 
-    if (!error && Array.isArray(data) && data.length > 0) {
+    if (Array.isArray(data) && data.length > 0) {
       const mapped = data.map(c => {
         const pContact = c.primary_contact || {};
         const effectiveContact = (pContact.name && pContact.name !== '—') 
@@ -818,10 +830,16 @@ const saveLocalBoms = async (boms) => {
           console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
         }
 
-        // 4. Broadcast via SSE to all connected clients
+        // 4. Broadcast via SSE to all connected clients (targeted lightweight event)
         try {
-          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: fullStoreList });
-          broadcastRealtimeEvent('bom_updated', { bomList: fullStoreList });
+          const primaryRecord = changedRecords?.[0] || incomingItems?.[0];
+          const recordId = primaryRecord?.bomCode || primaryRecord?.code || primaryRecord?.id;
+          broadcastRealtimeEvent('bom_updated', {
+            action: 'update',
+            recordId,
+            bom: primaryRecord,
+            count: changedRecords?.length || 1
+          });
         } catch (_) {}
 
         // 5. Post-commit inventory reconciliation
@@ -1102,22 +1120,57 @@ const getDatabaseStore = async (key) => {
 // Broadcasts updates to all connected users with sub-second latency (WhatsApp-style)
 // ==========================================
 const realtimeClients = new Set();
+let sseSequenceId = 0;
+const MAX_SSE_HISTORY = 120;
+const sseEventHistory = [];
 
-const broadcastRealtimeEvent = (eventType, payload) => {
+const broadcastRealtimeEvent = (eventType, payload = {}) => {
   if (!realtimeClients || realtimeClients.size === 0) return;
-  const msg = JSON.stringify({
+
+  const seq = ++sseSequenceId;
+  const recordId = payload?.recordId || payload?.id || payload?.bomCode || payload?.piNo || payload?.leadId || payload?.bom?.bomCode || payload?.bom?.id || payload?.lead?.id || payload?.notification?.id || null;
+  const action = payload?.action || (eventType.includes('delete') ? 'delete' : (eventType.includes('create') ? 'create' : 'update'));
+
+  const eventObj = {
+    seq,
     type: eventType,
+    key: payload?.key || null,
+    recordId,
+    action,
     payload,
     timestamp: new Date().toISOString()
-  });
-  const chunk = `data: ${msg}\n\n`;
-  for (const client of realtimeClients) {
-    try {
-      client.write(chunk);
-    } catch (_) {
-      realtimeClients.delete(client);
-    }
+  };
+
+  // Keep circular history buffer for missed event replays on client reconnect
+  sseEventHistory.push(eventObj);
+  if (sseEventHistory.length > MAX_SSE_HISTORY) {
+    sseEventHistory.shift();
   }
+
+  const msg = JSON.stringify(eventObj);
+  const chunk = `id: ${seq}\nevent: message\ndata: ${msg}\n\n`;
+
+  // Asynchronous non-blocking broadcast to avoid stalling Express event loop on slow client sockets
+  setImmediate(() => {
+    for (const client of realtimeClients) {
+      try {
+        if (!client.writableEnded && !client.destroyed) {
+          // Socket backpressure protection: drop stalled clients accumulating excess buffer
+          if (client.writableLength && client.writableLength > 256 * 1024) {
+            console.warn('[SSE Backpressure] Dropping stalled slow client');
+            realtimeClients.delete(client);
+            client.end();
+            continue;
+          }
+          client.write(chunk);
+        } else {
+          realtimeClients.delete(client);
+        }
+      } catch (_) {
+        realtimeClients.delete(client);
+      }
+    }
+  });
 };
 
 // Hook realtime broadcaster to CRM lead notifications for sub-second WhatsApp-style alerts
@@ -1206,10 +1259,17 @@ const saveLocalCustomers = async (customers) => {
     console.warn('[saveLocalCustomers Supabase upsert notice]:', sbErr?.message || sbErr);
   }
 
-  // 4. Broadcast via SSE to all connected clients
+  // 4. Broadcast via SSE to all connected clients (lightweight targeted event)
   try {
-    broadcastRealtimeEvent('store_updated', { key: 'customer_store', storeData: fullList });
-    broadcastRealtimeEvent('crm_updated', { type: 'customers_updated', customers: fullList });
+    const primary = incoming[0];
+    const recordId = primary?.customerCode || primary?.id || primary?.code;
+    broadcastRealtimeEvent('crm_updated', {
+      type: 'customer_updated',
+      action: 'update',
+      recordId,
+      customer: primary,
+      count: incoming.length
+    });
   } catch (_) {}
 };
 
@@ -1227,10 +1287,16 @@ const saveLocalOpportunities = async (opportunities) => {
     console.warn('[saveLocalOpportunities disk write error]:', diskErr?.message);
   }
 
-  // 2. Broadcast via SSE to all connected clients
+  // 2. Broadcast via SSE to all connected clients (lightweight targeted event)
   try {
-    broadcastRealtimeEvent('store_updated', { key: 'crm_opportunities', storeData: list });
-    broadcastRealtimeEvent('crm_updated', { type: 'opportunities_updated', opportunities: list });
+    const primary = list[0];
+    broadcastRealtimeEvent('crm_updated', {
+      type: 'opportunities_updated',
+      action: 'update',
+      recordId: primary?.id || primary?.opportunityId,
+      opportunity: primary,
+      count: list.length
+    });
   } catch (_) {}
 
   // 3. Upsert to canonical public.opportunities table (Zero leaves table interaction)
@@ -1298,10 +1364,16 @@ const saveLocalLeads = async (leadsData) => {
     console.warn('[saveLocalLeads disk write error]:', diskErr?.message);
   }
 
-  // 2. Broadcast via SSE to all connected clients
+  // 2. Broadcast via SSE to all connected clients (lightweight targeted event)
   try {
-    broadcastRealtimeEvent('store_updated', { key: 'crm_leads', storeData: list });
-    broadcastRealtimeEvent('crm_updated', { type: 'leads_updated', leads: list });
+    const primary = list[0];
+    broadcastRealtimeEvent('crm_updated', {
+      type: 'leads_updated',
+      action: 'update',
+      recordId: primary?.id || primary?.leadNumber,
+      lead: primary,
+      count: list.length
+    });
   } catch (_) {}
 
   // 3. Upsert to Supabase leads table / leaves store
@@ -1418,95 +1490,86 @@ const saveDatabaseStore = async (key, storeData) => {
   supabaseMemoryStore[key] = storeData;
   supabaseMemoryStore[cleanKey] = storeData;
 
-  // 5. Write optional JSON backup for local recovery (post-commit)
-  try {
-    if (cleanKey === 'raw_materials_store' && Array.isArray(storeData)) {
-      const rawMatsPath = getStoreFilePath('raw_materials_store.json');
-      fs.writeFileSync(rawMatsPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if (cleanKey === 'item_store' && Array.isArray(storeData)) {
-      const itemPath = getStoreFilePath('item_store.json');
-      fs.writeFileSync(itemPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if (cleanKey === 'vendor_store' && Array.isArray(storeData)) {
-      const vendPath = getStoreFilePath('vendor_store.json');
-      fs.writeFileSync(vendPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if (cleanKey === 'po_store' && Array.isArray(storeData)) {
-      const poPath = getStoreFilePath('po_store.json');
-      fs.writeFileSync(poPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if (cleanKey === 'grn_store' && Array.isArray(storeData)) {
-      const grnPath = getStoreFilePath('grn_store.json');
-      fs.writeFileSync(grnPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if ((cleanKey === 'workorder_store' || cleanKey === 'vrm_prod_workorders') && Array.isArray(storeData)) {
-      try {
-        fs.writeFileSync(getStoreFilePath('workorder_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
-        fs.writeFileSync(getStoreFilePath('vrm_prod_workorders.json'), JSON.stringify(storeData, null, 2), 'utf8');
-      } catch (_) {}
-    } else if (cleanKey === 'employees_store' && Array.isArray(storeData)) {
-      try {
-        fs.writeFileSync(getStoreFilePath('employees_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
-      } catch (_) {}
-    } else if (cleanKey === 'invoice_store' && Array.isArray(storeData)) {
-      try {
-        fs.writeFileSync(getStoreFilePath('invoice_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
-      } catch (_) {}
-    }
-  } catch (diskErr) {
-    console.warn(`[saveDatabaseStore disk backup notice for ${key}]:`, diskErr?.message);
-  }
+  // 5. Asynchronous, non-blocking JSON backup for local recovery (post-commit)
+  setImmediate(() => {
+    try {
+      const jsonStr = JSON.stringify(storeData);
+      if (cleanKey === 'raw_materials_store' && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('raw_materials_store.json'), jsonStr).catch(() => {});
+      } else if (cleanKey === 'item_store' && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('item_store.json'), jsonStr).catch(() => {});
+      } else if (cleanKey === 'vendor_store' && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('vendor_store.json'), jsonStr).catch(() => {});
+      } else if (cleanKey === 'po_store' && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('po_store.json'), jsonStr).catch(() => {});
+      } else if (cleanKey === 'grn_store' && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('grn_store.json'), jsonStr).catch(() => {});
+      } else if ((cleanKey === 'workorder_store' || cleanKey === 'vrm_prod_workorders') && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('workorder_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('vrm_prod_workorders.json'), jsonStr).catch(() => {});
+      } else if (cleanKey === 'employees_store' && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('employees_store.json'), jsonStr).catch(() => {});
+      } else if (cleanKey === 'invoice_store' && Array.isArray(storeData)) {
+        fs.promises.writeFile(getStoreFilePath('invoice_store.json'), jsonStr).catch(() => {});
+      }
+    } catch (_) {}
+  });
 
-  // 6. Broadcast realtime events ONLY after successful database persistence
+  // 6. Broadcast realtime events ONLY after successful database persistence (lightweight targeted events)
   try {
-    broadcastRealtimeEvent('store_updated', { key, storeData });
-    if (cleanKey === 'raw_materials_store') {
-      broadcastRealtimeEvent('inventory_updated', { rawMaterials: storeData });
-    } else if (cleanKey === 'item_store' || cleanKey === 'vrm_prod_inventory') {
-      broadcastRealtimeEvent('item_store_updated', { items: storeData });
-    } else if (cleanKey === 'vendor_store') {
-      broadcastRealtimeEvent('vendor_store_updated', { vendors: storeData });
-    } else if (cleanKey === 'bom_store') {
-      broadcastRealtimeEvent('bom_updated', { bomList: storeData });
-    } else if (cleanKey === 'notifications_store') {
+    if (cleanKey === 'notifications_store') {
       const latestNotif = Array.isArray(storeData) ? storeData[0] : storeData;
       if (latestNotif && latestNotif.id !== 'NOTIF-001' && !String(latestNotif.title || '').includes('System Central Inventory Initialized')) {
-        broadcastRealtimeEvent('workflow_notification', { notification: latestNotif, storeData });
+        broadcastRealtimeEvent('workflow_notification', {
+          action: 'create',
+          recordId: latestNotif.id,
+          notification: latestNotif
+        });
       }
+    } else if (cleanKey === 'bom_store') {
+      const primary = Array.isArray(storeData) ? storeData[0] : storeData;
+      const recordId = primary?.bomCode || primary?.code || primary?.id;
+      broadcastRealtimeEvent('bom_updated', {
+        action: 'update',
+        recordId,
+        bom: primary
+      });
+    } else if (cleanKey === 'raw_materials_store') {
+      const primary = Array.isArray(storeData) ? storeData[0] : storeData;
+      broadcastRealtimeEvent('inventory_updated', {
+        action: 'update',
+        recordId: primary?.code || primary?.id,
+        item: primary,
+        count: Array.isArray(storeData) ? storeData.length : 1
+      });
+    } else if (cleanKey === 'item_store' || cleanKey === 'vrm_prod_inventory') {
+      const primary = Array.isArray(storeData) ? storeData[0] : storeData;
+      broadcastRealtimeEvent('item_store_updated', {
+        action: 'update',
+        recordId: primary?.code || primary?.id,
+        item: primary,
+        count: Array.isArray(storeData) ? storeData.length : 1
+      });
+    } else if (cleanKey === 'vendor_store') {
+      const primary = Array.isArray(storeData) ? storeData[0] : storeData;
+      broadcastRealtimeEvent('vendor_store_updated', {
+        action: 'update',
+        recordId: primary?.vendorCode || primary?.id,
+        vendor: primary
+      });
+    } else {
+      const primary = Array.isArray(storeData) ? storeData[0] : (storeData?.data && Array.isArray(storeData.data) ? storeData.data[0] : storeData);
+      broadcastRealtimeEvent('store_updated', {
+        key,
+        action: storeData?.action || 'update',
+        recordId: primary?.id || primary?.code || primary?.recordId || storeData?.recordId || null,
+        count: Array.isArray(storeData) ? storeData.length : (Array.isArray(storeData?.data) ? storeData.data.length : 1)
+      });
     }
   } catch (_) {}
 
-  const employeeKey = key.toUpperCase();
-  // STRICT: Do not write migrated stores into legacy public.leaves
-  if (['BOM_STORE', 'CUSTOMER_STORE', 'CRM_CUSTOMERS', 'CRM_OPPORTUNITIES', 'OPPORTUNITIES', 'CRM_LEADS', 'LEADS'].includes(employeeKey)) {
-    return storeData;
-  }
-
-  try {
-    const { data: records } = await supabase
-      .from('leaves')
-      .select('id')
-      .eq('employee', employeeKey)
-      .order('id', { ascending: false });
-
-    const payload = {
-      employee: employeeKey,
-      reason: JSON.stringify(storeData),
-      status: 'active',
-      dates: new Date().toISOString(),
-      duration: String(Array.isArray(storeData) ? storeData.length : 1),
-      type: 'Store'
-    };
-
-    if (records && records.length > 0) {
-      const masterId = records[0].id;
-      await supabase.from('leaves').update(payload).eq('id', masterId);
-      if (records.length > 1) {
-        const excessIds = records.slice(1).map(r => r.id);
-        await supabase.from('leaves').delete().in('id', excessIds);
-      }
-    } else {
-      await supabase.from('leaves').insert(payload);
-    }
-  } catch (err) {
-    console.error(`[saveDatabaseStore Error for ${key}]:`, err?.message || err);
-  }
+  // STRICT Phase 3: Authoritative persistence is PostgreSQL controlroom_store.
+  // Eliminate legacy public.leaves writes permanently (saves 200-500ms network latency and egress).
   return storeData;
 };
 
@@ -2287,6 +2350,7 @@ app.get('/api/db-status', async (req, res) => {
 });
 
 // ⚡ Real-Time Push Gateway (Server-Sent Events)
+// ⚡ Real-Time Push Gateway (Server-Sent Events)
 // Enables sub-second instant updates across all 10+ users without page refresh
 app.get('/api/realtime-events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -2295,12 +2359,47 @@ app.get('/api/realtime-events', (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
-  res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
+  const lastEventIdHeader = req.headers['last-event-id'] || req.query.lastEventId;
+  const lastEventId = lastEventIdHeader ? parseInt(lastEventIdHeader, 10) : 0;
+
+  res.write(`id: ${sseSequenceId}\nevent: message\ndata: ${JSON.stringify({ type: 'connected', seq: sseSequenceId, timestamp: new Date().toISOString() })}\n\n`);
   realtimeClients.add(res);
+
+  // If client reconnected with lastEventId, check for ring buffer overflow or server sequence reset
+  if (lastEventId > 0) {
+    const oldestSeq = sseEventHistory.length > 0 ? sseEventHistory[0].seq : 0;
+    const isSequenceReset = lastEventId > sseSequenceId;
+    const isBufferOverflow = sseEventHistory.length > 0 && (lastEventId < oldestSeq - 1);
+
+    if (isSequenceReset || isBufferOverflow) {
+      // Signal client that ring buffer overflowed or sequence was reset; client must perform full state resync
+      res.write(`id: ${sseSequenceId}\nevent: message\ndata: ${JSON.stringify({ 
+        type: 'resync_required', 
+        seq: sseSequenceId, 
+        reason: isSequenceReset ? 'server_restart' : 'buffer_overflow',
+        message: 'Missed event gap exceeds replay buffer. Full authoritative state resync required.' 
+      })}\n\n`);
+    } else if (sseEventHistory.length > 0) {
+      const missed = sseEventHistory.filter(e => e.seq > lastEventId);
+      for (const ev of missed) {
+        try {
+          res.write(`id: ${ev.seq}\nevent: message\ndata: ${JSON.stringify(ev)}\n\n`);
+        } catch (_) {
+          realtimeClients.delete(res);
+          break;
+        }
+      }
+    }
+  }
 
   const keepAliveInterval = setInterval(() => {
     try {
-      res.write(': keepalive\n\n');
+      if (!res.writableEnded && !res.destroyed) {
+        res.write(': keepalive\n\n');
+      } else {
+        clearInterval(keepAliveInterval);
+        realtimeClients.delete(res);
+      }
     } catch (_) {
       clearInterval(keepAliveInterval);
       realtimeClients.delete(res);
@@ -2373,6 +2472,88 @@ app.get('/api/store/:key', async (req, res) => {
       const dbRes = await query('SELECT id, reason, dates, duration, status FROM public.leaves WHERE employee = $1 ORDER BY id DESC LIMIT 50', [String(employeeFilter).toUpperCase()]);
       return res.json({ success: true, data: dbRes.rows });
     }
+    if (key === 'notifications_store') {
+      const fullList = await getDatabaseStore('notifications_store');
+      const list = Array.isArray(fullList) ? fullList : [];
+      const total = list.length;
+
+      // Incremental sync via ?sinceId= (returns newer notifications ahead of sinceId)
+      if (req.query.sinceId) {
+        const sinceIdx = list.findIndex(n => n && (n.id === req.query.sinceId));
+        const newerSlice = sinceIdx > 0 ? list.slice(0, sinceIdx) : (sinceIdx === 0 ? [] : list.slice(0, 50));
+        return res.json({
+          success: true,
+          mode: 'incremental',
+          sinceId: req.query.sinceId,
+          total,
+          count: newerSlice.length,
+          data: newerSlice
+        });
+      }
+
+      // Incremental sync via ?since= (ISO timestamp or epoch)
+      if (req.query.since) {
+        const sinceTime = new Date(req.query.since).getTime();
+        const newerSlice = !isNaN(sinceTime)
+          ? list.filter(n => n && n.createdAt && new Date(n.createdAt).getTime() > sinceTime)
+          : list.slice(0, 50);
+        return res.json({
+          success: true,
+          mode: 'incremental',
+          since: req.query.since,
+          total,
+          count: newerSlice.length,
+          data: newerSlice
+        });
+      }
+
+      // Filter by role if requested
+      let filtered = list;
+      if (req.query.role) {
+        const reqRole = String(req.query.role).trim().toLowerCase();
+        filtered = filtered.filter(n => {
+          if (!n) return false;
+          const roles = Array.isArray(n.targetRoles) ? n.targetRoles : (n.role ? [n.role] : ['All']);
+          return roles.some(r => String(r).toLowerCase().includes(reqRole) || r === 'All');
+        });
+      }
+
+      // Filter by unread if requested
+      if (req.query.unread === 'true') {
+        filtered = filtered.filter(n => n && Boolean(n.unread));
+      }
+
+      // Explicit ?all=true returns all records without pagination (e.g. for complete export/audit)
+      if (req.query.all === 'true') {
+        return res.json({
+          success: true,
+          page: 1,
+          limit: filtered.length,
+          total,
+          filteredTotal: filtered.length,
+          totalPages: 1,
+          hasMore: false,
+          data: filtered
+        });
+      }
+
+      // Server-side pagination (default 50 items per page, capped at 200)
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 50), 200);
+      const startIndex = (page - 1) * limit;
+      const pagedData = filtered.slice(startIndex, startIndex + limit);
+
+      return res.json({
+        success: true,
+        page,
+        limit,
+        total,
+        filteredTotal: filtered.length,
+        totalPages: Math.ceil(filtered.length / limit),
+        hasMore: startIndex + limit < filtered.length,
+        data: pagedData
+      });
+    }
     const data = await getDatabaseStore(key);
     return res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
@@ -2436,14 +2617,28 @@ app.post('/api/auth/register-employee', async (req, res) => {
   }
 });
 
+const storeWriteQueues = new Map();
+
+function enqueueStoreOperation(storeKey, opFn) {
+  const currentQueue = storeWriteQueues.get(storeKey) || Promise.resolve();
+  const nextQueue = currentQueue.then(opFn, opFn);
+  storeWriteQueues.set(storeKey, nextQueue);
+  return nextQueue;
+}
+
 app.post('/api/store/:key', async (req, res) => {
   const { key } = req.params;
-  const storeData = req.body;
+  const rawBody = req.body;
+  const storeData = (key === 'notifications_store' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) && rawBody.data !== undefined)
+    ? rawBody.data
+    : rawBody;
   if (!isDbConnected()) {
     return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot persist store "${key}".` });
   }
-  try {
-    let finalDataToSave = storeData;
+
+  return enqueueStoreOperation(key, async () => {
+    try {
+      let finalDataToSave = storeData;
 
     // Smart merge for array collections
     if (Array.isArray(storeData) && storeData.length === 0) {
@@ -2492,6 +2687,33 @@ app.post('/api/store/:key', async (req, res) => {
       });
       if (!matched) mergedList.push(storeData);
       finalDataToSave = mergedList;
+    } else if (key === 'notifications_store') {
+      // Smart non-destructive merge for notifications_store: NEVER truncate or overwrite historical records
+      const currentNotifs = await getDatabaseStore('notifications_store');
+      const list = Array.isArray(currentNotifs) ? currentNotifs : [];
+      const incomingList = Array.isArray(storeData) ? storeData : (storeData && typeof storeData === 'object' ? [storeData] : []);
+
+      const notifMap = new Map();
+      // 1. Put incoming new/updated notifications first
+      incomingList.forEach(n => {
+        if (n && (n.id || n.message)) {
+          const k = n.id || n.message;
+          notifMap.set(k, n);
+        }
+      });
+      // 2. Preserve all historical notifications without data loss
+      list.forEach(n => {
+        if (n && (n.id || n.message)) {
+          const k = n.id || n.message;
+          if (!notifMap.has(k)) {
+            notifMap.set(k, n);
+          } else {
+            // Merge status changes (e.g. read status) while keeping existing metadata
+            notifMap.set(k, { ...n, ...notifMap.get(k) });
+          }
+        }
+      });
+      finalDataToSave = Array.from(notifMap.values());
     } else if (Array.isArray(storeData)) {
       const currentData = await getDatabaseStore(key);
       if (Array.isArray(currentData) && currentData.length > 0) {
@@ -2614,10 +2836,22 @@ app.post('/api/store/:key', async (req, res) => {
     }
 
     await saveDatabaseStore(key, finalDataToSave);
+    if (key === 'notifications_store') {
+      const returnedSlice = Array.isArray(storeData)
+        ? storeData.slice(0, 50)
+        : (storeData && typeof storeData === 'object' ? [storeData] : (Array.isArray(finalDataToSave) ? finalDataToSave.slice(0, 50) : [finalDataToSave]));
+      return res.json({
+        success: true,
+        count: Array.isArray(storeData) ? storeData.length : 1,
+        total: Array.isArray(finalDataToSave) ? finalDataToSave.length : 1,
+        data: returnedSlice
+      });
+    }
     res.json({ success: true, count: Array.isArray(finalDataToSave) ? finalDataToSave.length : 1, data: finalDataToSave });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, message: err.message });
-  }
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message, message: err.message });
+    }
+  });
 });
 
 app.delete('/api/store/:key/:id', async (req, res) => {
@@ -2662,9 +2896,8 @@ app.delete('/api/store/:key/:id', async (req, res) => {
         fs.writeFileSync(oppPath, JSON.stringify(updated, null, 2), 'utf8');
       } catch (_) {}
 
-      // 3. Broadcast event
-      broadcastRealtimeEvent('store_updated', { key: 'crm_opportunities', storeData: updated });
-      broadcastRealtimeEvent('crm_updated', { type: 'opportunities_updated', opportunities: updated });
+      // 3. Broadcast event (lightweight deletion)
+      broadcastRealtimeEvent('crm_updated', { type: 'opportunities_updated', action: 'delete', recordId: id });
 
       return res.json({ success: true, message: `Opportunity ${id} deleted successfully`, data: updated });
     } catch (err) {
@@ -2706,8 +2939,7 @@ app.delete('/api/store/:key/:id', async (req, res) => {
       // Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
       // and is not rewritten on normal BOM delete operations.
 
-      broadcastRealtimeEvent('bom_updated', { id: cleanId, action: 'delete', bomList: updated });
-      broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: updated });
+      broadcastRealtimeEvent('bom_updated', { recordId: cleanId, id: cleanId, action: 'delete' });
       return res.json({ success: true, message: `BOM ${cleanId} deleted successfully`, data: updated });
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
@@ -4038,9 +4270,8 @@ async function repairBomSequences() {
   // 5. Reload memory cache & broadcast updates
   await loadDatabaseBoms(true);
   try {
-    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piList });
-    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: supabaseMemoryStore.bom_store });
-    broadcastRealtimeEvent('bom_updated', { bomList: supabaseMemoryStore.bom_store });
+    broadcastRealtimeEvent('bom_updated', { action: 'repair_complete', count: bomUpdatedCount });
+    broadcastRealtimeEvent('pi_updated', { action: 'repair_complete', count: piUpdatedCount });
   } catch (_) {}
 
   console.log(`✅ [BOM Sequence Repair] Complete. ${piUpdatedCount} PIs aligned, ${bomUpdatedCount} BOMs ensured.`);
@@ -4155,38 +4386,116 @@ app.post('/api/repair-bom-sequences', async (req, res) => {
   });
 });
 
-// Centralized GET all BOMs endpoint - reads authoritative list from public.bom_orders with fast caching
+// Helper to strip heavy base64 dataUrls from BOM list responses while keeping all metadata
+const stripHeavyDocsFromBom = (b) => {
+  if (!b || typeof b !== 'object') return b;
+  const stripped = { ...b };
+
+  const stripDoc = (doc) => {
+    if (!doc) return null;
+    if (typeof doc === 'string') {
+      if (doc.startsWith('data:') && doc.length > 300) {
+        return { hasDoc: true, isLightweightRef: true, type: doc.slice(5, doc.indexOf(';')) || 'image/jpeg' };
+      }
+      return doc;
+    }
+    if (typeof doc === 'object') {
+      const { dataUrl, fileData, base64, buffer, ...meta } = doc;
+      return {
+        ...meta,
+        hasDoc: Boolean(dataUrl || fileData || base64 || meta.hasDoc || meta.storagePath || meta.url),
+        isLightweightRef: true
+      };
+    }
+    return doc;
+  };
+
+  if (stripped.paymentProofDoc) {
+    stripped.paymentProofDoc = stripDoc(stripped.paymentProofDoc);
+  }
+  if (Array.isArray(stripped.paymentProofDocs)) {
+    stripped.paymentProofDocs = stripped.paymentProofDocs.map(stripDoc);
+  }
+  if (stripped.deliveryAddressProofDoc) {
+    stripped.deliveryAddressProofDoc = stripDoc(stripped.deliveryAddressProofDoc);
+  }
+  if (stripped.lrCopyDoc) {
+    stripped.lrCopyDoc = stripDoc(stripped.lrCopyDoc);
+  }
+  if (stripped.dispatchPackingMedia && typeof stripped.dispatchPackingMedia === 'object') {
+    const rawMedia = stripped.dispatchPackingMedia;
+    const photoCount = Array.isArray(rawMedia.photos) ? rawMedia.photos.length : 0;
+    const videoCount = Array.isArray(rawMedia.videos) ? rawMedia.videos.length : 0;
+    stripped.dispatchPackingMedia = {
+      photosCount: photoCount,
+      videosCount: videoCount,
+      hasMedia: photoCount > 0 || videoCount > 0,
+      isLightweightRef: true
+    };
+  }
+
+  return stripped;
+};
+
+// Centralized GET all BOMs endpoint - reads authoritative list from public.bom_orders with fast caching, document stripping and pagination
 app.get('/api/boms', async (req, res) => {
   try {
     const now = Date.now();
     const shouldRefresh = Boolean(req.query.refresh === 'true' || req.query.refresh === '1');
+    const includeDocs = Boolean(req.query.includeDocs === 'true' || req.query.includeDocs === '1');
+    const pageParam = req.query.page ? parseInt(req.query.page, 10) : null;
+    const limitParam = req.query.limit ? parseInt(req.query.limit, 10) : (pageParam ? 50 : null);
+
+    let finalBoms = null;
     // 1. Serve immediately from high-speed memory cache if fresh (< 30s) unless refresh requested
     if (!shouldRefresh && cachedBomsResult && (now - lastBomFetchTimestamp < 30000)) {
-      return res.json({ success: true, data: cachedBomsResult, total: cachedBomsResult.length });
+      finalBoms = cachedBomsResult;
+    } else {
+      // Helper to sort BOMs by code sequence descending
+      const sortBoms = (list) => {
+        const parseBomSeq = (code) => {
+          const m = String(code || '').match(/BOM-(\d+)/i);
+          return m ? parseInt(m[1], 10) : 0;
+        };
+        return list.sort((a, b) => {
+          const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
+          const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
+          if (seqA !== seqB) return seqB - seqA;
+          const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
+          const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
+          return dateB - dateA;
+        });
+      };
+
+      // Load authoritative list directly from public.bom_orders (Zero leaves table interaction)
+      const boms = await loadDatabaseBoms(shouldRefresh);
+      finalBoms = sortBoms(Array.isArray(boms) ? boms : []);
+      cachedBomsResult = finalBoms;
+      lastBomFetchTimestamp = Date.now();
     }
 
-    // Helper to sort BOMs by code sequence descending
-    const sortBoms = (list) => {
-      const parseBomSeq = (code) => {
-        const m = String(code || '').match(/BOM-(\d+)/i);
-        return m ? parseInt(m[1], 10) : 0;
-      };
-      return list.sort((a, b) => {
-        const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
-        const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
-        if (seqA !== seqB) return seqB - seqA;
-        const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-        const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-        return dateB - dateA;
-      });
-    };
+    // Strip bulky inline documents unless client explicitly asks for them
+    const resultList = includeDocs ? finalBoms : finalBoms.map(stripHeavyDocsFromBom);
 
-    // Load authoritative list directly from public.bom_orders (Zero leaves table interaction)
-    const boms = await loadDatabaseBoms(shouldRefresh);
-    const finalBoms = sortBoms(Array.isArray(boms) ? boms : []);
-    cachedBomsResult = finalBoms;
-    lastBomFetchTimestamp = Date.now();
-    return res.json({ success: true, data: finalBoms, total: finalBoms.length });
+    // Server-side pagination if page query param provided
+    if (pageParam !== null) {
+      const page = Math.max(1, pageParam);
+      const limit = Math.max(1, limitParam || 50);
+      const total = resultList.length;
+      const startIndex = (page - 1) * limit;
+      const pagedBoms = resultList.slice(startIndex, startIndex + limit);
+      return res.json({
+        success: true,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+        data: pagedBoms
+      });
+    }
+
+    return res.json({ success: true, data: resultList, total: resultList.length });
   } catch (err) {
     console.error('Error fetching BOMs:', err);
     return res.status(500).json({ success: false, message: err.message, data: [] });
@@ -4200,20 +4509,26 @@ app.get('/api/boms/:id', async (req, res) => {
     const cleanId = String(id).trim();
     // 1. Check memory cache first
     if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
-      const found = supabaseMemoryStore.bom_store.find(b => b.id === cleanId || b.bomCode === cleanId || b.code === cleanId);
+      const found = supabaseMemoryStore.bom_store.find(b => 
+        String(b.id || '').toLowerCase() === cleanId.toLowerCase() || 
+        String(b.bomCode || '').toLowerCase() === cleanId.toLowerCase() || 
+        String(b.code || '').toLowerCase() === cleanId.toLowerCase()
+      );
       if (found) return res.json({ success: true, data: found });
     }
 
-    // 2. Fetch single row from public.bom_orders
-    const { data, error } = await supabase
-      .from('bom_orders')
-      .select('*')
-      .or(`id.eq.${cleanId},bom_code.eq.${cleanId}`)
-      .maybeSingle();
+    // 2. Fetch single row from public.bom_orders via PostgreSQL
+    if (isDbConnected()) {
+      const dbRes = await query(`
+        SELECT * FROM public.bom_orders
+        WHERE LOWER(TRIM(id)) = LOWER($1) OR LOWER(TRIM(bom_code)) = LOWER($1) OR LOWER(TRIM(code)) = LOWER($1)
+        LIMIT 1
+      `, [cleanId]);
 
-    if (!error && data) {
-      const consumer = toConsumerBomServer(data);
-      return res.json({ success: true, data: consumer });
+      if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+        const consumer = toConsumerBomServer(dbRes.rows[0]);
+        return res.json({ success: true, data: consumer });
+      }
     }
 
     return res.status(404).json({ success: false, message: `BOM ${cleanId} not found` });
@@ -4227,21 +4542,22 @@ app.get('/api/boms/:id/accounts-verification', async (req, res) => {
   const { id } = req.params;
   try {
     const cleanId = String(id).trim();
-    const { data, error } = await supabase
-      .from('bom_orders')
-      .select('accounts_verification')
-      .or(`id.eq.${cleanId},bom_code.eq.${cleanId}`)
-      .maybeSingle();
+    if (isDbConnected()) {
+      const dbRes = await query(`
+        SELECT accounts_verification FROM public.bom_orders
+        WHERE LOWER(TRIM(id)) = LOWER($1) OR LOWER(TRIM(bom_code)) = LOWER($1) OR LOWER(TRIM(code)) = LOWER($1)
+        LIMIT 1
+      `, [cleanId]);
 
-    if (error) {
-      return res.status(500).json({ success: false, message: error.message });
+      if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+        const raw = dbRes.rows[0]?.accounts_verification || {};
+        const clean = (typeof raw === 'object') ? { ...raw } : {};
+        delete clean._extra_data;
+        return res.json({ success: true, data: clean });
+      }
     }
 
-    const raw = data?.accounts_verification || {};
-    const clean = (typeof raw === 'object') ? { ...raw } : {};
-    delete clean._extra_data;
-
-    return res.json({ success: true, data: clean });
+    return res.status(404).json({ success: false, message: `BOM ${cleanId} not found` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -4386,7 +4702,7 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
         fs.writeFileSync(rawMatsPath, JSON.stringify(rawMats, null, 2), 'utf8');
         supabaseMemoryStore.raw_materials_store = rawMats;
         pushStoreToSupabase('raw_materials_store', rawMats).catch(() => {});
-        broadcastRealtimeEvent('inventory_updated', { rawMaterials: rawMats });
+        broadcastRealtimeEvent('inventory_updated', { action: 'reconcile', count: rawMats.length });
       }
     }
 
@@ -4437,7 +4753,7 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
         fs.writeFileSync(itemsPath, JSON.stringify(items, null, 2), 'utf8');
         supabaseMemoryStore.item_store = items;
         pushStoreToSupabase('item_store', items).catch(() => {});
-        broadcastRealtimeEvent('item_store_updated', { items });
+        broadcastRealtimeEvent('item_store_updated', { action: 'reconcile', count: items.length });
       }
     }
     console.log(`[Inventory Reconcile] Reconciled stock for ${allocations.size} allocated items across ${boms.length} BOMs.`);
@@ -4513,10 +4829,10 @@ app.post('/api/boms', async (req, res) => {
         cachedBomsResult = fullStoreList;
         lastBomFetchTimestamp = Date.now();
 
-        // 3. Write disk backup
+        // 3. Write disk backup asynchronously
         try {
           const diskPath = getStoreFilePath('bom_store.json');
-          fs.writeFileSync(diskPath, JSON.stringify(fullStoreList, null, 2), 'utf8');
+          safeWriteJsonFileAsync(diskPath, fullStoreList);
         } catch (diskErr) {
           console.warn('[POST /api/boms disk write error]:', diskErr?.message || diskErr);
         }
@@ -4532,11 +4848,16 @@ app.post('/api/boms', async (req, res) => {
 
         // 5. Real-time sub-second push to all connected browsers/devices immediately
         try {
-          broadcastRealtimeEvent('bom_updated', { bom: persistedBom, bomList: fullStoreList });
-          broadcastRealtimeEvent('inventory_updated', { rawMaterials: supabaseMemoryStore.raw_materials_store });
-          broadcastRealtimeEvent('item_store_updated', { items: supabaseMemoryStore.item_store });
-          broadcastRealtimeEvent('store_updated', { key: 'raw_materials_store', storeData: supabaseMemoryStore.raw_materials_store });
-          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: fullStoreList });
+          broadcastRealtimeEvent('bom_updated', {
+            action: isExisting ? 'update' : 'create',
+            recordId: persistedBom?.bomCode || persistedBom?.code || persistedBom?.id,
+            bom: persistedBom
+          });
+          broadcastRealtimeEvent('inventory_updated', {
+            action: 'update',
+            reason: 'bom_stock_deduction',
+            bomCode: persistedBom?.bomCode || persistedBom?.code
+          });
         } catch (_) {}
 
         // 6. Update sequence metadata in leaves table if needed
@@ -4578,7 +4899,7 @@ app.post('/api/boms', async (req, res) => {
             const piStoreRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`).catch(() => null);
             if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
               supabaseMemoryStore['sales_pi_store'] = piStoreRes.rows[0].data;
-              broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piStoreRes.rows[0].data });
+              broadcastRealtimeEvent('pi_updated', { action: 'converted_to_bom', recordId: bom.sourcePiNo, piNo: bom.sourcePiNo, convertedBomCode: finalCode });
             }
           } catch (_) {}
         }
@@ -4644,7 +4965,7 @@ app.post('/api/boms/:id/print-status', async (req, res) => {
 
     if (updatedBom) {
       try {
-        fs.writeFileSync(diskPath, JSON.stringify(fullList, null, 2), 'utf8');
+        safeWriteJsonFileAsync(diskPath, fullList);
       } catch (_) {}
       supabaseMemoryStore.bom_store = fullList;
       cachedBomsResult = fullList;
@@ -4700,10 +5021,10 @@ app.post('/api/boms/:id/print-status', async (req, res) => {
       }
 
       // 3. Broadcast real-time SSE event to ALL connected clients (Sales, Dispatch, Production, Admin)
-      broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: fullList });
       broadcastRealtimeEvent('bom_updated', {
+        action: 'print_update',
+        recordId: updatedBom.bomCode || updatedBom.code || updatedBom.id,
         bom: updatedBom,
-        bomList: fullList,
         printData: {
           bomCode: updatedBom.bomCode || updatedBom.code || updatedBom.id,
           ...printData
@@ -4736,9 +5057,11 @@ app.delete('/api/boms/:id', async (req, res) => {
     }
     const updated = current.filter(b => (b.id !== cleanId && b.bomCode !== cleanId && b.code !== cleanId));
     supabaseMemoryStore.bom_store = updated;
+    cachedBomsResult = updated;
+    lastBomFetchTimestamp = Date.now();
     try {
       const diskPath = getStoreFilePath('bom_store.json');
-      fs.writeFileSync(diskPath, JSON.stringify(updated, null, 2), 'utf8');
+      safeWriteJsonFileAsync(diskPath, updated);
     } catch (_) {}
     if (isDbConnected()) {
       query(`
@@ -4749,8 +5072,7 @@ app.delete('/api/boms/:id', async (req, res) => {
     }
 
     // 3. Broadcast real-time deletion
-    broadcastRealtimeEvent('bom_updated', { id: cleanId, action: 'delete', bomList: updated });
-    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: updated });
+    broadcastRealtimeEvent('bom_updated', { recordId: cleanId, id: cleanId, action: 'delete' });
 
     res.json({ success: true, message: `BOM ${cleanId} deleted successfully`, total: updated.length });
   } catch (err) {
@@ -4861,7 +5183,7 @@ app.post('/api/boms/:bomCode/documents', requireBusinzSession, async (req, res) 
       if (metadata && metadata.storagePath) {
         mediaCache[metadata.storagePath] = dataUrlToStore;
       }
-      fs.writeFileSync(mediaCachePath, JSON.stringify(mediaCache, null, 2), 'utf8');
+      safeWriteJsonFileAsync(mediaCachePath, mediaCache);
     } catch (cacheErr) {
       console.warn('[BOM Document Upload] Failed to update media_cache.json:', cacheErr.message);
     }
@@ -5178,8 +5500,10 @@ app.post('/api/invoices', async (req, res) => {
             supabaseMemoryStore.bom_store = diskBoms;
             cachedBomsResult = diskBoms;
             try {
-              broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: diskBoms });
-              broadcastRealtimeEvent('bom_updated', { bom: diskBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode) });
+              const matched = diskBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode);
+              if (matched) {
+                broadcastRealtimeEvent('bom_updated', { action: 'update', recordId: targetBomCode, bom: matched });
+              }
             } catch (_) {}
           }
         }
@@ -5189,8 +5513,7 @@ app.post('/api/invoices', async (req, res) => {
     }
 
     try {
-      broadcastRealtimeEvent('store_updated', { key: 'invoice_store', storeData: localInvList });
-      broadcastRealtimeEvent('invoice_updated', { invoice: invRecord });
+      broadcastRealtimeEvent('invoice_updated', { action: 'create', recordId: invRecord?.invNo || invRecord?.id, invoice: invRecord });
     } catch (_) {}
 
     return res.json({
@@ -5438,8 +5761,7 @@ app.post('/api/import-estimates', async (req, res) => {
     fs.writeFileSync(p1, JSON.stringify(mappedPIs, null, 2), 'utf8');
     fs.writeFileSync(p2, JSON.stringify(mappedPIs, null, 2), 'utf8');
     saveDatabaseStore('sales_pi_store', mappedPIs).catch(() => {});
-    saveDatabaseStore('proforma_invoice_store', mappedPIs).catch(() => {});
-    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: mappedPIs });
+    broadcastRealtimeEvent('pi_updated', { action: 'import', count: mappedPIs.length });
 
     res.json({ success: true, count: mappedPIs.length, message: `Successfully imported ${mappedPIs.length} Quotes (PIs)` });
   } catch (err) {
@@ -5474,8 +5796,7 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
     console.log(`✅ [PI STEP 1: DATABASE PERSISTED] PI "${savedPi.piNo}" safely stored in PostgreSQL public.proforma_invoices.`);
 
     // Broadcast realtime event immediately so all connected clients/dashboards see the PI
-    broadcastRealtimeEvent('pi_created', { pi: savedPi });
-    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: savedPi });
+    broadcastRealtimeEvent('pi_created', { action: 'create', recordId: savedPi?.piNo || savedPi?.id, pi: savedPi });
 
     // Store in database ONLY. Do NOT automatically push to Zoho.
     // As per requirement: PI is pushed to Zoho ONLY when salesperson explicitly clicks "Push to Zoho".
@@ -6273,7 +6594,7 @@ app.post('/api/grns', async (req, res) => {
         fs.writeFileSync(rawMatsPath, JSON.stringify(updatedRaw, null, 2), 'utf8');
         supabaseMemoryStore.raw_materials_store = updatedRaw;
         pushStoreToSupabase('raw_materials_store', updatedRaw).catch(() => {});
-        broadcastRealtimeEvent('inventory_updated', { rawMaterials: updatedRaw });
+        broadcastRealtimeEvent('inventory_updated', { action: 'update', recordId: newGRN.materialCode, grnNo: newGRN.grnNo });
       }
     }
   } catch (err) {
@@ -6609,44 +6930,117 @@ app.get('/api/approvals-pending', async (req, res) => {
 
 
 
-// Real-time endpoint retrieving items catalog strictly from BUSINZ local stores
+// Real-time endpoint retrieving items catalog strictly from BUSINZ local stores with search, category filtering & pagination
 app.get('/api/items', async (req, res) => {
   const localItems = loadLocalItems();
-  const guaranteedItems = (localItems || []).map(l => ({
+  let guaranteedItems = (localItems || []).map(l => ({
     ...l,
     stock: (l.stock !== undefined && l.stock !== null) ? Number(l.stock) : 0,
     openingStock: (l.openingStock !== undefined && l.openingStock !== null) ? Number(l.openingStock) : 0
   }));
+
+  // Filtering by category or search query
+  const { category, search, page, limit } = req.query;
+  if (category) {
+    const catLower = String(category).toLowerCase().trim();
+    guaranteedItems = guaranteedItems.filter(it => 
+      String(it.category || it.cat || '').toLowerCase().trim() === catLower
+    );
+  }
+  if (search) {
+    const sLower = String(search).toLowerCase().trim();
+    guaranteedItems = guaranteedItems.filter(it => 
+      String(it.code || '').toLowerCase().includes(sLower) ||
+      String(it.name || '').toLowerCase().includes(sLower) ||
+      String(it.sku || '').toLowerCase().includes(sLower)
+    );
+  }
+
+  // Server-side pagination if page query param provided
+  if (page !== undefined && page !== null && page !== '') {
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+    const total = guaranteedItems.length;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paged = guaranteedItems.slice(startIndex, startIndex + limitNum);
+    return res.json({
+      success: true,
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages: Math.ceil(total / limitNum),
+      hasMore: pageNum * limitNum < total,
+      data: paged
+    });
+  }
+
   res.json(guaranteedItems);
 });
 
-// Endpoint to retrieve live reconciled Raw Materials inventory
+// Endpoint to retrieve live reconciled Raw Materials inventory with filtering & pagination
 app.get('/api/raw-materials', async (req, res) => {
   try {
-    // 1. Instant response from high-speed memory cache or disk
+    let rawMats = [];
     if (supabaseMemoryStore.raw_materials_store && Array.isArray(supabaseMemoryStore.raw_materials_store) && supabaseMemoryStore.raw_materials_store.length > 0) {
-      return res.json(supabaseMemoryStore.raw_materials_store);
-    }
-    const rawMats = loadLocalRawMaterials();
-    if (Array.isArray(rawMats) && rawMats.length > 0) {
-      return res.json(rawMats);
-    }
-    const cloudMats = await getDatabaseStore('raw_materials_store');
-    if (Array.isArray(cloudMats) && cloudMats.length > 0) {
-      cloudMats.forEach(item => {
-        if (item && (item.code === 'ALU-LEN-2414MM' || item.code === 'RM-ALU-2414')) {
-          item.cat = 'Raw Material';
-          item.category = 'Raw Material';
+      rawMats = supabaseMemoryStore.raw_materials_store;
+    } else {
+      rawMats = loadLocalRawMaterials();
+      if (!Array.isArray(rawMats) || rawMats.length === 0) {
+        const cloudMats = await getDatabaseStore('raw_materials_store');
+        if (Array.isArray(cloudMats) && cloudMats.length > 0) {
+          cloudMats.forEach(item => {
+            if (item && (item.code === 'ALU-LEN-2414MM' || item.code === 'RM-ALU-2414')) {
+              item.cat = 'Raw Material';
+              item.category = 'Raw Material';
+            }
+          });
+          supabaseMemoryStore.raw_materials_store = cloudMats;
+          const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+          safeWriteJsonFileAsync(rawMatsPath, cloudMats);
+          rawMats = cloudMats;
         }
-      });
-      supabaseMemoryStore.raw_materials_store = cloudMats;
-      try {
-        const rawMatsPath = getStoreFilePath('raw_materials_store.json');
-        fs.writeFileSync(rawMatsPath, JSON.stringify(cloudMats, null, 2), 'utf8');
-      } catch (_) {}
-      return res.json(cloudMats);
+      }
     }
-    res.json([]);
+
+    if (!Array.isArray(rawMats)) rawMats = [];
+
+    // Optional filtering
+    const { category, search, page, limit } = req.query;
+    let filtered = rawMats;
+    if (category) {
+      const catLower = String(category).toLowerCase().trim();
+      filtered = filtered.filter(it => 
+        String(it.category || it.cat || '').toLowerCase().trim() === catLower
+      );
+    }
+    if (search) {
+      const sLower = String(search).toLowerCase().trim();
+      filtered = filtered.filter(it => 
+        String(it.code || '').toLowerCase().includes(sLower) ||
+        String(it.name || '').toLowerCase().includes(sLower) ||
+        String(it.sku || '').toLowerCase().includes(sLower)
+      );
+    }
+
+    // Optional pagination
+    if (page !== undefined && page !== null && page !== '') {
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+      const total = filtered.length;
+      const startIndex = (pageNum - 1) * limitNum;
+      const paged = filtered.slice(startIndex, startIndex + limitNum);
+      return res.json({
+        success: true,
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        hasMore: pageNum * limitNum < total,
+        data: paged
+      });
+    }
+
+    res.json(filtered);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6658,7 +7052,7 @@ app.post('/api/raw-materials', async (req, res) => {
     const updatedMats = req.body;
     if (Array.isArray(updatedMats)) {
       const rawMatsPath = getStoreFilePath('raw_materials_store.json');
-      fs.writeFileSync(rawMatsPath, JSON.stringify(updatedMats, null, 2), 'utf8');
+      safeWriteJsonFileAsync(rawMatsPath, updatedMats);
       supabaseMemoryStore.raw_materials_store = updatedMats;
 
       // Also sync matching items in item_store
@@ -6689,17 +7083,17 @@ app.post('/api/raw-materials', async (req, res) => {
             }
             return it;
           });
-          fs.writeFileSync(itemPath, JSON.stringify(currentItems, null, 2), 'utf8');
+          safeWriteJsonFileAsync(itemPath, currentItems);
           supabaseMemoryStore.item_store = currentItems;
           pushStoreToSupabase('item_store', currentItems).catch(() => {});
-          broadcastRealtimeEvent('item_store_updated', { items: currentItems });
+          broadcastRealtimeEvent('item_store_updated', { action: 'update', count: currentItems.length });
         }
       } catch (err) {
         console.error('[item_store sync error]:', err?.message);
       }
 
       pushStoreToSupabase('raw_materials_store', updatedMats).catch(() => {});
-      broadcastRealtimeEvent('inventory_updated', { rawMaterials: updatedMats });
+      broadcastRealtimeEvent('inventory_updated', { action: 'update', count: updatedMats.length });
       return res.json({ success: true, count: updatedMats.length });
     }
     res.status(400).json({ success: false, message: 'Array of materials required' });
@@ -6741,7 +7135,7 @@ app.post('/api/raw-materials/delete', async (req, res) => {
       const mName = String(m.name || '').toUpperCase().trim();
       return !codesToDelete.includes(mCode) && !codesToDelete.includes(mName);
     });
-    fs.writeFileSync(rawMatsPath, JSON.stringify(filteredMats, null, 2), 'utf8');
+    safeWriteJsonFileAsync(rawMatsPath, filteredMats);
     supabaseMemoryStore.raw_materials_store = filteredMats;
     saveDatabaseStore('raw_materials_store', filteredMats);
 
@@ -6756,13 +7150,13 @@ app.post('/api/raw-materials/delete', async (req, res) => {
       const iName = String(it.name || '').toUpperCase().trim();
       return !codesToDelete.includes(iCode) && !codesToDelete.includes(iName);
     });
-    fs.writeFileSync(itemPath, JSON.stringify(filteredItems, null, 2), 'utf8');
+    safeWriteJsonFileAsync(itemPath, filteredItems);
     supabaseMemoryStore.item_store = filteredItems;
     saveDatabaseStore('item_store', filteredItems);
 
     // 4. Real-time broadcasts
-    broadcastRealtimeEvent('inventory_updated', { rawMaterials: filteredMats });
-    broadcastRealtimeEvent('item_store_updated', { items: filteredItems });
+    broadcastRealtimeEvent('inventory_updated', { action: 'delete', deletedCodes: codesToDelete });
+    broadcastRealtimeEvent('item_store_updated', { action: 'delete', deletedCodes: codesToDelete });
 
     return res.json({
       success: true,
@@ -6812,8 +7206,8 @@ app.delete('/api/raw-materials/:code', async (req, res) => {
     supabaseMemoryStore.item_store = filteredItems;
     saveDatabaseStore('item_store', filteredItems);
 
-    broadcastRealtimeEvent('inventory_updated', { rawMaterials: filteredMats });
-    broadcastRealtimeEvent('item_store_updated', { items: filteredItems });
+    broadcastRealtimeEvent('inventory_updated', { action: 'delete', deletedCodes: [code] });
+    broadcastRealtimeEvent('item_store_updated', { action: 'delete', deletedCodes: [code] });
 
     res.json({ success: true, message: `Material ${code} deleted permanently.` });
   } catch (err) {
@@ -6838,7 +7232,7 @@ app.post('/api/items/delete', async (req, res) => {
     });
 
     saveLocalItems(updatedItems);
-    broadcastRealtimeEvent('item_store_updated', { items: updatedItems });
+    broadcastRealtimeEvent('item_store_updated', { action: 'delete', deletedIds: idsToDelete });
 
     // Also sync delete with raw materials
     const rawMatsPath = getStoreFilePath('raw_materials_store.json');
@@ -6854,7 +7248,7 @@ app.post('/api/items/delete', async (req, res) => {
     fs.writeFileSync(rawMatsPath, JSON.stringify(filteredMats, null, 2), 'utf8');
     supabaseMemoryStore.raw_materials_store = filteredMats;
     saveDatabaseStore('raw_materials_store', filteredMats);
-    broadcastRealtimeEvent('inventory_updated', { rawMaterials: filteredMats });
+    broadcastRealtimeEvent('inventory_updated', { action: 'delete', deletedCodes: idsToDelete });
 
     res.json({ success: true, count: idsToDelete.length, message: `Deleted ${idsToDelete.length} item(s)` });
   } catch (err) {
@@ -6938,12 +7332,12 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
       fs.writeFileSync(rawMatsPath, JSON.stringify(rawMats, null, 2), 'utf8');
       supabaseMemoryStore.raw_materials_store = rawMats;
       pushStoreToSupabase('raw_materials_store', rawMats).catch(() => {});
-      broadcastRealtimeEvent('inventory_updated', { rawMaterials: rawMats, deducted: deductedList });
+      broadcastRealtimeEvent('inventory_updated', { action: 'deduct', bomCode, deducted: deductedList });
 
       fs.writeFileSync(itemsPath, JSON.stringify(itemsList, null, 2), 'utf8');
       supabaseMemoryStore.item_store = itemsList;
       pushStoreToSupabase('item_store', itemsList).catch(() => {});
-      broadcastRealtimeEvent('item_store_updated', { items: itemsList });
+      broadcastRealtimeEvent('item_store_updated', { action: 'deduct', bomCode, deducted: deductedList });
 
       console.log(`[INVENTORY DEDUCTION] Deducted stock for BOM ${bomCode}:`, deductedList);
     }
@@ -7108,8 +7502,7 @@ app.post('/api/items', async (req, res) => {
       saveLocalItems(currentItems);
 
       try {
-        broadcastRealtimeEvent('item_store_updated', { items: currentItems });
-        broadcastRealtimeEvent('store_updated', { key: 'item_store', storeData: currentItems });
+        broadcastRealtimeEvent('item_store_updated', { action: 'create', count: createdItems.length, items: createdItems });
       } catch (_) {}
 
       return res.json({
@@ -7167,8 +7560,7 @@ app.post('/api/items', async (req, res) => {
     saveLocalItems(updated);
 
     try {
-      broadcastRealtimeEvent('item_store_updated', { items: updated });
-      broadcastRealtimeEvent('store_updated', { key: 'item_store', storeData: updated });
+      broadcastRealtimeEvent('item_store_updated', { action: 'update', recordId: itemToSave.code || itemToSave.itemId, item: itemToSave });
     } catch (_) {}
 
     return res.json({ 

@@ -32,23 +32,36 @@ export const pool = new Pool({
   ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false
 });
 
-let isConnected = false;
+let isConnected = true;
 
 pool.on('connect', () => {
   isConnected = true;
 });
 
 pool.on('error', (err) => {
-  console.warn('[PostgreSQL Pool Warning]:', err.message);
-  isConnected = false;
+  console.warn('[PostgreSQL Pool Warning (Idle client closed)]:', err.message);
+  // Do NOT permanently set isConnected to false on routine idle client disconnection.
+  // The pool automatically establishes a new client on the next query.
+  if (err?.code === 'ECONNREFUSED' || err?.code === '57P01' || err?.code === '57P02' || err?.code === '57P03') {
+    isConnected = false;
+  }
 });
 
 export async function query(text, params) {
-  return pool.query(text, params);
+  try {
+    const res = await pool.query(text, params);
+    isConnected = true;
+    return res;
+  } catch (err) {
+    if (err?.code === 'ECONNREFUSED' || err?.code === '57P01' || err?.code === '57P02' || err?.code === '57P03') {
+      isConnected = false;
+    }
+    throw err;
+  }
 }
 
 export function isDbConnected() {
-  return isConnected;
+  return isConnected || (pool && !pool.ending && !pool.ended);
 }
 
 /**

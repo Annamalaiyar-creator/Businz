@@ -2,6 +2,23 @@
  * scripts/test_two_user_concurrency.js
  * Two-User Inventory Concurrency Test: Over-reservation Prevention & SSE Synchronization
  */
+const storageMap = new Map();
+if (!globalThis.localStorage || typeof globalThis.localStorage.getItem !== 'function') {
+  globalThis.localStorage = {
+    getItem: (k) => storageMap.get(k) || null,
+    setItem: (k, v) => storageMap.set(k, String(v)),
+    removeItem: (k) => storageMap.delete(k),
+    clear: () => storageMap.clear()
+  };
+}
+if (!globalThis.window) {
+  globalThis.window = {
+    dispatchEvent: () => true,
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+}
+
 import assert from 'assert';
 import http from 'http';
 import { centralInventoryStore } from '../src/utils/centralInventoryStore.js';
@@ -11,6 +28,7 @@ console.log('🧪 TWO-USER INVENTORY CONCURRENCY & SSE SYNCHRONIZATION TEST');
 console.log('===============================================================\n');
 
 async function runConcurrencyTest() {
+  centralInventoryStore.initStore();
   const itemCode = 'CONCUR-ALU-01';
   const initialStock = 100;
 

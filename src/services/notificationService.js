@@ -9,7 +9,7 @@
 // 4. Billing -> Sales & Dispatch (Invoice completed & ready to dispatch) -> redirects to 'BOM Orders' / 'Dispatch Orders'
 // ===================================================================================
 
-import { fetchCloudStore, saveCloudStore } from "../utils/supabaseDataSync";
+import { fetchCloudStore, saveCloudStore } from "../utils/supabaseDataSync.js";
 
 let audioCtx = null;
 
@@ -706,7 +706,7 @@ export function sendWorkflowNotification({
     const existing = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
     const updated = [notification, ...existing.filter(n => n.id !== notifId)].slice(0, 50);
     localStorage.setItem('vrm_live_notifications', JSON.stringify(updated));
-    saveCloudStore('notifications_store', updated);
+    saveCloudStore('notifications_store', [notification]);
   } catch (e) {
     console.error('Error saving live notification:', e);
   }
@@ -1241,17 +1241,33 @@ export function notifyGrnCompletedToAccounts({
 let isSyncingNotifs = false;
 let notifSyncDebounceTimer = null;
 
-/**
- * Fetch latest notifications from cloud store and merge with local notifications
- * so Dispatch and Accounts logins on different devices/browsers receive live alerts.
- */
 export async function syncCloudNotifications() {
   if (typeof window === 'undefined' || isSyncingNotifs) return;
   isSyncingNotifs = true;
   try {
-    const cloudNotifs = await fetchCloudStore('notifications_store', []);
+    const localNotifs = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
+    const latestLocalId = (localNotifs.length > 0 && localNotifs[0]?.id) ? localNotifs[0].id : null;
+
+    let url = '/api/store/notifications_store?page=1&limit=50';
+    if (latestLocalId) {
+      url = `/api/store/notifications_store?sinceId=${encodeURIComponent(latestLocalId)}`;
+    }
+
+    let cloudNotifs = [];
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(tId);
+      if (res && res.ok) {
+        const json = await res.json();
+        cloudNotifs = Array.isArray(json.data) ? json.data : [];
+      }
+    } catch (_) {
+      cloudNotifs = await fetchCloudStore('notifications_store', []);
+    }
+
     if (Array.isArray(cloudNotifs) && cloudNotifs.length > 0) {
-      const localNotifs = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
       const map = new Map();
       [...cloudNotifs, ...localNotifs].forEach(n => {
         if (n && n.id && !map.has(n.id)) {
@@ -1274,11 +1290,11 @@ export async function syncCloudNotifications() {
 
 if (typeof window !== 'undefined') {
   setTimeout(() => syncCloudNotifications(), 2500);
-  window.addEventListener('controlroom_storage_update', () => {
+  window.addEventListener('vrm_notifications_sync_requested', () => {
     if (notifSyncDebounceTimer) clearTimeout(notifSyncDebounceTimer);
     notifSyncDebounceTimer = setTimeout(() => {
       syncCloudNotifications();
-    }, 2000);
+    }, 1000);
   });
 }
 

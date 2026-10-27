@@ -272,8 +272,26 @@ export default function BomOrdersView(props) {
       }
     };
 
-    const handleStorageUpdate = () => {
+    const handleStorageUpdate = (e) => {
       if (isSubmittingBomRef.current) return;
+      const payload = e?.detail;
+      if (payload?.action === 'delete' && (payload?.recordId || payload?.id)) {
+        const targetId = payload.recordId || payload.id;
+        setBomStore(prev => (prev || []).filter(b => b && b.id !== targetId && b.bomCode !== targetId && b.code !== targetId));
+        return;
+      }
+      if (payload?.bom && typeof payload.bom === 'object') {
+        const single = stripDataUrlsFromRecord(payload.bom);
+        setBomStore(prev => {
+          const k = single.bomCode || single.code || single.id;
+          if (!k) return prev;
+          const filtered = (prev || []).filter(b => b && (b.bomCode !== k && b.code !== k && b.id !== k));
+          const list = [single, ...filtered];
+          safeSaveBomStoreToLocal(list);
+          return list;
+        });
+        return;
+      }
       debouncedSync();
     };
 

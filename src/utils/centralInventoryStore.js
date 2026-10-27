@@ -208,6 +208,17 @@ class CentralInventoryStore {
 
     fetchCloudStore('item_store', this.items).then(cloudItems => {
       if (Array.isArray(cloudItems) && cloudItems.length > 0) {
+        const cloudMap = new Map();
+        cloudItems.forEach(ci => {
+          const k = String(ci.code || ci.sku || ci.name || '').toUpperCase().trim();
+          if (k) cloudMap.set(k, ci);
+        });
+        (this.items || []).forEach(localItem => {
+          const k = String(localItem.code || localItem.sku || localItem.name || '').toUpperCase().trim();
+          if (k && !cloudMap.has(k)) {
+            cloudItems.push(localItem);
+          }
+        });
         this.items = sanitizeInventoryItems(cloudItems);
         try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
         this.notifyChange();
