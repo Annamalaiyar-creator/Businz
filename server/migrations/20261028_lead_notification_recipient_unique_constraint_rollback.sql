@@ -6,3 +6,4 @@
 -- ==============================================================================
 
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_notif_recipient_unique;
+

@@ -176,9 +176,6 @@ export async function ensureLeadsSchema() {
         read_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_recipient_unique 
-        ON public.lead_notification_recipients(notification_id, recipient_user_id);
     `);
     schemaEnsured = true;
     console.log('✅ [PostgreSQL] Ensured public.leads columns and CRM tables exist.');
@@ -463,6 +460,9 @@ export async function getLeadDetail(leadId) {
  * Create a new Lead
  */
 export async function createLead(leadData, creatorUser = {}) {
+  // Pre-transaction: Ensure schema outside transaction before BEGIN
+  await ensureLeadsSchema();
+
   const leadNumber = leadData.lead_number || leadData.leadNumber || await generateNextLeadNumber();
   const id = leadNumber;
 
@@ -511,27 +511,18 @@ export async function createLead(leadData, creatorUser = {}) {
     leadData.externalPayload ? JSON.stringify(leadData.externalPayload) : null
   ];
 
-  return await withTransaction(async (client) => {
-    let res;
-    try {
-      res = await client.query(sql, params);
-    } catch (queryErr) {
-      if (queryErr.message && (queryErr.message.includes('does not exist') || queryErr.message.includes('column'))) {
-        console.log('[createLead] Missing column detected, auto-healing leads schema...', queryErr.message);
-        await ensureLeadsSchema();
-        res = await client.query(sql, params);
-      } else {
-        throw queryErr;
-      }
-    }
-    let created = res.rows[0];
+  let pendingNotificationBroadcast = null;
+
+  const created = await withTransaction(async (client) => {
+    const res = await client.query(sql, params);
+    let lead = res.rows[0];
 
     // If assignee was specified upon creation, assign immediately within same transaction
     if (leadData.assignedToId && leadData.assignedToName) {
       try {
-        const assignedLead = await assignLead({
+        const assignedResult = await assignLead({
           client,
-          leadId: created.id,
+          leadId: lead.id,
           assignedToId: leadData.assignedToId,
           assignedToName: leadData.assignedToName,
           assignedToRole: leadData.assignedToRole || 'Sales Executive',
@@ -539,8 +530,11 @@ export async function createLead(leadData, creatorUser = {}) {
           reason: leadData.assignmentReason || 'Assigned on lead creation',
           bypassPermission: true
         });
-        if (assignedLead) {
-          created = assignedLead;
+        if (assignedResult) {
+          lead = assignedResult.lead || assignedResult;
+          if (assignedResult.deferredNotification) {
+            pendingNotificationBroadcast = assignedResult.deferredNotification;
+          }
         }
       } catch (assignErr) {
         console.error('[createLead: direct assign error]:', assignErr);
@@ -548,18 +542,32 @@ export async function createLead(leadData, creatorUser = {}) {
       }
     } else {
       // Notify CEO & Tech Support of New Unassigned Lead within same transaction
-      await createLeadNotification({
+      const notifResult = await createLeadNotification({
         client,
-        leadId: created.id,
+        leadId: lead.id,
         type: 'NEW_LEAD',
-        title: `🆕 New Lead Created: ${created.company_name}`,
-        message: `Lead ${created.lead_number} created from ${created.source} by ${createdByName}. Added to Unassigned queue.`,
-        metadata: { leadNumber: created.lead_number, companyName: created.company_name, source: created.source }
+        title: `🆕 New Lead Created: ${lead.company_name}`,
+        message: `Lead ${lead.lead_number} created from ${lead.source} by ${createdByName}. Added to Unassigned queue.`,
+        metadata: { leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source }
       });
+      if (notifResult?.deferredBroadcast) {
+        pendingNotificationBroadcast = notifResult.deferredBroadcast;
+      }
     }
 
-    return created;
+    return lead;
   });
+
+  // Post-commit: Broadcast realtime notification only after transaction has successfully committed
+  if (typeof pendingNotificationBroadcast === 'function') {
+    try {
+      pendingNotificationBroadcast();
+    } catch (sseErr) {
+      console.warn('[createLead: post-commit SSE broadcast notice]:', sseErr.message);
+    }
+  }
+
+  return created;
 }
 
 /**
@@ -729,8 +737,10 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
   const result = client ? await executeAssignment(client) : await withTransaction(executeAssignment);
 
   // 5. Notify the Assigned Salesperson after successful transaction commit
+  let deferredNotification = null;
   try {
-    await createLeadNotification({
+    const notifResult = await createLeadNotification({
+      client,
       leadId: result.id,
       type: 'ASSIGNMENT',
       title: `🎯 Lead Assigned to You: ${result.company_name}`,
@@ -739,11 +749,14 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
       specificRecipientId: assignedToId,
       specificRecipientRole: assignedToRole || 'Sales Executive'
     });
+    if (notifResult?.deferredBroadcast) {
+      deferredNotification = notifResult.deferredBroadcast;
+    }
   } catch (notifErr) {
     console.warn('[Notification Notice]:', notifErr.message);
   }
 
-  return result;
+  return { lead: result, ...result, deferredNotification };
 }
 
 /**
@@ -907,6 +920,59 @@ export function setRealtimeNotificationBroadcaster(fn) {
 }
 
 /**
+ * Helper to broadcast lead notifications over SSE gateway
+ */
+function broadcastLeadNotification({ notifId, leadId, incidentId, type, title, message, metadata, recipientList, specificRecipientId, specificRecipientRole }) {
+  if (typeof realtimeNotificationBroadcaster !== 'function') return;
+  try {
+    let targetRoles = [];
+    if (type === 'UNATTENDED_2H' || type === 'STATUS_UNCHANGED_2H' || type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
+      targetRoles = ['CEO', 'Managing Director', 'MD', 'Technical Administrator', 'Tech Support', 'Technical Support'];
+    } else {
+      targetRoles = [
+        ...new Set(recipientList.map(r => r.role).filter(Boolean)),
+        specificRecipientId,
+        specificRecipientRole
+      ].filter(Boolean);
+    }
+
+    const notifPayload = {
+      id: notifId,
+      title,
+      message,
+      targetTab: 'CRM Leads',
+      targetRoles,
+      role: specificRecipientRole || (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'Tech Support' : 'Sales Executive'),
+      type: type === 'ASSIGNMENT' ? 'success' : (type.includes('ESCALATION') || type.includes('UNATTENDED') || type.includes('STATUS_UNCHANGED') ? 'alert' : 'info'),
+      soundType: type === 'ASSIGNMENT' ? 'success' : (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'alert' : 'chime'),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: new Date().toISOString(),
+      metadata: {
+        ...metadata,
+        leadId,
+        incidentId,
+        specificRecipientId,
+        specificRecipientRole,
+        type,
+        step: type
+      },
+      unread: true
+    };
+
+    realtimeNotificationBroadcaster('workflow_notification', {
+      notification: notifPayload
+    });
+    realtimeNotificationBroadcaster('crm_updated', {
+      type: 'lead_notification',
+      notificationId: notifId,
+      leadId
+    });
+  } catch (bcErr) {
+    console.warn('[Realtime Broadcaster Error]:', bcErr.message);
+  }
+}
+
+/**
  * Create Lead Notification with Individual Recipient Tracking (Sales, CEO & Tech Support)
  * Each recipient has their own independent 'read' status and receives sub-second push via SSE!
  */
@@ -976,63 +1042,33 @@ export async function createLeadNotification({ leadId = null, incidentId = null,
     }
   };
 
+  const broadcastData = {
+    notifId,
+    leadId,
+    incidentId,
+    type,
+    title,
+    message,
+    metadata,
+    recipientList,
+    specificRecipientId,
+    specificRecipientRole
+  };
+
   if (client) {
+    // Within outer transaction: perform writes on the caller's client, defer realtime broadcast
     await executeNotificationWrites(client);
+    return {
+      success: true,
+      notificationId: notifId,
+      deferredBroadcast: () => broadcastLeadNotification(broadcastData)
+    };
   } else {
+    // Standalone call: wrap in isolated transaction and broadcast only after successful commit
     await withTransaction(executeNotificationWrites);
+    broadcastLeadNotification(broadcastData);
+    return { success: true, notificationId: notifId };
   }
-
-  // 4. Sub-second Instant Push via Realtime SSE Gateway (WhatsApp-style delivery)
-  if (typeof realtimeNotificationBroadcaster === 'function') {
-    try {
-      let targetRoles = [];
-      if (type === 'UNATTENDED_2H' || type === 'STATUS_UNCHANGED_2H' || type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
-        targetRoles = ['CEO', 'Managing Director', 'MD', 'Technical Administrator', 'Tech Support', 'Technical Support'];
-      } else {
-        targetRoles = [
-          ...new Set(recipientList.map(r => r.role).filter(Boolean)),
-          specificRecipientId,
-          specificRecipientRole
-        ].filter(Boolean);
-      }
-
-      const notifPayload = {
-        id: notifId,
-        title,
-        message,
-        targetTab: 'CRM Leads',
-        targetRoles,
-        role: specificRecipientRole || (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'Tech Support' : 'Sales Executive'),
-        type: type === 'ASSIGNMENT' ? 'success' : (type.includes('ESCALATION') || type.includes('UNATTENDED') || type.includes('STATUS_UNCHANGED') ? 'alert' : 'info'),
-        soundType: type === 'ASSIGNMENT' ? 'success' : (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'alert' : 'chime'),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        createdAt: new Date().toISOString(),
-        metadata: {
-          ...metadata,
-          leadId,
-          incidentId,
-          specificRecipientId,
-          specificRecipientRole,
-          type,
-          step: type
-        },
-        unread: true
-      };
-
-      realtimeNotificationBroadcaster('workflow_notification', {
-        notification: notifPayload
-      });
-      realtimeNotificationBroadcaster('crm_updated', {
-        type: 'lead_notification',
-        notificationId: notifId,
-        leadId
-      });
-    } catch (bcErr) {
-      console.warn('[Realtime Broadcaster Error]:', bcErr.message);
-    }
-  }
-
-  return { success: true, notificationId: notifId };
 }
 
 /**

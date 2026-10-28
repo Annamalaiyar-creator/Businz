@@ -40,6 +40,41 @@ const __dirname = path.dirname(__filename);
 export const KNOWN_SYNTHETIC_LEADS = ['VRM-LD-2026-01'];
 export const KNOWN_SYNTHETIC_EMPLOYEES = ['TA-TEST-552', 'SE-PEND-552', 'SE-ACT-552', 'SE-TEST-396'];
 
+/**
+ * Strict synthetic lead ownership verification
+ * Requirement: Lead number alone is NEVER sufficient; MUST have SYNTH_P9Y_ marker.
+ */
+export function verifySyntheticLeadOwnership(lead) {
+  if (!lead) return false;
+  const leadNum = String(lead.lead_number || lead.id || '').trim();
+  if (!KNOWN_SYNTHETIC_LEADS.includes(leadNum)) return false;
+  const companyName = String(lead.company_name || '');
+  const notes = String(lead.notes || '');
+  const hasMarker = companyName.includes('SYNTH_P9Y_') || notes.includes('SYNTH_P9Y_');
+  return hasMarker;
+}
+
+/**
+ * Strict synthetic employee ownership verification
+ * Requirement: Reject loose checks ('TEST', 'Active', 'Pending').
+ * Require exact known code AND synthetic evidence (synth_*@example.com or SYNTH_P9Y_ tag).
+ */
+export function verifySyntheticEmployeeEvidence(emp) {
+  if (!emp) return false;
+  const code = String(emp.employee_code || emp.code || '').trim();
+  if (!KNOWN_SYNTHETIC_EMPLOYEES.includes(code)) return false;
+
+  const email = String(emp.email || '').toLowerCase().trim();
+  const synthTag = String(emp.synthTag || '');
+  const name = String(emp.employee_name || emp.name || '');
+
+  const hasEmailEvidence = email.startsWith('synth_') || (email.endsWith('@example.com') && email.includes('synth_p9y'));
+  const hasTagEvidence = synthTag.startsWith('SYNTH_P9Y_');
+  const hasNameEvidence = name.includes('SYNTH_P9Y_');
+
+  return hasEmailEvidence || hasTagEvidence || hasNameEvidence;
+}
+
 export async function runResidueRecovery(options = {}) {
   const isExecuteAuthorized = Boolean(
     options.executeAuthorized || process.argv.includes('--execute-authorized')
@@ -111,14 +146,10 @@ export async function runResidueRecovery(options = {}) {
       }
 
       const leadRow = leadRes.rows[0];
-      const isSynthetic = (
-        (typeof leadRow.company_name === 'string' && leadRow.company_name.toUpperCase().includes('SYNTH')) ||
-        (typeof leadRow.notes === 'string' && leadRow.notes.toUpperCase().includes('SYNTH')) ||
-        leadRow.lead_number === 'VRM-LD-2026-01'
-      );
+      const isSynthetic = verifySyntheticLeadOwnership(leadRow);
 
       if (!isSynthetic) {
-        console.warn(`   ⚠️  [SECURITY WARNING] Record "${leadIdent}" lacks synthetic markers! Skipping removal.`);
+        console.warn(`   ⚠️  [SECURITY WARNING] Record "${leadIdent}" lacks SYNTH_P9Y_ synthetic markers! Skipping removal.`);
         continue;
       }
 
@@ -172,18 +203,11 @@ export async function runResidueRecovery(options = {}) {
     for (const empCode of KNOWN_SYNTHETIC_EMPLOYEES) {
       const match = employeeList.find(e => (e.employee_code || e.code) === empCode);
       if (match) {
-        const isSynth = (
-          empCode.includes('TEST') ||
-          (match.email && match.email.includes('synth')) ||
-          match.synthTag ||
-          match.employee_name?.includes('Test') ||
-          match.employee_name?.includes('Pending') ||
-          match.employee_name?.includes('Active')
-        );
+        const isSynth = verifySyntheticEmployeeEvidence(match);
 
         if (isSynth) {
           auditReport.employeesFound.push(match);
-          console.log(`   🎯 Found target synthetic employee: ${match.employee_code} (${match.employee_name || 'N/A'}, ${match.email || 'N/A'})`);
+          console.log(`   🎯 Found target synthetic employee: ${match.employee_code || match.code} (${match.employee_name || 'N/A'}, ${match.email || 'N/A'})`);
         } else {
           console.warn(`   ⚠️  Employee ${empCode} lacks synthetic markers. Preserving.`);
         }
@@ -212,28 +236,94 @@ export async function runResidueRecovery(options = {}) {
     console.log('\n⚡ PROCEEDING WITH AUTHORIZED LIVE REMOVAL IN TRANSACTION...');
     await client.query('BEGIN');
 
-    // 1. Delete dependent child records and parent leads
+    // 1. Delete dependent child records and parent leads with row locks and parameterized ownership-constrained deletes
     for (const lead of auditReport.leadsFound) {
       const leadId = lead.id;
 
+      // Acquire exclusive row lock and re-verify synthetic ownership markers
+      const lockRes = await client.query(
+        'SELECT id, lead_number, company_name, notes FROM public.leads WHERE id = $1 FOR UPDATE',
+        [leadId]
+      );
+      if (lockRes.rows.length === 0) {
+        throw new Error(`[FAIL-SAFE] Target lead ${leadId} disappeared before locked removal. Aborting transaction.`);
+      }
+      const lockedLead = lockRes.rows[0];
+      if (!verifySyntheticLeadOwnership(lockedLead)) {
+        throw new Error(`[FAIL-SAFE] Lead ${leadId} failed synthetic ownership verification under FOR UPDATE lock! Aborting transaction.`);
+      }
+
       await client.query(`
         DELETE FROM public.lead_notification_recipients
-        WHERE notification_id IN (SELECT id FROM public.lead_notifications WHERE lead_id = $1)
+        WHERE notification_id IN (
+          SELECT n.id FROM public.lead_notifications n
+          JOIN public.leads l ON n.lead_id = l.id
+          WHERE l.id = $1 AND (l.company_name LIKE '%SYNTH_P9Y_%' OR l.notes LIKE '%SYNTH_P9Y_%')
+        )
       `, [leadId]);
 
-      await client.query('DELETE FROM public.lead_notifications WHERE lead_id = $1', [leadId]);
-      await client.query('DELETE FROM public.lead_status_history WHERE lead_id = $1', [leadId]);
-      await client.query('DELETE FROM public.lead_assignment_history WHERE lead_id = $1', [leadId]);
-      await client.query('DELETE FROM public.lead_activities WHERE lead_id = $1', [leadId]);
-      await client.query('DELETE FROM public.lead_followups WHERE lead_id = $1', [leadId]);
-      await client.query('DELETE FROM public.lead_inactivity_incidents WHERE lead_id = $1', [leadId]);
+      await client.query(`
+        DELETE FROM public.lead_notifications
+        WHERE lead_id = $1 AND lead_id IN (
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        )
+      `, [leadId]);
+
+      await client.query(`
+        DELETE FROM public.lead_status_history
+        WHERE lead_id = $1 AND lead_id IN (
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        )
+      `, [leadId]);
+
+      await client.query(`
+        DELETE FROM public.lead_assignment_history
+        WHERE lead_id = $1 AND lead_id IN (
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        )
+      `, [leadId]);
+
+      await client.query(`
+        DELETE FROM public.lead_activities
+        WHERE lead_id = $1 AND lead_id IN (
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        )
+      `, [leadId]);
+
+      await client.query(`
+        DELETE FROM public.lead_followups
+        WHERE lead_id = $1 AND lead_id IN (
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        )
+      `, [leadId]);
+
+      await client.query(`
+        DELETE FROM public.lead_inactivity_incidents
+        WHERE lead_id = $1 AND lead_id IN (
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        )
+      `, [leadId]);
 
       const hasCrmActivities = await client.query("SELECT to_regclass('public.crm_leads_activities') as reg");
       if (hasCrmActivities.rows[0]?.reg) {
-        await client.query('DELETE FROM public.crm_leads_activities WHERE lead_id = $1', [leadId]);
+        await client.query(`
+          DELETE FROM public.crm_leads_activities
+          WHERE lead_id = $1 AND lead_id IN (
+            SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+          )
+        `, [leadId]);
       }
 
-      await client.query('DELETE FROM public.leads WHERE id = $1', [leadId]);
+      const delLeadRes = await client.query(`
+        DELETE FROM public.leads
+        WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        RETURNING id
+      `, [leadId]);
+
+      if (delLeadRes.rowCount !== 1) {
+        throw new Error(`[FAIL-SAFE] Expected to delete 1 lead row for ${leadId}, but deleted ${delLeadRes.rowCount}. Aborting.`);
+      }
+
       console.log(`   ✅ Deleted synthetic lead ${leadId} and all child records.`);
     }
 
@@ -244,10 +334,25 @@ export async function runResidueRecovery(options = {}) {
         const currentList = lockRes.rows[0].data;
         const targetCodes = auditReport.employeesFound.map(e => e.employee_code || e.code);
 
+        // Re-verify that each employee in targetCodes genuinely satisfies synthetic evidence under lock
+        for (const item of currentList) {
+          const itemCode = item.employee_code || item.code;
+          if (targetCodes.includes(itemCode)) {
+            if (!verifySyntheticEmployeeEvidence(item)) {
+              throw new Error(`[FAIL-SAFE] Employee ${itemCode} under lock failed synthetic evidence verification! Aborting.`);
+            }
+          }
+        }
+
         const cleanedList = currentList.filter(item => {
           const itemCode = item.employee_code || item.code;
           return !targetCodes.includes(itemCode);
         });
+
+        const removedCount = currentList.length - cleanedList.length;
+        if (removedCount !== targetCodes.length) {
+          throw new Error(`[FAIL-SAFE] Expected to remove ${targetCodes.length} employees, but filtered count was ${removedCount}. Aborting.`);
+        }
 
         await client.query(`
           UPDATE public.controlroom_store
@@ -291,3 +396,4 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename
       process.exit(1);
     });
 }
+

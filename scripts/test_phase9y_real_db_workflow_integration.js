@@ -478,10 +478,10 @@ export async function executeComprehensiveCleanup(pool) {
 
     const unrecordedBoms = await client.query(
       `SELECT id, bom_code FROM public.bom_orders
-       WHERE (customer_name LIKE $1 OR bom_code LIKE $2) AND id NOT IN (
-         SELECT unnest(COALESCE($3::text[], ARRAY[]::text[]))
+       WHERE customer_name LIKE $1 AND id NOT IN (
+         SELECT unnest(COALESCE($2::text[], ARRAY[]::text[]))
        )`,
-      [`%${SYNTH_TAG}%`, `%${RUN_ID % 10000}%`, syntheticLedger.bomOrders.map(b => b.id).filter(Boolean)]
+      [`%${SYNTH_TAG}%`, syntheticLedger.bomOrders.map(b => b.id).filter(Boolean)]
     );
     for (const row of unrecordedBoms.rows) {
       console.log(`   [RECOVERY] Recovered unrecorded synthetic BOM: ${row.id} (${row.bom_code})`);
@@ -545,8 +545,7 @@ export async function executeComprehensiveCleanup(pool) {
       if (check.rows.length === 0) continue;
       const row = check.rows[0];
 
-      const isOwned = (typeof row.customer_name === 'string' && row.customer_name.includes(SYNTH_TAG)) ||
-        row.bom_code.includes(String(RUN_ID % 10000));
+      const isOwned = (typeof row.customer_name === 'string' && row.customer_name.includes(SYNTH_TAG));
       if (!isOwned) {
         throw new Error(`[SECURITY] BOM ownership check failed for "${bom.bomCode}". Expected tag "${SYNTH_TAG}".`);
       }
@@ -558,7 +557,10 @@ export async function executeComprehensiveCleanup(pool) {
       }
 
       // Delete parent bom_orders record
-      const delBomRes = await client.query('DELETE FROM public.bom_orders WHERE id = $1 AND bom_code = $2', [bom.id, bom.bomCode]);
+      const delBomRes = await client.query(
+        'DELETE FROM public.bom_orders WHERE id = $1 AND bom_code = $2 AND customer_name LIKE $3',
+        [bom.id, bom.bomCode, `%${SYNTH_TAG}%`]
+      );
       if (delBomRes.rowCount === 0) {
         throw new Error(`[CLEANUP ERROR] Failed to delete BOM order "${bom.bomCode}" with verified ownership.`);
       }
@@ -627,6 +629,24 @@ export async function executeComprehensiveCleanup(pool) {
         preCommitMatches = false;
         discrepancies.push({ target: `store:${st}`, baseline: baseCount, current });
       }
+    }
+
+    // Verify zero residual synthetic records matching this run's SYNTH_TAG
+    const residualLeads = await client.query(
+      "SELECT id FROM public.leads WHERE company_name LIKE $1 OR notes = $2",
+      [`%${SYNTH_TAG}%`, SYNTH_TAG]
+    );
+    const residualBoms = await client.query(
+      "SELECT id FROM public.bom_orders WHERE customer_name LIKE $1",
+      [`%${SYNTH_TAG}%`]
+    );
+    if (residualLeads.rows.length > 0 || residualBoms.rows.length > 0) {
+      preCommitMatches = false;
+      cleanupReport.remainingSyntheticData.push({
+        source: 'database',
+        reason: `Synthetic residue still present: ${residualLeads.rows.length} leads, ${residualBoms.rows.length} BOMs`
+      });
+      discrepancies.push({ target: 'synthetic_residue_check', leads: residualLeads.rows.length, boms: residualBoms.rows.length });
     }
 
     cleanupReport.dbCleanup.preCommitBaselineCheck = preCommitMatches;
@@ -726,8 +746,9 @@ export async function executeComprehensiveCleanup(pool) {
   // -------------------------------------------------------------------------
   const isDbSuccess = cleanupReport.dbCleanup.committed && cleanupReport.dbCleanup.preCommitBaselineCheck;
   const isDiskSuccess = cleanupReport.diskCleanup.status === 'COMPLETED' && !cleanupReport.diskCleanup.filesystemInconsistency;
+  const hasNoResidualData = cleanupReport.remainingSyntheticData.length === 0;
 
-  cleanupReport.baselineRestored = isDbSuccess && isDiskSuccess;
+  cleanupReport.baselineRestored = isDbSuccess && isDiskSuccess && hasNoResidualData;
   cleanupReport.status = cleanupReport.baselineRestored
     ? 'COMPLETE_VERIFIED'
     : (cleanupReport.dbCleanup.status.includes('ROLLED_BACK') ? 'ROLLED_BACK' : 'FAILED');

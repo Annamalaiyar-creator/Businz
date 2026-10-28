@@ -623,9 +623,6 @@ export async function initPostgresDatabase() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
 
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_recipient_unique 
-          ON public.lead_notification_recipients(notification_id, recipient_user_id);
-
         DO $$
         BEGIN
           IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quotations') THEN
