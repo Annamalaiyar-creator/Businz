@@ -1825,11 +1825,11 @@ export default function BomOrdersView(props) {
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = cleanNum(grp.kitPrice, 0);
-        const multiplier = parseInt(String(grp.setCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(grp.setCount).replace(/[^0-9.]/g, '')) || 1;
         kitSubtotal += (unitPrice * multiplier);
       } else if (grpId === 'legacy_default') {
         const unitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
-        const multiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
@@ -1861,11 +1861,11 @@ export default function BomOrdersView(props) {
       let groupTotal = 0;
       if (grp) {
         const unitPrice = cleanNum(grp.kitPrice, 0);
-        const multiplier = parseInt(String(grp.setCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(grp.setCount).replace(/[^0-9.]/g, '')) || 1;
         groupTotal = unitPrice * multiplier;
       } else if (grpId === 'legacy_default') {
         const unitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
-        const multiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1;
         groupTotal = unitPrice * multiplier;
       }
 

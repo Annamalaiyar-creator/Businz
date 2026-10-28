@@ -829,9 +829,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const pGroups = pi.presetGroups || {};
     const pGroupList = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
-    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} Set${g.setCount > 1 ? 's' : ''})`).join(' + ') : null);
+    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} ${g.unit || (g.setCount > 1 ? 'Sets' : 'Set')})`).join(' + ') : null);
     const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null));
-    const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseInt(g.setCount) || 1), 0) : 1);
+    const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseFloat(g.setCount) || 1), 0) : 1);
 
     const conversionData = {
       sourcePiNo: pi.piNo,
@@ -1011,6 +1011,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [showCreateSetModal, setShowCreateSetModal] = useState(false);
   const [newSetName, setNewSetName] = useState('');
   const [newSetCount, setNewSetCount] = useState(1);
+  const [newSetUnit, setNewSetUnit] = useState('Sets');
   const [newSetPrice, setNewSetPrice] = useState('');
   const [newSetGstRate, setNewSetGstRate] = useState('18%');
   const [piConfirmModal, setPiConfirmModal] = useState(null); // 'cancel' | 'draft' | 'create'
@@ -1670,7 +1671,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
@@ -1710,7 +1711,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         const groupTotal = unitPrice * multiplier;
         if (groupTotal <= 0) return;
 
@@ -1917,6 +1918,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId: 'custom_set',
         presetName: cleanName,
         setCount: 1,
+        unit: 'Sets',
         kitPrice: convertPresetPrice ? String(convertPresetPrice) : '',
         gstRate: gst,
         hsn: getHsnCode(cleanName),
@@ -1957,7 +1959,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const handleCreateCustomSet = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
-    const count = Math.max(1, parseInt(newSetCount) || 1);
+    const unit = newSetUnit || 'Sets';
+    const count = unit === 'kW' ? Math.max(0.01, parseFloat(newSetCount) || 1) : Math.max(1, parseInt(newSetCount) || 1);
     const groupId = 'custom_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const setGst = newSetGstRate || '18%';
 
@@ -1968,6 +1971,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId: 'custom_set',
         presetName: cleanName,
         setCount: count,
+        unit,
         kitPrice: newSetPrice ? String(newSetPrice) : '',
         gstRate: setGst,
         hsn: getHsnCode(cleanName),
@@ -1978,7 +1982,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const initialItem = {
       name: '',
       category: '',
-      uom: 'NOS',
+      uom: unit === 'kW' ? 'kW' : 'NOS',
       qty: '1',
       baseQty: 1,
       rate: '0',
@@ -1993,6 +1997,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     setNewSetName('');
     setNewSetCount(1);
+    setNewSetUnit('Sets');
     setNewSetPrice('');
     setNewSetGstRate('18%');
     setShowCreateSetModal(false);
@@ -2023,6 +2028,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId,
         presetName,
         setCount: multiplier,
+        unit: targetPreset.unit || 'Sets',
         kitPrice: defaultPrice,
         gstRate: initialGstRate,
         hsn: presetHsn
@@ -4792,7 +4798,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       }}
                     >
                       <Layers size={13} style={{ color: '#0E7490' }} />
-                      {grp.presetName} ({grp.setCount} Set{grp.setCount > 1 ? 's' : ''})
+                      {grp.presetName} ({grp.setCount} {grp.unit || (grp.setCount > 1 ? 'Sets' : 'Set')})
                       <button
                         type="button"
                         onClick={() => handleAddPresetItem(grp.groupId)}
@@ -5468,14 +5474,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             </span>
                                           )}
 
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ fontSize: '10.5px', color: theme.primary, fontWeight: '700' }}>
                                               {groupCount} items ×
                                             </span>
                                             <input id="performa-invoice-set-count" name="setCount" aria-label="SetCount"
                                               type="number"
                                               min="0"
-                                              max="999"
+                                              step={(currentGroup?.unit || 'Sets') === 'kW' ? 'any' : '1'}
+                                              max="99999"
                                               value={currentGroup?.setCount !== undefined && currentGroup?.setCount !== null ? currentGroup.setCount : ''}
                                               onFocus={(e) => e.target.select()}
                                               onChange={(e) => {
@@ -5489,7 +5496,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                   }
                                                   return;
                                                 }
-                                                const parsed = parseInt(rawVal);
+                                                const parsed = parseFloat(rawVal);
                                                 const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
                                                 if (groupId) {
                                                   setPresetGroups(prev => ({
@@ -5499,16 +5506,36 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                 }
                                               }}
                                               style={{
-                                                width: '42px', height: '26px', borderRadius: '6px',
-                                                border: `1.5px solid ${theme.border}`, fontSize: '13px',
+                                                width: '50px', height: '26px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, fontSize: '12px',
                                                 fontWeight: '800', color: theme.primary, textAlign: 'center',
                                                 padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box'
                                               }}
-                                              title="Sets multiplier for this preset"
+                                              title={(currentGroup?.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this preset"}
                                             />
-                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '600' }}>
-                                              set{(parseInt(currentGroup?.setCount) || 1) !== 1 ? 's' : ''}
-                                            </span>
+                                            <select
+                                              value={currentGroup?.unit || 'Sets'}
+                                              onChange={(e) => {
+                                                const newUnit = e.target.value;
+                                                if (groupId) {
+                                                  setPresetGroups(prev => ({
+                                                    ...prev,
+                                                    [groupId]: { ...(prev[groupId] || currentGroup), unit: newUnit }
+                                                  }));
+                                                }
+                                              }}
+                                              style={{
+                                                height: '26px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, padding: '0 2px',
+                                                fontSize: '11px', fontWeight: '800',
+                                                color: theme.primary, backgroundColor: '#FFFFFF',
+                                                outline: 'none', cursor: 'pointer'
+                                              }}
+                                              title="Choose unit: Sets or kW"
+                                            >
+                                              <option value="Sets">Sets</option>
+                                              <option value="kW">kW</option>
+                                            </select>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                                             <span style={{ fontSize: '10px', color: theme.primary, fontWeight: '700' }}>GST:</span>
@@ -5998,7 +6025,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         Object.values(presetGroupsMap).forEach(grp => {
           if (!grp) return;
           const uPrice = parseFloat(grp.kitPrice) || 0;
-          const sCount = parseInt(grp.setCount) || 1;
+          const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 0;
           presetKitsSubtotal += (uPrice * sCount);
         });
         if (presetKitsSubtotal === 0 && selectedPi.kitSubtotal) {
@@ -6046,7 +6073,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           Object.values(presetGroupsMap).forEach(grp => {
             if (!grp) return;
             const unitPrice = parseFloat(grp.kitPrice) || 0;
-            const multiplier = parseInt(grp.setCount) || 1;
+            const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
             const groupTotal = unitPrice * multiplier;
             if (groupTotal <= 0) return;
             const rawRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18';
@@ -6486,18 +6513,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                       {Object.values(presetGroupsMap).map((grp, gIdx) => {
                         const uPrice = parseFloat(grp.kitPrice) || 0;
-                        const sCount = parseInt(grp.setCount) || 1;
+                        const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 0;
                         const gTotal = uPrice * sCount;
+                        const unitName = grp.unit || 'Sets';
+                        const isKw = unitName === 'kW';
                         return (
                           <div key={gIdx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', borderRadius: '10px', padding: '12px' }}>
                             <div style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>{grp.presetName}</div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '6px' }}>
-                              <span>Total Quantity: <strong>{sCount} Set{sCount > 1 ? 's' : ''}</strong></span>
+                              <span>{isKw ? 'Total Capacity' : 'Total Quantity'}: <strong>{sCount} {isKw ? 'kW' : `Set${sCount !== 1 ? 's' : ''}`}</strong></span>
                               <span>GST: <strong>{grp.gstRate || '18%'}</strong></span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '4px' }}>
-                              <span>Kit Rate: <strong>₹{uPrice.toLocaleString('en-IN')}</strong></span>
-                              <span>Total: <strong style={{ color: '#15803D' }}>₹{gTotal.toLocaleString('en-IN')}</strong></span>
+                              <span>{isKw ? 'Rate / kW' : 'Kit Rate'}: <strong>₹{uPrice.toLocaleString('en-IN')}</strong></span>
+                              <span>Total: <strong style={{ color: '#15803D' }}>₹{Math.round(gTotal).toLocaleString('en-IN')}</strong></span>
                             </div>
                           </div>
                         );
@@ -6608,11 +6637,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           color: theme.tagText,
                                           border: `1px solid ${theme.border}`
                                         }}>
-                                          Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                          {currentGroup?.unit === 'kW' ? `Total Capacity: ${currentGroup?.setCount || 1} kW (${groupCount} components)` : `Total Quantity: ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) !== 1 ? 's' : ''} (${groupCount} components)`}
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong>{(parseInt(currentGroup?.setCount) || 1) > 1 ? ` (${currentGroup?.setCount || 1} Sets × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
+                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseFloat(currentGroup?.setCount || 1) || 0)).toLocaleString('en-IN')}</strong>{(parseFloat(currentGroup?.setCount || 1) || 0) !== 1 ? ` (${currentGroup?.setCount || 1} ${currentGroup?.unit || 'Sets'} × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
                                       </div>
                                     </div>
                                   </td>
@@ -7697,17 +7726,62 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 />
               </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Pricing / Capacity Unit
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('Sets')}
+                    style={{
+                      flex: 1, height: '36px', borderRadius: '8px',
+                      border: newSetUnit === 'Sets' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1',
+                      backgroundColor: newSetUnit === 'Sets' ? '#F5F3FF' : '#FFFFFF',
+                      color: newSetUnit === 'Sets' ? '#7C3AED' : '#475569',
+                      fontWeight: '800', fontSize: '12.5px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    <span>Sets (Set-based)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('kW')}
+                    style={{
+                      flex: 1, height: '36px', borderRadius: '8px',
+                      border: newSetUnit === 'kW' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1',
+                      backgroundColor: newSetUnit === 'kW' ? '#F5F3FF' : '#FFFFFF',
+                      color: newSetUnit === 'kW' ? '#7C3AED' : '#475569',
+                      fontWeight: '800', fontSize: '12.5px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    <span>kW (Kilowatt Capacity)</span>
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Number of Sets
+                    {newSetUnit === 'kW' ? 'Capacity (kW)' : 'Number of Sets'}
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    max="999"
+                    min={newSetUnit === 'kW' ? '0.01' : '1'}
+                    step={newSetUnit === 'kW' ? 'any' : '1'}
+                    max="99999"
                     value={newSetCount}
-                    onChange={(e) => setNewSetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setNewSetCount('');
+                        return;
+                      }
+                      setNewSetCount(newSetUnit === 'kW' ? (parseFloat(val) || '') : (parseInt(val) || ''));
+                    }}
+                    placeholder={newSetUnit === 'kW' ? 'e.g. 50 or 10.5' : '1'}
                     style={{
                       width: '100%', height: '40px', borderRadius: '8px',
                       border: '1.5px solid #CBD5E1', padding: '0 12px',
@@ -7741,7 +7815,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Kit / Set Lump-Sum Price (₹) <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
+                  {newSetUnit === 'kW' ? 'Rate per kW (₹)' : 'Kit / Set Lump-Sum Price (₹)'} <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
                 </label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: '#64748B' }}>₹</span>
@@ -7751,7 +7825,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     step="any"
                     value={newSetPrice}
                     onChange={(e) => setNewSetPrice(e.target.value)}
-                    placeholder="Enter total taxable price for 1 set"
+                    placeholder={newSetUnit === 'kW' ? 'Enter rate per 1 kW' : 'Enter total taxable price for 1 set'}
                     style={{
                       width: '100%', height: '40px', borderRadius: '8px',
                       border: '1.5px solid #CBD5E1', padding: '0 12px 0 28px',

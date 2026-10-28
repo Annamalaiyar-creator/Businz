@@ -184,7 +184,7 @@ export default function CreateBomFormPage(props) {
 
   const calculateBOMTotals = () => {
     const kitUnitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
-    const kitMultiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1;
+    const kitMultiplier = parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1;
     const kitSubtotal = selectedPreset ? (kitUnitPrice * kitMultiplier) : 0;
 
     const itemsSub = (bomMaterialsList || []).reduce((acc, item) => {

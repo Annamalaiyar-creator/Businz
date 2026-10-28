@@ -573,7 +573,7 @@ export default function CrmQuotationsView({
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
@@ -603,24 +603,12 @@ export default function CrmQuotationsView({
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         const groupTotal = unitPrice * multiplier;
-
-        const groupItems = (quoteItems || []).filter(it => (it.presetGroupId || 'legacy_default') === grpId);
-        const totalQty = groupItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 1), 0);
-
-        if (totalQty > 0) {
-          groupItems.forEach(it => {
-            const itQty = parseFloat(it.qty) || 1;
-            const itemShare = groupTotal * (itQty / totalQty);
-            const itGstRate = parseFloat(String(it.gstRate || grp.gstRate || '18%').replace('%', '')) || 0;
-            kitGst += itemShare * (itGstRate / 100);
-          });
-        } else {
-          const gRateStr = grp?.gstRate || '18%';
-          const gPct = parseFloat(String(gRateStr).replace('%', '')) || 0;
-          kitGst += groupTotal * (gPct / 100);
-        }
+        if (groupTotal <= 0) return;
+        const gRateStr = grp?.gstRate || '18%';
+        const gPct = parseFloat(String(gRateStr).replace('%', '')) || 18;
+        kitGst += groupTotal * (gPct / 100);
       }
     });
 
@@ -670,6 +658,7 @@ export default function CrmQuotationsView({
         presetId,
         presetName,
         setCount: multiplier,
+        unit: targetPreset.unit || 'Sets',
         kitPrice: defaultPrice,
         gstRate: initialGstRate,
         isFixedKit
@@ -1884,7 +1873,7 @@ export default function CrmQuotationsView({
                   }}
                 >
                   <Layers size={13} style={{ color: '#0E7490' }} />
-                  {grp.presetName} (Total Quantity: {grp.setCount || 1} Set{(grp.setCount || 1) > 1 ? 's' : ''})
+                  {grp.presetName} ({grp.unit === 'kW' ? `Total Capacity: ${grp.setCount || 1} kW` : `Total Quantity: ${grp.setCount || 1} Set${(grp.setCount || 1) > 1 ? 's' : ''}`})
                   <button
                     type="button"
                     onClick={() => handleRemovePresetGroup(grp.groupId)}
@@ -2319,7 +2308,7 @@ export default function CrmQuotationsView({
                                               }
                                               return;
                                             }
-                                            const parsed = parseInt(rawVal);
+                                            const parsed = parseFloat(rawVal);
                                             const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
                                             if (groupId) {
                                               setPresetGroups(prev => ({
@@ -2330,7 +2319,7 @@ export default function CrmQuotationsView({
                                           }}
                                           onBlur={() => {
                                             const current = currentGroup.setCount;
-                                            const finalCount = (current === '' || isNaN(parseInt(current)) || parseInt(current) < 0) ? 1 : Math.max(0, parseInt(current));
+                                            const finalCount = (current === '' || isNaN(parseFloat(current)) || parseFloat(current) < 0) ? 1 : Math.max(0, parseFloat(current));
                                             if (groupId) {
                                               setPresetGroups(prev => ({
                                                 ...prev,
@@ -2339,16 +2328,36 @@ export default function CrmQuotationsView({
                                             }
                                           }}
                                           style={{
-                                            width: '42px', height: '26px', borderRadius: '6px',
-                                            border: '1.5px solid #818CF8', fontSize: '13px',
+                                            width: '50px', height: '26px', borderRadius: '6px',
+                                            border: '1.5px solid #818CF8', fontSize: '12px',
                                             fontWeight: '800', color: '#312E81', textAlign: 'center',
                                             padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box', cursor: 'text'
                                           }}
-                                          title="Sets multiplier for this preset"
+                                          title={(currentGroup.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this preset"}
                                          />
-                                        <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
-                                          set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
-                                        </span>
+                                        <select
+                                          value={currentGroup.unit || 'Sets'}
+                                          onChange={(e) => {
+                                            const newUnit = e.target.value;
+                                            if (groupId) {
+                                              setPresetGroups(prev => ({
+                                                ...prev,
+                                                [groupId]: { ...(prev[groupId] || currentGroup), unit: newUnit }
+                                              }));
+                                            }
+                                          }}
+                                          style={{
+                                            height: '26px', borderRadius: '6px',
+                                            border: '1.5px solid #818CF8', padding: '0 2px',
+                                            fontSize: '11px', fontWeight: '800',
+                                            color: '#312E81', backgroundColor: '#FFFFFF',
+                                            outline: 'none', cursor: 'pointer'
+                                          }}
+                                          title="Choose unit: Sets or kW"
+                                        >
+                                          <option value="Sets">Sets</option>
+                                          <option value="kW">kW</option>
+                                        </select>
                                       </div>
 
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
@@ -3778,12 +3787,14 @@ export default function CrmQuotationsView({
                       || (Array.isArray(rawPresetGroups) && rawPresetGroups.find(g => g.groupId === gid))
                       || null;
                     const name = it.presetName || (savedGrp && savedGrp.presetName) || 'Pre-Engineered MMS Kit Package';
-                    const setCount = (savedGrp && parseInt(savedGrp.setCount)) || 1;
+                    const unit = (savedGrp && savedGrp.unit) || 'Sets';
+                    const setCount = (savedGrp && parseFloat(savedGrp.setCount)) || 1;
                     const kitPrice = savedGrp && savedGrp.kitPrice !== undefined ? parseFloat(savedGrp.kitPrice) : (parseFloat(selectedQuote.kitSubtotal) || 0);
                     groupMeta[gid] = {
                       groupId: gid,
                       name,
                       setCount,
+                      unit,
                       kitPrice,
                       totalAmount: kitPrice * setCount,
                       itemsCount: 0,
@@ -3844,10 +3855,10 @@ export default function CrmQuotationsView({
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                   <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 6px', borderRadius: '4px' }}>
-                                    Total Quantity: {gInfo.setCount} Set{gInfo.setCount > 1 ? 's' : ''}
+                                    {gInfo.unit === 'kW' ? `Total Capacity: ${gInfo.setCount} kW` : `Total Quantity: ${gInfo.setCount} Set${gInfo.setCount !== 1 ? 's' : ''}`}
                                   </span>
                                   <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
-                                    ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}{gInfo.unit === 'kW' ? ' / kW' : ''}
                                   </span>
                                 </div>
                               </td>

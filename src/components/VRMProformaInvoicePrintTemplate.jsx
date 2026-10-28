@@ -762,7 +762,8 @@ export function VRMProformaInvoicePrintSheet({
     Object.keys(presetGroups).forEach(grpId => {
       const grp = presetGroups[grpId];
       const uPrice = parseFloat(grp.kitPrice) || 0;
-      const sCount = parseInt(grp.setCount) || 1;
+      const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 1;
+      const pUnit = grp.unit || 'Sets';
       const grpSub = uPrice * sCount;
       const gItems = rawItems.filter(it => (it.presetGroupId || 'legacy_default') === grpId);
       const tQty = gItems.reduce((s, it) => s + (parseFloat(it.qty) || 1), 0);
@@ -787,6 +788,7 @@ export function VRMProformaInvoicePrintSheet({
         kitPrice: uPrice,
         taxable: grpSub,
         setCount: sCount,
+        unit: pUnit,
         groupSubtotal: grpSub,
         groupGst: grpGst,
         groupTotal: grpSub + grpGst,
@@ -943,6 +945,7 @@ export function VRMProformaInvoicePrintSheet({
       groupCount,
       presetName: grpMeta?.presetName || grpMeta?.name || '',
       setCount: grpMeta?.setCount || 1,
+      unit: grpMeta?.unit || 'Sets',
       groupPrice: grpMeta?.kitPrice || grpMeta?.groupSubtotal || 0,
       groupTaxable: grpMeta?.groupSubtotal || grpMeta?.taxable || 0,
       groupGst: grpMeta?.groupGst || 0,
@@ -1922,7 +1925,7 @@ export function VRMProformaInvoicePrintSheet({
                                     if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
                                   }}
                                 />
-                                {' '}(Total Quantity: {it.setCount || 1} Set{(it.setCount || 1) > 1 ? 's' : ''} — {it.groupCount} Components)
+                                {' '}({it.unit === 'kW' ? `Total Capacity: ${it.setCount || 1} kW` : `Total Quantity: ${it.setCount || 1} Set${(it.setCount || 1) > 1 ? 's' : ''}`} — {it.groupCount} Components)
                               </span>
                             </div>
                           </td>
@@ -2027,13 +2030,13 @@ export function VRMProformaInvoicePrintSheet({
                                     onSave={(v) => {
                                       const num = parseFloat(v.replace(/[^0-9.]/g, ''));
                                       if (!isNaN(num) && it.grpId) {
-                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num / (it.setCount || 1) });
+                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num / (parseFloat(it.setCount) || 1) });
                                       }
                                     }}
                                   />
                                 </div>
                                 <div style={{ fontSize: '8px', color: '#64748B', fontWeight: '500', marginTop: '2px' }}>
-                                  per set
+                                  {it.unit === 'kW' ? 'per kW' : 'per set'}
                                 </div>
                               </td>
                             ) : null
