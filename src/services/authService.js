@@ -8,45 +8,13 @@ import { clearCustomerCacheOnLogout } from './customerService';
  * Dedicated module for handling authentication, credential matching, session persistence, and role resolution.
  */
 
-export const DEFAULT_CORE_EMPLOYEES = [
-  {
-    employee_code: "TA-VRM001",
-    employee_name: "Ar.Annamalaiyar",
-    email: "arannamalaiyar@gmail.com",
-    password: "Efx@1234",
-    role: "Technical Administrator",
-    status: "Active"
-  },
-  {
-    employee_code: "SH-VRM001",
-    employee_name: "Sales Head",
-    email: "sales@vrm.com",
-    password: "12345",
-    role: "Sales Head",
-    status: "Active"
-  },
-  {
-    employee_code: "SH-1000",
-    employee_name: "Sales Head",
-    email: "vijay@vrmstructures.in",
-    password: "12345",
-    role: "Sales Head",
-    status: "Active"
-  },
-  {
-    employee_code: "CEO-001",
-    employee_name: "Velmurugan Rathinam",
-    email: "ceo@vrmstructures.com",
-    password: "12345",
-    role: "CEO",
-    status: "Active"
-  }
-];
+// Hardcoded operational employee credentials eliminated (Phase 8D).
+// All identities and credentials must be provisioned through secure, database-backed storage.
+export const DEFAULT_CORE_EMPLOYEES = [];
 
 const mergeWithCoreEmployees = (incomingList = []) => {
   const normalize = (c) => String(c || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
   const empMap = new Map();
-  DEFAULT_CORE_EMPLOYEES.forEach(e => empMap.set(normalize(e.employee_code), e));
   if (Array.isArray(incomingList)) {
     incomingList.forEach(e => {
       if (!e) return;
@@ -160,12 +128,18 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
     };
   }
 
-  // 2. Validate Password strictly against account password
-  if (accountRecord.password) {
-    const isPassValid = cleanPassword === accountRecord.password;
-    if (!isPassValid) {
-      return { success: false, error: 'Incorrect Password: The password you entered is invalid. Please try again.' };
-    }
+  // 2. Validate Password strictly against account password verifier
+  // Accounts with missing, null, or empty password verifiers fail authentication unconditionally
+  if (!accountRecord.password || typeof accountRecord.password !== 'string' || accountRecord.password.trim().length === 0) {
+    return {
+      success: false,
+      error: 'Account Configuration Error: No valid password verifier found for this account. Please contact your Technical Administrator.'
+    };
+  }
+
+  const isPassValid = cleanPassword === accountRecord.password;
+  if (!isPassValid) {
+    return { success: false, error: 'Incorrect Password: The password you entered is invalid. Please try again.' };
   }
 
   const finalRoleName = accountRecord.role;

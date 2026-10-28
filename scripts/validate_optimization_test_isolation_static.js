@@ -57,6 +57,21 @@ import {
   resolveAndValidateTestDatabaseUrl
 } from './testEnvironmentGuard.js';
 
+import {
+  verifyPasswordVerifier,
+  hashPassword,
+  generateSecureSessionId,
+  authenticateEmployeeRecord,
+  isPrivilegedRole,
+  normalizeEmployeeCode,
+  createSessionRecord,
+  validateSessionInMap,
+  heartbeatSessionInMap,
+  revokeSessionInMap,
+  SESSION_TTL_MS,
+  FORBIDDEN_SELF_REGISTER_ROLES
+} from '../server/authSecurity.js';
+
 console.log('===================================================================');
 console.log('🛡️  BUSINZ ERP: PHASE 6P STATIC ISOLATION & EXTERNAL INTEGRATION AUDIT SUITE');
 console.log('===================================================================\n');
@@ -899,6 +914,330 @@ try {
     const syncRes = await imModule.syncIndiaMartLeads();
     assert.strictEqual(syncRes.success, false);
     assert(syncRes.error.includes('[FAIL-CLOSED]'));
+  });
+
+  // TEST GROUP 9: Authentication & Session Security Invariants (Phase 8D)
+  console.log('\n--- TEST GROUP 9: Authentication & Session Security Invariants (Phase 8D) ---');
+
+  // 1. Correct password authentication (plaintext and hashed verifiers)
+  runTest('Correct password authentication verifies successfully for plaintext, SHA-256, and scrypt', () => {
+    const rawPass = 'SyntheticSecurePass#2026';
+
+    // Plaintext
+    assert.strictEqual(verifyPasswordVerifier(rawPass, rawPass), true);
+
+    // Salted SHA-256
+    const shaVerifier = hashPassword(rawPass, 'sha256');
+    assert(shaVerifier.startsWith('sha256$'));
+    assert.strictEqual(verifyPasswordVerifier(rawPass, shaVerifier), true);
+
+    // Salted scrypt
+    const scryptVerifier = hashPassword(rawPass, 'scrypt');
+    assert(scryptVerifier.startsWith('scrypt$'));
+    assert.strictEqual(verifyPasswordVerifier(rawPass, scryptVerifier), true);
+
+    // authenticateEmployeeRecord
+    const syntheticEmp = {
+      employee_code: 'EMP-SYN001',
+      employee_name: 'Synthetic Sales Rep',
+      email: 'salesrep@synthetic.local',
+      role: 'Sales Executive',
+      password: shaVerifier,
+      status: 'Active'
+    };
+    const authRes = authenticateEmployeeRecord(syntheticEmp, rawPass);
+    assert.strictEqual(authRes.verified, true);
+    assert.strictEqual(authRes.employee_code, 'EMP-SYN001');
+    assert.strictEqual(authRes.role, 'Sales Executive');
+    assert.strictEqual(authRes.email, 'salesrep@synthetic.local');
+  });
+
+  // 2. Incorrect and missing candidate passwords
+  runTest('Rejects incorrect, empty, and missing candidate passwords', () => {
+    const validVerifier = hashPassword('SyntheticPass#1', 'sha256');
+    const syntheticEmp = {
+      employee_code: 'EMP-SYN002',
+      employee_name: 'Synthetic Employee',
+      email: 'synth2@synthetic.local',
+      role: 'Production Staff',
+      password: validVerifier,
+      status: 'Active'
+    };
+
+    // Wrong password
+    const wrongRes = authenticateEmployeeRecord(syntheticEmp, 'WrongPass#999');
+    assert.strictEqual(wrongRes.verified, false);
+    assert.strictEqual(wrongRes.status, 401);
+    assert.strictEqual(wrongRes.error, 'Invalid password');
+
+    // Empty password
+    const emptyRes = authenticateEmployeeRecord(syntheticEmp, '');
+    assert.strictEqual(emptyRes.verified, false);
+    assert.strictEqual(emptyRes.status, 401);
+    assert.strictEqual(emptyRes.error, 'Password is required');
+
+    // Missing password (null/undefined)
+    const nullRes = authenticateEmployeeRecord(syntheticEmp, null);
+    assert.strictEqual(nullRes.verified, false);
+    assert.strictEqual(nullRes.status, 401);
+
+    const undefRes = authenticateEmployeeRecord(syntheticEmp, undefined);
+    assert.strictEqual(undefRes.verified, false);
+    assert.strictEqual(undefRes.status, 401);
+  });
+
+  // 3. Rejection of missing stored password verifiers
+  runTest('Rejects accounts with missing, null, or empty stored password verifiers', () => {
+    const accountsWithoutVerifier = [
+      { employee_code: 'EMP-NO-VER1', password: null, status: 'Active' },
+      { employee_code: 'EMP-NO-VER2', password: '', status: 'Active' },
+      { employee_code: 'EMP-NO-VER3', password: '   ', status: 'Active' },
+      { employee_code: 'EMP-NO-VER4', status: 'Active' }
+    ];
+
+    for (const acc of accountsWithoutVerifier) {
+      // Must fail unconditionally; must NEVER accept arbitrary passwords
+      const res1 = authenticateEmployeeRecord(acc, 'AnyPassword123');
+      assert.strictEqual(res1.verified, false);
+      assert.strictEqual(res1.status, 401);
+      assert(res1.error.includes('no valid password verifier configured'));
+
+      const res2 = authenticateEmployeeRecord(acc, '');
+      assert.strictEqual(res2.verified, false);
+      assert.strictEqual(res2.status, 401);
+
+      // Raw verifier helper must also return false
+      assert.strictEqual(verifyPasswordVerifier('AnyPassword123', acc.password), false);
+    }
+  });
+
+  // 4. Rejection of unknown and inactive employees
+  runTest('Rejects unknown employees and non-active employee statuses', () => {
+    // Unknown employee record
+    const notFoundRes = authenticateEmployeeRecord(null, 'SomePass');
+    assert.strictEqual(notFoundRes.verified, false);
+    assert.strictEqual(notFoundRes.status, 404);
+    assert.strictEqual(notFoundRes.error, 'Account not found');
+
+    const rawPass = 'Pass123!';
+    const verifier = hashPassword(rawPass, 'sha256');
+
+    // Pending Approval
+    const pendingEmp = { employee_code: 'EMP-P1', password: verifier, status: 'Pending Approval' };
+    const pendingRes = authenticateEmployeeRecord(pendingEmp, rawPass);
+    assert.strictEqual(pendingRes.verified, false);
+    assert.strictEqual(pendingRes.status, 403);
+    assert.strictEqual(pendingRes.error, 'Account is Pending Approval');
+
+    // Disabled
+    const disabledEmp = { employee_code: 'EMP-D1', password: verifier, status: 'Disabled' };
+    const disabledRes = authenticateEmployeeRecord(disabledEmp, rawPass);
+    assert.strictEqual(disabledRes.verified, false);
+    assert.strictEqual(disabledRes.status, 403);
+    assert.strictEqual(disabledRes.error, 'Account is Disabled');
+
+    // Rejected
+    const rejectedEmp = { employee_code: 'EMP-R1', password: verifier, status: 'Rejected' };
+    const rejectedRes = authenticateEmployeeRecord(rejectedEmp, rawPass);
+    assert.strictEqual(rejectedRes.verified, false);
+    assert.strictEqual(rejectedRes.status, 403);
+  });
+
+  // 5. Rejection of client-submitted CEO and privileged roles
+  runTest('Detects and rejects client-submitted CEO, TA, and privileged executive roles', () => {
+    assert.strictEqual(isPrivilegedRole('CEO'), true);
+    assert.strictEqual(isPrivilegedRole('Technical Administrator'), true);
+    assert.strictEqual(isPrivilegedRole('Director'), true);
+    assert.strictEqual(isPrivilegedRole('Managing Director'), true);
+    assert.strictEqual(isPrivilegedRole('MD'), true);
+    assert.strictEqual(isPrivilegedRole('Super Admin'), true);
+    assert.strictEqual(isPrivilegedRole('Admin'), true);
+    assert.strictEqual(isPrivilegedRole(null, 'TA-VRM001'), true);
+    assert.strictEqual(isPrivilegedRole(null, 'CEO-001'), true);
+    assert.strictEqual(isPrivilegedRole(null, 'MD-100'), true);
+    assert.strictEqual(isPrivilegedRole(null, 'DIR-01'), true);
+
+    // Non-privileged roles
+    assert.strictEqual(isPrivilegedRole('Sales Executive', 'SE-001'), false);
+    assert.strictEqual(isPrivilegedRole('Billing Team', 'BIL-001'), false);
+    assert.strictEqual(isPrivilegedRole('Dispatch Staff', 'DIS-001'), false);
+
+    // Server-side session creation strictly ignores client-supplied roles
+    const authResult = {
+      verified: true,
+      employee_code: 'EMP-SE01',
+      employee_name: 'Sales Rep',
+      email: 'rep@synthetic.local',
+      role: 'Sales Executive'
+    };
+    const session = createSessionRecord(authResult, { device: 'Mobile', browser: 'Safari' });
+    assert.strictEqual(session.role, 'Sales Executive');
+    assert.strictEqual(session.empCode, 'EMP-SE01');
+    assert(session.id.startsWith('sess_'));
+  });
+
+  // 6. Elimination of hardcoded operational fallback credentials in source
+  runTest('Application source contains zero hardcoded operational employee credentials or fallback passwords', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    const authServiceSrc = fs.readFileSync(path.resolve(__dirname, '../src/services/authService.js'), 'utf8');
+
+    // Confirm elimination of CORE_AUTHENTICATED_EMPLOYEES array
+    assert(
+      !serverIndexSrc.includes('const CORE_AUTHENTICATED_EMPLOYEES ='),
+      'server/index.js must not define CORE_AUTHENTICATED_EMPLOYEES'
+    );
+
+    // Confirm DEFAULT_CORE_EMPLOYEES is empty in authService.js
+    assert(
+      authServiceSrc.includes('export const DEFAULT_CORE_EMPLOYEES = [];'),
+      'src/services/authService.js must have empty DEFAULT_CORE_EMPLOYEES'
+    );
+
+    // Verify hardcoded plaintext credentials are eliminated from both source files
+    const forbiddenCredentialPatterns = ['Efx@1234', 'password: "12345"', 'password: \'12345\''];
+    for (const cred of forbiddenCredentialPatterns) {
+      assert(!serverIndexSrc.includes(cred), `server/index.js must not contain credential pattern "${cred}"`);
+      assert(!authServiceSrc.includes(cred), `src/services/authService.js must not contain credential pattern "${cred}"`);
+    }
+  });
+
+  // 7. Session impersonation and adoption prevention
+  runTest('Prevents session adoption, requires cryptographic server-generated session tokens', () => {
+    const id1 = generateSecureSessionId();
+    const id2 = generateSecureSessionId();
+    assert(id1.startsWith('sess_'));
+    assert(id2.startsWith('sess_'));
+    assert.notStrictEqual(id1, id2);
+    // At least 48 hex characters after 'sess_' prefix
+    assert(id1.length >= 53);
+
+    // Random session cannot be adopted in session map without prior registration
+    const testMap = new Map();
+    const validation = validateSessionInMap('sess_unregistered_attacker_token', testMap);
+    assert.strictEqual(validation.valid, false);
+    assert.strictEqual(validation.error, 'Active session not found or expired');
+  });
+
+  // 8. Session refresh, heartbeat, cross-employee prevention, revocation, and expiry
+  runTest('Enforces session lifecycle: heartbeat, cross-employee prevention, revocation, and 24h expiry', () => {
+    const testMap = new Map();
+    const authSynthetic = {
+      verified: true,
+      employee_code: 'EMP-SYN88',
+      employee_name: 'Synthetic Heartbeat Test',
+      email: 'hb@synthetic.local',
+      role: 'Sales Executive'
+    };
+    const session = createSessionRecord(authSynthetic);
+    testMap.set(session.id, session);
+
+    // 8a. Valid heartbeat updates timestamp
+    const hbRes = heartbeatSessionInMap(session.id, testMap, 'EMP-SYN88');
+    assert.strictEqual(hbRes.success, true);
+    assert.strictEqual(hbRes.status, 'active');
+
+    // 8b. Cross-employee heartbeat attempt rejected with 403 forbidden
+    const hijackRes = heartbeatSessionInMap(session.id, testMap, 'EMP-OTHER-ATTACKER');
+    assert.strictEqual(hijackRes.success, false);
+    assert.strictEqual(hijackRes.status, 'forbidden');
+    assert.strictEqual(hijackRes.error, 'Forbidden: Cannot refresh another employee session');
+
+    // 8c. Expired session (> 24 hours inactivity)
+    const expiredSession = createSessionRecord(authSynthetic);
+    expiredSession.lastActiveTimestamp = Date.now() - (SESSION_TTL_MS + 5000);
+    testMap.set(expiredSession.id, expiredSession);
+
+    const expValidation = validateSessionInMap(expiredSession.id, testMap);
+    assert.strictEqual(expValidation.valid, false);
+    assert.strictEqual(expValidation.error, 'Session has expired');
+
+    // Pruned from map
+    assert.strictEqual(testMap.has(expiredSession.id), false);
+
+    // 8d. Session revocation
+    const revokeTarget = createSessionRecord(authSynthetic);
+    testMap.set(revokeTarget.id, revokeTarget);
+
+    // Non-executive cannot revoke another user's session
+    const otherEmployeeCaller = { sessionId: 'sess_other', empCode: 'EMP-999', role: 'Sales Executive' };
+    const failRevoke = revokeSessionInMap(revokeTarget.id, testMap, otherEmployeeCaller);
+    assert.strictEqual(failRevoke.success, false);
+    assert(failRevoke.error.includes('Forbidden'));
+
+    // Own session revocation succeeds
+    const ownCaller = { sessionId: revokeTarget.id, empCode: 'EMP-SYN88', role: 'Sales Executive' };
+    const ownRevoke = revokeSessionInMap(revokeTarget.id, testMap, ownCaller);
+    assert.strictEqual(ownRevoke.success, true);
+
+    // Revoked session rejected on subsequent validation
+    const revokedCheck = validateSessionInMap(revokeTarget.id, testMap);
+    assert.strictEqual(revokedCheck.valid, false);
+    assert.strictEqual(revokedCheck.error, 'Session has been revoked');
+
+    // Executive caller CAN revoke any session
+    const anotherTarget = createSessionRecord(authSynthetic);
+    testMap.set(anotherTarget.id, anotherTarget);
+    const execCaller = { sessionId: 'sess_exec', empCode: 'CEO-001', role: 'CEO' };
+    const execRevoke = revokeSessionInMap(anotherTarget.id, testMap, execCaller);
+    assert.strictEqual(execRevoke.success, true);
+  });
+
+  // 9. Administrator-key bypass strictly blocked in optimization test mode
+  runTest('Administrator-key bypass is strictly blocked in optimization test mode across all endpoints', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+
+    // getVerifiedUserSession gates x-admin-key behind !isOptimizationTestMode()
+    assert(
+      serverIndexSrc.includes('adminKey && !isOptimizationTestMode() && process.env.SUPABASE_SERVICE_ROLE_KEY'),
+      'server/index.js getVerifiedUserSession must strictly fence x-admin-key behind !isOptimizationTestMode()'
+    );
+
+    // requireBusinzSession delegates to getVerifiedUserSession
+    assert(
+      serverIndexSrc.includes('const session = await getVerifiedUserSession(req);') &&
+      serverIndexSrc.includes('const requireBusinzSession = async (req, res, next) => {'),
+      'requireBusinzSession must delegate session verification directly to getVerifiedUserSession'
+    );
+
+    // requireBusinzSession does not accept unauthenticated x-user-role or x-user-email headers
+    const reqSessionMatch = serverIndexSrc.match(/const requireBusinzSession = async[\s\S]*?next\(\);\s*\};/);
+    assert(reqSessionMatch, 'requireBusinzSession must be defined in server/index.js');
+    assert(
+      !reqSessionMatch[0].includes("req.headers['x-user-role']") && !reqSessionMatch[0].includes("req.headers['x-user-email']"),
+      'requireBusinzSession must not allow unauthenticated role spoofing via x-user-role or x-user-email headers'
+    );
+
+    // Maintenance toggle gates x-admin-key behind !isOptimizationTestMode()
+    assert(
+      serverIndexSrc.includes("(!isOptimizationTestMode() ? req.headers['x-admin-key'] : null)"),
+      'server/index.js /api/maintenance/toggle must reject x-admin-key in optimization test mode'
+    );
+
+    // Self-registration endpoint rejects privileged executive/admin roles
+    assert(
+      serverIndexSrc.includes('isPrivilegedRole(role, cleanCode) || isPrivilegedRole(prefix, cleanCode)'),
+      'server/index.js /api/auth/register-employee must reject self-registration of privileged roles'
+    );
+  });
+
+  // 10. Role-based notification authorization scoping
+  runTest('Notification store access requires authenticated session and strictly scopes by verified role', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+
+    // Endpoint checks getVerifiedUserSession
+    assert(
+      serverIndexSrc.includes("key === 'notifications_store'") &&
+      serverIndexSrc.includes('await getVerifiedUserSession(req)'),
+      'server/index.js notification store access must require verified session'
+    );
+
+    // Non-executive users are filtered to their session role or 'All'
+    assert(
+      serverIndexSrc.includes('!isExecutive') &&
+      serverIndexSrc.includes('scopedList.filter(n => {') &&
+      serverIndexSrc.includes("rLower === 'all' || rLower.includes(userRoleLower)"),
+      'server/index.js notifications must scope non-executive users strictly to their verified session role or All'
+    );
   });
 
 } finally {

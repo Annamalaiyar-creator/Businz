@@ -27,7 +27,7 @@ const TechSupportDashboardView = lazy(() => import('./components/views/TechSuppo
 const DeveloperPortalView = lazy(() => import('./components/DeveloperPortalView'));
 
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
-import { heartbeatActiveSession, registerActiveSession, revokeSession } from './services/sessionService';
+import { heartbeatActiveSession, revokeSession } from './services/sessionService';
 import { getPurchaseOrders, getItems } from './services/businzDataService';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
@@ -442,14 +442,6 @@ function App() {
   // Heartbeat & session verification interval (checks every 25 seconds)
   useEffect(() => {
     if (isAuthenticated) {
-      const email = localStorage.getItem('controlroom_logged_user');
-      const empCode = localStorage.getItem('controlroom_logged_emp_id');
-      const name = localStorage.getItem('controlroom_logged_user_name');
-      const role = localStorage.getItem('controlroom_user_role');
-      if (email) {
-        registerActiveSession(email, empCode, name, role);
-      }
-
       heartbeatActiveSession();
       const interval = setInterval(() => {
         heartbeatActiveSession();

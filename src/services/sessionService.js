@@ -60,37 +60,39 @@ export function getOrCreateSessionId() {
 
 /**
  * Register or update active session in backend session registry
+ * Server verifies credentials and issues cryptographic session ID (sess_...)
  */
 export async function registerActiveSession(userEmail, empCode, displayName, userRole, password = null) {
   if (!userEmail && !empCode) return null;
-  const sessionId = getOrCreateSessionId();
   const { device, browser } = getDeviceInfo();
 
   const sessionPayload = {
-    id: sessionId,
     email: (userEmail || '').toLowerCase().trim(),
     empCode: empCode || 'EMP',
     user: displayName || userEmail,
     role: userRole || 'Employee',
     ...(password ? { password: String(password) } : {}),
     device: device,
-    browser: browser,
-    ip: 'Live Client',
-    location: 'India',
-    loginTime: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    lastActiveTimestamp: Date.now(),
-    lastActive: 'Just now'
+    browser: browser
   };
 
   try {
-    await fetch('/api/sessions/register', {
+    const res = await fetch('/api/sessions/register', {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json',
-        'x-session-id': sessionId
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(sessionPayload)
     }).catch(() => null);
+
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.success && data.session?.id) {
+        localStorage.setItem('controlroom_device_session_id', data.session.id);
+        localStorage.setItem('controlroom_session_start_time', String(Date.now()));
+        return data.session;
+      }
+    }
   } catch (err) {
     console.warn('[SessionService] Register notice:', err);
   }
@@ -113,9 +115,22 @@ export async function heartbeatActiveSession() {
   try {
     const res = await fetch('/api/sessions/heartbeat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-session-id': sessionId
+      },
       body: JSON.stringify({ sessionId })
     }).catch(() => null);
+
+    if (res && res.status === 401) {
+      console.warn('Session is invalid or expired. Logging out.');
+      localStorage.removeItem('controlroom_is_authenticated');
+      localStorage.removeItem('controlroom_user_role');
+      localStorage.removeItem('controlroom_device_session_id');
+      localStorage.removeItem('controlroom_session_start_time');
+      window.location.reload();
+      return;
+    }
 
     if (res && res.ok) {
       const json = await res.json().catch(() => null);
