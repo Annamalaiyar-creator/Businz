@@ -1,5 +1,5 @@
 import './optimizationTestGuard.js';
-import { isOptimizationTestMode } from './optimizationTestGuard.js';
+import { isOptimizationTestMode, getServerBindHost } from './optimizationTestGuard.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -139,29 +139,33 @@ try {
 } catch (_) {}
 
 try {
-  const bomDisk = getStoreFilePath('bom_store.json');
-  if (fs.existsSync(bomDisk)) {
-    const list = JSON.parse(fs.readFileSync(bomDisk, 'utf8'));
-    if (Array.isArray(list) && list.length > 0) {
-      supabaseMemoryStore.bom_store = list;
+  if (!isOptimizationTestMode()) {
+    const bomDisk = getStoreFilePath('bom_store.json');
+    if (fs.existsSync(bomDisk)) {
+      const list = JSON.parse(fs.readFileSync(bomDisk, 'utf8'));
+      if (Array.isArray(list) && list.length > 0) {
+        supabaseMemoryStore.bom_store = list;
+      }
     }
+  } else {
+    supabaseMemoryStore.bom_store = [];
   }
 } catch (_) {}
 
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
 initPostgresDatabase().then(() => {
-  loadDatabaseCustomers(true).then(list => {
-    console.log(`✅ [Database Customers] Loaded ${list?.length || 0} authoritative customers from PostgreSQL.`);
-  }).catch(err => console.warn('[Customers Init Notice]:', err.message));
-  loadDatabaseBoms(true).then(list => {
-    console.log(`✅ [Database BOMs] Pre-warmed ${list?.length || 0} authoritative BOM orders.`);
-  }).catch(err => console.warn('[BOMs Init Notice]:', err.message));
   if (!isOptimizationTestMode()) {
+    loadDatabaseCustomers(true).then(list => {
+      console.log(`✅ [Database Customers] Loaded ${list?.length || 0} authoritative customers from PostgreSQL.`);
+    }).catch(err => console.warn('[Customers Init Notice]:', err.message));
+    loadDatabaseBoms(true).then(list => {
+      console.log(`✅ [Database BOMs] Pre-warmed ${list?.length || 0} authoritative BOM orders.`);
+    }).catch(err => console.warn('[BOMs Init Notice]:', err.message));
     setTimeout(() => {
       syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
     }, 2000);
   } else {
-    console.log('🛡️ [BOM Startup Sync] Test mode active: automatic relational BOM sync disabled.');
+    console.log('🛡️ [Database Init] Optimization test mode: startup data pre-warming and relational synchronization disabled.');
   }
 }).catch(err => {
   console.warn('[PostgreSQL Init Notice]:', err.message);
@@ -9257,9 +9261,15 @@ if (fs.existsSync(distPath)) {
 
 app.supabaseMemoryStore = supabaseMemoryStore;
 
-app.listen(PORT, () => {
-  console.log(`BUSINZ Native Server running on port ${PORT}`);
-  if (!isOptimizationTestMode()) {
+if (isOptimizationTestMode()) {
+  app.listen(PORT, '127.0.0.1', () => {
+    console.log(`🛡️ [Server Startup] BUSINZ Optimization Test Server bound exclusively to 127.0.0.1:${PORT}`);
+    console.log(`🛡️ [Server Startup] External network access to port ${PORT} is strictly blocked (localhost only).`);
+    console.log('🛡️ [Server Startup] WhatsApp auto-restoration disabled in optimization test mode.');
+  });
+} else {
+  app.listen(PORT, () => {
+    console.log(`BUSINZ Native Server running on port ${PORT}`);
     autoRestoreAllSavedSessions({
       onMessageReceived: (msgData) => {
         broadcastRealtimeEvent('whatsapp_message', msgData);
@@ -9271,10 +9281,8 @@ app.listen(PORT, () => {
         broadcastRealtimeEvent('whatsapp_chats_updated', { count: chatsList.length, chats: chatsList });
       }
     }).catch(() => {});
-  } else {
-    console.log('🛡️ [Server Startup] Optimization test mode: WhatsApp auto-restoration disabled.');
-  }
-});
+  });
+}
 
 export default app;
 export {

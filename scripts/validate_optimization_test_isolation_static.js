@@ -45,7 +45,9 @@ import {
   REQUIRED_TEST_DATABASE,
   REQUIRED_TEST_DB_ROLE,
   REQUIRED_TEST_HOST,
-  APPROVED_TEST_STORAGE_ROOT
+  REQUIRED_TEST_BIND_HOST,
+  APPROVED_TEST_STORAGE_ROOT,
+  getServerBindHost
 } from '../server/optimizationTestGuard.js';
 
 import {
@@ -54,7 +56,7 @@ import {
 } from './testEnvironmentGuard.js';
 
 console.log('===================================================================');
-console.log('🛡️  BUSINZ ERP: PHASE 6B STATIC ISOLATION & SAFETY AUDIT SUITE');
+console.log('🛡️  BUSINZ ERP: PHASE 6H STATIC ISOLATION & STARTUP AUDIT SUITE');
 console.log('===================================================================\n');
 
 let passedTests = 0;
@@ -581,6 +583,99 @@ try {
     assert.strictEqual(client, null, 'Client reference must be nulled');
   });
 
+  // TEST GROUP 7: Safe Optimization Test Startup & Storage Lifecycle (Phase 6H)
+  console.log('\n--- TEST GROUP 7: Safe Optimization Test Startup & Lifecycle Safeguards ---');
+
+  runTest('Server startup in test mode binds exclusively to localhost (127.0.0.1:5101)', () => {
+    // 1. Helper / Guard verification
+    resetEnv();
+    process.env.BUSINZ_OPTIMIZATION_TEST_MODE = 'true';
+    assert.strictEqual(getServerBindHost(), '127.0.0.1', 'getServerBindHost() must return 127.0.0.1 in test mode');
+
+    resetEnv();
+    delete process.env.BUSINZ_OPTIMIZATION_TEST_MODE;
+    assert.strictEqual(getServerBindHost(), undefined, 'getServerBindHost() must return undefined in normal mode');
+
+    // 2. Source inspection of server/index.js
+    const indexSource = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      /if\s*\(\s*isOptimizationTestMode\(\)\s*\)\s*\{[\s\S]*?app\.listen\(\s*PORT\s*,\s*['"]127\.0\.0\.1['"]/.test(indexSource),
+      'server/index.js must call app.listen(PORT, "127.0.0.1") when in optimization test mode'
+    );
+    assert(
+      /app\.listen\(\s*PORT\s*,\s*\(\)\s*=>/.test(indexSource),
+      'server/index.js must preserve standard app.listen(PORT, ...) when outside test mode'
+    );
+  });
+
+  runTest('Disabling legacy storage seeding in test mode (initRuntimeStorage)', () => {
+    const runtimePathsSource = fs.readFileSync(path.resolve(__dirname, '../server/runtimePaths.js'), 'utf8');
+    const initStorageSource = runtimePathsSource.split('export function initRuntimeStorage()')[1] || '';
+
+    // Verify test mode branches before copyFileSync
+    assert(
+      /if\s*\(\s*isOptimizationTestMode\(\)\s*\)\s*\{[\s\S]*?fs\.writeFileSync\([\s\S]*?seededStores:\s*0/.test(initStorageSource),
+      'server/runtimePaths.js must initialize empty synthetic stores and set seededStores: 0 in test mode'
+    );
+
+    // Verify copyFileSync is not invoked for legacy stores in test branch of initRuntimeStorage
+    const testBranchMatch = initStorageSource.match(/if\s*\(\s*isOptimizationTestMode\(\)\s*\)\s*\{([\s\S]*?return\s*\{[\s\S]*?seededStores:\s*0[\s\S]*?\};)/);
+    assert(testBranchMatch, 'Test mode branch must exist in initRuntimeStorage()');
+    assert(
+      !testBranchMatch[1].includes('fs.copyFileSync'),
+      'Test mode branch in initRuntimeStorage() must NOT call fs.copyFileSync'
+    );
+    assert(
+      !testBranchMatch[1].includes('copyDirRecursiveNonDestructive'),
+      'Test mode branch in initRuntimeStorage() must NOT copy legacy attachments/bom-documents'
+    );
+  });
+
+  runTest('Database initialization isolation: verifies active DB and role before schema operations', () => {
+    const dbSource = fs.readFileSync(path.resolve(__dirname, '../server/db.js'), 'utf8');
+
+    // Verify query to check current_database() and current_user in initPostgresDatabase
+    assert(
+      /SELECT\s+current_database\(\)\s+as\s+db_name\s*,\s*current_user\s+as\s+role_name/.test(dbSource),
+      'initPostgresDatabase() must query current_database() and current_user for runtime verification'
+    );
+
+    // Verify rejection if activeDb is not REQUIRED_TEST_DATABASE
+    assert(
+      /if\s*\(\s*activeDb\s*!==\s*REQUIRED_TEST_DATABASE\s*\)/.test(dbSource),
+      'initPostgresDatabase() must strictly reject schema initialization if active database is not REQUIRED_TEST_DATABASE'
+    );
+
+    // Verify rejection if activeRole is not REQUIRED_TEST_DB_ROLE
+    assert(
+      /if\s*\(\s*activeRole\s*!==\s*REQUIRED_TEST_DB_ROLE\s*\)/.test(dbSource),
+      'initPostgresDatabase() must strictly reject schema initialization if active role is not REQUIRED_TEST_DB_ROLE'
+    );
+  });
+
+  runTest('Startup synchronization safeguards: disables historical data and store seeding', () => {
+    const dbSource = fs.readFileSync(path.resolve(__dirname, '../server/db.js'), 'utf8');
+    const indexSource = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+
+    // Verify historical PI seeding is fenced behind !isOptimizationTestMode()
+    assert(
+      /if\s*\(\s*!isOptimizationTestMode\(\)\s*\)\s*\{[\s\S]*?const\s+piFiles\s*=\s*\['sales_pi_store\.json'/.test(dbSource),
+      'initPostgresDatabase() must fence historical PI auto-seeding behind !isOptimizationTestMode()'
+    );
+
+    // Verify controlroom_store seeding is fenced behind !isOptimizationTestMode()
+    assert(
+      /if\s*\(\s*!isOptimizationTestMode\(\)\s*\)\s*\{[\s\S]*?const\s+storesToSeed\s*=/.test(dbSource),
+      'initPostgresDatabase() must fence legacy storesToSeed seeding behind !isOptimizationTestMode()'
+    );
+
+    // Verify server/index.js fences startup data pre-warming and relational sync
+    assert(
+      /if\s*\(\s*!isOptimizationTestMode\(\)\s*\)\s*\{[\s\S]*?loadDatabaseCustomers\(true\)[\s\S]*?loadDatabaseBoms\(true\)[\s\S]*?syncMissingRelationalBoms\(/.test(indexSource),
+      'server/index.js must fence customer/BOM pre-warming and relational sync behind !isOptimizationTestMode()'
+    );
+  });
+
 } finally {
   resetEnv();
 }
@@ -592,6 +687,6 @@ console.log('===================================================================
 if (failedTests > 0) {
   process.exit(1);
 } else {
-  console.log('🛡️  PHASE 6B STATIC ISOLATION AUDIT: FULLY VERIFIED & COMPLIANT\n');
+  console.log('🛡️  PHASE 6H STATIC ISOLATION & STARTUP AUDIT: FULLY VERIFIED & COMPLIANT\n');
   process.exit(0);
 }

@@ -12,7 +12,8 @@ import { getStoreFilePath } from './runtimePaths.js';
 import {
   isOptimizationTestMode,
   validateDatabaseConfigForTestMode,
-  REQUIRED_TEST_DATABASE
+  REQUIRED_TEST_DATABASE,
+  REQUIRED_TEST_DB_ROLE
 } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -192,9 +193,37 @@ export async function verifyDbConnectivity(timeoutMs = 3000) {
  */
 export async function initPostgresDatabase() {
   try {
+    if (isOptimizationTestMode()) {
+      validateDatabaseConfigForTestMode(connectionString);
+    }
+
     const client = await pool.connect();
     isConnected = true;
-    console.log('✅ [PostgreSQL] Connected successfully to self-hosted database on Hostinger VPS');
+
+    // Defense-in-depth: In test mode, verify database and role directly from PostgreSQL metadata
+    if (isOptimizationTestMode()) {
+      const auditRes = await client.query('SELECT current_database() as db_name, current_user as role_name;');
+      const activeDb = auditRes.rows[0]?.db_name;
+      const activeRole = auditRes.rows[0]?.role_name;
+
+      if (activeDb !== REQUIRED_TEST_DATABASE) {
+        client.release();
+        throw new Error(
+          `[DATABASE-ISOLATION-FAIL-CLOSED] Refusing schema initialization! ` +
+          `Active database is "${activeDb}", but optimization test mode requires "${REQUIRED_TEST_DATABASE}".`
+        );
+      }
+      if (activeRole !== REQUIRED_TEST_DB_ROLE) {
+        client.release();
+        throw new Error(
+          `[DATABASE-ISOLATION-FAIL-CLOSED] Refusing schema initialization! ` +
+          `Active role is "${activeRole}", but optimization test mode requires dedicated role "${REQUIRED_TEST_DB_ROLE}".`
+        );
+      }
+      console.log(`🛡️ [PostgreSQL] Verified isolated test database "${activeDb}" with test role "${activeRole}".`);
+    } else {
+      console.log('✅ [PostgreSQL] Connected successfully to self-hosted database on Hostinger VPS');
+    }
 
     // 1. Ensure controlroom_store key-value table exists immediately for VPS persistence
     await client.query(`
@@ -371,80 +400,86 @@ export async function initPostgresDatabase() {
       console.warn('⚠️ [PostgreSQL proforma_invoices Table Warning]:', piTableErr.message);
     }
 
-    // Auto-seed existing historical PIs into relational public.proforma_invoices if table is empty
-    try {
-      const piCountRes = await client.query('SELECT COUNT(*) as count FROM public.proforma_invoices');
-      const count = parseInt(piCountRes.rows[0]?.count || 0, 10);
-      if (count === 0) {
-        const piFiles = ['sales_pi_store.json', 'proforma_invoice_store.json'];
-        const seedPis = new Map();
-        for (const pf of piFiles) {
-          const pPath = getStoreFilePath(pf);
-          if (fs.existsSync(pPath)) {
-            try {
-              const list = JSON.parse(fs.readFileSync(pPath, 'utf8'));
-              if (Array.isArray(list)) {
-                for (const item of list) {
-                  if (item && (item.piNo || item.id)) {
-                    const key = String(item.piNo || item.id).trim().toLowerCase();
-                    if (!seedPis.has(key)) seedPis.set(key, item);
+    // Auto-seed existing historical PIs into relational public.proforma_invoices if table is empty (disabled in test mode)
+    if (!isOptimizationTestMode()) {
+      try {
+        const piCountRes = await client.query('SELECT COUNT(*) as count FROM public.proforma_invoices');
+        const count = parseInt(piCountRes.rows[0]?.count || 0, 10);
+        if (count === 0) {
+          const piFiles = ['sales_pi_store.json', 'proforma_invoice_store.json'];
+          const seedPis = new Map();
+          for (const pf of piFiles) {
+            const pPath = getStoreFilePath(pf);
+            if (fs.existsSync(pPath)) {
+              try {
+                const list = JSON.parse(fs.readFileSync(pPath, 'utf8'));
+                if (Array.isArray(list)) {
+                  for (const item of list) {
+                    if (item && (item.piNo || item.id)) {
+                      const key = String(item.piNo || item.id).trim().toLowerCase();
+                      if (!seedPis.has(key)) seedPis.set(key, item);
+                    }
                   }
                 }
-              }
-            } catch (_) {}
+              } catch (_) {}
+            }
+          }
+          if (seedPis.size > 0) {
+            console.log(`📦 [PostgreSQL] Seeding ${seedPis.size} Proforma Invoices into relational database...`);
+            const { saveProformaInvoiceToDatabase } = await import('./piPersistence.js');
+            for (const pi of seedPis.values()) {
+              await saveProformaInvoiceToDatabase(pi, pool).catch(e => console.warn(`[PI Seed Warning ${pi.piNo}]:`, e.message));
+            }
+            console.log(`✅ [PostgreSQL] Successfully seeded ${seedPis.size} Proforma Invoices into public.proforma_invoices.`);
           }
         }
-        if (seedPis.size > 0) {
-          console.log(`📦 [PostgreSQL] Seeding ${seedPis.size} Proforma Invoices into relational database...`);
-          const { saveProformaInvoiceToDatabase } = await import('./piPersistence.js');
-          for (const pi of seedPis.values()) {
-            await saveProformaInvoiceToDatabase(pi, pool).catch(e => console.warn(`[PI Seed Warning ${pi.piNo}]:`, e.message));
-          }
-          console.log(`✅ [PostgreSQL] Successfully seeded ${seedPis.size} Proforma Invoices into public.proforma_invoices.`);
-        }
+      } catch (seedErr) {
+        console.warn('[PI Seed Error]:', seedErr.message);
       }
-    } catch (seedErr) {
-      console.warn('[PI Seed Error]:', seedErr.message);
+    } else {
+      console.log('🛡️ [PostgreSQL] Optimization test mode: historical PI auto-seeding strictly disabled.');
     }
 
-    // Safety reconciliation: Fix any falsely-converted PIs whose linked BOM has mismatched customer or items (e.g. PI-122 accidental link)
-    try {
-      await client.query(`
-        UPDATE public.bom_orders b
-        SET source_pi_no = null,
-            updated_at = NOW()
-        WHERE (b.source_pi_no ILIKE '%122%')
-          AND NOT EXISTS (
-            SELECT 1 FROM public.proforma_invoices p
-            WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
-              AND (
-                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-              )
-          );
-      `);
+    // Safety reconciliation: Fix any falsely-converted PIs whose linked BOM has mismatched customer or items (disabled in test mode)
+    if (!isOptimizationTestMode()) {
+      try {
+        await client.query(`
+          UPDATE public.bom_orders b
+          SET source_pi_no = null,
+              updated_at = NOW()
+          WHERE (b.source_pi_no ILIKE '%122%')
+            AND NOT EXISTS (
+              SELECT 1 FROM public.proforma_invoices p
+              WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+                AND (
+                  LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                  OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                )
+            );
+        `);
 
-      await client.query(`
-        UPDATE public.proforma_invoices p
-        SET status = 'Issued',
-            status_type = 'issued',
-            converted_bom_no = null,
-            converted_bom_code = null,
-            updated_at = NOW()
-        WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
-          AND p.status = 'Converted to BOM'
-          AND NOT EXISTS (
-            SELECT 1 FROM public.bom_orders b
-            WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
-              AND (
-                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-              )
-          );
-      `);
-      console.log('✅ [PostgreSQL] Verified PI/BOM conversion link integrity.');
-    } catch (auditErr) {
-      console.warn('[PI/BOM Integrity Audit Notice]:', auditErr.message);
+        await client.query(`
+          UPDATE public.proforma_invoices p
+          SET status = 'Issued',
+              status_type = 'issued',
+              converted_bom_no = null,
+              converted_bom_code = null,
+              updated_at = NOW()
+          WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
+            AND p.status = 'Converted to BOM'
+            AND NOT EXISTS (
+              SELECT 1 FROM public.bom_orders b
+              WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
+                AND (
+                  LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                  OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                )
+            );
+        `);
+        console.log('✅ [PostgreSQL] Verified PI/BOM conversion link integrity.');
+      } catch (auditErr) {
+        console.warn('[PI/BOM Integrity Audit Notice]:', auditErr.message);
+      }
     }
 
     // Ensure public.leads table and CRM columns (location, product_requirement, etc.) exist
@@ -600,47 +635,51 @@ export async function initPostgresDatabase() {
       console.warn('[PostgreSQL Leads Schema Notice]:', leadsErr.message);
     }
 
-    // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
-    const storesToSeed = [
-      'bom_store',
-      'employees_store',
-      'po_store',
-      'grn_store',
-      'raw_materials_store',
-      'item_store',
-      'workorder_store',
-      'vrm_prod_workorders',
-      'vendor_store',
-      'presets_store',
-      'company_branding_store',
-      'invoice_store',
-      'proforma_invoice_store',
-      'sales_pi_store',
-      'payment_store',
-      'customer_store',
-      'crm_customers'
-    ];
+    // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database (disabled in test mode)
+    if (!isOptimizationTestMode()) {
+      const storesToSeed = [
+        'bom_store',
+        'employees_store',
+        'po_store',
+        'grn_store',
+        'raw_materials_store',
+        'item_store',
+        'workorder_store',
+        'vrm_prod_workorders',
+        'vendor_store',
+        'presets_store',
+        'company_branding_store',
+        'invoice_store',
+        'proforma_invoice_store',
+        'sales_pi_store',
+        'payment_store',
+        'customer_store',
+        'crm_customers'
+      ];
 
-    for (const storeKey of storesToSeed) {
-      const checkRes = await client.query(`SELECT key FROM controlroom_store WHERE key = $1`, [storeKey]);
-      if (checkRes.rows.length === 0) {
-        const filePath = getStoreFilePath(`${storeKey}.json`);
-        if (fs.existsSync(filePath)) {
-          try {
-            const raw = fs.readFileSync(filePath, 'utf8');
-            const parsed = JSON.parse(raw);
-            const hasData = Array.isArray(parsed) ? parsed.length > 0 : (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0);
-            if (hasData) {
-              await client.query(`
-                INSERT INTO controlroom_store (key, data, updated_at)
-                VALUES ($1, $2, NOW())
-                ON CONFLICT (key) DO NOTHING
-              `, [storeKey, JSON.stringify(parsed)]);
-              console.log(`✅ [PostgreSQL] Seeded ${storeKey} into VPS database`);
-            }
-          } catch (_) {}
+      for (const storeKey of storesToSeed) {
+        const checkRes = await client.query(`SELECT key FROM controlroom_store WHERE key = $1`, [storeKey]);
+        if (checkRes.rows.length === 0) {
+          const filePath = getStoreFilePath(`${storeKey}.json`);
+          if (fs.existsSync(filePath)) {
+            try {
+              const raw = fs.readFileSync(filePath, 'utf8');
+              const parsed = JSON.parse(raw);
+              const hasData = Array.isArray(parsed) ? parsed.length > 0 : (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0);
+              if (hasData) {
+                await client.query(`
+                  INSERT INTO controlroom_store (key, data, updated_at)
+                  VALUES ($1, $2, NOW())
+                  ON CONFLICT (key) DO NOTHING
+                `, [storeKey, JSON.stringify(parsed)]);
+                console.log(`✅ [PostgreSQL] Seeded ${storeKey} into VPS database`);
+              }
+            } catch (_) {}
+          }
         }
       }
+    } else {
+      console.log('🛡️ [PostgreSQL] Optimization test mode: legacy business data seeding into controlroom_store strictly disabled.');
     }
 
     // 2. Ensure public.leaves has all required columns (used for key-value store & session registry)

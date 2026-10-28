@@ -335,6 +335,40 @@ export function initRuntimeStorage() {
   const backupsDir = getBackupDir();
   const waSessionsDir = getWaSessionsDir();
 
+  // In optimization test mode: NEVER copy legacy business JSON data from repository or production.
+  // Initialize ONLY empty synthetic test stores inside approved test storage.
+  if (isOptimizationTestMode()) {
+    let initializedStores = 0;
+    for (const file of ALL_STORE_FILENAMES) {
+      const target = path.join(dataDir, file);
+      if (!fs.existsSync(target)) {
+        try {
+          const initialContent = (file.includes('config') || file.includes('branding') || file.includes('presets')) ? '{}' : '[]';
+          fs.writeFileSync(target, initialContent, 'utf8');
+          initializedStores++;
+        } catch (err) {
+          console.warn(`[RuntimePaths] Failed to initialize empty test store ${file}:`, err.message);
+        }
+      }
+    }
+    console.log(`🛡️ [RuntimePaths] Optimization Test Storage Initialized:`);
+    console.log(`   - Data Dir:    ${dataDir} (${initializedStores} empty synthetic stores created)`);
+    console.log(`   - Uploads:     ${uploadsDir}`);
+    console.log(`   - Backups:     ${backupsDir}`);
+    console.log(`   - WA Sessions: ${waSessionsDir}`);
+    console.log(`   - Legacy Data Seeding: STRICTLY DISABLED (Zero repository JSON data copied)`);
+
+    return {
+      active: true,
+      mode: 'optimization-test-isolated',
+      dataDir,
+      uploadsDir,
+      backupsDir,
+      waSessionsDir,
+      seededStores: 0
+    };
+  }
+
   let seededStores = 0;
   for (const file of ALL_STORE_FILENAMES) {
     const target = path.join(dataDir, file);

@@ -28,7 +28,20 @@ export const REQUIRED_TEST_PORT = '5101';
 export const REQUIRED_TEST_DATABASE = 'businz_optimization_test';
 export const REQUIRED_TEST_DB_ROLE = 'businz_test_user';
 export const REQUIRED_TEST_HOST = '127.0.0.1';
+export const REQUIRED_TEST_BIND_HOST = '127.0.0.1';
 export const APPROVED_TEST_STORAGE_ROOT = '/var/www/businz-optimization-test/storage';
+
+/**
+ * Returns the bind host for Express server.
+ * In test mode: strictly binds to loopback 127.0.0.1 (blocking external network access).
+ * In normal mode: returns undefined (Node default 0.0.0.0 / ::).
+ */
+export function getServerBindHost() {
+  if (isOptimizationTestMode()) {
+    return REQUIRED_TEST_BIND_HOST;
+  }
+  return undefined;
+}
 
 export const FORBIDDEN_PORTS = ['5001', '5002'];
 
