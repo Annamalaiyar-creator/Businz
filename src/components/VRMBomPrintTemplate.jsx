@@ -223,11 +223,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         const grpMeta = (item.presetGroupId && presetGroupsObj[item.presetGroupId]) || {};
         const pName = grpMeta.presetName || item.presetName || b.presetName || matchedPi?.presetName || 'Preset Kit';
         const sCount = grpMeta.setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1;
+        const pUnit = grpMeta.unit || item.unit || b.presetUnit || matchedPi?.presetUnit || 'Sets';
         kitGroupsMap.set(key, {
           groupId: key,
           presetId: grpMeta.presetId || item.presetId || null,
           presetName: pName,
           setCount: sCount,
+          unit: pUnit,
           items: []
         });
       }
@@ -250,12 +252,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
     return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
   };
 
-  // Helper to determine the entire quantity for fixed-quantity presets (12 presets)
-  const getEntireKitItemQty = (item, setCount) => {
-    const sCount = parseInt(setCount) || 1;
-    const baseQ = parseFloat(item.baseQty) || (parseFloat(item.qty || item.bomQty || item.quantity) || 1);
-    const entireQty = Math.round(baseQ * sCount * 100) / 100;
-    return entireQty > 0 ? entireQty : (parseFloat(item.qty) || sCount);
+  // Helper to determine the entire quantity for fixed-quantity presets (decoupled quantities preserved)
+  const getEntireKitItemQty = (item, _setCount) => {
+    return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
   };
 
   // Helper to determine strictly the 1-set quantity for BOM printout (Option 2)
@@ -717,7 +716,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
           <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
             <th style={{ padding: '8px 6px', width: '38px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>#</th>
             <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Product / Material Name</th>
-            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>Set</th>
+            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{hasAnyKits && kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set'}</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
             <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
               Quantity
@@ -792,7 +791,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                                 fontWeight: '800'
                               }}
                             >
-                              Total Quantity: {kg.setCount || 1} {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
+                              {kg.unit === 'kW' ? `Total Capacity: ${kg.setCount || 1} kW` : `Total Quantity: ${kg.setCount || 1} ${Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}`}
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#475569', fontWeight: '700' }}>
@@ -862,7 +861,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                                   {kg.setCount || 1}
                                 </span>
                                 <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                                  {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
+                                  {kg.unit === 'kW' ? 'kW' : (Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets')}
                                 </span>
                               </div>
                             ) : null}

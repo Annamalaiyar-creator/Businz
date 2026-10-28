@@ -805,6 +805,26 @@ export default function BomOrdersView(props) {
         return true;
       }
 
+      // 4. Source PI ownership check: If source PI belongs to this sales user, include this BOM
+      const sPiNo = b.sourcePiNo || b.piNo;
+      if (sPiNo) {
+        try {
+          const piStore = JSON.parse(localStorage.getItem('controlroom_pi_store') || '[]');
+          const targetPi = piStore.find(p => {
+            const pNo = String(p.piNo || p.id || '').trim().toLowerCase();
+            return pNo === String(sPiNo).trim().toLowerCase();
+          });
+          if (targetPi) {
+            const piCodes = [targetPi.salesPersonCode, targetPi.createdById, targetPi.sales_person_code, targetPi.created_by_id].filter(Boolean);
+            if (piCodes.some(isCodeMatch)) return true;
+            const piEmails = [targetPi.salesPersonEmail, targetPi.email].filter(Boolean).map(e => String(e).trim().toLowerCase());
+            if (curEmail && piEmails.some(e => e === curEmail || userAliases.has(e))) return true;
+            const piNames = [targetPi.salesPerson, targetPi.createdBy, targetPi.salesperson].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+            if (piNames.some(n => userAliases.has(n) || (cleanCurNorm && normA(n) === cleanCurNorm))) return true;
+          }
+        } catch (_) {}
+      }
+
       return false;
     });
   }, [bomStore, isRestrictedSalesUser, currentEmpId, currentEmpName, defaultSalesPersonName, currentLoggedEmail, props.targetBomCode, props.targetPiNo]);
@@ -1289,6 +1309,9 @@ export default function BomOrdersView(props) {
           const eCode = existingBom.bomCode || existingBom.code || existingBom.id;
           alert(`ℹ️ Proforma Invoice (${targetPiNo}) is already converted to BOM (${eCode}). Opening existing BOM order.`, 'BOM Already Exists', 'info');
           setShowBOMForm(false);
+          setActiveSubTab('All');
+          setSearchQueryText(eCode);
+          setCurrentPage(1);
           setConfirmingBomModal(existingBom);
           return;
         }
@@ -1548,7 +1571,9 @@ export default function BomOrdersView(props) {
         (b.id && String(b.id).toLowerCase() === codeToFind)
       );
       if (target) {
+        setActiveSubTab('All');
         setSearchQueryText(target.bomCode || target.code || props.targetBomCode);
+        setCurrentPage(1);
         setConfirmingBomModal({ ...target, isEditMode: false });
         if (typeof props.clearTargetBom === 'function') props.clearTargetBom();
       }
@@ -1765,6 +1790,8 @@ export default function BomOrdersView(props) {
   const filteredRows = (pageConfig.rows || []).filter(r => {
     const matchesSearch = !searchQueryText ||
       (r.code && r.code.toLowerCase().includes(searchQueryText.toLowerCase())) ||
+      (r.bomCode && String(r.bomCode).toLowerCase().includes(searchQueryText.toLowerCase())) ||
+      (r.id && String(r.id).toLowerCase().includes(searchQueryText.toLowerCase())) ||
       (r.sourcePiNo && String(r.sourcePiNo).toLowerCase().includes(searchQueryText.toLowerCase())) ||
       (r.c2 && r.c2.toLowerCase().includes(searchQueryText.toLowerCase())) ||
       (r.c3 && r.c3.toLowerCase().includes(searchQueryText.toLowerCase())) ||

@@ -2030,7 +2030,7 @@ export function VRMProformaInvoicePrintSheet({
                                     onSave={(v) => {
                                       const num = parseFloat(v.replace(/[^0-9.]/g, ''));
                                       if (!isNaN(num) && it.grpId) {
-                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num / (parseFloat(it.setCount) || 1) });
+                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num });
                                       }
                                     }}
                                   />
