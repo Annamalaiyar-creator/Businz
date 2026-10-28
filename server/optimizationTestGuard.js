@@ -1,19 +1,23 @@
 /**
  * server/optimizationTestGuard.js
  * 
- * BUSINZ ERP: Fail-Closed Optimization Test Environment Guard (Phase 5D)
+ * BUSINZ ERP: Hardened Fail-Closed Optimization Test Environment Guard (Phase 6B)
  * Enforces absolute isolation for optimization testing environments.
  * 
  * Key Invariants:
  * 1. Requires PORT=5101 when BUSINZ_OPTIMIZATION_TEST_MODE is enabled.
  * 2. Strictly rejects Production (5001) and Development (5002) ports.
- * 3. Requires an explicitly configured test database: "businz_optimization_test".
- * 4. Strictly rejects production and development database targets.
- * 5. Requires dedicated test-only storage path (BUSINZ_DATA_DIR), rejecting production/dev paths.
- * 6. Disables scheduled background jobs, WhatsApp sockets, and third-party API calls.
- * 7. Fails closed before any database connections or side-effects can execute.
+ * 3. Requires exact database name: "businz_optimization_test".
+ * 4. Requires TCP host "127.0.0.1" (rejects "localhost", Unix sockets, alternate hosts).
+ * 5. Rejects URL query parameters, service overrides, and socket redirection.
+ * 6. Requires dedicated test role "businz_test_user" (rejects "postgres", "root", production users).
+ * 7. Rejects production, development, HRMS, and unverified database targets.
+ * 8. Requires storage strictly inside "/var/www/businz-optimization-test/storage" (rejects symlink escapes).
+ * 9. Independently validates data, uploads, backups, and WhatsApp session paths.
+ * 10. Masks credentials in all errors and logs.
  */
 
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,6 +26,10 @@ const __dirname = path.dirname(__filename);
 
 export const REQUIRED_TEST_PORT = '5101';
 export const REQUIRED_TEST_DATABASE = 'businz_optimization_test';
+export const REQUIRED_TEST_DB_ROLE = 'businz_test_user';
+export const REQUIRED_TEST_HOST = '127.0.0.1';
+export const APPROVED_TEST_STORAGE_ROOT = '/var/www/businz-optimization-test/storage';
+
 export const FORBIDDEN_PORTS = ['5001', '5002'];
 
 export const FORBIDDEN_DATABASE_NAMES = [
@@ -34,7 +42,24 @@ export const FORBIDDEN_DATABASE_NAMES = [
   'businz_development',
   'controlroom',
   'postgres',
-  'template1'
+  'template1',
+  'hrms',
+  'businz_hrms',
+  'hrms_prod',
+  'hrms_dev',
+  'hrms_development'
+];
+
+export const FORBIDDEN_DATABASE_ROLES = [
+  'postgres',
+  'root',
+  'admin',
+  'businz',
+  'businz_user',
+  'businz_dev',
+  'controlroom',
+  'hrms',
+  'hrms_user'
 ];
 
 /**
@@ -48,21 +73,53 @@ export function isOptimizationTestMode() {
 }
 
 /**
- * Extracts database name and host from connection string or individual environment variables.
+ * Masks credentials in connection strings, error messages, or logs.
+ */
+export function maskCredentials(str = '') {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/:([^:@]+)@/, ':••••••••@')
+    .replace(/(password|secret|key|token)=([^&]+)/gi, '$1=••••••••');
+}
+
+/**
+ * Extracts database name, host, user, port, and query parameter presence.
  */
 export function parseDatabaseTarget(connectionString = '') {
   let dbName = '';
   let host = '';
+  let user = '';
+  let port = '';
+  let hasQueryParams = false;
+  let queryParamsList = [];
 
   const rawConn = String(connectionString || '').trim();
+
+  // Reject Unix domain socket strings immediately
   if (rawConn) {
+    if (rawConn.includes('/var/run/postgresql') || rawConn.includes('.s.PGSQL') || rawConn.includes('socket=')) {
+      throw new Error(
+        `[TEST-MODE-FAIL-CLOSED] Unix domain socket redirection strictly rejected in optimization test mode. Must use TCP host 127.0.0.1.`
+      );
+    }
+  }
+
+  if (rawConn) {
+    let parsedUrl = null;
     try {
-      const url = new URL(rawConn.replace('postgresql://', 'http://').replace('postgres://', 'http://'));
-      dbName = url.pathname.replace(/^\/+/, '');
-      host = url.hostname;
-    } catch (_) {
-      const match = rawConn.match(/\/([a-zA-Z0-9_-]+)(?:\?.*)?$/);
-      if (match) dbName = match[1];
+      parsedUrl = new URL(rawConn.replace('postgresql://', 'http://').replace('postgres://', 'http://'));
+    } catch (err) {
+      throw new Error(`[TEST-MODE-FAIL-CLOSED] Malformed database connection URL: ${maskCredentials(err.message)}`);
+    }
+
+    dbName = parsedUrl.pathname.replace(/^\/+/, '');
+    host = parsedUrl.hostname;
+    user = decodeURIComponent(parsedUrl.username || '');
+    port = parsedUrl.port;
+
+    if (parsedUrl.search && parsedUrl.search.length > 1) {
+      hasQueryParams = true;
+      queryParamsList = Array.from(parsedUrl.searchParams.keys());
     }
   }
 
@@ -70,21 +127,47 @@ export function parseDatabaseTarget(connectionString = '') {
     dbName = (process.env.BUSINZ_TEST_DATABASE || process.env.PGDATABASE || '').trim();
   }
   if (!host) {
-    host = (process.env.PGHOST || '127.0.0.1').trim();
+    host = (process.env.PGHOST || '').trim();
+  }
+  if (!user) {
+    user = (process.env.BUSINZ_TEST_DB_USER || process.env.PGUSER || '').trim();
+  }
+  if (!port) {
+    port = (process.env.PGPORT || '5432').trim();
   }
 
-  return { dbName, host };
+  return { dbName, host, user, port, hasQueryParams, queryParamsList };
 }
 
 /**
- * Validates database target against optimization test rules.
- * Fails closed immediately if anything is unverified or matches production/development.
+ * Validates database target against hardened optimization test rules.
+ * Fails closed immediately if anything is unverified or matches forbidden targets.
  */
 export function validateDatabaseConfigForTestMode(connectionString = '') {
   if (!isOptimizationTestMode()) return;
 
-  const { dbName, host } = parseDatabaseTarget(connectionString);
+  const rawConn = String(connectionString || '').trim();
 
+  // 1. Reject Unix socket redirection or alternate path configurations before URL parsing
+  if (rawConn) {
+    if (rawConn.includes('/var/run/postgresql') || rawConn.includes('.s.PGSQL') || rawConn.includes('socket=')) {
+      throw new Error(
+        `[TEST-MODE-FAIL-CLOSED] Unix domain socket redirection strictly rejected in optimization test mode. Must use TCP host 127.0.0.1.`
+      );
+    }
+  }
+
+  // 2. Connection URL query parameters check: REJECT all overrides
+  const { dbName, host, user, hasQueryParams, queryParamsList } = parseDatabaseTarget(rawConn);
+
+  if (hasQueryParams) {
+    throw new Error(
+      `[TEST-MODE-FAIL-CLOSED] Database connection overrides strictly rejected! ` +
+      `URL query parameters are forbidden in optimization test mode. Detected: [${queryParamsList.join(', ')}].`
+    );
+  }
+
+  // 3. Database name validation
   if (!dbName) {
     throw new Error(
       `[TEST-MODE-FAIL-CLOSED] Optimization test mode requires an explicitly configured test database. ` +
@@ -94,64 +177,180 @@ export function validateDatabaseConfigForTestMode(connectionString = '') {
 
   const normalizedDb = dbName.toLowerCase().trim();
 
-  // 1. If not the exact designated test database, identify and reject specific forbidden target
+  // If not the exact designated test database, identify and reject specific forbidden target
   if (normalizedDb !== REQUIRED_TEST_DATABASE) {
     for (const forbidden of FORBIDDEN_DATABASE_NAMES) {
       if (normalizedDb === forbidden || normalizedDb.startsWith(`${forbidden}_`) || normalizedDb.startsWith(`${forbidden}-`)) {
         throw new Error(
-          `[TEST-MODE-FAIL-CLOSED] FORBIDDEN DATABASE TARGET "${dbName}"! ` +
-          `Optimization test mode strictly refuses to connect to production or development databases. ` +
+          `[TEST-MODE-FAIL-CLOSED] FORBIDDEN DATABASE TARGET "${maskCredentials(dbName)}"! ` +
+          `Optimization test mode strictly refuses to connect to production, development, or HRMS databases. ` +
           `Configured database must be "${REQUIRED_TEST_DATABASE}".`
         );
       }
     }
     throw new Error(
-      `[TEST-MODE-FAIL-CLOSED] Unverified database target "${dbName}". ` +
+      `[TEST-MODE-FAIL-CLOSED] Unverified database target "${maskCredentials(dbName)}". ` +
       `Optimization test mode requires dedicated database "${REQUIRED_TEST_DATABASE}".`
     );
   }
 
-  // 2. Enforce local host target
+  // 4. Host validation: Strictly 127.0.0.1 (reject localhost, remote hosts, domain names, unix sockets)
   const normalizedHost = (host || '').toLowerCase().trim();
-  if (!['127.0.0.1', 'localhost'].includes(normalizedHost)) {
+  if (!normalizedHost) {
+    throw new Error(`[TEST-MODE-FAIL-CLOSED] Missing database host. Must be explicitly set to 127.0.0.1.`);
+  }
+  if (normalizedHost === 'localhost') {
     throw new Error(
-      `[TEST-MODE-FAIL-CLOSED] Unverified database host "${host}". ` +
-      `Optimization test database host must be local (127.0.0.1 or localhost).`
+      `[TEST-MODE-FAIL-CLOSED] Host "localhost" is ambiguous and may resolve to Unix socket. Must be explicitly set to 127.0.0.1.`
+    );
+  }
+  if (normalizedHost !== REQUIRED_TEST_HOST) {
+    throw new Error(
+      `[TEST-MODE-FAIL-CLOSED] Alternate database host "${normalizedHost}" strictly rejected. ` +
+      `Optimization test database must reside on local instance (127.0.0.1).`
+    );
+  }
+
+  // 5. User / Role validation: Dedicated test role required (reject postgres, root, businz, etc.)
+  const normalizedUser = (user || '').toLowerCase().trim();
+  if (!normalizedUser) {
+    throw new Error(
+      `[TEST-MODE-FAIL-CLOSED] Missing database user/role. Optimization test mode requires dedicated test role "${REQUIRED_TEST_DB_ROLE}".`
+    );
+  }
+  if (normalizedUser !== REQUIRED_TEST_DB_ROLE) {
+    for (const forbiddenRole of FORBIDDEN_DATABASE_ROLES) {
+      if (normalizedUser === forbiddenRole || normalizedUser.startsWith(`${forbiddenRole}_`)) {
+        throw new Error(
+          `[TEST-MODE-FAIL-CLOSED] FORBIDDEN DATABASE ROLE "${user}"! ` +
+          `Optimization test mode strictly refuses superuser "postgres" or production database users. ` +
+          `Must connect as dedicated test role "${REQUIRED_TEST_DB_ROLE}".`
+        );
+      }
+    }
+    throw new Error(
+      `[TEST-MODE-FAIL-CLOSED] Invalid database role "${user}". ` +
+      `Optimization test mode requires dedicated role "${REQUIRED_TEST_DB_ROLE}".`
     );
   }
 }
 
 /**
+ * Checks whether a path resides strictly within approved test storage root.
+ */
+export function isPathInsideApprovedStorage(targetPath, approvedRoot = APPROVED_TEST_STORAGE_ROOT) {
+  const resolved = path.resolve(targetPath);
+  const normalized = resolved.replace(/\\/g, '/').toLowerCase();
+  const normalizedRoot = path.resolve(approvedRoot).replace(/\\/g, '/').toLowerCase();
+
+  return normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}/`);
+}
+
+/**
+ * Detects and rejects symbolic links that redirect storage outside the designated test directory.
+ */
+export function checkSymlinkRedirection(targetPath, approvedRoot = APPROVED_TEST_STORAGE_ROOT) {
+  const resolved = path.resolve(targetPath);
+  const normalizedApproved = path.resolve(approvedRoot);
+  let realApproved = normalizedApproved;
+  try {
+    if (fs.existsSync(normalizedApproved)) {
+      realApproved = fs.realpathSync(normalizedApproved);
+    }
+  } catch (_) {}
+
+  // Only inspect paths at or below the approvedRoot boundary
+  let current = resolved;
+  while (current && current.length >= normalizedApproved.length) {
+    if (fs.existsSync(current)) {
+      try {
+        const lstat = fs.lstatSync(current);
+        if (lstat.isSymbolicLink()) {
+          const real = fs.realpathSync(current);
+          const isSafe = isPathInsideApprovedStorage(real, normalizedApproved) ||
+                         isPathInsideApprovedStorage(real, realApproved);
+          if (!isSafe) {
+            throw new Error(
+              `[STORAGE-FAIL-CLOSED] Symbolic link "${current}" points to "${real}" outside approved storage "${approvedRoot}".`
+            );
+          }
+        }
+        const real = fs.realpathSync(current);
+        const isSafe = isPathInsideApprovedStorage(real, normalizedApproved) ||
+                       isPathInsideApprovedStorage(real, realApproved);
+        if (!isSafe && current !== normalizedApproved) {
+          throw new Error(
+            `[STORAGE-FAIL-CLOSED] Real path "${real}" escapes approved storage root "${approvedRoot}".`
+          );
+        }
+      } catch (err) {
+        if (err.message.includes('[STORAGE-FAIL-CLOSED]')) throw err;
+      }
+    }
+    if (current === normalizedApproved) break;
+    current = path.dirname(current);
+  }
+}
+
+/**
+ * Validates an individual storage path independently.
+ */
+export function validateSingleStoragePath(pathName, rawPath, approvedRoot = APPROVED_TEST_STORAGE_ROOT) {
+  if (!rawPath || !String(rawPath).trim()) {
+    throw new Error(
+      `[TEST-MODE-FAIL-CLOSED] Missing ${pathName}. Must be explicitly configured inside "${approvedRoot}".`
+    );
+  }
+
+  const resolved = path.resolve(rawPath.trim());
+  const normalized = resolved.replace(/\\/g, '/').toLowerCase();
+
+  // Reject production, development, and HRMS directories
+  const forbiddenDirs = [
+    '/var/www/businz',
+    '/var/www/businz-dev',
+    '/var/www/hrms',
+    '/var/www/hrms-dev'
+  ];
+
+  for (const forbidden of forbiddenDirs) {
+    const normForbidden = path.resolve(forbidden).replace(/\\/g, '/').toLowerCase();
+    if (normalized === normForbidden || normalized.startsWith(`${normForbidden}/`)) {
+      throw new Error(
+        `[TEST-MODE-FAIL-CLOSED] Refusing to use ${pathName} pointing to production/development/HRMS directory "${resolved}".`
+      );
+    }
+  }
+
+  // Must be strictly inside approvedRoot
+  if (!isPathInsideApprovedStorage(resolved, approvedRoot)) {
+    throw new Error(
+      `[TEST-MODE-FAIL-CLOSED] ${pathName} "${resolved}" is outside approved test directory "${approvedRoot}".`
+    );
+  }
+
+  // Symlink escape check
+  checkSymlinkRedirection(resolved, approvedRoot);
+}
+
+/**
  * Validates storage path configuration for optimization test mode.
+ * Independently validates data, uploads, backups, and WhatsApp session paths.
  */
 export function validateStorageConfigForTestMode() {
   if (!isOptimizationTestMode()) return;
 
-  const dataDir = process.env.BUSINZ_DATA_DIR ? process.env.BUSINZ_DATA_DIR.trim() : '';
-  if (!dataDir) {
-    throw new Error(
-      `[TEST-MODE-FAIL-CLOSED] Optimization test mode requires an explicit BUSINZ_DATA_DIR. ` +
-      `Must point to an isolated test storage directory (e.g. /var/www/businz-optimization-test/storage).`
-    );
-  }
+  const dataDir = (process.env.BUSINZ_DATA_DIR || '').trim();
+  validateSingleStoragePath('BUSINZ_DATA_DIR', dataDir);
 
-  const resolved = path.resolve(dataDir);
-  const normalized = resolved.toLowerCase();
+  const uploadsDir = (process.env.BUSINZ_UPLOADS_DIR || path.join(dataDir, 'uploads')).trim();
+  validateSingleStoragePath('BUSINZ_UPLOADS_DIR', uploadsDir);
 
-  // Reject production, development, and repository source directories
-  if (
-    normalized.includes('/var/www/businz/') ||
-    normalized === '/var/www/businz' ||
-    normalized.includes('/var/www/businz-dev/') ||
-    normalized === '/var/www/businz-dev' ||
-    resolved === path.resolve(__dirname) ||
-    resolved === path.resolve(__dirname, '..')
-  ) {
-    throw new Error(
-      `[TEST-MODE-FAIL-CLOSED] Refusing to use production or development storage path "${resolved}". ` +
-      `Dedicated test storage must be completely isolated.`
-    );
-  }
+  const backupsDir = (process.env.BUSINZ_BACKUP_DIR || path.join(dataDir, 'backups')).trim();
+  validateSingleStoragePath('BUSINZ_BACKUP_DIR', backupsDir);
+
+  const waDir = (process.env.BUSINZ_WA_SESSIONS_DIR || path.join(dataDir, 'wa_sessions')).trim();
+  validateSingleStoragePath('BUSINZ_WA_SESSIONS_DIR', waDir);
 }
 
 /**

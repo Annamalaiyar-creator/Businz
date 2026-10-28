@@ -84,6 +84,14 @@ export function isDbConnected() {
  * Verifies database connectivity using an actual bounded PostgreSQL query (SELECT 1).
  * Updates internal connection state and returns genuine health status.
  *
+ * Hardened for Phase 6B:
+ * 1. Bounded connection acquisition (timeout 1) AND bounded query execution (timeout 2).
+ * 2. Guaranteed zero client leak on late-arriving connection: client is immediately released
+ *    if connection completes after the timeout has fired.
+ * 3. Guaranteed client release in all completion, error, and timeout paths.
+ * 4. Never reports connectivity success after a timeout has fired.
+ * 5. Preserves existing API response contract: { ok: boolean, latencyMs?: number, database?: string, error?: string }.
+ *
  * @param {number} timeoutMs Maximum time to wait for database response (default: 3000ms)
  * @returns {Promise<{ ok: boolean, latencyMs?: number, database?: string, error?: string }>}
  */
@@ -96,24 +104,71 @@ export async function verifyDbConnectivity(timeoutMs = 3000) {
   const start = Date.now();
   let client = null;
   let timer = null;
+  let hasTimedOut = false;
 
   try {
-    const clientPromise = pool.connect();
+    // 1. Connection acquisition with late-arrival cleanup protection
     const timeoutPromise = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`Database connectivity check timed out after ${timeoutMs}ms`)), timeoutMs);
+      timer = setTimeout(() => {
+        hasTimedOut = true;
+        reject(new Error(`Database connectivity check timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
     });
 
-    client = await Promise.race([clientPromise, timeoutPromise]);
-    clearTimeout(timer);
+    const connectPromise = pool.connect().then((acquiredClient) => {
+      if (hasTimedOut) {
+        // Late arriving client! Must release immediately to prevent pool leak
+        try {
+          acquiredClient.release();
+        } catch (_) {}
+        return null;
+      }
+      return acquiredClient;
+    }).catch((err) => {
+      if (hasTimedOut) {
+        // Late arriving error, swallow as timeout already handled the response
+        return null;
+      }
+      throw err;
+    });
 
-    const res = await client.query('SELECT current_database() as db_name, 1 as health_check;');
-    isConnected = true;
-    const latencyMs = Date.now() - start;
-    return {
-      ok: true,
-      latencyMs,
-      database: res.rows[0]?.db_name || 'unknown'
-    };
+    client = await Promise.race([connectPromise, timeoutPromise]);
+    if (!client && hasTimedOut) {
+      throw new Error(`Database connectivity check timed out after ${timeoutMs}ms`);
+    }
+
+    // 2. Query execution bounded by remaining timeout
+    const elapsed = Date.now() - start;
+    const remainingTime = Math.max(500, timeoutMs - elapsed);
+
+    let queryTimer = null;
+    const queryTimeoutPromise = new Promise((_, reject) => {
+      queryTimer = setTimeout(() => {
+        hasTimedOut = true;
+        reject(new Error(`Database health-check query timed out after ${remainingTime}ms`));
+      }, remainingTime);
+    });
+
+    try {
+      const res = await Promise.race([
+        client.query('SELECT current_database() as db_name, 1 as health_check;'),
+        queryTimeoutPromise
+      ]);
+
+      if (hasTimedOut) {
+        throw new Error(`Database connectivity check timed out`);
+      }
+
+      isConnected = true;
+      const latencyMs = Date.now() - start;
+      return {
+        ok: true,
+        latencyMs,
+        database: res.rows[0]?.db_name || 'unknown'
+      };
+    } finally {
+      if (queryTimer) clearTimeout(queryTimer);
+    }
   } catch (err) {
     isConnected = false;
     return {
@@ -123,7 +178,10 @@ export async function verifyDbConnectivity(timeoutMs = 3000) {
   } finally {
     if (timer) clearTimeout(timer);
     if (client) {
-      try { client.release(); } catch (_) {}
+      try {
+        client.release();
+      } catch (_) {}
+      client = null;
     }
   }
 }

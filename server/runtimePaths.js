@@ -19,11 +19,39 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   isOptimizationTestMode,
-  validateStorageConfigForTestMode
+  validateStorageConfigForTestMode,
+  isPathInsideApprovedStorage,
+  checkSymlinkRedirection,
+  APPROVED_TEST_STORAGE_ROOT
 } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Safely ensures a directory exists.
+ * In test mode, strictly rejects directory creation outside APPROVED_TEST_STORAGE_ROOT
+ * or through symlinks that escape the approved test root.
+ */
+function safeEnsureDir(dirPath) {
+  const resolved = path.resolve(dirPath);
+  if (isOptimizationTestMode()) {
+    if (!isPathInsideApprovedStorage(resolved, APPROVED_TEST_STORAGE_ROOT)) {
+      throw new Error(`[STORAGE-FAIL-CLOSED] Refusing to create or access directory outside approved test storage: "${resolved}"`);
+    }
+    checkSymlinkRedirection(resolved, APPROVED_TEST_STORAGE_ROOT);
+  }
+  if (!fs.existsSync(resolved)) {
+    try {
+      fs.mkdirSync(resolved, { recursive: true });
+    } catch (err) {
+      if (isOptimizationTestMode()) {
+        throw new Error(`[STORAGE-FAIL-CLOSED] Failed to safely create approved test directory "${resolved}": ${err.message}`);
+      }
+    }
+  }
+  return resolved;
+}
 
 // All known live business transaction and application JSON stores
 export const ALL_STORE_FILENAMES = [
@@ -72,6 +100,10 @@ export function isExternalStorageActive() {
  * Checks external persistent storage directory, current working directory, and server directory.
  */
 export function getMaintenanceFlagPath() {
+  if (isOptimizationTestMode()) {
+    validateStorageConfigForTestMode();
+    return path.join(getDataDir(), 'maintenance.flag');
+  }
   if (isExternalStorageActive()) {
     return path.join(getDataDir(), 'maintenance.flag');
   }
@@ -95,6 +127,9 @@ export function isMaintenanceModeActive() {
       const stats = fs.statSync(flagPath);
       if (stats.isFile()) return true;
     }
+    // In optimization test mode, do not probe outside approved storage
+    if (isOptimizationTestMode()) return false;
+
     const cwdFlag = path.resolve(process.cwd(), 'maintenance.flag');
     if (fs.existsSync(cwdFlag) && fs.statSync(cwdFlag).isFile()) return true;
     const srvFlag = path.resolve(__dirname, 'maintenance.flag');
@@ -109,16 +144,12 @@ export function isMaintenanceModeActive() {
 export function getDataDir() {
   if (isOptimizationTestMode()) {
     validateStorageConfigForTestMode();
+    const p = path.resolve((process.env.BUSINZ_DATA_DIR || '').trim());
+    return safeEnsureDir(p);
   }
   if (isExternalStorageActive()) {
     const p = path.resolve(process.env.BUSINZ_DATA_DIR.trim());
-    if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
-    }
-    return p;
-  }
-  if (isOptimizationTestMode()) {
-    throw new Error('[TEST-MODE-FAIL-CLOSED] Optimization test mode requires dedicated BUSINZ_DATA_DIR.');
+    return safeEnsureDir(p);
   }
   return __dirname;
 }
@@ -127,25 +158,23 @@ export function getDataDir() {
  * Resolves the uploads directory for attachments, photos, videos, and LR docs.
  */
 export function getUploadsDir() {
+  if (isOptimizationTestMode()) {
+    validateStorageConfigForTestMode();
+    const p = process.env.BUSINZ_UPLOADS_DIR && process.env.BUSINZ_UPLOADS_DIR.trim().length > 0
+      ? path.resolve(process.env.BUSINZ_UPLOADS_DIR.trim())
+      : path.join(getDataDir(), 'uploads');
+    return safeEnsureDir(p);
+  }
   if (process.env.BUSINZ_UPLOADS_DIR && process.env.BUSINZ_UPLOADS_DIR.trim().length > 0) {
     const p = path.resolve(process.env.BUSINZ_UPLOADS_DIR.trim());
-    if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
-    }
-    return p;
+    return safeEnsureDir(p);
   }
   if (isExternalStorageActive()) {
     const p = path.join(getDataDir(), 'uploads');
-    if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
-    }
-    return p;
+    return safeEnsureDir(p);
   }
   const defaultPath = path.join(__dirname, 'uploads');
-  if (!fs.existsSync(defaultPath)) {
-    try { fs.mkdirSync(defaultPath, { recursive: true }); } catch {}
-  }
-  return defaultPath;
+  return safeEnsureDir(defaultPath);
 }
 
 /**
@@ -153,60 +182,53 @@ export function getUploadsDir() {
  */
 export function getBomDocumentsDir() {
   const p = path.join(getUploadsDir(), 'bom-documents');
-  if (!fs.existsSync(p)) {
-    try { fs.mkdirSync(p, { recursive: true }); } catch {}
-  }
-  return p;
+  return safeEnsureDir(p);
 }
 
 /**
  * Resolves the backups directory.
  */
 export function getBackupDir() {
+  if (isOptimizationTestMode()) {
+    validateStorageConfigForTestMode();
+    const p = process.env.BUSINZ_BACKUP_DIR && process.env.BUSINZ_BACKUP_DIR.trim().length > 0
+      ? path.resolve(process.env.BUSINZ_BACKUP_DIR.trim())
+      : path.join(getDataDir(), 'backups');
+    return safeEnsureDir(p);
+  }
   if (process.env.BUSINZ_BACKUP_DIR && process.env.BUSINZ_BACKUP_DIR.trim().length > 0) {
     const p = path.resolve(process.env.BUSINZ_BACKUP_DIR.trim());
-    if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
-    }
-    return p;
+    return safeEnsureDir(p);
   }
   if (isExternalStorageActive()) {
     const p = path.join(getDataDir(), 'backups');
-    if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
-    }
-    return p;
+    return safeEnsureDir(p);
   }
   const defaultPath = path.resolve(__dirname, 'backups');
-  if (!fs.existsSync(defaultPath)) {
-    try { fs.mkdirSync(defaultPath, { recursive: true }); } catch {}
-  }
-  return defaultPath;
+  return safeEnsureDir(defaultPath);
 }
 
 /**
  * Resolves the WhatsApp sessions directory.
  */
 export function getWaSessionsDir() {
+  if (isOptimizationTestMode()) {
+    validateStorageConfigForTestMode();
+    const p = process.env.BUSINZ_WA_SESSIONS_DIR && process.env.BUSINZ_WA_SESSIONS_DIR.trim().length > 0
+      ? path.resolve(process.env.BUSINZ_WA_SESSIONS_DIR.trim())
+      : path.join(getDataDir(), 'wa_sessions');
+    return safeEnsureDir(p);
+  }
   if (process.env.BUSINZ_WA_SESSIONS_DIR && process.env.BUSINZ_WA_SESSIONS_DIR.trim().length > 0) {
     const p = path.resolve(process.env.BUSINZ_WA_SESSIONS_DIR.trim());
-    if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
-    }
-    return p;
+    return safeEnsureDir(p);
   }
   if (isExternalStorageActive()) {
     const p = path.join(getDataDir(), 'wa_sessions');
-    if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
-    }
-    return p;
+    return safeEnsureDir(p);
   }
   const defaultPath = path.join(__dirname, 'wa_sessions');
-  if (!fs.existsSync(defaultPath)) {
-    try { fs.mkdirSync(defaultPath, { recursive: true }); } catch {}
-  }
-  return defaultPath;
+  return safeEnsureDir(defaultPath);
 }
 
 /**
@@ -220,7 +242,12 @@ export function getStoreFilePath(filename) {
   if (isOptimizationTestMode()) {
     validateStorageConfigForTestMode();
     const dataDir = getDataDir();
-    return path.join(dataDir, filename);
+    const targetPath = path.join(dataDir, filename);
+    if (!isPathInsideApprovedStorage(targetPath, APPROVED_TEST_STORAGE_ROOT)) {
+      throw new Error(`[STORAGE-FAIL-CLOSED] Store path "${targetPath}" is outside approved test storage "${APPROVED_TEST_STORAGE_ROOT}".`);
+    }
+    checkSymlinkRedirection(targetPath, APPROVED_TEST_STORAGE_ROOT);
+    return targetPath;
   }
 
   if (isExternalStorageActive()) {
