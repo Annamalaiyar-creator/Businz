@@ -1502,22 +1502,30 @@ const saveDatabaseStore = async (key, storeData) => {
     return storeData;
   }
   if (cleanKey === 'leaves') {
-    // Route directly to relational public.leaves table (Phase 9I zero-JSONB-bloat policy)
+    // Route directly to relational public.leaves table (Phase 9I & 9R zero-JSONB-bloat policy)
     const rows = Array.isArray(storeData) ? storeData : [storeData];
     for (const row of rows) {
       if (!row || typeof row !== 'object') continue;
       const emp = String(row.employee || row.empCode || row.code || '').trim().toUpperCase();
       if (!emp) continue;
+
+      // Isolate legacy store synchronization: ignore non-leave records or legacy store markers
+      if (row.type === 'Store' || ['BOM_STORE', 'INVOICE_STORE', 'BOM_SEQUENCE'].includes(emp)) {
+        continue;
+      }
+
       const reasonStr = typeof row.reason === 'object' ? JSON.stringify(row.reason) : String(row.reason || '');
       const status = row.status || 'active';
       const duration = String(row.duration || '1');
-      const type = row.type || 'Store';
+      const type = row.type || 'Casual';
       const dates = row.dates || new Date().toISOString();
-      const existing = await query('SELECT id FROM public.leaves WHERE employee = $1 ORDER BY id DESC LIMIT 1', [emp]);
-      if (existing.rows.length > 0) {
+      const rowId = row.id ? parseInt(row.id, 10) : null;
+
+      // Stable record identity: only UPDATE when verified row.id is provided; otherwise INSERT to preserve history
+      if (rowId && !isNaN(rowId) && rowId > 0) {
         await query(
-          'UPDATE public.leaves SET reason = $1, status = $2, duration = $3, type = $4, dates = $5 WHERE id = $6',
-          [reasonStr, status, duration, type, dates, existing.rows[0].id]
+          'UPDATE public.leaves SET reason = $1, status = $2, duration = $3, type = $4, dates = $5, employee = $6 WHERE id = $7',
+          [reasonStr, status, duration, type, dates, emp, rowId]
         );
       } else {
         await query(
@@ -1539,7 +1547,8 @@ const saveDatabaseStore = async (key, storeData) => {
   }
 
   // 3. Persist directly to authoritative PostgreSQL database on VPS first
-  const jsonPayload = JSON.stringify(storeData);
+  // Reuse single stringified payload to avoid redundant serialization and memory spikes (Phase 9R Issue 5)
+  const jsonPayload = typeof storeData === 'string' ? storeData : JSON.stringify(storeData);
   if (jsonPayload.length > 250 * 1024 * 1024) {
     throw new Error(`[Oversized JSONB Payload] Store "${cleanKey}" payload (${(jsonPayload.length / (1024 * 1024)).toFixed(1)} MB) exceeds PostgreSQL JSONB safe limit (250 MB).`);
   }
@@ -1562,26 +1571,26 @@ const saveDatabaseStore = async (key, storeData) => {
   }
 
   // 5. Asynchronous, non-blocking JSON backup for local recovery (post-commit)
+  // Passes pre-computed jsonPayload directly without re-stringifying storeData
   setImmediate(() => {
     try {
-      const jsonStr = JSON.stringify(storeData);
       if (cleanKey === 'raw_materials_store' && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('raw_materials_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('raw_materials_store.json'), jsonPayload).catch(() => {});
       } else if (cleanKey === 'item_store' && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('item_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('item_store.json'), jsonPayload).catch(() => {});
       } else if (cleanKey === 'vendor_store' && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('vendor_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('vendor_store.json'), jsonPayload).catch(() => {});
       } else if (cleanKey === 'po_store' && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('po_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('po_store.json'), jsonPayload).catch(() => {});
       } else if (cleanKey === 'grn_store' && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('grn_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('grn_store.json'), jsonPayload).catch(() => {});
       } else if ((cleanKey === 'workorder_store' || cleanKey === 'vrm_prod_workorders') && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('workorder_store.json'), jsonStr).catch(() => {});
-        fs.promises.writeFile(getStoreFilePath('vrm_prod_workorders.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('workorder_store.json'), jsonPayload).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('vrm_prod_workorders.json'), jsonPayload).catch(() => {});
       } else if (cleanKey === 'employees_store' && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('employees_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('employees_store.json'), jsonPayload).catch(() => {});
       } else if (cleanKey === 'invoice_store' && Array.isArray(storeData)) {
-        fs.promises.writeFile(getStoreFilePath('invoice_store.json'), jsonStr).catch(() => {});
+        fs.promises.writeFile(getStoreFilePath('invoice_store.json'), jsonPayload).catch(() => {});
       }
     } catch (_) {}
   });
@@ -1755,6 +1764,49 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-file-name', 'X-File-Name']
 }));
+
+// 3b. Route-aware request-size enforcement: enforce 15 MB strictly for /api/store before global body parsers (Phase 9R Issue 2)
+// Protects against oversized Content-Length as well as streaming chunked transfer encoding without Content-Length
+const STORE_PAYLOAD_LIMIT_BYTES = 15 * 1024 * 1024; // 15 MB
+const storeJsonParser = express.json({ limit: STORE_PAYLOAD_LIMIT_BYTES });
+const storeUrlencodedParser = express.urlencoded({ limit: STORE_PAYLOAD_LIMIT_BYTES, extended: true });
+
+app.use('/api/store', (req, res, next) => {
+  // 1. Early rejection for oversized Content-Length header
+  const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+  if (contentLength > STORE_PAYLOAD_LIMIT_BYTES) {
+    return res.status(413).json({
+      success: false,
+      error: '[Payload Too Large] Payload size exceeds 15 MB store limit. Document attachments must use media storage.'
+    });
+  }
+
+  // 2. Stream-level size enforcement for chunked transfer encoding and streaming body parsing
+  storeJsonParser(req, res, (err) => {
+    if (err) {
+      if (err.type === 'entity.too.large' || err.status === 413) {
+        return res.status(413).json({
+          success: false,
+          error: '[Payload Too Large] Payload size exceeds 15 MB store limit. Document attachments must use media storage.'
+        });
+      }
+      return next(err);
+    }
+    storeUrlencodedParser(req, res, (err2) => {
+      if (err2) {
+        if (err2.type === 'entity.too.large' || err2.status === 413) {
+          return res.status(413).json({
+            success: false,
+            error: '[Payload Too Large] Payload size exceeds 15 MB store limit. Document attachments must use media storage.'
+          });
+        }
+        return next(err2);
+      }
+      next();
+    });
+  });
+});
+
 app.use(express.json({ limit: '150mb' }));
 app.use(express.urlencoded({ limit: '150mb', extended: true }));
 
@@ -1787,7 +1839,7 @@ app.use((req, res, next) => {
 });
 
 // 2. Specific PostgREST legacy /rest/v1 write-blocking guard
-app.all('/rest/v1/*', (req, res, next) => {
+app.use('/rest/v1', (req, res, next) => {
   if (isMaintenanceModeActive()) {
     const isReadOnly = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
     if (!isReadOnly) {
@@ -3013,15 +3065,27 @@ app.post('/api/auth/register-employee', async (req, res) => {
       });
     }
 
+    // Require approval/authorization checks (Phase 9R Issue 4):
+    // Active administrator or HR executive sessions may provision accounts directly (or approve status).
+    // All other registrations are strictly forced to 'Pending Approval'.
+    const session = await getVerifiedUserSession(req);
+    const sessionRole = String(session?.role || '').toLowerCase();
+    const isAdminOrHr = session?.valid && ['ceo', 'md', 'managing director', 'technical administrator', 'admin', 'super admin', 'hr'].some(r => sessionRole.includes(r));
+
+    let finalStatus = 'Pending Approval';
+    if (isAdminOrHr && req.body.status && ['Active', 'Approved'].includes(req.body.status)) {
+      finalStatus = req.body.status;
+    }
+
     const newEmpAccount = {
       employee_code: cleanCode,
       employee_name: String(employee_name || '').trim(),
       email: cleanEmail,
-      password: hashPassword(String(password)),
+      password: hashPassword(String(password), 'scrypt'),
       prefix: prefix || cleanCode.split('-')[0] || 'SE',
       role: role || 'Sales Executive',
       dashboard_type: dashboard_type || role || 'Sales Executive',
-      status: 'Pending Approval',
+      status: finalStatus,
       created_at: new Date().toISOString(),
       last_login: new Date().toISOString()
     };
@@ -3029,7 +3093,17 @@ app.post('/api/auth/register-employee', async (req, res) => {
     const updatedList = [...list, newEmpAccount];
     await saveDatabaseStore('employees_store', updatedList);
 
-    return res.status(201).json({ success: true, account: newEmpAccount, data: updatedList });
+    // Return strictly sanitized account metadata (Zero password/hash/verifier exposure, Zero company-wide list exposure)
+    const sanitizedAccount = {
+      employee_code: newEmpAccount.employee_code,
+      employee_name: newEmpAccount.employee_name,
+      email: newEmpAccount.email,
+      role: newEmpAccount.role,
+      status: newEmpAccount.status,
+      prefix: newEmpAccount.prefix
+    };
+
+    return res.status(201).json({ success: true, account: sanitizedAccount });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -3038,21 +3112,30 @@ app.post('/api/auth/register-employee', async (req, res) => {
 const storeWriteQueues = new Map();
 
 function enqueueStoreOperation(storeKey, opFn) {
-  const currentQueue = storeWriteQueues.get(storeKey) || Promise.resolve();
-  const execute = async () => {
+  const previousTail = storeWriteQueues.get(storeKey) || Promise.resolve();
+
+  // Operation promise returned to caller: waits for previous tail (regardless of previous outcome) then executes opFn
+  const opPromise = (async () => {
     try {
-      await currentQueue;
-    } catch (_) {}
+      await previousTail;
+    } catch (_) {
+      // Previous operation failure must not stall subsequent queued operations
+    }
     return await opFn();
-  };
-  const nextQueue = execute();
+  })();
+
+  // Safe queue tail promise: catches rejections so the internal queue structure never produces unhandled rejections
+  const nextQueue = opPromise.catch(() => {});
   storeWriteQueues.set(storeKey, nextQueue);
   nextQueue.finally(() => {
+    // Only delete from map if this exact nextQueue is still the active tail
     if (storeWriteQueues.get(storeKey) === nextQueue) {
       storeWriteQueues.delete(storeKey);
     }
   });
-  return nextQueue;
+
+  // Return the caller's operation promise directly
+  return opPromise;
 }
 
 app.post('/api/store/:key', async (req, res) => {
@@ -3092,35 +3175,84 @@ app.post('/api/store/:key', async (req, res) => {
     }
   }
 
-  // Dedicated relational leaves handler to eliminate JSONB bloat
+  // Dedicated relational leaves handler to eliminate JSONB bloat (Phase 9R Issue 3)
   if (cleanKey === 'leaves') {
+    // 1. Require authenticated session
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({
+        success: false,
+        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+      });
+    }
+
+    const sessionEmpCode = String(session.empCode || session.user?.employee_code || session.employee_code || '').trim().toUpperCase();
+    const sessionRole = String(session.role || '').toLowerCase();
+    const isExecutiveOrHr = ['ceo', 'md', 'managing director', 'technical administrator', 'admin', 'super admin', 'hr'].some(r => sessionRole.includes(r));
+
     return enqueueStoreOperation('leaves', async () => {
       try {
         const rows = Array.isArray(storeData) ? storeData : [storeData];
+        const processed = [];
+
         for (const row of rows) {
           if (!row || typeof row !== 'object') continue;
           const emp = String(row.employee || row.empCode || row.code || '').trim().toUpperCase();
           if (!emp) continue;
-          const reasonStr = typeof row.reason === 'object' ? JSON.stringify(row.reason) : String(row.reason || '');
-          const status = row.status || 'active';
-          const duration = String(row.duration || '1');
-          const type = row.type || 'Store';
-          const dates = row.dates || new Date().toISOString();
 
-          const existing = await query('SELECT id FROM public.leaves WHERE employee = $1 ORDER BY id DESC LIMIT 1', [emp]);
-          if (existing.rows.length > 0) {
-            await query(
-              'UPDATE public.leaves SET reason = $1, status = $2, duration = $3, type = $4, dates = $5 WHERE id = $6',
-              [reasonStr, status, duration, type, dates, existing.rows[0].id]
-            );
+          // Isolate legacy store synchronization: ignore non-leave records or legacy store markers
+          if (row.type === 'Store' || ['BOM_STORE', 'INVOICE_STORE', 'BOM_SEQUENCE'].includes(emp)) {
+            continue;
+          }
+
+          // Non-executive users may only submit or modify leave records for their own employee code
+          if (!isExecutiveOrHr && emp !== sessionEmpCode) {
+            return res.status(403).json({
+              success: false,
+              error: `Forbidden: You cannot submit or modify leave records for other employees (${emp}).`
+            });
+          }
+
+          const reasonStr = typeof row.reason === 'object' ? JSON.stringify(row.reason) : String(row.reason || '');
+          const status = row.status || 'Pending Approval';
+          const duration = String(row.duration || '1');
+          const type = row.type || 'Casual';
+          const dates = row.dates || new Date().toISOString();
+          const rowId = row.id ? parseInt(row.id, 10) : null;
+
+          if (rowId && !isNaN(rowId) && rowId > 0) {
+            // Stable identity update: only UPDATE when verified record id is provided
+            let updateRes;
+            if (isExecutiveOrHr) {
+              updateRes = await query(
+                'UPDATE public.leaves SET reason = $1, status = $2, duration = $3, type = $4, dates = $5, employee = $6 WHERE id = $7 RETURNING id',
+                [reasonStr, status, duration, type, dates, emp, rowId]
+              );
+            } else {
+              updateRes = await query(
+                'UPDATE public.leaves SET reason = $1, status = $2, duration = $3, type = $4, dates = $5 WHERE id = $6 AND employee = $7 RETURNING id',
+                [reasonStr, status, duration, type, dates, rowId, sessionEmpCode]
+              );
+            }
+            if (updateRes.rows.length === 0) {
+              return res.status(404).json({
+                success: false,
+                error: `Leave record #${rowId} not found or unauthorized to update.`
+              });
+            }
+            processed.push({ id: rowId, employee: emp, status, duration, type, dates, action: 'updated' });
           } else {
-            await query(
-              'INSERT INTO public.leaves (employee, reason, status, duration, type, dates) VALUES ($1, $2, $3, $4, $5, $6)',
+            // New record: always INSERT a new row so historical applications are strictly preserved
+            const insertRes = await query(
+              'INSERT INTO public.leaves (employee, reason, status, duration, type, dates) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
               [emp, reasonStr, status, duration, type, dates]
             );
+            const newId = insertRes.rows[0]?.id;
+            processed.push({ id: newId, employee: emp, status, duration, type, dates, action: 'inserted' });
           }
         }
-        return res.json({ success: true, count: rows.length, data: rows.slice(0, 50) });
+
+        return res.json({ success: true, count: processed.length, data: processed });
       } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
       }
@@ -9333,6 +9465,9 @@ export {
   loadDatabaseBoms,
   persistBomsTransactionSafe,
   saveDatabaseStore,
-  getDatabaseStore
+  getDatabaseStore,
+  enqueueStoreOperation,
+  storeWriteQueues,
+  STORE_PAYLOAD_LIMIT_BYTES
 };
 

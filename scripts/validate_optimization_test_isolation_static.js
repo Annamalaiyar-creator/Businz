@@ -1323,6 +1323,72 @@ try {
     );
   });
 
+  // =========================================================================
+  // TEST GROUP 11: Phase 9R Code Review Security, Body Limit & Data Integrity Safeguards
+  // =========================================================================
+  console.log('\n--- TEST GROUP 11: Phase 9R Code Review Security & Data Integrity Safeguards ---');
+
+  runTest('server/index.js registers route-aware 15 MB limit on /api/store before global body parsers', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes("STORE_PAYLOAD_LIMIT_BYTES = 15 * 1024 * 1024") &&
+      serverIndexSrc.includes("app.use('/api/store', (req, res, next) => {") &&
+      serverIndexSrc.indexOf("app.use('/api/store',") < serverIndexSrc.indexOf("app.use(express.json({ limit: '150mb' }))"),
+      'Route-aware 15 MB store limit must be mounted before global 150 MB body parsers'
+    );
+  });
+
+  runTest('enqueueStoreOperation handles promise rejections and matching tail eviction safely', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes('const nextQueue = opPromise.catch(() => {});') &&
+      serverIndexSrc.includes('if (storeWriteQueues.get(storeKey) === nextQueue) {') &&
+      serverIndexSrc.includes('storeWriteQueues.delete(storeKey);'),
+      'enqueueStoreOperation must suppress rejections on queue tail and evict only matching tail'
+    );
+  });
+
+  runTest('POST /api/store/leaves requires verified session and updates only by stable row.id', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    const postStoreIdx = serverIndexSrc.indexOf("app.post('/api/store/:key'");
+    assert(postStoreIdx !== -1, 'Must contain POST /api/store/:key route');
+    const leavesStoreIdx = serverIndexSrc.indexOf("if (cleanKey === 'leaves')", postStoreIdx);
+    assert(leavesStoreIdx !== -1, 'Must contain leaves store handler in POST /api/store/:key');
+    const leavesBlock = serverIndexSrc.slice(leavesStoreIdx, leavesStoreIdx + 5000);
+
+    assert(
+      leavesBlock.includes('const session = await getVerifiedUserSession(req);') &&
+      leavesBlock.includes('if (!session || !session.valid)'),
+      'POST /api/store/leaves must require verified session'
+    );
+    assert(
+      leavesBlock.includes('rowId && !isNaN(rowId) && rowId > 0') &&
+      leavesBlock.includes('WHERE id = $') &&
+      leavesBlock.includes('INSERT INTO public.leaves'),
+      'POST /api/store/leaves must require stable row.id for updates and insert new records otherwise'
+    );
+  });
+
+  runTest('POST /api/auth/register-employee returns sanitized metadata and uses scrypt hashing', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes("password: hashPassword(String(password), 'scrypt')") &&
+      serverIndexSrc.includes('const sanitizedAccount = {') &&
+      serverIndexSrc.includes('return res.status(201).json({ success: true, account: sanitizedAccount });') &&
+      !serverIndexSrc.includes('account: newEmpAccount, data: updatedList'),
+      'register-employee endpoint must never expose passwords, hashes, or whole-company employee lists'
+    );
+  });
+
+  runTest('saveDatabaseStore reuses pre-serialized jsonPayload for async backup writes', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes("fs.promises.writeFile(getStoreFilePath('raw_materials_store.json'), jsonPayload)") &&
+      serverIndexSrc.includes("fs.promises.writeFile(getStoreFilePath('item_store.json'), jsonPayload)"),
+      'saveDatabaseStore must reuse jsonPayload string to avoid redundant serialization'
+    );
+  });
+
 } finally {
   resetEnv();
 }
