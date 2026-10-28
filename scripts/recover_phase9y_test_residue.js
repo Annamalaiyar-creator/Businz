@@ -56,23 +56,36 @@ export function verifySyntheticLeadOwnership(lead) {
 
 /**
  * Strict synthetic employee ownership verification
- * Requirement: Reject loose checks ('TEST', 'Active', 'Pending').
- * Require exact known code AND synthetic evidence (synth_*@example.com or SYNTH_P9Y_ tag).
+ * Requirement:
+ * - Exact known employee code
+ * - Plus a run-specific synthetic identity marker correlated to the code's numeric suffix
+ * - Generic email prefixes (e.g. 'synth_user@example.com' without matching run ID) or generic names are REJECTED.
+ * - Fails closed when evidence is missing.
  */
 export function verifySyntheticEmployeeEvidence(emp) {
-  if (!emp) return false;
+  if (!emp || typeof emp !== 'object') return false;
   const code = String(emp.employee_code || emp.code || '').trim();
   if (!KNOWN_SYNTHETIC_EMPLOYEES.includes(code)) return false;
 
+  // Extract the run-specific numeric marker from the employee code (e.g. "552" from "TA-TEST-552", "SE-PEND-552")
+  const codeMatch = code.match(/(\d+)$/);
+  if (!codeMatch) return false;
+  const runMarker = codeMatch[1];
+
   const email = String(emp.email || '').toLowerCase().trim();
-  const synthTag = String(emp.synthTag || '');
-  const name = String(emp.employee_name || emp.name || '');
+  const synthTag = String(emp.synthTag || '').trim();
 
-  const hasEmailEvidence = email.startsWith('synth_') || (email.endsWith('@example.com') && email.includes('synth_p9y'));
-  const hasTagEvidence = synthTag.startsWith('SYNTH_P9Y_');
-  const hasNameEvidence = name.includes('SYNTH_P9Y_');
+  // Verification 1: synthTag with exact run marker (e.g., "SYNTH_P9Y_...552")
+  const hasValidTag = synthTag.startsWith('SYNTH_P9Y_') && synthTag.includes(runMarker);
 
-  return hasEmailEvidence || hasTagEvidence || hasNameEvidence;
+  // Verification 2: email must end with @example.com, have synthetic prefix, AND contain the exact run marker
+  // e.g. synth_admin_*552@example.com, synth_pend_*552@example.com, synth_act_*552@example.com, synth_*396@example.com
+  const hasValidEmail = email.endsWith('@example.com') &&
+    (email.startsWith('synth_admin_') || email.startsWith('synth_pend_') || email.startsWith('synth_act_') || email.startsWith('synth_se_') || email.startsWith('synth_')) &&
+    email.includes(`${runMarker}@example.com`);
+
+  // Generic names are strictly rejected as evidence; must have run-correlated tag or email
+  return hasValidTag || hasValidEmail;
 }
 
 export async function runResidueRecovery(options = {}) {
@@ -258,49 +271,49 @@ export async function runResidueRecovery(options = {}) {
         WHERE notification_id IN (
           SELECT n.id FROM public.lead_notifications n
           JOIN public.leads l ON n.lead_id = l.id
-          WHERE l.id = $1 AND (l.company_name LIKE '%SYNTH_P9Y_%' OR l.notes LIKE '%SYNTH_P9Y_%')
+          WHERE l.id = $1 AND (l.company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR l.notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         )
       `, [leadId]);
 
       await client.query(`
         DELETE FROM public.lead_notifications
         WHERE lead_id = $1 AND lead_id IN (
-          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         )
       `, [leadId]);
 
       await client.query(`
         DELETE FROM public.lead_status_history
         WHERE lead_id = $1 AND lead_id IN (
-          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         )
       `, [leadId]);
 
       await client.query(`
         DELETE FROM public.lead_assignment_history
         WHERE lead_id = $1 AND lead_id IN (
-          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         )
       `, [leadId]);
 
       await client.query(`
         DELETE FROM public.lead_activities
         WHERE lead_id = $1 AND lead_id IN (
-          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         )
       `, [leadId]);
 
       await client.query(`
         DELETE FROM public.lead_followups
         WHERE lead_id = $1 AND lead_id IN (
-          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         )
       `, [leadId]);
 
       await client.query(`
         DELETE FROM public.lead_inactivity_incidents
         WHERE lead_id = $1 AND lead_id IN (
-          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+          SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         )
       `, [leadId]);
 
@@ -309,14 +322,14 @@ export async function runResidueRecovery(options = {}) {
         await client.query(`
           DELETE FROM public.crm_leads_activities
           WHERE lead_id = $1 AND lead_id IN (
-            SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+            SELECT id FROM public.leads WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
           )
         `, [leadId]);
       }
 
       const delLeadRes = await client.query(`
         DELETE FROM public.leads
-        WHERE id = $1 AND (company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%')
+        WHERE id = $1 AND (company_name LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\' OR notes LIKE '%SYNTH\\_P9Y\\_%' ESCAPE '\\')
         RETURNING id
       `, [leadId]);
 

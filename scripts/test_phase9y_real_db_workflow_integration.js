@@ -466,10 +466,10 @@ export async function executeComprehensiveCleanup(pool) {
     // discover and register it in syntheticLedger using this run's unique SYNTH_TAG.
     const unrecordedLeads = await client.query(
       `SELECT id, lead_number FROM public.leads 
-       WHERE (company_name LIKE $1 OR notes = $2) AND id NOT IN (
+       WHERE (company_name LIKE $1 ESCAPE '\\' OR notes = $2) AND id NOT IN (
          SELECT unnest(COALESCE($3::text[], ARRAY[]::text[]))
        )`,
-      [`%${SYNTH_TAG}%`, SYNTH_TAG, syntheticLedger.leads.map(l => l.id).filter(Boolean)]
+      [`%${SYNTH_TAG.replace(/_/g, '\\_')}%`, SYNTH_TAG, syntheticLedger.leads.map(l => l.id).filter(Boolean)]
     );
     for (const row of unrecordedLeads.rows) {
       console.log(`   [RECOVERY] Recovered unrecorded synthetic lead from HTTP 500: ${row.id} (${row.lead_number})`);
@@ -478,10 +478,10 @@ export async function executeComprehensiveCleanup(pool) {
 
     const unrecordedBoms = await client.query(
       `SELECT id, bom_code FROM public.bom_orders
-       WHERE customer_name LIKE $1 AND id NOT IN (
+       WHERE customer_name LIKE $1 ESCAPE '\\' AND id NOT IN (
          SELECT unnest(COALESCE($2::text[], ARRAY[]::text[]))
        )`,
-      [`%${SYNTH_TAG}%`, syntheticLedger.bomOrders.map(b => b.id).filter(Boolean)]
+      [`%${SYNTH_TAG.replace(/_/g, '\\_')}%`, syntheticLedger.bomOrders.map(b => b.id).filter(Boolean)]
     );
     for (const row of unrecordedBoms.rows) {
       console.log(`   [RECOVERY] Recovered unrecorded synthetic BOM: ${row.id} (${row.bom_code})`);
@@ -525,8 +525,8 @@ export async function executeComprehensiveCleanup(pool) {
 
       // Delete parent lead record
       const delLeadRes = await client.query(
-        'DELETE FROM public.leads WHERE id = $1 AND (notes = $2 OR company_name LIKE $3)',
-        [lead.id, SYNTH_TAG, `%${SYNTH_TAG}%`]
+        'DELETE FROM public.leads WHERE id = $1 AND (notes = $2 OR company_name LIKE $3 ESCAPE \'\\\')',
+        [lead.id, SYNTH_TAG, `%${SYNTH_TAG.replace(/_/g, '\\_')}%`]
       );
       if (delLeadRes.rowCount === 0) {
         throw new Error(`[CLEANUP ERROR] Failed to delete parent lead #${lead.id} with verified ownership.`);
@@ -558,8 +558,8 @@ export async function executeComprehensiveCleanup(pool) {
 
       // Delete parent bom_orders record
       const delBomRes = await client.query(
-        'DELETE FROM public.bom_orders WHERE id = $1 AND bom_code = $2 AND customer_name LIKE $3',
-        [bom.id, bom.bomCode, `%${SYNTH_TAG}%`]
+        'DELETE FROM public.bom_orders WHERE id = $1 AND bom_code = $2 AND customer_name LIKE $3 ESCAPE \'\\\'',
+        [bom.id, bom.bomCode, `%${SYNTH_TAG.replace(/_/g, '\\_')}%`]
       );
       if (delBomRes.rowCount === 0) {
         throw new Error(`[CLEANUP ERROR] Failed to delete BOM order "${bom.bomCode}" with verified ownership.`);
@@ -633,12 +633,12 @@ export async function executeComprehensiveCleanup(pool) {
 
     // Verify zero residual synthetic records matching this run's SYNTH_TAG
     const residualLeads = await client.query(
-      "SELECT id FROM public.leads WHERE company_name LIKE $1 OR notes = $2",
-      [`%${SYNTH_TAG}%`, SYNTH_TAG]
+      "SELECT id FROM public.leads WHERE company_name LIKE $1 ESCAPE '\\' OR notes = $2",
+      [`%${SYNTH_TAG.replace(/_/g, '\\_')}%`, SYNTH_TAG]
     );
     const residualBoms = await client.query(
-      "SELECT id FROM public.bom_orders WHERE customer_name LIKE $1",
-      [`%${SYNTH_TAG}%`]
+      "SELECT id FROM public.bom_orders WHERE customer_name LIKE $1 ESCAPE '\\'",
+      [`%${SYNTH_TAG.replace(/_/g, '\\_')}%`]
     );
     if (residualLeads.rows.length > 0 || residualBoms.rows.length > 0) {
       preCommitMatches = false;

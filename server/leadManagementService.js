@@ -520,7 +520,7 @@ export async function createLead(leadData, creatorUser = {}) {
     // If assignee was specified upon creation, assign immediately within same transaction
     if (leadData.assignedToId && leadData.assignedToName) {
       try {
-        const assignedResult = await assignLead({
+        const assignedLead = await assignLead({
           client,
           leadId: lead.id,
           assignedToId: leadData.assignedToId,
@@ -528,13 +528,13 @@ export async function createLead(leadData, creatorUser = {}) {
           assignedToRole: leadData.assignedToRole || 'Sales Executive',
           assignerUser: creatorUser,
           reason: leadData.assignmentReason || 'Assigned on lead creation',
-          bypassPermission: true
-        });
-        if (assignedResult) {
-          lead = assignedResult.lead || assignedResult;
-          if (assignedResult.deferredNotification) {
-            pendingNotificationBroadcast = assignedResult.deferredNotification;
+          bypassPermission: true,
+          onDeferredNotification: (broadcastFn) => {
+            pendingNotificationBroadcast = broadcastFn;
           }
+        });
+        if (assignedLead) {
+          lead = assignedLead;
         }
       } catch (assignErr) {
         console.error('[createLead: direct assign error]:', assignErr);
@@ -647,7 +647,17 @@ export async function updateLead(leadId, leadData = {}) {
  * Permanently logs to public.lead_assignment_history
  * Starts/Resets the 24-hour inactivity response timer
  */
-export async function assignLead({ leadId, assignedToId, assignedToName, assignedToRole, assignerUser, reason = 'Direct assignment', bypassPermission = false, client = null }) {
+export async function assignLead({
+  leadId,
+  assignedToId,
+  assignedToName,
+  assignedToRole,
+  assignerUser,
+  reason = 'Direct assignment',
+  bypassPermission = false,
+  client = null,
+  onDeferredNotification = null
+}) {
   if (!bypassPermission && !canAssignLeads(assignerUser.role, assignerUser.employee_code)) {
     throw new Error('Unauthorized: Only CEO and Tech Support can assign or reassign leads.');
   }
@@ -737,7 +747,6 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
   const result = client ? await executeAssignment(client) : await withTransaction(executeAssignment);
 
   // 5. Notify the Assigned Salesperson after successful transaction commit
-  let deferredNotification = null;
   try {
     const notifResult = await createLeadNotification({
       client,
@@ -749,14 +758,23 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
       specificRecipientId: assignedToId,
       specificRecipientRole: assignedToRole || 'Sales Executive'
     });
+
     if (notifResult?.deferredBroadcast) {
-      deferredNotification = notifResult.deferredBroadcast;
+      if (typeof onDeferredNotification === 'function') {
+        onDeferredNotification(notifResult.deferredBroadcast);
+      }
+      Object.defineProperty(result, '_deferredNotification', {
+        value: notifResult.deferredBroadcast,
+        enumerable: false,
+        configurable: true
+      });
     }
   } catch (notifErr) {
     console.warn('[Notification Notice]:', notifErr.message);
   }
 
-  return { lead: result, ...result, deferredNotification };
+  // Preserve historical return contract: return database lead row directly without leaking internal fields
+  return result;
 }
 
 /**
