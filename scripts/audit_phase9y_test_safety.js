@@ -596,6 +596,103 @@ await runAsyncTest('7.8 Verifies unrelated employee records are 100% preserved d
 });
 
 // =============================================================================
+// TEST GROUP 8: Phase 9Z Lead Notification Schema, Transaction Consistency & Recovery
+// =============================================================================
+console.log('\n--- TEST GROUP 8: Phase 9Z Lead Notification Schema, Transaction Consistency & Recovery ---');
+
+const migrationPath = path.resolve(__dirname, '../server/migrations/20261028_lead_notification_recipient_unique_constraint.sql');
+const rollbackMigrationPath = path.resolve(__dirname, '../server/migrations/20261028_lead_notification_recipient_unique_constraint_rollback.sql');
+const leadMgmtSrcPath = path.resolve(__dirname, '../server/leadManagementService.js');
+const dbSrcPath = path.resolve(__dirname, '../server/db.js');
+const recoveryScriptPath = path.resolve(__dirname, 'recover_phase9y_test_residue.js');
+
+const migrationSrc = fs.existsSync(migrationPath) ? fs.readFileSync(migrationPath, 'utf8') : '';
+const rollbackSrc = fs.existsSync(rollbackMigrationPath) ? fs.readFileSync(rollbackMigrationPath, 'utf8') : '';
+const leadMgmtSrc = fs.existsSync(leadMgmtSrcPath) ? fs.readFileSync(leadMgmtSrcPath, 'utf8') : '';
+const dbSrc = fs.existsSync(dbSrcPath) ? fs.readFileSync(dbSrcPath, 'utf8') : '';
+const recoveryScriptSrc = fs.existsSync(recoveryScriptPath) ? fs.readFileSync(recoveryScriptPath, 'utf8') : '';
+
+runTest('8.1 Migration exists and creates unique index on (notification_id, recipient_user_id)', () => {
+  assert(fs.existsSync(migrationPath), 'Migration file must exist');
+  assert(migrationSrc.includes('CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_notif_recipient_unique'), 'Must create unique index concurrently');
+  assert(migrationSrc.includes('ON public.lead_notification_recipients(notification_id, recipient_user_id)'), 'Must index notification_id and recipient_user_id');
+});
+
+runTest('8.2 Migration includes fail-safe duplicate pre-flight audit without automatic deletion', () => {
+  assert(migrationSrc.includes('duplicate_count > 0'), 'Must check for duplicate count');
+  assert(migrationSrc.includes('RAISE EXCEPTION'), 'Must raise exception on duplicates');
+  assert(migrationSrc.includes('[PRE-FLIGHT-FAIL-SAFE]'), 'Must include fail-safe tag');
+  assert(!migrationSrc.includes('DELETE FROM public.lead_notification_recipients'), 'Migration must never auto-delete rows');
+});
+
+runTest('8.3 Rollback migration exists and drops unique index concurrently', () => {
+  assert(fs.existsSync(rollbackMigrationPath), 'Rollback migration must exist');
+  assert(rollbackSrc.includes('DROP INDEX CONCURRENTLY IF EXISTS public.idx_notif_recipient_unique'), 'Rollback must drop index concurrently');
+});
+
+runTest('8.4 Application schema definitions include idx_notif_recipient_unique for new environments', () => {
+  assert(leadMgmtSrc.includes('idx_notif_recipient_unique'), 'leadManagementService.js must include idx_notif_recipient_unique');
+  assert(dbSrc.includes('idx_notif_recipient_unique'), 'db.js must include idx_notif_recipient_unique');
+});
+
+runTest('8.5 createLead() executes atomically within withTransaction to prevent partial failures', () => {
+  assert(leadMgmtSrc.includes('return await withTransaction(async (client) => {'), 'createLead must use withTransaction');
+  assert(leadMgmtSrc.includes('createLeadNotification({\n        client,'), 'createLead must pass client to createLeadNotification');
+});
+
+runTest('8.6 createLeadNotification and assignLead support optional client parameter', () => {
+  assert(leadMgmtSrc.includes('client = null'), 'Functions must support client = null default');
+  assert(
+    leadMgmtSrc.includes('executeNotificationWrites(client)') &&
+    leadMgmtSrc.includes('withTransaction(executeNotificationWrites)'),
+    'Notification must use client or withTransaction'
+  );
+  assert(
+    leadMgmtSrc.includes('executeAssignment(client)') &&
+    leadMgmtSrc.includes('withTransaction(executeAssignment)'),
+    'assignLead must use client or withTransaction'
+  );
+});
+
+runTest('8.7 Cleanup Step 0 dynamically recovers unrecorded synthetic records from HTTP 500 failures', () => {
+  assert(testScriptSrc.includes('DB STEP 0: RECOVER UNRECORDED SYNTHETIC RECORDS'), 'Must include DB Step 0 recovery');
+  assert(testScriptSrc.includes('unrecordedLeads = await client.query('), 'Must query for unrecorded leads');
+  assert(testScriptSrc.includes('unrecordedBoms = await client.query('), 'Must query for unrecorded BOMs');
+});
+
+runTest('8.8 Foreign key child records of leads are deleted in safe order before parent lead', () => {
+  const recipDel = testScriptSrc.indexOf('DELETE FROM public.lead_notification_recipients');
+  const notifDel = testScriptSrc.indexOf('DELETE FROM public.lead_notifications WHERE lead_id = $1');
+  const leadDel = testScriptSrc.indexOf('DELETE FROM public.leads WHERE id = $1');
+
+  assert(recipDel !== -1 && notifDel !== -1 && leadDel !== -1, 'Must have deletion queries');
+  assert(recipDel < notifDel, 'Recipients must be deleted before notifications');
+  assert(notifDel < leadDel, 'Notifications must be deleted before parent leads');
+});
+
+runTest('8.9 Recovery script exists, defaults to dry-run, and requires --execute-authorized', () => {
+  assert(fs.existsSync(recoveryScriptPath), 'Recovery script file must exist');
+  assert(recoveryScriptSrc.includes('--execute-authorized'), 'Must check for --execute-authorized flag');
+  assert(recoveryScriptSrc.includes('const isDryRun = !isExecuteAuthorized'), 'Must default to dry run mode');
+  assert(recoveryScriptSrc.includes('DRY RUN'), 'Must announce dry run mode');
+});
+
+runTest('8.10 Recovery script targets exact known residue records and enforces ownership check', () => {
+  assert(recoveryScriptSrc.includes('VRM-LD-2026-01'), 'Must target known lead VRM-LD-2026-01');
+  assert(recoveryScriptSrc.includes('TA-TEST-552'), 'Must target TA-TEST-552');
+  assert(recoveryScriptSrc.includes('SE-PEND-552'), 'Must target SE-PEND-552');
+  assert(recoveryScriptSrc.includes('SE-ACT-552'), 'Must target SE-ACT-552');
+  assert(recoveryScriptSrc.includes('SE-TEST-396'), 'Must target SE-TEST-396');
+  assert(recoveryScriptSrc.includes('isSynthetic'), 'Must enforce synthetic ownership verification before deletion');
+});
+
+runTest('8.11 Recovery script validates database and enforces fail-closed isolation', () => {
+  assert(recoveryScriptSrc.includes('resolveAndValidateTestDatabaseUrl'), 'Must use resolveAndValidateTestDatabaseUrl');
+  assert(recoveryScriptSrc.includes('expectedWorkspace'), 'Must check workspace directory');
+  assert(recoveryScriptSrc.includes('/var/www/businz-optimization-test'), 'Must target optimization test worktree');
+});
+
+// =============================================================================
 // SUMMARY
 // =============================================================================
 console.log('\n===================================================================');

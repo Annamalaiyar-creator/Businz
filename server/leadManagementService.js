@@ -176,6 +176,9 @@ export async function ensureLeadsSchema() {
         read_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_recipient_unique 
+        ON public.lead_notification_recipients(notification_id, recipient_user_id);
     `);
     schemaEnsured = true;
     console.log('✅ [PostgreSQL] Ensured public.leads columns and CRM tables exist.');
@@ -508,50 +511,55 @@ export async function createLead(leadData, creatorUser = {}) {
     leadData.externalPayload ? JSON.stringify(leadData.externalPayload) : null
   ];
 
-  let res;
-  try {
-    res = await dbQuery(sql, params);
-  } catch (queryErr) {
-    if (queryErr.message && (queryErr.message.includes('does not exist') || queryErr.message.includes('column'))) {
-      console.log('[createLead] Missing column detected, auto-healing leads schema...', queryErr.message);
-      await ensureLeadsSchema();
-      res = await dbQuery(sql, params);
-    } else {
-      throw queryErr;
-    }
-  }
-  let created = res.rows[0];
-
-  // If assignee was specified upon creation, assign immediately
-  if (leadData.assignedToId && leadData.assignedToName) {
+  return await withTransaction(async (client) => {
+    let res;
     try {
-      const assignedLead = await assignLead({
-        leadId: created.id,
-        assignedToId: leadData.assignedToId,
-        assignedToName: leadData.assignedToName,
-        assignedToRole: leadData.assignedToRole || 'Sales Executive',
-        assignerUser: creatorUser,
-        reason: leadData.assignmentReason || 'Assigned on lead creation',
-        bypassPermission: true
-      });
-      if (assignedLead) {
-        created = assignedLead;
+      res = await client.query(sql, params);
+    } catch (queryErr) {
+      if (queryErr.message && (queryErr.message.includes('does not exist') || queryErr.message.includes('column'))) {
+        console.log('[createLead] Missing column detected, auto-healing leads schema...', queryErr.message);
+        await ensureLeadsSchema();
+        res = await client.query(sql, params);
+      } else {
+        throw queryErr;
       }
-    } catch (assignErr) {
-      console.error('[createLead: direct assign error]:', assignErr);
     }
-  } else {
-    // Notify CEO & Tech Support of New Unassigned Lead
-    await createLeadNotification({
-      leadId: created.id,
-      type: 'NEW_LEAD',
-      title: `🆕 New Lead Created: ${created.company_name}`,
-      message: `Lead ${created.lead_number} created from ${created.source} by ${createdByName}. Added to Unassigned queue.`,
-      metadata: { leadNumber: created.lead_number, companyName: created.company_name, source: created.source }
-    });
-  }
+    let created = res.rows[0];
 
-  return created;
+    // If assignee was specified upon creation, assign immediately within same transaction
+    if (leadData.assignedToId && leadData.assignedToName) {
+      try {
+        const assignedLead = await assignLead({
+          client,
+          leadId: created.id,
+          assignedToId: leadData.assignedToId,
+          assignedToName: leadData.assignedToName,
+          assignedToRole: leadData.assignedToRole || 'Sales Executive',
+          assignerUser: creatorUser,
+          reason: leadData.assignmentReason || 'Assigned on lead creation',
+          bypassPermission: true
+        });
+        if (assignedLead) {
+          created = assignedLead;
+        }
+      } catch (assignErr) {
+        console.error('[createLead: direct assign error]:', assignErr);
+        throw assignErr;
+      }
+    } else {
+      // Notify CEO & Tech Support of New Unassigned Lead within same transaction
+      await createLeadNotification({
+        client,
+        leadId: created.id,
+        type: 'NEW_LEAD',
+        title: `🆕 New Lead Created: ${created.company_name}`,
+        message: `Lead ${created.lead_number} created from ${created.source} by ${createdByName}. Added to Unassigned queue.`,
+        metadata: { leadNumber: created.lead_number, companyName: created.company_name, source: created.source }
+      });
+    }
+
+    return created;
+  });
 }
 
 /**
@@ -631,7 +639,7 @@ export async function updateLead(leadId, leadData = {}) {
  * Permanently logs to public.lead_assignment_history
  * Starts/Resets the 24-hour inactivity response timer
  */
-export async function assignLead({ leadId, assignedToId, assignedToName, assignedToRole, assignerUser, reason = 'Direct assignment', bypassPermission = false }) {
+export async function assignLead({ leadId, assignedToId, assignedToName, assignedToRole, assignerUser, reason = 'Direct assignment', bypassPermission = false, client = null }) {
   if (!bypassPermission && !canAssignLeads(assignerUser.role, assignerUser.employee_code)) {
     throw new Error('Unauthorized: Only CEO and Tech Support can assign or reassign leads.');
   }
@@ -640,9 +648,9 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
   const assignerName = assignerUser.employee_name || assignerUser.name || 'Management';
   const assignerRole = assignerUser.role || 'Tech Support';
 
-  return await withTransaction(async (client) => {
+  const executeAssignment = async (activeClient) => {
     // 1. Get current lead state
-    const currentRes = await client.query(`SELECT * FROM public.leads WHERE id = $1 FOR UPDATE`, [leadId]);
+    const currentRes = await activeClient.query(`SELECT * FROM public.leads WHERE id = $1 FOR UPDATE`, [leadId]);
     if (currentRes.rows.length === 0) throw new Error('Lead not found.');
     const current = currentRes.rows[0];
 
@@ -652,7 +660,7 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
 
     // 2. Insert into permanent history (never deleted)
     const historyId = `AH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    await client.query(`
+    await activeClient.query(`
       INSERT INTO public.lead_assignment_history (
         id, lead_id, assigned_by_user_id, assigned_by_name, assigned_by_role,
         assigned_to_user_id, assigned_to_name, assigned_to_role,
@@ -676,7 +684,7 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
     ]);
 
     // 3. Update the lead record
-    const updateRes = await client.query(`
+    const updateRes = await activeClient.query(`
       UPDATE public.leads SET
         assigned_by_user_id = $1,
         assigned_by_name = $2,
@@ -707,7 +715,7 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
     // 4. Record status change if transitioned from New to Assigned
     if (current.status === 'New') {
       const statusHistId = `SH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-      await client.query(`
+      await activeClient.query(`
         INSERT INTO public.lead_status_history (
           id, lead_id, previous_status, new_status, remarks,
           updated_by_user_id, updated_by_name, created_at
@@ -716,7 +724,9 @@ export async function assignLead({ leadId, assignedToId, assignedToName, assigne
     }
 
     return updateRes.rows[0];
-  });
+  };
+
+  const result = client ? await executeAssignment(client) : await withTransaction(executeAssignment);
 
   // 5. Notify the Assigned Salesperson after successful transaction commit
   try {
@@ -900,17 +910,17 @@ export function setRealtimeNotificationBroadcaster(fn) {
  * Create Lead Notification with Individual Recipient Tracking (Sales, CEO & Tech Support)
  * Each recipient has their own independent 'read' status and receives sub-second push via SSE!
  */
-export async function createLeadNotification({ leadId = null, incidentId = null, type, title, message, metadata = {}, specificRecipientId = null, specificRecipientRole = null }) {
+export async function createLeadNotification({ leadId = null, incidentId = null, type, title, message, metadata = {}, specificRecipientId = null, specificRecipientRole = null, client = null }) {
   const notifId = `NOTIF-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
 
   let recipientList = [];
 
-  await withTransaction(async (client) => {
+  const executeNotificationWrites = async (activeClient) => {
     // 1. Verify lead exists to prevent foreign key constraint violation
     let validLeadId = null;
     if (leadId) {
       try {
-        const leadCheck = await client.query('SELECT id FROM public.leads WHERE id = $1 LIMIT 1', [leadId]);
+        const leadCheck = await activeClient.query('SELECT id FROM public.leads WHERE id = $1 LIMIT 1', [leadId]);
         if (leadCheck.rows && leadCheck.rows.length > 0) {
           validLeadId = leadId;
         }
@@ -918,7 +928,7 @@ export async function createLeadNotification({ leadId = null, incidentId = null,
     }
 
     // 2. Create main notification
-    await client.query(`
+    await activeClient.query(`
       INSERT INTO public.lead_notifications (id, lead_id, incident_id, type, title, message, metadata, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
     `, [notifId, validLeadId, incidentId, type, title, message, JSON.stringify(metadata)]);
@@ -958,13 +968,19 @@ export async function createLeadNotification({ leadId = null, incidentId = null,
     // 3. Insert individual recipient records
     for (const rec of recipients) {
       const recId = `REC-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-      await client.query(`
+      await activeClient.query(`
         INSERT INTO public.lead_notification_recipients (id, notification_id, recipient_user_id, recipient_role, read, created_at)
         VALUES ($1, $2, $3, $4, false, NOW())
         ON CONFLICT (notification_id, recipient_user_id) DO NOTHING
       `, [recId, notifId, rec.id, rec.role]);
     }
-  });
+  };
+
+  if (client) {
+    await executeNotificationWrites(client);
+  } else {
+    await withTransaction(executeNotificationWrites);
+  }
 
   // 4. Sub-second Instant Push via Realtime SSE Gateway (WhatsApp-style delivery)
   if (typeof realtimeNotificationBroadcaster === 'function') {

@@ -460,6 +460,35 @@ export async function executeComprehensiveCleanup(pool) {
     inTransaction = true;
 
     // -------------------------------------------------------------------------
+    // DB STEP 0: RECOVER UNRECORDED SYNTHETIC RECORDS FROM HTTP 500 FAILURES (Phase 9Z)
+    // -------------------------------------------------------------------------
+    // If an API request returned HTTP 500 after persisting a record, dynamically
+    // discover and register it in syntheticLedger using this run's unique SYNTH_TAG.
+    const unrecordedLeads = await client.query(
+      `SELECT id, lead_number FROM public.leads 
+       WHERE (company_name LIKE $1 OR notes = $2) AND id NOT IN (
+         SELECT unnest(COALESCE($3::text[], ARRAY[]::text[]))
+       )`,
+      [`%${SYNTH_TAG}%`, SYNTH_TAG, syntheticLedger.leads.map(l => l.id).filter(Boolean)]
+    );
+    for (const row of unrecordedLeads.rows) {
+      console.log(`   [RECOVERY] Recovered unrecorded synthetic lead from HTTP 500: ${row.id} (${row.lead_number})`);
+      syntheticLedger.leads.push({ id: row.id, leadNumber: row.lead_number });
+    }
+
+    const unrecordedBoms = await client.query(
+      `SELECT id, bom_code FROM public.bom_orders
+       WHERE (customer_name LIKE $1 OR bom_code LIKE $2) AND id NOT IN (
+         SELECT unnest(COALESCE($3::text[], ARRAY[]::text[]))
+       )`,
+      [`%${SYNTH_TAG}%`, `%${RUN_ID % 10000}%`, syntheticLedger.bomOrders.map(b => b.id).filter(Boolean)]
+    );
+    for (const row of unrecordedBoms.rows) {
+      console.log(`   [RECOVERY] Recovered unrecorded synthetic BOM: ${row.id} (${row.bom_code})`);
+      syntheticLedger.bomOrders.push({ id: row.id, bomCode: row.bom_code });
+    }
+
+    // -------------------------------------------------------------------------
     // DB STEP 1: Clean Leads & Foreign Key Child Records (No Suppressed Errors)
     // -------------------------------------------------------------------------
     for (const lead of syntheticLedger.leads) {
@@ -965,14 +994,16 @@ async function main() {
       body: synthLeadData
     });
 
-    assert.strictEqual(leadRes.status, 200, `Inbound lead capture must return 200, got ${leadRes.status}`);
     const createdLead = leadRes.data?.lead;
     const leadId = createdLead?.id;
     const leadNumber = createdLead?.lead_number;
+    if (leadId) {
+      syntheticLedger.leads.push({ id: leadId, leadNumber: leadNumber || leadId });
+    }
+
+    assert.strictEqual(leadRes.status, 200, `Inbound lead capture must return 200, got ${leadRes.status}`);
     assert(leadId, 'Lead must have a valid ID');
     assert(leadNumber, 'Lead must have a lead_number');
-
-    syntheticLedger.leads.push({ id: leadId, leadNumber });
 
     const updateRes = await apiRequest(`/api/crm/leads/${leadId}/status`, {
       method: 'POST',
