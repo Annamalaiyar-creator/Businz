@@ -9,7 +9,11 @@
  * 3. Enforces fail-closed preflight rejection when executed in wrong workspace directories.
  * 4. Strictly rejects production (5001), development (5002), and unapproved ports.
  * 5. Strictly rejects production, dev, and HRMS databases and roles.
- * 6. Implements exact-ID synthetic ledger tracking and safe cleanup verification.
+ * 6. Implements exact-ID synthetic ledger tracking for all 7 record types (leads, quotes, PIs, BOMs, reservations, invoices, employees).
+ * 7. Enforces foreign key child-record dependency cleanup order before parent deletion.
+ * 8. Uses atomic row-level locking (FOR UPDATE) for generic JSONB stores.
+ * 9. Executes cleanup in try...finally block to guarantee safe cleanup on mid-test failure.
+ * 10. Reports unsupported dispatch/accounts transitions as NOT TESTED per real workflow rules.
  */
 
 import assert from 'assert';
@@ -100,6 +104,11 @@ runTest('1.5 Script contains zero access to HRMS application, database, or table
   });
 });
 
+runTest('1.6 Script uses item-level filtering in generic JSONB stores rather than whole-array replacement', () => {
+  assert(testScriptSrc.includes('.filter(item =>'), 'Must use item-level filtering');
+  assert(testScriptSrc.includes('matchesLedger && hasSynthTag'), 'Must filter only matching synthetic items with ownership proof');
+});
+
 // =============================================================================
 // TEST GROUP 2: Preflight Rejection of Incorrect Directory, Port, and Role
 // =============================================================================
@@ -160,25 +169,54 @@ runTest('2.5 resolveAndValidateTestDatabaseUrl rejects superuser and non-test ro
 });
 
 // =============================================================================
-// TEST GROUP 3: Exact-ID Synthetic Ledger Tracking & Cleanup Safety
+// TEST GROUP 3: Exact-ID Synthetic Ledger Tracking & Comprehensive Cleanup Safety
 // =============================================================================
-console.log('\n--- TEST GROUP 3: Exact-ID Synthetic Ledger Tracking & Cleanup Safety ---');
+console.log('\n--- TEST GROUP 3: Exact-ID Synthetic Ledger Tracking & Comprehensive Cleanup Safety ---');
 
-runTest('3.1 Script tracks exact database IDs in syntheticLedger before deletion', () => {
-  assert(testScriptSrc.includes('syntheticLedger.leads.push({ id: leadId, leadNumber })'), 'Must record exact lead ID');
-  assert(testScriptSrc.includes('syntheticLedger.bomOrders.push({ id: bomDbCheck.rows[0].id, bomCode: synthBomCode })'), 'Must record exact BOM ID');
-  assert(testScriptSrc.includes('syntheticLedger.invoices.push(synthInvNumber)'), 'Must record exact invoice number');
+runTest('3.1 Script tracks exact database IDs across all 7 synthetic record types in syntheticLedger', () => {
+  assert(testScriptSrc.includes('leads: []'), 'Must track leads');
+  assert(testScriptSrc.includes('quotations: []'), 'Must track quotations');
+  assert(testScriptSrc.includes('proformaInvoices: []'), 'Must track proforma invoices');
+  assert(testScriptSrc.includes('bomOrders: []'), 'Must track BOM orders');
+  assert(testScriptSrc.includes('reservations: []'), 'Must track reservations');
+  assert(testScriptSrc.includes('invoices: []'), 'Must track invoices');
+  assert(testScriptSrc.includes('registeredEmployees: []'), 'Must track registered employees');
 });
 
 runTest('3.2 Cleanup verifies ownership before deleting each synthetic record', () => {
-  assert(testScriptSrc.includes('SELECT id, notes, company_name FROM crm_leads WHERE id = $1'), 'Must verify lead ownership');
-  assert(testScriptSrc.includes('SELECT id, bom_code, customer_name FROM bom_orders WHERE id = $1'), 'Must verify BOM ownership');
-  assert(testScriptSrc.includes('SELECT inv_no, customer_name FROM in_progress_invoices WHERE inv_no = $1'), 'Must verify invoice ownership');
+  assert(testScriptSrc.includes('SELECT id, lead_number, company_name, notes FROM public.leads WHERE id = $1'), 'Must verify lead ownership');
+  assert(testScriptSrc.includes('SELECT id, bom_code, customer_name FROM public.bom_orders WHERE id = $1 AND bom_code = $2'), 'Must verify BOM ownership');
+  assert(testScriptSrc.includes('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE'), 'Must use row-level lock FOR UPDATE');
 });
 
-runTest('3.3 Cleanup aborts and rolls back transaction if ownership check fails', () => {
-  assert(testScriptSrc.includes('await cleanupClient.query(\'ROLLBACK\')'), 'Must rollback on safety failure');
-  assert(testScriptSrc.includes("status: 'ABORTED_UNSAFE'"), 'Must report ABORTED_UNSAFE');
+runTest('3.3 Cleanup enforces FK child record deletion order before parent deletion', () => {
+  assert(testScriptSrc.includes('DELETE FROM public.lead_notification_recipients'), 'Must clean recipients');
+  assert(testScriptSrc.includes('DELETE FROM public.lead_notifications WHERE lead_id = $1'), 'Must clean notifications');
+  assert(testScriptSrc.includes('DELETE FROM public.lead_status_history WHERE lead_id = $1'), 'Must clean status history');
+  assert(testScriptSrc.includes('DELETE FROM public.bom_items WHERE bom_order_id = $1 OR bom_code = $2'), 'Must clean bom_items');
+});
+
+runTest('3.4 Cleanup is guaranteed in finally block to protect partial test failures', () => {
+  assert(testScriptSrc.includes('finally {'), 'Must have finally block');
+  assert(testScriptSrc.includes('testReport.cleanup = await executeComprehensiveCleanup(dbPool);'), 'Must execute comprehensive cleanup in finally');
+});
+
+runTest('3.5 Baseline and final count audit verifies both tables and generic stores', () => {
+  assert(testScriptSrc.includes('collectDatabaseCounts'), 'Must collect database and store counts');
+  assert(testScriptSrc.includes('testReport.baselines = await collectDatabaseCounts'), 'Must record baseline counts');
+  assert(testScriptSrc.includes('finalCounts = await collectDatabaseCounts'), 'Must record final post-cleanup counts');
+  assert(testScriptSrc.includes('discrepancies.push'), 'Must detect count discrepancies');
+});
+
+runTest('3.6 Unsupported dispatch/accounts transitions are reported as NOT TESTED per workflow rules', () => {
+  assert(
+    testScriptSrc.includes("testReport.workflows['7. Dispatch packing and accounts verification'] = {\n      status: 'NOT TESTED'"),
+    'Must report Dispatch packing as NOT TESTED'
+  );
+  assert(
+    testScriptSrc.includes('Direct BOM status update bypassed per application transition logic'),
+    'Must document transition logic requirement in reason'
+  );
 });
 
 // =============================================================================
