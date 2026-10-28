@@ -1719,7 +1719,7 @@ app.use((req, res, next) => {
 });
 
 // 2. Specific PostgREST legacy /rest/v1 write-blocking guard
-app.all('/rest/v1/*', (req, res, next) => {
+app.use('/rest/v1', (req, res, next) => {
   if (isMaintenanceModeActive()) {
     const isReadOnly = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
     if (!isReadOnly) {
