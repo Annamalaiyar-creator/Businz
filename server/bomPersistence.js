@@ -869,7 +869,7 @@ export async function persistBomsTransactionSafe({
       const existingInDbRes = await client.query(`
         SELECT * FROM public.bom_orders 
         WHERE bom_code = $1 OR id = $1 
-           OR ($2::text IS NOT NULL AND source_pi_no = $2)
+           OR ($2::text IS NOT NULL AND LOWER(source_pi_no) = $2)
         FOR UPDATE
       `, [incomingCode || null, incomingPi || null]);
 
@@ -895,7 +895,12 @@ export async function persistBomsTransactionSafe({
 
       // General DB Validation: If PI is already converted to another BOM, reject new conversion (even if cancelled)
       // Client-supplied fields like reuseApproved or releaseState CANNOT bypass this protection
-      if (incomingPi && existingPiBom && (isNew || (incomingCode && !isPlaceholderCode && incomingCode !== existingPiBom.bomCode && incomingCode !== existingPiBom.id))) {
+      const isSameBomRecord = existingPiBom && (
+        (incomingCode && !isPlaceholderCode && (incomingCode === existingPiBom.bomCode || incomingCode === existingPiBom.id)) ||
+        (bom.id && (bom.id === existingPiBom.id || bom.id === existingPiBom.bomCode)) ||
+        codeBelongsToSameRecord
+      );
+      if (incomingPi && existingPiBom && !isSameBomRecord) {
         const activeCode = existingPiBom.bomCode || existingPiBom.id;
         const isCancelled = String(existingPiBom.status || '').toLowerCase().includes('cancel');
         if (isCancelled) {

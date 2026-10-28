@@ -901,6 +901,17 @@ const getDatabaseStore = async (key) => {
   if (cleanKey === 'bom_store' || cleanKey === 'boms' || cleanKey === 'bom_orders') {
     return await loadDatabaseBoms();
   }
+  if (cleanKey === 'leaves') {
+    if (isDbConnected()) {
+      try {
+        const dbRes = await query('SELECT id, employee, reason, status, dates, duration, type FROM public.leaves ORDER BY id DESC LIMIT 50');
+        return dbRes.rows;
+      } catch (err) {
+        console.error('[getDatabaseStore leaves query error]:', err?.message || err);
+      }
+    }
+    return [];
+  }
   // 0. Primary: Check PostgreSQL controlroom_store on Hostinger VPS
   // Protection 1: PostgreSQL is authoritative whenever the store row exists
   if (isDbConnected()) {
@@ -1490,6 +1501,33 @@ const saveDatabaseStore = async (key, storeData) => {
     await saveLocalBoms(storeData);
     return storeData;
   }
+  if (cleanKey === 'leaves') {
+    // Route directly to relational public.leaves table (Phase 9I zero-JSONB-bloat policy)
+    const rows = Array.isArray(storeData) ? storeData : [storeData];
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      const emp = String(row.employee || row.empCode || row.code || '').trim().toUpperCase();
+      if (!emp) continue;
+      const reasonStr = typeof row.reason === 'object' ? JSON.stringify(row.reason) : String(row.reason || '');
+      const status = row.status || 'active';
+      const duration = String(row.duration || '1');
+      const type = row.type || 'Store';
+      const dates = row.dates || new Date().toISOString();
+      const existing = await query('SELECT id FROM public.leaves WHERE employee = $1 ORDER BY id DESC LIMIT 1', [emp]);
+      if (existing.rows.length > 0) {
+        await query(
+          'UPDATE public.leaves SET reason = $1, status = $2, duration = $3, type = $4, dates = $5 WHERE id = $6',
+          [reasonStr, status, duration, type, dates, existing.rows[0].id]
+        );
+      } else {
+        await query(
+          'INSERT INTO public.leaves (employee, reason, status, duration, type, dates) VALUES ($1, $2, $3, $4, $5, $6)',
+          [emp, reasonStr, status, duration, type, dates]
+        );
+      }
+    }
+    return storeData;
+  }
   // 1. Validate input
   if (!key || typeof key !== 'string') {
     throw new Error('[Validation Error] Invalid store key provided to saveDatabaseStore');
@@ -1501,20 +1539,27 @@ const saveDatabaseStore = async (key, storeData) => {
   }
 
   // 3. Persist directly to authoritative PostgreSQL database on VPS first
+  const jsonPayload = JSON.stringify(storeData);
+  if (jsonPayload.length > 250 * 1024 * 1024) {
+    throw new Error(`[Oversized JSONB Payload] Store "${cleanKey}" payload (${(jsonPayload.length / (1024 * 1024)).toFixed(1)} MB) exceeds PostgreSQL JSONB safe limit (250 MB).`);
+  }
+
   try {
     await query(`
       INSERT INTO controlroom_store (key, data, updated_at)
       VALUES ($1, $2, NOW())
       ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
-    `, [cleanKey, JSON.stringify(storeData)]);
+    `, [cleanKey, jsonPayload]);
   } catch (pgErr) {
     console.error(`[saveDatabaseStore PostgreSQL write error for ${cleanKey}]:`, pgErr?.message || pgErr);
     throw pgErr; // Never silently swallow database write errors; propagate to trigger HTTP 500
   }
 
   // 4. Update memory and application cache ONLY after successful PostgreSQL write
-  supabaseMemoryStore[key] = storeData;
   supabaseMemoryStore[cleanKey] = storeData;
+  if (key !== cleanKey && supabaseMemoryStore[key] !== undefined) {
+    delete supabaseMemoryStore[key];
+  }
 
   // 5. Asynchronous, non-blocking JSON backup for local recovery (post-commit)
   setImmediate(() => {
@@ -2994,13 +3039,41 @@ const storeWriteQueues = new Map();
 
 function enqueueStoreOperation(storeKey, opFn) {
   const currentQueue = storeWriteQueues.get(storeKey) || Promise.resolve();
-  const nextQueue = currentQueue.then(opFn, opFn);
+  const execute = async () => {
+    try {
+      await currentQueue;
+    } catch (_) {}
+    return await opFn();
+  };
+  const nextQueue = execute();
   storeWriteQueues.set(storeKey, nextQueue);
+  nextQueue.finally(() => {
+    if (storeWriteQueues.get(storeKey) === nextQueue) {
+      storeWriteQueues.delete(storeKey);
+    }
+  });
   return nextQueue;
 }
 
 app.post('/api/store/:key', async (req, res) => {
   const { key } = req.params;
+  const cleanKey = String(key || '').trim().toLowerCase();
+
+  // 1. Validate store key
+  if (!cleanKey || cleanKey.includes('..') || cleanKey.includes('/') || cleanKey.length > 64) {
+    return res.status(400).json({ success: false, error: '[Validation Error] Invalid store key.' });
+  }
+
+  // 2. Reject oversized requests safely before expensive merging or serialization (Phase 9I)
+  const MAX_STORE_PAYLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
+  const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+  if (contentLength > MAX_STORE_PAYLOAD_BYTES) {
+    return res.status(413).json({
+      success: false,
+      error: `[Payload Too Large] Payload size exceeds 15 MB store limit. Document attachments must use media storage.`
+    });
+  }
+
   const rawBody = req.body;
   const storeData = (key === 'notifications_store' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) && rawBody.data !== undefined)
     ? rawBody.data
@@ -3017,6 +3090,41 @@ app.post('/api/store/:key', async (req, res) => {
         error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
       });
     }
+  }
+
+  // Dedicated relational leaves handler to eliminate JSONB bloat
+  if (cleanKey === 'leaves') {
+    return enqueueStoreOperation('leaves', async () => {
+      try {
+        const rows = Array.isArray(storeData) ? storeData : [storeData];
+        for (const row of rows) {
+          if (!row || typeof row !== 'object') continue;
+          const emp = String(row.employee || row.empCode || row.code || '').trim().toUpperCase();
+          if (!emp) continue;
+          const reasonStr = typeof row.reason === 'object' ? JSON.stringify(row.reason) : String(row.reason || '');
+          const status = row.status || 'active';
+          const duration = String(row.duration || '1');
+          const type = row.type || 'Store';
+          const dates = row.dates || new Date().toISOString();
+
+          const existing = await query('SELECT id FROM public.leaves WHERE employee = $1 ORDER BY id DESC LIMIT 1', [emp]);
+          if (existing.rows.length > 0) {
+            await query(
+              'UPDATE public.leaves SET reason = $1, status = $2, duration = $3, type = $4, dates = $5 WHERE id = $6',
+              [reasonStr, status, duration, type, dates, existing.rows[0].id]
+            );
+          } else {
+            await query(
+              'INSERT INTO public.leaves (employee, reason, status, duration, type, dates) VALUES ($1, $2, $3, $4, $5, $6)',
+              [emp, reasonStr, status, duration, type, dates]
+            );
+          }
+        }
+        return res.json({ success: true, count: rows.length, data: rows.slice(0, 50) });
+      } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+    });
   }
 
   return enqueueStoreOperation(key, async () => {
@@ -3145,11 +3253,9 @@ app.post('/api/store/:key', async (req, res) => {
               };
               if (k1) poMap.set(k1, merged);
               if (k2) poMap.set(k2, merged);
-              if (k3) poMap.set(k3, merged);
             } else {
               if (k1) poMap.set(k1, item);
               if (k2) poMap.set(k2, item);
-              if (k3) poMap.set(k3, item);
             }
           });
           finalDataToSave = Array.from(new Set(poMap.values()));
@@ -3159,7 +3265,7 @@ app.post('/api/store/:key', async (req, res) => {
             if (key === 'invoice_store') {
               return item.invNo || item.invoiceNo || item.invoiceNumber || item.id || item.code || item.bomCode || item.poNo;
             }
-            return item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.id || item.poNo || item.invNo || item.grnNo || item.vendorCode || item.email || item.name;
+            return item.employee || item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.id || item.poNo || item.invNo || item.grnNo || item.vendorCode || item.email || item.name;
           };
 
           const map = new Map();
@@ -3189,7 +3295,7 @@ app.post('/api/store/:key', async (req, res) => {
       const list = Array.isArray(currentData) ? [...currentData] : (currentData && typeof currentData === 'object' && Object.keys(currentData).length > 0 ? [currentData] : []);
       const getId = (item) => {
         if (!item || typeof item !== 'object') return null;
-        return item.invNo || item.invoiceNo || item.invoiceNumber || item.id || item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.poNo || item.grnNo || item.vendorCode || item.email || item.name;
+        return item.employee || item.invNo || item.invoiceNo || item.invoiceNumber || item.id || item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.poNo || item.grnNo || item.vendorCode || item.email || item.name;
       };
       const singleId = getId(storeData);
       const existingIdx = singleId ? list.findIndex(it => getId(it) === singleId) : -1;
@@ -3230,7 +3336,15 @@ app.post('/api/store/:key', async (req, res) => {
         data: returnedSlice
       });
     }
-    res.json({ success: true, count: Array.isArray(finalDataToSave) ? finalDataToSave.length : 1, data: finalDataToSave });
+    const returnedData = Array.isArray(finalDataToSave)
+      ? (finalDataToSave.length <= 50 ? finalDataToSave : finalDataToSave.slice(0, 50))
+      : finalDataToSave;
+    return res.json({
+      success: true,
+      count: Array.isArray(storeData) ? storeData.length : 1,
+      total: Array.isArray(finalDataToSave) ? finalDataToSave.length : 1,
+      data: returnedData
+    });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message, message: err.message });
     }

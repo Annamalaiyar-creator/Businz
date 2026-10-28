@@ -1240,6 +1240,89 @@ try {
     );
   });
 
+  // =========================================================================
+  // TEST GROUP 10: Memory Leak & Oversized JSONB Persistence Safeguards (Phase 9I)
+  // =========================================================================
+  console.log('\n--- TEST GROUP 10: Memory Leak & Oversized JSONB Persistence Safeguards (Phase 9I) ---');
+
+  runTest('enqueueStoreOperation cleans up settled queues to prevent promise closure memory leaks', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes('storeWriteQueues.set(storeKey, nextQueue)') &&
+      serverIndexSrc.includes('nextQueue.finally(') &&
+      serverIndexSrc.includes('storeWriteQueues.delete(storeKey)'),
+      'enqueueStoreOperation must delete settled queue from storeWriteQueues to allow GC reclamation'
+    );
+  });
+
+  runTest('POST /api/store/:key enforces strict payload size limit (15 MB) to block oversized JSONB attacks', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes('MAX_STORE_PAYLOAD_BYTES = 15 * 1024 * 1024') &&
+      serverIndexSrc.includes("res.status(413)"),
+      'server/index.js must reject store payloads exceeding 15 MB with HTTP 413'
+    );
+  });
+
+  runTest('POST /api/store/leaves routes to relational public.leaves instead of bloating controlroom_store JSONB', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes("cleanKey === 'leaves'") &&
+      serverIndexSrc.includes('FROM public.leaves WHERE employee = $1') &&
+      serverIndexSrc.includes('INSERT INTO public.leaves'),
+      'server/index.js leaves store updates must persist to public.leaves relational table'
+    );
+  });
+
+  runTest('saveDatabaseStore enforces 250 MB safety ceiling before PostgreSQL JSONB insertion', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes('250 * 1024 * 1024') &&
+      serverIndexSrc.includes('exceeds PostgreSQL JSONB safe limit (250 MB)'),
+      'saveDatabaseStore must assert payload size <= 250 MB before calling PostgreSQL query'
+    );
+  });
+
+  runTest('POST /api/store/:key returns bounded response to prevent Express/V8 heap exhaustion', () => {
+    const serverIndexSrc = fs.readFileSync(path.resolve(__dirname, '../server/index.js'), 'utf8');
+    assert(
+      serverIndexSrc.includes('finalDataToSave.length <= 50 ? finalDataToSave : finalDataToSave.slice(0, 50)'),
+      'POST /api/store/:key must return bounded data slice (max 50) rather than whole-collection payload'
+    );
+  });
+
+  runTest('BOM source-PI validation allows self-updates without throwing false association conflicts', () => {
+    const bomPersistSrc = fs.readFileSync(path.resolve(__dirname, '../server/bomPersistence.js'), 'utf8');
+    assert(
+      bomPersistSrc.includes('const isSameBomRecord = existingPiBom &&') &&
+      bomPersistSrc.includes('if (incomingPi && existingPiBom && !isSameBomRecord)'),
+      'server/bomPersistence.js must not throw PI association conflict when updating the same BOM record'
+    );
+    assert(
+      bomPersistSrc.includes('LOWER(source_pi_no) = $2'),
+      'server/bomPersistence.js must perform case-insensitive source_pi_no comparison in DB lookup'
+    );
+  });
+
+  runTest('src/utils/supabaseDataSync.js eliminates legacy leaves table writes in saveCloudStoreImmediate', () => {
+    const dataSyncSrc = fs.readFileSync(path.resolve(__dirname, '../src/utils/supabaseDataSync.js'), 'utf8');
+    assert(
+      !dataSyncSrc.includes("supabase\n      .from('leaves')\n      .select('id')\n      .eq('employee', employeeKey)") &&
+      !dataSyncSrc.includes("await supabase.from('leaves').update(payload)"),
+      'src/utils/supabaseDataSync.js must not execute legacy leaves table writes in saveCloudStoreImmediate'
+    );
+  });
+
+  runTest('src/utils/supabaseDataSync.js evaluates isIsolatedNodeTestMode to protect Node.js tests', () => {
+    const dataSyncSrc = fs.readFileSync(path.resolve(__dirname, '../src/utils/supabaseDataSync.js'), 'utf8');
+    assert(
+      dataSyncSrc.includes('export function isIsolatedNodeTestMode()') &&
+      dataSyncSrc.includes("typeof window === 'undefined'") &&
+      dataSyncSrc.includes('process.env.BUSINZ_OPTIMIZATION_TEST_MODE'),
+      'isIsolatedNodeTestMode must evaluate strictly for window-free Node execution with test mode active'
+    );
+  });
+
 } finally {
   resetEnv();
 }
