@@ -13,7 +13,10 @@
  * 9. 401 Unauthorized when no session provided for POST /api/store/notifications_store
  */
 
-const BASE_URL = 'http://localhost:5001';
+import { resolveAndValidateTestApiUrl } from './testEnvironmentGuard.js';
+
+// Resolve explicit test API URL (Fails closed if missing, or if targeting 5001/5002)
+const BASE_URL = resolveAndValidateTestApiUrl();
 
 async function registerSession(session) {
   const res = await fetch(`${BASE_URL}/api/sessions/register`, {

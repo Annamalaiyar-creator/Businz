@@ -20,6 +20,7 @@ import assert from 'assert';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { resolveAndValidateTestApiUrl, resolveAndValidateTestDatabaseUrl } from './testEnvironmentGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,11 +28,13 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const BASE_URL = 'http://127.0.0.1:5001';
+// Enforce fail-closed test environment validation
+const BASE_URL = resolveAndValidateTestApiUrl();
 const TEST_SESSION_ID = `SES_TEST_AUDIT_PHASE4_${Date.now()}`;
+const testDbUrl = resolveAndValidateTestDatabaseUrl();
 
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/businz_dev',
+  connectionString: testDbUrl,
   max: 5
 });
 

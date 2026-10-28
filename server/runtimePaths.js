@@ -17,6 +17,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  isOptimizationTestMode,
+  validateStorageConfigForTestMode
+} from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,12 +107,18 @@ export function isMaintenanceModeActive() {
  * Resolves the root data directory.
  */
 export function getDataDir() {
+  if (isOptimizationTestMode()) {
+    validateStorageConfigForTestMode();
+  }
   if (isExternalStorageActive()) {
     const p = path.resolve(process.env.BUSINZ_DATA_DIR.trim());
     if (!fs.existsSync(p)) {
       try { fs.mkdirSync(p, { recursive: true }); } catch {}
     }
     return p;
+  }
+  if (isOptimizationTestMode()) {
+    throw new Error('[TEST-MODE-FAIL-CLOSED] Optimization test mode requires dedicated BUSINZ_DATA_DIR.');
   }
   return __dirname;
 }
@@ -207,6 +217,12 @@ export function getWaSessionsDir() {
  *   - NEVER overwrites an existing external store file.
  */
 export function getStoreFilePath(filename) {
+  if (isOptimizationTestMode()) {
+    validateStorageConfigForTestMode();
+    const dataDir = getDataDir();
+    return path.join(dataDir, filename);
+  }
+
   if (isExternalStorageActive()) {
     const dataDir = getDataDir();
     const targetPath = path.join(dataDir, filename);
@@ -269,7 +285,14 @@ function copyDirRecursiveNonDestructive(src, dest) {
  * Initializes external storage and auto-seeds all stores & attachments safely.
  */
 export function initRuntimeStorage() {
+  if (isOptimizationTestMode()) {
+    validateStorageConfigForTestMode();
+  }
+
   if (!isExternalStorageActive()) {
+    if (isOptimizationTestMode()) {
+      throw new Error('[TEST-MODE-FAIL-CLOSED] Optimization test mode requires external isolated storage.');
+    }
     return {
       active: false,
       mode: 'in-tree',

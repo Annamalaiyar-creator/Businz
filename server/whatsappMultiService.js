@@ -11,6 +11,7 @@ import makeWASocket, {
 import pino from 'pino';
 import QRCode from 'qrcode';
 import { getWaSessionsDir, isMaintenanceModeActive } from './runtimePaths.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -259,6 +260,30 @@ export function getAllUserSessions() {
  */
 export async function initUserSession(rawUserId, options = {}) {
   const userId = sanitizeUserId(rawUserId);
+
+  if (isOptimizationTestMode()) {
+    console.log(`🛡️ [WhatsApp MultiService] Test mode active: socket creation disabled for ${userId}. Returning mock session.`);
+    const mockSession = {
+      userId,
+      sock: null,
+      status: 'MOCK_TEST_MODE',
+      qrCode: null,
+      phoneNumber: '919999999999',
+      userName: 'Test User',
+      chats: new Map(),
+      contacts: new Map()
+    };
+    activeSessions.set(userId, mockSession);
+    return {
+      userId,
+      status: 'MOCK_TEST_MODE',
+      phoneNumber: '919999999999',
+      userName: 'Test User',
+      qrCode: null,
+      hasSavedCredentials: false
+    };
+  }
+
   const { onMessageReceived, onStatusChange, onChatsUpdated } = options;
 
   const sessionDir = path.join(SESSIONS_BASE_DIR, `user_${userId}`);
@@ -631,6 +656,18 @@ export async function initUserSession(rawUserId, options = {}) {
  */
 export async function sendUserWhatsAppMessage(rawUserId, { to, text = '', document = null, fileName = 'Document.pdf', mimetype = 'application/pdf', caption = '' }) {
   const userId = sanitizeUserId(rawUserId);
+
+  if (isOptimizationTestMode()) {
+    console.log(`🛡️ [WhatsApp MultiService] Test mode active: outbound message to ${to} blocked/mocked.`);
+    return {
+      success: true,
+      messageId: `MOCK_TEST_MSG_${Date.now()}`,
+      status: 'MOCK_SENT',
+      testMode: true,
+      recipient: to
+    };
+  }
+
   const session = activeSessions.get(userId);
 
   if (!session || session.status !== 'CONNECTED' || !session.sock) {
@@ -786,6 +823,10 @@ export async function logoutUserSession(rawUserId) {
  * Auto-restore all saved sessions on server startup
  */
 export async function autoRestoreAllSavedSessions(options = {}) {
+  if (isOptimizationTestMode()) {
+    console.log('🛡️ [WhatsApp MultiService] Test mode active: auto-restoration of WhatsApp sessions is disabled.');
+    return;
+  }
   if (!fs.existsSync(SESSIONS_BASE_DIR)) return;
 
   const entries = fs.readdirSync(SESSIONS_BASE_DIR, { withFileTypes: true });

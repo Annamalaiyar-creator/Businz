@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { query, isDbConnected } from './db.js';
 import { getStoreFilePath } from './runtimePaths.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -298,6 +299,18 @@ export function getZohoAccessToken(forceRefresh = false) {
  * Standardized HTTP caller for Zoho Books with automatic 401 retry and 429 backoff handling.
  */
 export async function zohoRequest(requestOptions, postPayload = null, retryCount = 0) {
+  if (isOptimizationTestMode()) {
+    console.log('🛡️ [Zoho Auth Service] Test mode active: external zohoRequest mocked.');
+    return {
+      code: 0,
+      message: 'Mocked Zoho Books API response in test mode',
+      testMode: true,
+      contacts: [],
+      items: [],
+      estimates: []
+    };
+  }
+
   stats.apiRequestsCount++;
   const token = await getZohoAccessToken();
   const creds = getCredentials();
@@ -418,6 +431,16 @@ export async function zohoRequest(requestOptions, postPayload = null, retryCount
  * Tests connection to Zoho Books OAuth & API using provided custom creds or currently saved creds.
  */
 export async function testZohoConnection(customCreds = null) {
+  if (isOptimizationTestMode()) {
+    return {
+      success: true,
+      testMode: true,
+      message: 'Mocked Zoho connection in test mode',
+      organizationName: 'BUSINZ Test Org',
+      connected: true
+    };
+  }
+
   const creds = customCreds ? {
     orgId: String(customCreds.orgId || '').trim(),
     clientId: String(customCreds.clientId || '').trim(),
@@ -600,6 +623,15 @@ export function getZohoAuthStats() {
  * Exchanges a temporary grant token (authorization code from Self Client) for a permanent Refresh Token.
  */
 export async function exchangeAuthorizationCode({ code, clientId, clientSecret, orgId, apiDomain, accountsDomain, companyName }) {
+  if (isOptimizationTestMode()) {
+    return {
+      success: true,
+      testMode: true,
+      message: 'Mocked Zoho authorization code exchange in test mode',
+      accessToken: 'MOCK_TEST_ACCESS_TOKEN'
+    };
+  }
+
   const cId = (clientId || activeConfig.clientId || '').trim();
   const cSec = (clientSecret || activeConfig.clientSecret || '').trim();
   const oId = (orgId || activeConfig.orgId || '').trim();

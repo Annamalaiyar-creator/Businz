@@ -9,6 +9,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { getStoreFilePath } from './runtimePaths.js';
+import {
+  isOptimizationTestMode,
+  validateDatabaseConfigForTestMode,
+  REQUIRED_TEST_DATABASE
+} from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,20 +24,31 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
+// Resolve default database name - strictly require dedicated test DB in test mode
+let defaultDbName = 'businz';
+if (isOptimizationTestMode()) {
+  defaultDbName = (process.env.BUSINZ_TEST_DATABASE || process.env.PGDATABASE || '').trim();
+}
+
 // PostgreSQL connection config for Hostinger VPS (Self-hosted)
 const connectionString = process.env.DATABASE_URL || 
   process.env.PG_CONNECTION_STRING || 
-  `postgres://${process.env.PGUSER || 'postgres'}:${encodeURIComponent(process.env.PGPASSWORD || 'postgres')}@${process.env.PGHOST || '127.0.0.1'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'businz'}`;
+  (defaultDbName ? `postgres://${process.env.PGUSER || 'postgres'}:${encodeURIComponent(process.env.PGPASSWORD || 'postgres')}@${process.env.PGHOST || '127.0.0.1'}:${process.env.PGPORT || 5432}/${defaultDbName}` : '');
+
+// Fail closed immediately before creating pool if optimization test mode is active and database is unverified or forbidden
+if (isOptimizationTestMode()) {
+  validateDatabaseConfigForTestMode(connectionString);
+}
 
 export const pool = new Pool({
-  connectionString,
+  connectionString: connectionString || undefined,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
   ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false
 });
 
-let isConnected = true;
+let isConnected = false;
 
 pool.on('connect', () => {
   isConnected = true;
@@ -61,7 +77,55 @@ export async function query(text, params) {
 }
 
 export function isDbConnected() {
-  return isConnected || (pool && !pool.ending && !pool.ended);
+  return Boolean(isConnected && pool && !pool.ending && !pool.ended);
+}
+
+/**
+ * Verifies database connectivity using an actual bounded PostgreSQL query (SELECT 1).
+ * Updates internal connection state and returns genuine health status.
+ *
+ * @param {number} timeoutMs Maximum time to wait for database response (default: 3000ms)
+ * @returns {Promise<{ ok: boolean, latencyMs?: number, database?: string, error?: string }>}
+ */
+export async function verifyDbConnectivity(timeoutMs = 3000) {
+  if (!pool || pool.ending || pool.ended) {
+    isConnected = false;
+    return { ok: false, error: 'Database pool is not active or has ended' };
+  }
+
+  const start = Date.now();
+  let client = null;
+  let timer = null;
+
+  try {
+    const clientPromise = pool.connect();
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Database connectivity check timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+
+    client = await Promise.race([clientPromise, timeoutPromise]);
+    clearTimeout(timer);
+
+    const res = await client.query('SELECT current_database() as db_name, 1 as health_check;');
+    isConnected = true;
+    const latencyMs = Date.now() - start;
+    return {
+      ok: true,
+      latencyMs,
+      database: res.rows[0]?.db_name || 'unknown'
+    };
+  } catch (err) {
+    isConnected = false;
+    return {
+      ok: false,
+      error: err.message || String(err)
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (client) {
+      try { client.release(); } catch (_) {}
+    }
+  }
 }
 
 /**

@@ -1,5 +1,6 @@
 import http from 'http';
 import { URL } from 'url';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 /**
  * Tally Prime Automated Service Bridge (HTTP Port 9000)
@@ -64,6 +65,15 @@ export function sendTallyRequest(xmlPayload, tallyUrl = DEFAULT_TALLY_URL, timeo
  * Also retrieves the list of open companies
  */
 export async function checkTallyStatus(tallyUrl = DEFAULT_TALLY_URL) {
+  if (isOptimizationTestMode()) {
+    return {
+      online: false,
+      message: 'Tally integration disabled in optimization test mode',
+      testMode: true,
+      companies: []
+    };
+  }
+
   const checkXml = `
 <ENVELOPE>
   <HEADER>
@@ -119,6 +129,14 @@ export async function checkTallyStatus(tallyUrl = DEFAULT_TALLY_URL) {
  * Request live Profit & Loss data from Tally Prime
  */
 export async function fetchTallyPnl(tallyUrl = DEFAULT_TALLY_URL, companyName = '', fromDate = '', toDate = '') {
+  if (isOptimizationTestMode()) {
+    return {
+      success: false,
+      message: 'Tally integration disabled in optimization test mode',
+      testMode: true
+    };
+  }
+
   const pnlXml = `
 <ENVELOPE>
   <HEADER>
@@ -194,6 +212,17 @@ export async function fetchTallyPnl(tallyUrl = DEFAULT_TALLY_URL, companyName = 
  * Direct voucher synchronization (No XML file download needed)
  */
 export async function pushDirectVoucher(xmlPayload, tallyUrl = DEFAULT_TALLY_URL) {
+  if (isOptimizationTestMode()) {
+    return {
+      success: true,
+      created: 1,
+      altered: 0,
+      errors: 0,
+      testMode: true,
+      message: 'Mocked Tally voucher push in test mode'
+    };
+  }
+
   try {
     const resp = await sendTallyRequest(xmlPayload, tallyUrl, 10000);
     const body = resp.body || '';

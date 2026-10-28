@@ -1,3 +1,5 @@
+import './optimizationTestGuard.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -8,7 +10,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import { pool, isDbConnected, initPostgresDatabase, createLocalDbClient, query } from './db.js';
+import { pool, isDbConnected, initPostgresDatabase, createLocalDbClient, query, verifyDbConnectivity } from './db.js';
 import {
   persistBomsTransactionSafe,
   toDatabaseBomRowServer,
@@ -154,9 +156,13 @@ initPostgresDatabase().then(() => {
   loadDatabaseBoms(true).then(list => {
     console.log(`✅ [Database BOMs] Pre-warmed ${list?.length || 0} authoritative BOM orders.`);
   }).catch(err => console.warn('[BOMs Init Notice]:', err.message));
-  setTimeout(() => {
-    syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
-  }, 2000);
+  if (!isOptimizationTestMode()) {
+    setTimeout(() => {
+      syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
+    }, 2000);
+  } else {
+    console.log('🛡️ [BOM Startup Sync] Test mode active: automatic relational BOM sync disabled.');
+  }
 }).catch(err => {
   console.warn('[PostgreSQL Init Notice]:', err.message);
 });
@@ -2430,17 +2436,26 @@ const saveLocalGRNs = (grns) => {
 // Health & PostgreSQL Database Status Check
 app.get('/api/db-status', async (req, res) => {
   try {
-    const isConn = isDbConnected();
+    const health = await verifyDbConnectivity(3000);
+    if (!health.ok) {
+      return res.status(503).json({
+        status: 'error',
+        connected: false,
+        message: health.error,
+        isPoolActive: isDbConnected()
+      });
+    }
     const result = await query('SELECT current_database(), current_user, version(), NOW() as server_time;');
     const storeCount = await query('SELECT count(*) as total_tables FROM public.controlroom_store;');
     res.json({
       status: 'online',
       connected: true,
-      database: result.rows[0]?.current_database || 'unknown',
+      database: result.rows[0]?.current_database || health.database || 'unknown',
       user: result.rows[0]?.current_user || 'unknown',
       serverTime: result.rows[0]?.server_time,
       storeTablesCount: Number(storeCount.rows[0]?.total_tables || 0),
-      isPoolActive: isConn
+      isPoolActive: isDbConnected(),
+      latencyMs: health.latencyMs
     });
   } catch (err) {
     res.status(500).json({
@@ -9027,17 +9042,25 @@ app.get('/api/integrations/indiamart/logs', async (req, res) => {
 });
 
 // Automatic 24h & 48h Inactivity Background Checker (Runs 5s after startup and 5m after each completion)
-setTimeout(async () => {
-  try {
-    if (isMaintenanceModeActive()) return;
-    await checkAndProcessLeadInactivity({ source: 'startup' });
-  } catch (err) {
-    console.warn('[Initial Lead Inactivity Check Error]:', err.message);
-  }
-}, 5000);
+if (!isOptimizationTestMode()) {
+  setTimeout(async () => {
+    try {
+      if (isMaintenanceModeActive()) return;
+      await checkAndProcessLeadInactivity({ source: 'startup' });
+    } catch (err) {
+      console.warn('[Initial Lead Inactivity Check Error]:', err.message);
+    }
+  }, 5000);
+} else {
+  console.log('🛡️ [Startup Lead Inactivity] Test mode active: initial inactivity check disabled.');
+}
 
 let inactivityTimer = null;
 function scheduleNextInactivityCheck() {
+  if (isOptimizationTestMode()) {
+    console.log('🛡️ [Lead Inactivity Scheduler] Test mode active: background scheduling disabled.');
+    return;
+  }
   inactivityTimer = setTimeout(async () => {
     try {
       if (!isMaintenanceModeActive()) {
@@ -9079,11 +9102,13 @@ app.post('/api/crm/leads/check-inactivity', async (req, res) => {
 });
 
 // Periodic lightweight memory diagnostic logger (Runs every 15 minutes)
-setInterval(() => {
-  try {
-    logMemoryDiagnostic('PERIODIC');
-  } catch (_) {}
-}, 15 * 60 * 1000);
+if (!isOptimizationTestMode()) {
+  setInterval(() => {
+    try {
+      logMemoryDiagnostic('PERIODIC');
+    } catch (_) {}
+  }, 15 * 60 * 1000);
+}
 
 // Authenticated memory and background job diagnostics endpoint
 app.get('/api/system/diagnostics/memory', async (req, res) => {
@@ -9188,22 +9213,24 @@ app.post('/api/system/backup/restore', async (req, res) => {
 });
 
 // 6. Automated periodic backup (every 24 hours)
-setInterval(async () => {
-  try {
-    if (isMaintenanceModeActive()) {
-      console.log('[Automated Backup] Maintenance mode active; skipping 24h scheduled snapshot.');
-      return;
+if (!isOptimizationTestMode()) {
+  setInterval(async () => {
+    try {
+      if (isMaintenanceModeActive()) {
+        console.log('[Automated Backup] Maintenance mode active; skipping 24h scheduled snapshot.');
+        return;
+      }
+      console.log('[Automated Backup] Running 24-hour scheduled snapshot...');
+      await createFullBackup({
+        supabaseClient: supabase,
+        memoryStore: supabaseMemoryStore,
+        triggeredBy: 'Automated 24h Scheduler'
+      });
+    } catch (e) {
+      console.warn('[Automated Backup Error]:', e.message);
     }
-    console.log('[Automated Backup] Running 24-hour scheduled snapshot...');
-    await createFullBackup({
-      supabaseClient: supabase,
-      memoryStore: supabaseMemoryStore,
-      triggeredBy: 'Automated 24h Scheduler'
-    });
-  } catch (e) {
-    console.warn('[Automated Backup Error]:', e.message);
-  }
-}, 24 * 60 * 60 * 1000);
+  }, 24 * 60 * 60 * 1000);
+}
 
 // 🌐 SERVE PRODUCTION DIST (FOR PLESK & STANDALONE HOSTING)
 const distPath = fs.existsSync(path.resolve(__dirname, '../dist'))
@@ -9232,17 +9259,21 @@ app.supabaseMemoryStore = supabaseMemoryStore;
 
 app.listen(PORT, () => {
   console.log(`BUSINZ Native Server running on port ${PORT}`);
-  autoRestoreAllSavedSessions({
-    onMessageReceived: (msgData) => {
-      broadcastRealtimeEvent('whatsapp_message', msgData);
-    },
-    onStatusChange: (statusData) => {
-      broadcastRealtimeEvent('whatsapp_session_update', statusData);
-    },
-    onChatsUpdated: (chatsList) => {
-      broadcastRealtimeEvent('whatsapp_chats_updated', { count: chatsList.length, chats: chatsList });
-    }
-  }).catch(() => {});
+  if (!isOptimizationTestMode()) {
+    autoRestoreAllSavedSessions({
+      onMessageReceived: (msgData) => {
+        broadcastRealtimeEvent('whatsapp_message', msgData);
+      },
+      onStatusChange: (statusData) => {
+        broadcastRealtimeEvent('whatsapp_session_update', statusData);
+      },
+      onChatsUpdated: (chatsList) => {
+        broadcastRealtimeEvent('whatsapp_chats_updated', { count: chatsList.length, chats: chatsList });
+      }
+    }).catch(() => {});
+  } else {
+    console.log('🛡️ [Server Startup] Optimization test mode: WhatsApp auto-restoration disabled.');
+  }
 });
 
 export default app;

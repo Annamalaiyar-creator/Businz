@@ -13,8 +13,10 @@
 
 import http from 'http';
 import assert from 'assert';
+import { resolveAndValidateTestApiUrl } from './testEnvironmentGuard.js';
 
-const SERVER_BASE = 'http://127.0.0.1:5001';
+// Resolve explicit test API URL (Fails closed if missing, or if targeting 5001/5002)
+const SERVER_BASE = resolveAndValidateTestApiUrl();
 
 function createSseClient(name, options = {}) {
   const { lastEventId, queryParam } = options;

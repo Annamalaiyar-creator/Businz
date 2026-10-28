@@ -1,5 +1,6 @@
 import { dbQuery, withTransaction, createLeadNotification } from './leadManagementService.js';
 import { encryptApiKey, decryptApiKey } from './indiaMartCrypto.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const INDIAMART_CRM_API_BASE = 'https://mapi.indiamart.com/wservce/crm/crmListing/v2/';
 
@@ -109,6 +110,15 @@ async function getDecryptedCredentials() {
  * Test IndiaMART Connection
  */
 export async function testIndiaMartConnection() {
+  if (isOptimizationTestMode()) {
+    console.log('🛡️ [IndiaMART Service] Test mode active: external connection test mocked.');
+    return {
+      success: true,
+      testMode: true,
+      message: 'Mocked IndiaMART connection test in test mode'
+    };
+  }
+
   const creds = await getDecryptedCredentials();
   if (!creds || !creds.apiKey || !creds.mobile) {
     return {
@@ -193,6 +203,17 @@ export async function testIndiaMartConnection() {
  * Idempotently imports new leads into public.leads with source = 'IndiaMART'
  */
 export async function syncIndiaMartLeads(syncType = 'MANUAL') {
+  if (isOptimizationTestMode()) {
+    console.log('🛡️ [IndiaMART Service] Test mode active: external lead sync mocked.');
+    return {
+      success: true,
+      recordsImported: 0,
+      duplicatesSkipped: 0,
+      testMode: true,
+      message: 'IndiaMART sync bypassed in test mode'
+    };
+  }
+
   const logId = `IMLOG-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
   const creds = await getDecryptedCredentials();
 

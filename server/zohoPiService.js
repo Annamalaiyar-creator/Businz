@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { zohoRequest } from './zohoAuthService.js';
 import { query, isDbConnected } from './db.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -302,6 +303,17 @@ function determineIsIntraState(piData) {
  * Push a single Proforma Invoice to Zoho Books as an Estimate / Quote.
  */
 export async function pushPiToZoho(piData) {
+  if (isOptimizationTestMode()) {
+    console.log(`🛡️ [Zoho PI Service] Test mode active: pushPiToZoho mocked for ${piData?.piNo}.`);
+    return {
+      success: true,
+      testMode: true,
+      estimateId: `MOCK_ESTIMATE_${Date.now()}`,
+      estimateNumber: `EST-${piData?.piNo || 'MOCK'}`,
+      message: 'Mocked Zoho Books estimate push in test mode'
+    };
+  }
+
   if (!piData || !piData.piNo) {
     throw new Error('Valid PI record with piNo is required.');
   }

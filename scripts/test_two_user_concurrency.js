@@ -22,6 +22,10 @@ if (!globalThis.window) {
 import assert from 'assert';
 import http from 'http';
 import { centralInventoryStore } from '../src/utils/centralInventoryStore.js';
+import { resolveAndValidateTestApiUrl } from './testEnvironmentGuard.js';
+
+// Resolve explicit test API URL (Fails closed if missing, or if targeting 5001/5002)
+const BASE_URL = resolveAndValidateTestApiUrl();
 
 console.log('===============================================================');
 console.log('🧪 TWO-USER INVENTORY CONCURRENCY & SSE SYNCHRONIZATION TEST');
@@ -47,7 +51,7 @@ async function runConcurrencyTest() {
 
   // 2. Setup SSE connection to verify real-time event reception
   let receivedEvents = [];
-  const sseReq = http.request('http://127.0.0.1:5001/api/realtime-events', (res) => {
+  const sseReq = http.request(`${BASE_URL}/api/realtime-events`, (res) => {
     res.on('data', chunk => {
       const text = chunk.toString();
       if (text.includes('data:')) {
