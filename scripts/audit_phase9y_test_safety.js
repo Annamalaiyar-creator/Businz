@@ -811,22 +811,24 @@ runTest('8.24 Recovery script enforces fail-closed workspace and database isolat
 
 runTest('8.25 PostgreSQL 18-compatible index metadata inspection', () => {
   // Must avoid int2vector array_position() incompatibility in PostgreSQL 18.6
-  assert(!migrationSrc.includes('array_position(i.indkey'), 'Must not call array_position on int2vector');
   assert(!migrationSrc.includes('array_position('), 'Must not use array_position anywhere in migration');
+  assert(!migrationSrc.includes('split_part'), 'Must not use split_part anywhere in migration');
 
-  // Must use PostgreSQL 18-compatible column extraction via split_part on indkey::text
-  assert(migrationSrc.includes("split_part(i.indkey::text, ' ', 1)::smallint"), 'Must use split_part for column 1 extraction');
-  assert(migrationSrc.includes("split_part(i.indkey::text, ' ', 2)::smallint"), 'Must use split_part for column 2 extraction');
+  // Must use PostgreSQL 18.6 verified pg_get_indexdef column extraction
+  assert(migrationSrc.includes('pg_get_indexdef(i.indexrelid, k, TRUE)'), 'Must use pg_get_indexdef for column extraction');
+  assert(migrationSrc.includes('generate_series(1, i.indnkeyatts)'), 'Must use generate_series(1, i.indnkeyatts)');
 
   // Must verify total and key attributes (PostgreSQL 11+ / 18.6 compatible)
   assert(migrationSrc.includes('v_natts <> 2 OR v_nkeyatts <> 2'), 'Must verify total and key attributes in step 1');
   assert(migrationSrc.includes('i.indnatts = 2\n    AND i.indnkeyatts = 2'), 'Must verify total and key attributes in step 2');
+
+  // Must enable ON_ERROR_STOP in psql
+  assert(migrationSrc.includes('\\set ON_ERROR_STOP on'), 'Must enable ON_ERROR_STOP for psql autocommit mode');
 });
 
 runTest('8.26 Exact key-column matching in required order (notification_id, recipient_user_id)', () => {
   assert(migrationSrc.includes("v_cols <> ARRAY['notification_id', 'recipient_user_id']"), 'Step 1 must fail closed on column mismatch');
-  assert(migrationSrc.includes("= 'notification_id'"), 'Step 2 must verify first column is notification_id');
-  assert(migrationSrc.includes("= 'recipient_user_id'"), 'Step 2 must verify second column is recipient_user_id');
+  assert(migrationSrc.includes("ARRAY['notification_id', 'recipient_user_id']"), 'Step 2 must verify matching columns in order');
   assert(migrationSrc.includes("v_cols <> ARRAY['notification_id', 'recipient_user_id']"), 'Step 5 must verify exact column ordering');
 });
 
@@ -940,6 +942,169 @@ runTest('8.31 Complete preservation of unrelated database records during recover
   assert.strictEqual(preserved.length, 2, 'Must preserve exactly 2 unrelated leads');
   assert.strictEqual(preserved[0].id, 'VRM-LD-2026-02', 'Must preserve VRM-LD-2026-02');
   assert.strictEqual(preserved[1].id, 'VRM-LD-2026-03', 'Must preserve VRM-LD-2026-03');
+});
+
+runTest('8.32 Fail-closed protection across single-column, composite, invalid, and mismatched index definitions', () => {
+  // Simulates Step 1 metadata evaluation logic on PostgreSQL 18.6
+  function evaluateIndexMetadata({
+    tableName,
+    keyColumns,
+    isUnique,
+    isValid,
+    natts,
+    nkeyatts,
+    hasExpr,
+    hasPred
+  }) {
+    if (tableName !== 'lead_notification_recipients') {
+      throw new Error(`[INDEX-METADATA-MISMATCH] Existing index belongs to unrelated table "${tableName}", expected "lead_notification_recipients"!`);
+    }
+    if (natts !== 2 || nkeyatts !== 2) {
+      throw new Error(`[INDEX-METADATA-MISMATCH] Existing index has ${natts} total attributes and ${nkeyatts} key attributes (expected exactly 2 key columns, no included columns)!`);
+    }
+    if (hasExpr) {
+      throw new Error('[INDEX-METADATA-MISMATCH] Existing index contains unexpected expressions (indexprs IS NOT NULL)!');
+    }
+    if (hasPred) {
+      throw new Error('[INDEX-METADATA-MISMATCH] Existing index has an unexpected partial predicate (indpred IS NOT NULL)!');
+    }
+    const expectedCols = ['notification_id', 'recipient_user_id'];
+    if (keyColumns.length !== 2 || keyColumns[0] !== expectedCols[0] || keyColumns[1] !== expectedCols[1]) {
+      throw new Error(`[INDEX-METADATA-MISMATCH] Existing index key columns are [${keyColumns.join(', ')}], expected [notification_id, recipient_user_id] in that exact order!`);
+    }
+    if (isValid && isUnique) {
+      return 'VALID_AND_UNIQUE';
+    } else if (!isValid) {
+      return 'INVALID_MATCHING';
+    } else {
+      throw new Error('[INDEX-METADATA-MISMATCH] Existing index is NOT unique (indisunique = false)!');
+    }
+  }
+
+  // 1. Single-column index (e.g. Hostinger\'s lead_notification_recipients_pkey on [\'id\'])
+  assert.throws(() => {
+    evaluateIndexMetadata({
+      tableName: 'lead_notification_recipients',
+      keyColumns: ['id'],
+      isUnique: true,
+      isValid: true,
+      natts: 1,
+      nkeyatts: 1,
+      hasExpr: false,
+      hasPred: false
+    });
+  }, /expected exactly 2 key columns/, 'Single-column index must fail closed');
+
+  // 2. Matching composite index: valid and unique
+  const matchingRes = evaluateIndexMetadata({
+    tableName: 'lead_notification_recipients',
+    keyColumns: ['notification_id', 'recipient_user_id'],
+    isUnique: true,
+    isValid: true,
+    natts: 2,
+    nkeyatts: 2,
+    hasExpr: false,
+    hasPred: false
+  });
+  assert.strictEqual(matchingRes, 'VALID_AND_UNIQUE', 'Matching index must evaluate as valid and unique');
+
+  // 3. Invalid matching index: triggers guarded concurrent drop
+  const invalidRes = evaluateIndexMetadata({
+    tableName: 'lead_notification_recipients',
+    keyColumns: ['notification_id', 'recipient_user_id'],
+    isUnique: true,
+    isValid: false,
+    natts: 2,
+    nkeyatts: 2,
+    hasExpr: false,
+    hasPred: false
+  });
+  assert.strictEqual(invalidRes, 'INVALID_MATCHING', 'Invalid matching index must evaluate as invalid matching');
+
+  // 4. Incorrect index definitions:
+  // 4a. Reversed column order
+  assert.throws(() => {
+    evaluateIndexMetadata({
+      tableName: 'lead_notification_recipients',
+      keyColumns: ['recipient_user_id', 'notification_id'],
+      isUnique: true,
+      isValid: true,
+      natts: 2,
+      nkeyatts: 2,
+      hasExpr: false,
+      hasPred: false
+    });
+  }, /expected \[notification_id, recipient_user_id\] in that exact order/, 'Reversed column order must fail closed');
+
+  // 4b. Unexpected included columns (INCLUDE)
+  assert.throws(() => {
+    evaluateIndexMetadata({
+      tableName: 'lead_notification_recipients',
+      keyColumns: ['notification_id', 'recipient_user_id'],
+      isUnique: true,
+      isValid: true,
+      natts: 3,
+      nkeyatts: 2,
+      hasExpr: false,
+      hasPred: false
+    });
+  }, /expected exactly 2 key columns, no included columns/, 'Included columns must fail closed');
+
+  // 4c. Expression index
+  assert.throws(() => {
+    evaluateIndexMetadata({
+      tableName: 'lead_notification_recipients',
+      keyColumns: ['notification_id', 'recipient_user_id'],
+      isUnique: true,
+      isValid: true,
+      natts: 2,
+      nkeyatts: 2,
+      hasExpr: true,
+      hasPred: false
+    });
+  }, /contains unexpected expressions/, 'Expression index must fail closed');
+
+  // 4d. Partial predicate
+  assert.throws(() => {
+    evaluateIndexMetadata({
+      tableName: 'lead_notification_recipients',
+      keyColumns: ['notification_id', 'recipient_user_id'],
+      isUnique: true,
+      isValid: true,
+      natts: 2,
+      nkeyatts: 2,
+      hasExpr: false,
+      hasPred: true
+    });
+  }, /has an unexpected partial predicate/, 'Partial index must fail closed');
+
+  // 4e. Unrelated table
+  assert.throws(() => {
+    evaluateIndexMetadata({
+      tableName: 'leads',
+      keyColumns: ['notification_id', 'recipient_user_id'],
+      isUnique: true,
+      isValid: true,
+      natts: 2,
+      nkeyatts: 2,
+      hasExpr: false,
+      hasPred: false
+    });
+  }, /belongs to unrelated table "leads"/, 'Unrelated table must fail closed');
+
+  // 4f. Non-unique index
+  assert.throws(() => {
+    evaluateIndexMetadata({
+      tableName: 'lead_notification_recipients',
+      keyColumns: ['notification_id', 'recipient_user_id'],
+      isUnique: false,
+      isValid: true,
+      natts: 2,
+      nkeyatts: 2,
+      hasExpr: false,
+      hasPred: false
+    });
+  }, /is NOT unique/, 'Non-unique index must fail closed');
 });
 
 // =============================================================================

@@ -12,6 +12,8 @@
 --   - Safe execution ordering: Execute migration in PostgreSQL -> Deploy code -> Reload PM2
 -- ==============================================================================
 
+\set ON_ERROR_STOP on
+
 -- ------------------------------------------------------------------------------
 -- STEP 0: PRE-FLIGHT AUDIT — CHECK FOR DUPLICATE PAIRS
 -- If any rows are returned, STOP and reconcile before creating unique index.
@@ -41,7 +43,7 @@ END $$;
 -- ------------------------------------------------------------------------------
 -- STEP 1: PRE-CHECK TARGET INDEX METADATA (FAIL CLOSED ON UNRELATED INDEX OR MISMATCH)
 -- Inspect target index table, columns, uniqueness, and validity. Never drop an unrelated index.
--- PostgreSQL 18.6 compatible: avoids int2vector function incompatibilities.
+-- PostgreSQL 18.6 verified: uses pg_get_indexdef with generate_series(1, i.indnkeyatts).
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -61,10 +63,11 @@ BEGIN
   ) THEN
     SELECT 
       t.relname,
-      ARRAY[
-        (SELECT a1.attname FROM pg_attribute a1 WHERE a1.attrelid = t.oid AND a1.attnum = split_part(i.indkey::text, ' ', 1)::smallint),
-        (SELECT a2.attname FROM pg_attribute a2 WHERE a2.attrelid = t.oid AND a2.attnum = split_part(i.indkey::text, ' ', 2)::smallint)
-      ],
+      ARRAY(
+        SELECT pg_get_indexdef(i.indexrelid, k, TRUE)
+        FROM generate_series(1, i.indnkeyatts) AS k
+        ORDER BY k
+      ),
       i.indisvalid,
       i.indisunique,
       i.indnatts,
@@ -83,7 +86,7 @@ BEGIN
       RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique belongs to unrelated table "%", expected "lead_notification_recipients"! Never drop an unrelated index.', v_tbl;
     END IF;
 
-    -- Fail-closed guard: Must have exactly 2 key columns and 0 included columns
+    -- Fail-closed guard: Must have exactly 2 key columns and 0 included columns (no unexpected included columns)
     IF v_natts <> 2 OR v_nkeyatts <> 2 THEN
       RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique has % total attributes and % key attributes (expected exactly 2 key columns, no included columns)! Failing closed.', v_natts, v_nkeyatts;
     END IF;
@@ -118,7 +121,7 @@ END $$;
 -- Drops the index CONCURRENTLY outside any transaction ONLY if it is invalid and matches
 -- table public.lead_notification_recipients on columns (notification_id, recipient_user_id)
 -- with exactly 2 key columns, no expressions, and no partial predicate.
--- PostgreSQL 18.6 compatible: avoids int2vector function incompatibilities.
+-- PostgreSQL 18.6 verified: uses pg_get_indexdef with generate_series(1, i.indnkeyatts).
 -- ------------------------------------------------------------------------------
 SELECT 'DROP INDEX CONCURRENTLY IF EXISTS public.idx_notif_recipient_unique;'
 WHERE EXISTS (
@@ -134,8 +137,11 @@ WHERE EXISTS (
     AND i.indnkeyatts = 2
     AND i.indexprs IS NULL
     AND i.indpred IS NULL
-    AND (SELECT a1.attname FROM pg_attribute a1 WHERE a1.attrelid = t.oid AND a1.attnum = split_part(i.indkey::text, ' ', 1)::smallint) = 'notification_id'
-    AND (SELECT a2.attname FROM pg_attribute a2 WHERE a2.attrelid = t.oid AND a2.attnum = split_part(i.indkey::text, ' ', 2)::smallint) = 'recipient_user_id'
+    AND ARRAY(
+      SELECT pg_get_indexdef(i.indexrelid, k, TRUE)
+      FROM generate_series(1, i.indnkeyatts) AS k
+      ORDER BY k
+    ) = ARRAY['notification_id', 'recipient_user_id']
 ) \gexec
 
 -- ------------------------------------------------------------------------------
@@ -162,7 +168,7 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_notif_recipient_unique
 -- STEP 5: POST-CREATION VERIFICATION & FAIL-CLOSED METADATA VALIDATION
 -- Confirm the index is present, valid (indisvalid = true), unique (indisunique = true),
 -- exactly two key columns in required order, no expressions, no partial predicates.
--- PostgreSQL 18.6 compatible: avoids int2vector function incompatibilities.
+-- PostgreSQL 18.6 verified: uses pg_get_indexdef with generate_series(1, i.indnkeyatts).
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -177,10 +183,11 @@ DECLARE
 BEGIN
   SELECT 
     t.relname,
-    ARRAY[
-      (SELECT a1.attname FROM pg_attribute a1 WHERE a1.attrelid = t.oid AND a1.attnum = split_part(i.indkey::text, ' ', 1)::smallint),
-      (SELECT a2.attname FROM pg_attribute a2 WHERE a2.attrelid = t.oid AND a2.attnum = split_part(i.indkey::text, ' ', 2)::smallint)
-    ],
+    ARRAY(
+      SELECT pg_get_indexdef(i.indexrelid, k, TRUE)
+      FROM generate_series(1, i.indnkeyatts) AS k
+      ORDER BY k
+    ),
     i.indisvalid,
     i.indisunique,
     i.indnatts,
