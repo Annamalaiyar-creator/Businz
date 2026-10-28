@@ -1992,7 +1992,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       name: '',
       category: '',
       uom: 'NOS',
-      qty: String(1 * count),
+      qty: '1',
       baseQty: 1,
       rate: '0',
       gstRate: setGst,
@@ -2052,7 +2052,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+        qty: String(baseQ),
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || presetHsn,
@@ -2095,7 +2095,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         subPresetId,
         subPresetName,
         baseQty: baseQ,
-        qty: String(Math.round(baseQ * multiplier)),
+        qty: String(baseQ),
         rate: '0',
         gstRate: it.gstRate || parentGroup.gstRate || '18%',
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || parentGroup.hsn,
@@ -5504,14 +5504,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                     [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                   }));
                                                 }
-                                                const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
-                                                const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                                setPiItems(prev => prev.map(mat => {
-                                                  if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                    return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                                  }
-                                                  return mat;
-                                                }));
                                               }}
                                               style={{
                                                 width: '42px', height: '26px', borderRadius: '6px',

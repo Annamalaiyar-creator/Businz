@@ -3006,7 +3006,7 @@ export default function BomOrdersView(props) {
           presetGroupId: groupId,
           presetName,
           baseQty: baseQ,
-          qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+          qty: String(baseQ),
           rate: '0',
           gstRate: isDcrBosKit ? '5%' : (it.gstRate || initialGstRate),
           isPresetItem: true
@@ -4230,14 +4230,6 @@ export default function BomOrdersView(props) {
                                                   [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                 }));
                                               }
-                                              const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
-                                              const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                              setBomMaterialsList(prev => prev.map(mat => {
-                                                if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                  return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                                }
-                                                return mat;
-                                              }));
                                             }}
                                             onBlur={() => {
                                               const current = currentGroup.setCount;
@@ -4248,14 +4240,6 @@ export default function BomOrdersView(props) {
                                                   [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                                 }));
                                               }
-                                              const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
-                                              const multiplier = isFixedKit ? 1 : finalCount;
-                                              setBomMaterialsList(prev => prev.map(mat => {
-                                                if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                  return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                                }
-                                                return mat;
-                                              }));
                                             }}
                                             style={{
                                               width: '42px', height: '26px', borderRadius: '6px',

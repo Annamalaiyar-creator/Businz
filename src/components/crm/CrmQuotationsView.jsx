@@ -683,7 +683,7 @@ export default function CrmQuotationsView({
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+        qty: String(baseQ),
         rate: '0',
         gstRate: is5PctSolarProduct(it.name, it.category || it.specs) ? '5%' : (it.gstRate || initialGstRate),
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it),
@@ -2327,14 +2327,6 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                               }));
                                             }
-                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
-                                            const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                            setQuoteItems(prev => prev.map(mat => {
-                                              if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                              }
-                                              return mat;
-                                            }));
                                           }}
                                           onBlur={() => {
                                             const current = currentGroup.setCount;
@@ -2345,14 +2337,6 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                               }));
                                             }
-                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
-                                            const effectiveMultiplier = isFixedKit ? 1 : finalCount;
-                                            setQuoteItems(prev => prev.map(mat => {
-                                              if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * effectiveMultiplier)) };
-                                              }
-                                              return mat;
-                                            }));
                                           }}
                                           style={{
                                             width: '42px', height: '26px', borderRadius: '6px',

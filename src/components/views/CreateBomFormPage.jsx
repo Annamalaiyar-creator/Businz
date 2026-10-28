@@ -898,14 +898,12 @@ export default function CreateBomFormPage(props) {
                 setSelectedBomItemIndexes([]);
 
                 if (targetPreset && targetPreset.items) {
-                  const isFixedKit = isFixedQuantityPreset(val, targetPreset.label || val);
-                  const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                   setBomMaterialsList(targetPreset.items.map(it => {
                     const baseQ = parseFloat(it.qty) || 1;
                     return {
                       ...it,
                       baseQty: baseQ,
-                      qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+                      qty: String(baseQ),
                       rate: '0',
                       isPresetItem: true
                     };
@@ -929,14 +927,12 @@ export default function CreateBomFormPage(props) {
                 onClick={() => {
                   const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
                   if (targetPreset && targetPreset.items) {
-                    const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset.label || selectedPreset);
-                    const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                     const additionalItems = targetPreset.items.map(it => {
                       const baseQ = parseFloat(it.qty) || 1;
                       return {
                         ...it,
                         baseQty: baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+                        qty: String(baseQ),
                         rate: '0',
                         isPresetItem: true
                       };
@@ -981,32 +977,6 @@ export default function CreateBomFormPage(props) {
                   const rawVal = e.target.value;
                   const newCount = rawVal === '' ? '' : Math.max(1, parseInt(rawVal) || 1);
                   setPresetSetCount(newCount);
-
-                  const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
-                  const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset?.label || selectedPreset);
-                  const multiplier = isFixedKit ? 1 : (parseInt(rawVal) || 1);
-                  if (targetPreset && targetPreset.items) {
-                    const baseItems = targetPreset.items;
-                    setBomMaterialsList(baseItems.map(it => {
-                      const baseQ = parseFloat(it.qty) || 1;
-                      return {
-                        ...it,
-                        baseQty: baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
-                        rate: '0',
-                        isPresetItem: true
-                      };
-                    }));
-                  } else if (bomMaterialsList.length > 0) {
-                    setBomMaterialsList(prev => prev.map(it => {
-                      const baseQ = parseFloat(it.baseQty || it.qty) || 1;
-                      return {
-                        ...it,
-                        baseQty: it.baseQty || baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier))
-                      };
-                    }));
-                  }
                 }}
                 style={{
                   width: '54px',
