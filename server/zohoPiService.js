@@ -4,13 +4,10 @@ import { fileURLToPath } from 'url';
 import { zohoRequest } from './zohoAuthService.js';
 import { query, isDbConnected } from './db.js';
 import { isOptimizationTestMode } from './optimizationTestGuard.js';
+import { getStoreFilePath } from './runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-function getStoreFilePath(filename) {
-  return path.join(__dirname, filename);
-}
 
 /**
  * Parse any raw address (object or string) into a structured Zoho Books address object.
@@ -304,14 +301,7 @@ function determineIsIntraState(piData) {
  */
 export async function pushPiToZoho(piData) {
   if (isOptimizationTestMode()) {
-    console.log(`🛡️ [Zoho PI Service] Test mode active: pushPiToZoho mocked for ${piData?.piNo}.`);
-    return {
-      success: true,
-      testMode: true,
-      estimateId: `MOCK_ESTIMATE_${Date.now()}`,
-      estimateNumber: `EST-${piData?.piNo || 'MOCK'}`,
-      message: 'Mocked Zoho Books estimate push in test mode'
-    };
+    return Promise.reject(new Error('[FAIL-CLOSED] External Zoho PI synchronization is blocked in optimization test mode.'));
   }
 
   if (!piData || !piData.piNo) {

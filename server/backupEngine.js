@@ -3,16 +3,20 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getBackupDir, getStoreFilePath } from './runtimePaths.js';
 import { recordJobStart, recordJobEnd } from './memoryDiagnostics.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BACKUP_DIR = getBackupDir();
+const resolveBackupDir = () => getBackupDir();
 
-// Ensure backups directory exists
-if (!fs.existsSync(BACKUP_DIR)) {
+// Ensure backups directory exists (strictly skipped in optimization test mode)
+if (!isOptimizationTestMode()) {
   try {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const backupDir = resolveBackupDir();
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
   } catch (err) {
     console.error('[BackupEngine] Failed to create backup dir:', err.message);
   }
@@ -46,10 +50,13 @@ export function formatBytes(bytes, decimals = 2) {
  * Capture full unified snapshot: Database Stores + Supabase cloud tables + Media Cache
  */
 export async function createFullBackup({ supabaseClient, memoryStore = {}, triggeredBy = 'System Admin' } = {}) {
+  if (isOptimizationTestMode()) {
+    throw new Error('[FAIL-CLOSED] External backup creation is blocked in optimization test mode.');
+  }
   const timestamp = new Date().toISOString();
   const fileDateStr = timestamp.replace(/[:.]/g, '-');
   const filename = `controlroom_backup_${fileDateStr}.json`;
-  const backupFilePath = path.join(BACKUP_DIR, filename);
+  const backupFilePath = path.join(resolveBackupDir(), filename);
 
   console.log(`\n🛡️ [BackupEngine] Starting Full ERP & Media Backup (${timestamp})...`);
 
@@ -314,15 +321,19 @@ export function readBackupHeader(fullPath) {
  * Guarantees that valid backups are never silently omitted.
  */
 export function listBackups() {
-  if (!fs.existsSync(BACKUP_DIR)) return [];
+  if (isOptimizationTestMode()) {
+    return [];
+  }
+  const backupDir = resolveBackupDir();
+  if (!fs.existsSync(backupDir)) return [];
   try {
-    const files = fs.readdirSync(BACKUP_DIR)
+    const files = fs.readdirSync(backupDir)
       .filter(f => f.endsWith('.json') && (f.startsWith('controlroom_backup_') || f.startsWith('businz_backup_') || f.includes('backup')))
       .sort()
       .reverse();
 
     return files.map(file => {
-      const fullPath = path.join(BACKUP_DIR, file);
+      const fullPath = path.join(backupDir, file);
       const stat = fs.statSync(fullPath);
       const { metadata, createdAt } = readBackupHeader(fullPath);
 
@@ -346,13 +357,17 @@ export function listBackups() {
  * Delete older backups exceeding keepCount
  */
 export function pruneOldBackups(keepCount = 15) {
+  if (isOptimizationTestMode()) {
+    return;
+  }
   try {
+    const backupDir = resolveBackupDir();
     const backups = listBackups();
     if (backups.length > keepCount) {
       const excess = backups.slice(keepCount);
       excess.forEach(b => {
         try {
-          const p = path.join(BACKUP_DIR, b.filename);
+          const p = path.join(backupDir, b.filename);
           if (fs.existsSync(p)) fs.unlinkSync(p);
           console.log(`[BackupEngine] Pruned old backup: ${b.filename}`);
         } catch (_) {}
@@ -365,6 +380,10 @@ export function pruneOldBackups(keepCount = 15) {
  * Restore ERP state from a backup object
  */
 export async function restoreFromBackup(backupData, { supabaseClient, memoryStore = {} } = {}) {
+  if (isOptimizationTestMode()) {
+    throw new Error('[FAIL-CLOSED] External backup restoration is blocked in optimization test mode.');
+  }
+
   if (!backupData || typeof backupData !== 'object') {
     throw new Error('Invalid backup file structure.');
   }

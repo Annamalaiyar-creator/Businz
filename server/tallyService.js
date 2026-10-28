@@ -14,6 +14,9 @@ const DEFAULT_TALLY_URL = process.env.TALLY_URL || 'http://127.0.0.1:9000';
  * Helper to make raw HTTP requests to Tally
  */
 export function sendTallyRequest(xmlPayload, tallyUrl = DEFAULT_TALLY_URL, timeoutMs = 8000) {
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] External Tally HTTP requests are blocked in optimization test mode.'));
+  }
   return new Promise((resolve, reject) => {
     let urlObj;
     try {
@@ -214,12 +217,13 @@ export async function fetchTallyPnl(tallyUrl = DEFAULT_TALLY_URL, companyName = 
 export async function pushDirectVoucher(xmlPayload, tallyUrl = DEFAULT_TALLY_URL) {
   if (isOptimizationTestMode()) {
     return {
-      success: true,
-      created: 1,
+      success: false,
+      created: 0,
       altered: 0,
-      errors: 0,
+      errors: 1,
       testMode: true,
-      message: 'Mocked Tally voucher push in test mode'
+      error: '[FAIL-CLOSED] External Tally synchronization is blocked in optimization test mode.',
+      message: 'Tally synchronization is blocked in optimization test mode.'
     };
   }
 

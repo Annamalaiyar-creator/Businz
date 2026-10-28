@@ -16,7 +16,7 @@ import { isOptimizationTestMode } from './optimizationTestGuard.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SESSIONS_BASE_DIR = getWaSessionsDir();
+const getSessionsBaseDir = () => getWaSessionsDir();
 
 const silentLogger = pino({ level: 'silent' });
 
@@ -125,7 +125,7 @@ export function extractWhatsAppMessageText(msg) {
 
 // Helper to get session chat cache file path
 function getChatsCachePath(userId) {
-  return path.join(SESSIONS_BASE_DIR, `user_${userId}`, 'chats_cache.json');
+  return path.join(getSessionsBaseDir(), `user_${userId}`, 'chats_cache.json');
 }
 
 function loadUserChatsFromDisk(userId) {
@@ -216,7 +216,7 @@ export function getUserSessionStatus(rawUserId) {
   const session = activeSessions.get(userId);
 
   if (!session) {
-    const sessionDir = path.join(SESSIONS_BASE_DIR, `user_${userId}`);
+    const sessionDir = path.join(getSessionsBaseDir(), `user_${userId}`);
     const hasCreds = fs.existsSync(path.join(sessionDir, 'creds.json'));
     return {
       userId,
@@ -262,31 +262,12 @@ export async function initUserSession(rawUserId, options = {}) {
   const userId = sanitizeUserId(rawUserId);
 
   if (isOptimizationTestMode()) {
-    console.log(`🛡️ [WhatsApp MultiService] Test mode active: socket creation disabled for ${userId}. Returning mock session.`);
-    const mockSession = {
-      userId,
-      sock: null,
-      status: 'MOCK_TEST_MODE',
-      qrCode: null,
-      phoneNumber: '919999999999',
-      userName: 'Test User',
-      chats: new Map(),
-      contacts: new Map()
-    };
-    activeSessions.set(userId, mockSession);
-    return {
-      userId,
-      status: 'MOCK_TEST_MODE',
-      phoneNumber: '919999999999',
-      userName: 'Test User',
-      qrCode: null,
-      hasSavedCredentials: false
-    };
+    return Promise.reject(new Error('[FAIL-CLOSED] WhatsApp session initialization is blocked in optimization test mode.'));
   }
 
   const { onMessageReceived, onStatusChange, onChatsUpdated } = options;
 
-  const sessionDir = path.join(SESSIONS_BASE_DIR, `user_${userId}`);
+  const sessionDir = path.join(getSessionsBaseDir(), `user_${userId}`);
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
   }
@@ -658,14 +639,7 @@ export async function sendUserWhatsAppMessage(rawUserId, { to, text = '', docume
   const userId = sanitizeUserId(rawUserId);
 
   if (isOptimizationTestMode()) {
-    console.log(`🛡️ [WhatsApp MultiService] Test mode active: outbound message to ${to} blocked/mocked.`);
-    return {
-      success: true,
-      messageId: `MOCK_TEST_MSG_${Date.now()}`,
-      status: 'MOCK_SENT',
-      testMode: true,
-      recipient: to
-    };
+    return Promise.reject(new Error('[FAIL-CLOSED] Outbound WhatsApp messages are blocked in optimization test mode.'));
   }
 
   const session = activeSessions.get(userId);
@@ -807,7 +781,7 @@ export async function logoutUserSession(rawUserId) {
 
   activeSessions.delete(userId);
 
-  const sessionDir = path.join(SESSIONS_BASE_DIR, `user_${userId}`);
+  const sessionDir = path.join(getSessionsBaseDir(), `user_${userId}`);
   if (fs.existsSync(sessionDir)) {
     try {
       fs.rmSync(sessionDir, { recursive: true, force: true });
@@ -827,13 +801,14 @@ export async function autoRestoreAllSavedSessions(options = {}) {
     console.log('🛡️ [WhatsApp MultiService] Test mode active: auto-restoration of WhatsApp sessions is disabled.');
     return;
   }
-  if (!fs.existsSync(SESSIONS_BASE_DIR)) return;
+  const sessionsBaseDir = getSessionsBaseDir();
+  if (!fs.existsSync(sessionsBaseDir)) return;
 
-  const entries = fs.readdirSync(SESSIONS_BASE_DIR, { withFileTypes: true });
+  const entries = fs.readdirSync(sessionsBaseDir, { withFileTypes: true });
   for (const ent of entries) {
     if (ent.isDirectory() && ent.name.startsWith('user_')) {
       const userId = ent.name.replace('user_', '');
-      const credsPath = path.join(SESSIONS_BASE_DIR, ent.name, 'creds.json');
+      const credsPath = path.join(sessionsBaseDir, ent.name, 'creds.json');
       if (fs.existsSync(credsPath)) {
         console.log(`[WhatsApp MultiService] Auto-restoring session for sales rep: ${userId}...`);
         initUserSession(userId, options).catch((err) => {

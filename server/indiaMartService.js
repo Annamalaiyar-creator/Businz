@@ -111,11 +111,11 @@ async function getDecryptedCredentials() {
  */
 export async function testIndiaMartConnection() {
   if (isOptimizationTestMode()) {
-    console.log('🛡️ [IndiaMART Service] Test mode active: external connection test mocked.');
     return {
-      success: true,
+      success: false,
       testMode: true,
-      message: 'Mocked IndiaMART connection test in test mode'
+      error: '[FAIL-CLOSED] External IndiaMART connection tests are blocked in optimization test mode.',
+      message: 'IndiaMART connection test is blocked in optimization test mode.'
     };
   }
 
@@ -204,13 +204,13 @@ export async function testIndiaMartConnection() {
  */
 export async function syncIndiaMartLeads(syncType = 'MANUAL') {
   if (isOptimizationTestMode()) {
-    console.log('🛡️ [IndiaMART Service] Test mode active: external lead sync mocked.');
     return {
-      success: true,
+      success: false,
       recordsImported: 0,
       duplicatesSkipped: 0,
       testMode: true,
-      message: 'IndiaMART sync bypassed in test mode'
+      error: '[FAIL-CLOSED] External IndiaMART lead synchronization is blocked in optimization test mode.',
+      message: 'IndiaMART sync is blocked in optimization test mode.'
     };
   }
 

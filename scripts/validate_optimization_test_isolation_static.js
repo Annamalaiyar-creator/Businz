@@ -1,7 +1,7 @@
 /**
  * scripts/validate_optimization_test_isolation_static.js
  * 
- * BUSINZ ERP: Phase 6B Static Validation Suite
+ * BUSINZ ERP: Phase 6P Static Validation Suite
  * 
  * Verifies all hardened isolation invariants purely in-memory and statically:
  * 1. Port isolation: strictly requires 5101; refuses 5001 (prod), 5002 (dev), and arbitrary ports.
@@ -14,6 +14,8 @@
  * 8. Automatic background jobs & WhatsApp sockets disabled in test mode.
  * 9. HTTP test scripts cannot silently fall back to production; require 5101 and businz_test_user.
  * 10. Database health-check reliability: bounded acquisition, bounded query, zero client leaks on timeout.
+ * 11. External integrations fail-closed: Zoho OAuth, Zoho Books API, Zoho PI sync, Tally Prime bridge, IndiaMART CRM sync, Backups, and WhatsApp.
+ * 12. Complete sanitation of hardcoded operational secrets in integration adapters.
  * 
  * ABSOLUTELY ZERO NETWORK REQUESTS OR DATABASE OPERATIONS ARE EXECUTED.
  */
@@ -56,7 +58,7 @@ import {
 } from './testEnvironmentGuard.js';
 
 console.log('===================================================================');
-console.log('🛡️  BUSINZ ERP: PHASE 6H STATIC ISOLATION & STARTUP AUDIT SUITE');
+console.log('🛡️  BUSINZ ERP: PHASE 6P STATIC ISOLATION & EXTERNAL INTEGRATION AUDIT SUITE');
 console.log('===================================================================\n');
 
 let passedTests = 0;
@@ -676,6 +678,229 @@ try {
     );
   });
 
+  // TEST GROUP 8: External Integration Fail-Closed & Secret Sanitation (Phase 6P)
+  console.log('\n--- TEST GROUP 8: External Integration Fail-Closed & Secret Sanitation ---');
+
+  runTest('Zoho Auth Service contains zero hardcoded operational secrets in source', () => {
+    const zohoSource = fs.readFileSync(path.resolve(__dirname, '../server/zohoAuthService.js'), 'utf8');
+
+    // Reject hardcoded client secrets, refresh tokens, client IDs, or org IDs
+    assert(!zohoSource.includes('e82079a'), 'zohoAuthService.js must not contain hardcoded Zoho client secret');
+    assert(!zohoSource.includes('dbba4167'), 'zohoAuthService.js must not contain hardcoded Zoho refresh token');
+    assert(!zohoSource.includes('9U5BAN338075M5HBI3U8K1VBNKUU8K'), 'zohoAuthService.js must not contain hardcoded Zoho client ID');
+    assert(!zohoSource.includes('60082137608'), 'zohoAuthService.js must not contain hardcoded Zoho organization ID');
+
+    // Confirm DEFAULT_CONFIG uses environment variables
+    assert(
+      /clientId:\s*process\.env\.ZOHO_CLIENT_ID\s*\|\|\s*''/.test(zohoSource),
+      'DEFAULT_CONFIG must resolve clientId from process.env.ZOHO_CLIENT_ID with empty default'
+    );
+    assert(
+      /clientSecret:\s*process\.env\.ZOHO_CLIENT_SECRET\s*\|\|\s*''/.test(zohoSource),
+      'DEFAULT_CONFIG must resolve clientSecret from process.env.ZOHO_CLIENT_SECRET with empty default'
+    );
+    assert(
+      /refreshToken:\s*process\.env\.ZOHO_REFRESH_TOKEN\s*\|\|\s*''/.test(zohoSource),
+      'DEFAULT_CONFIG must resolve refreshToken from process.env.ZOHO_REFRESH_TOKEN with empty default'
+    );
+  });
+
+  runTest('Zoho Auth Service startup and storage routines are side-effect-free in test mode', () => {
+    const zohoSource = fs.readFileSync(path.resolve(__dirname, '../server/zohoAuthService.js'), 'utf8');
+
+    // Confirm initZohoConfig skips in test mode
+    assert(
+      /function\s+initZohoConfig\(\)\s*\{[\s\r\n]*if\s*\(\s*isOptimizationTestMode\(\)\s*\)\s*\{[\s\r\n]*return;/.test(zohoSource),
+      'initZohoConfig() must exit immediately when isOptimizationTestMode() is true'
+    );
+
+    // Confirm initTokenCache skips in test mode
+    assert(
+      /function\s+initTokenCache\(\)\s*\{[\s\r\n]*if\s*\(\s*isOptimizationTestMode\(\)\s*\)\s*\{[\s\r\n]*return;/.test(zohoSource),
+      'initTokenCache() must exit immediately when isOptimizationTestMode() is true'
+    );
+  });
+
+  runTest('Zoho Auth Service fails closed on all OAuth and API operations in test mode', async () => {
+    resetEnv();
+    process.env.BUSINZ_OPTIMIZATION_TEST_MODE = 'true';
+    process.env.PORT = '5101';
+    process.env.BUSINZ_DATA_DIR = '/var/www/businz-optimization-test/storage';
+    process.env.DATABASE_URL = 'postgresql://businz_test_user:testpass@127.0.0.1:5432/businz_optimization_test';
+
+    const zohoModule = await import('../server/zohoAuthService.js');
+
+    // 1. getZohoAccessToken rejects
+    await assert.rejects(
+      async () => await zohoModule.getZohoAccessToken(),
+      /\[FAIL-CLOSED\] External Zoho OAuth authentication is blocked in optimization test mode\./
+    );
+
+    // 2. zohoRequest rejects
+    await assert.rejects(
+      async () => await zohoModule.zohoRequest({ path: '/books/v3/organizations' }),
+      /\[FAIL-CLOSED\] External Zoho Books API requests are blocked in optimization test mode\./
+    );
+
+    // 3. testZohoConnection fails closed
+    const testConnRes = await zohoModule.testZohoConnection();
+    assert.strictEqual(testConnRes.success, false);
+    assert.strictEqual(testConnRes.connected, false);
+    assert(testConnRes.error.includes('[FAIL-CLOSED]'));
+
+    // 4. exchangeAuthorizationCode rejects
+    await assert.rejects(
+      async () => await zohoModule.exchangeAuthorizationCode({ code: 'dummy_grant_code' }),
+      /\[FAIL-CLOSED\] External Zoho authorization code exchange is blocked in optimization test mode\./
+    );
+
+    // 5. updateZohoConfig rejects
+    await assert.rejects(
+      async () => await zohoModule.updateZohoConfig({ clientId: 'new_id' }),
+      /\[FAIL-CLOSED\] External Zoho configuration updates are blocked in optimization test mode\./
+    );
+  });
+
+  runTest('Zoho PI Service uses centralized runtime storage and fails closed in test mode', async () => {
+    const piSource = fs.readFileSync(path.resolve(__dirname, '../server/zohoPiService.js'), 'utf8');
+
+    // Confirm getStoreFilePath imported from runtimePaths
+    assert(
+      /import\s*\{[\s\S]*?getStoreFilePath[\s\S]*?\}\s*from\s*['"]\.\/runtimePaths\.js['"]/.test(piSource),
+      'zohoPiService.js must import getStoreFilePath from ./runtimePaths.js'
+    );
+    assert(
+      !piSource.includes('function getStoreFilePath('),
+      'zohoPiService.js must not define a local getStoreFilePath'
+    );
+
+    resetEnv();
+    process.env.BUSINZ_OPTIMIZATION_TEST_MODE = 'true';
+    process.env.PORT = '5101';
+    process.env.BUSINZ_DATA_DIR = '/var/www/businz-optimization-test/storage';
+    process.env.DATABASE_URL = 'postgresql://businz_test_user:testpass@127.0.0.1:5432/businz_optimization_test';
+
+    const zohoPiModule = await import('../server/zohoPiService.js');
+    await assert.rejects(
+      async () => await zohoPiModule.pushPiToZoho({ piNo: 'VRM-PI-TEST' }),
+      /\[FAIL-CLOSED\] External Zoho PI synchronization is blocked in optimization test mode\./
+    );
+  });
+
+  runTest('Tally Service fails closed before network dispatch in test mode', async () => {
+    resetEnv();
+    process.env.BUSINZ_OPTIMIZATION_TEST_MODE = 'true';
+    process.env.PORT = '5101';
+    process.env.BUSINZ_DATA_DIR = '/var/www/businz-optimization-test/storage';
+    process.env.DATABASE_URL = 'postgresql://businz_test_user:testpass@127.0.0.1:5432/businz_optimization_test';
+
+    const tallyModule = await import('../server/tallyService.js');
+
+    // sendTallyRequest rejects
+    await assert.rejects(
+      async () => await tallyModule.sendTallyRequest('<xml></xml>'),
+      /\[FAIL-CLOSED\] External Tally HTTP requests are blocked in optimization test mode\./
+    );
+
+    // pushDirectVoucher returns fail-closed
+    const voucherRes = await tallyModule.pushDirectVoucher('<xml></xml>');
+    assert.strictEqual(voucherRes.success, false);
+    assert.strictEqual(voucherRes.created, 0);
+    assert.strictEqual(voucherRes.errors, 1);
+    assert(voucherRes.error.includes('[FAIL-CLOSED]'));
+
+    // checkTallyStatus reports offline
+    const statusRes = await tallyModule.checkTallyStatus();
+    assert.strictEqual(statusRes.online, false);
+
+    // fetchTallyPnl returns failure
+    const pnlRes = await tallyModule.fetchTallyPnl();
+    assert.strictEqual(pnlRes.success, false);
+  });
+
+  runTest('Backup Engine protects storage and fails closed in test mode', async () => {
+    const backupSource = fs.readFileSync(path.resolve(__dirname, '../server/backupEngine.js'), 'utf8');
+
+    // Confirm directory creation on import is guarded
+    assert(
+      /if\s*\(\s*!isOptimizationTestMode\(\)\s*\)\s*\{[\s\S]*?fs\.mkdirSync\(/.test(backupSource),
+      'backupEngine.js must guard fs.mkdirSync with !isOptimizationTestMode()'
+    );
+
+    resetEnv();
+    process.env.BUSINZ_OPTIMIZATION_TEST_MODE = 'true';
+    process.env.PORT = '5101';
+    process.env.BUSINZ_DATA_DIR = '/var/www/businz-optimization-test/storage';
+    process.env.DATABASE_URL = 'postgresql://businz_test_user:testpass@127.0.0.1:5432/businz_optimization_test';
+
+    const backupModule = await import('../server/backupEngine.js');
+
+    // createFullBackup throws fail-closed
+    await assert.rejects(
+      async () => await backupModule.createFullBackup(),
+      /\[FAIL-CLOSED\] External backup creation is blocked in optimization test mode\./
+    );
+
+    // restoreFromBackup throws fail-closed
+    await assert.rejects(
+      async () => await backupModule.restoreFromBackup({ stores: {} }),
+      /\[FAIL-CLOSED\] External backup restoration is blocked in optimization test mode\./
+    );
+
+    // listBackups returns empty array in test mode
+    assert.deepStrictEqual(backupModule.listBackups(), []);
+  });
+
+  runTest('WhatsApp Service fails closed on outbound messaging and session init in test mode', async () => {
+    const waSource = fs.readFileSync(path.resolve(__dirname, '../server/whatsappMultiService.js'), 'utf8');
+
+    // Confirm no eager call to getWaSessionsDir() at top level
+    assert(
+      !waSource.includes('const SESSIONS_BASE_DIR = getWaSessionsDir();'),
+      'whatsappMultiService.js must not eagerly call getWaSessionsDir() at module top-level'
+    );
+
+    resetEnv();
+    process.env.BUSINZ_OPTIMIZATION_TEST_MODE = 'true';
+    process.env.PORT = '5101';
+    process.env.BUSINZ_DATA_DIR = '/var/www/businz-optimization-test/storage';
+    process.env.DATABASE_URL = 'postgresql://businz_test_user:testpass@127.0.0.1:5432/businz_optimization_test';
+
+    const waModule = await import('../server/whatsappMultiService.js');
+
+    // sendUserWhatsAppMessage rejects
+    await assert.rejects(
+      async () => await waModule.sendUserWhatsAppMessage('sales_rep_1', { to: '919876543210', text: 'Hello' }),
+      /\[FAIL-CLOSED\] Outbound WhatsApp messages are blocked in optimization test mode\./
+    );
+
+    // initUserSession rejects
+    await assert.rejects(
+      async () => await waModule.initUserSession('sales_rep_1'),
+      /\[FAIL-CLOSED\] WhatsApp session initialization is blocked in optimization test mode\./
+    );
+  });
+
+  runTest('IndiaMART Service fails closed on connection tests and lead sync in test mode', async () => {
+    resetEnv();
+    process.env.BUSINZ_OPTIMIZATION_TEST_MODE = 'true';
+    process.env.PORT = '5101';
+    process.env.BUSINZ_DATA_DIR = '/var/www/businz-optimization-test/storage';
+    process.env.DATABASE_URL = 'postgresql://businz_test_user:testpass@127.0.0.1:5432/businz_optimization_test';
+
+    const imModule = await import('../server/indiaMartService.js');
+
+    // testIndiaMartConnection returns fail-closed
+    const connRes = await imModule.testIndiaMartConnection();
+    assert.strictEqual(connRes.success, false);
+    assert(connRes.error.includes('[FAIL-CLOSED]'));
+
+    // syncIndiaMartLeads returns fail-closed
+    const syncRes = await imModule.syncIndiaMartLeads();
+    assert.strictEqual(syncRes.success, false);
+    assert(syncRes.error.includes('[FAIL-CLOSED]'));
+  });
+
 } finally {
   resetEnv();
 }
@@ -687,6 +912,6 @@ console.log('===================================================================
 if (failedTests > 0) {
   process.exit(1);
 } else {
-  console.log('🛡️  PHASE 6H STATIC ISOLATION & STARTUP AUDIT: FULLY VERIFIED & COMPLIANT\n');
+  console.log('🛡️  PHASE 6P STATIC ISOLATION & EXTERNAL INTEGRATION AUDIT: FULLY VERIFIED & COMPLIANT\n');
   process.exit(0);
 }
