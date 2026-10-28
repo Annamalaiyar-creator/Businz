@@ -665,17 +665,36 @@ async function validateTargetDatabase(client, customAllowedDb = null) {
 }
 
 /**
+ * Helper to match a Proforma Invoice record against a target PI identifier.
+ * Checks id, piNo, pi_no, proformaInvoiceNumber, piNumber, and invoiceNo case-insensitively.
+ */
+export function isPiMatch(item, lowerPi) {
+  if (!item || typeof item !== 'object') return false;
+  const candidates = [
+    item.id,
+    item.piNo,
+    item.pi_no,
+    item.proformaInvoiceNumber,
+    item.piNumber,
+    item.invoiceNo
+  ];
+  return candidates.some(c => c && String(c).trim().toLowerCase() === lowerPi);
+}
+
+export const AUTHORITATIVE_PI_STORE_KEYS = ['customer_pis_store', 'sales_pi_store', 'proforma_invoice_store'];
+
+/**
  * Validates and synchronizes source PI association within the PostgreSQL transaction.
  * 
  * General Database-Backed Rules:
- * 1. Source PI must exist in authoritative sales_pi_store or public.proforma_invoices.
+ * 1. Source PI must exist in authoritative customer_pis_store, sales_pi_store, proforma_invoice_store, or public.proforma_invoices.
  * 2. If the BOM already has an associated source PI, confirm it does not point to a different PI.
- * 3. If the PI is already converted, confirm it does not point to a different active BOM.
+ * 3. If the PI is already converted, confirm it does not point to a different active or cancelled BOM.
  * 4. Reject ambiguous or conflicting associations with an explicit error.
- * 5. Update PI status and conversion fields in both relational table and controlroom_store.
+ * 5. Update PI status and conversion fields in both relational table (if present) and controlroom_store.
  * 6. Strictly preserve existing customer, salesperson, and financial data on the PI.
  */
-async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
+export async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
   if (!cleanPi) return;
 
   const targetPi = String(cleanPi).trim();
@@ -689,27 +708,45 @@ async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
     );
   }
 
-  // 2. Fetch authoritative sales_pi_store with row-level lock
+  // 2. Fetch authoritative PI stores with row-level locks
   const piStoreRes = await client.query(`
-    SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store' FOR UPDATE
-  `);
-  let piList = [];
-  if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
-    piList = piStoreRes.rows[0].data;
+    SELECT key, data FROM public.controlroom_store
+    WHERE key = ANY($1)
+    FOR UPDATE
+  `, [AUTHORITATIVE_PI_STORE_KEYS]);
+
+  const storeMap = new Map();
+  if (piStoreRes?.rows) {
+    for (const row of piStoreRes.rows) {
+      if (row.key && Array.isArray(row.data)) {
+        storeMap.set(row.key, row.data);
+      }
+    }
   }
 
-  // Also query public.proforma_invoices
-  const piDbRes = await client.query(`
-    SELECT * FROM public.proforma_invoices
-    WHERE LOWER(pi_no) = $1 OR LOWER(id) = $1
-    FOR UPDATE
-  `, [lowerPi]);
+  // Also query public.proforma_invoices relational table if it exists
+  let matchedDbPi = null;
+  const regCheck = await client.query("SELECT to_regclass('public.proforma_invoices') as reg");
+  if (regCheck?.rows?.[0]?.reg) {
+    const piDbRes = await client.query(`
+      SELECT * FROM public.proforma_invoices
+      WHERE LOWER(pi_no) = $1 OR LOWER(id) = $1
+      FOR UPDATE
+    `, [lowerPi]);
+    matchedDbPi = piDbRes?.rows?.[0] || null;
+  }
 
-  const matchedStorePi = piList.find(p => String(p?.piNo || p?.id || '').trim().toLowerCase() === lowerPi);
-  const matchedDbPi = piDbRes?.rows?.[0] || null;
+  // Find matches across all authoritative stores
+  const matchedStores = [];
+  for (const [key, list] of storeMap.entries()) {
+    const matched = list.find(p => isPiMatch(p, lowerPi));
+    if (matched) {
+      matchedStores.push({ key, pi: matched });
+    }
+  }
 
-  // Validation: Source PI must exist in at least one authoritative store
-  if (!matchedStorePi && !matchedDbPi) {
+  // Validation: Source PI must exist in at least one authoritative store or relational table
+  if (matchedStores.length === 0 && !matchedDbPi) {
     throw new Error(
       `[PI Validation Error] Source PI "${targetPi}" does not exist in authoritative PI stores.`
     );
@@ -741,9 +778,22 @@ async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
     }
   }
 
-  // Check if the store PI object already has a conflicting convertedBomCode
-  const existingConvertedBomCode = String(matchedStorePi?.convertedBomCode || matchedStorePi?.converted_bom_code || '').trim();
-  if (existingConvertedBomCode && existingConvertedBomCode !== finalCode) {
+  // Check if any matched store PI object or relational DB PI already has a conflicting convertedBomCode
+  const existingConvertedCodes = new Set();
+  for (const ms of matchedStores) {
+    const cCode = String(ms.pi?.convertedBomCode || ms.pi?.converted_bom_code || ms.pi?.convertedBomNo || '').trim();
+    if (cCode && cCode !== finalCode) {
+      existingConvertedCodes.add(cCode);
+    }
+  }
+  if (matchedDbPi) {
+    const dbCode = String(matchedDbPi.converted_bom_code || matchedDbPi.converted_bom_no || '').trim();
+    if (dbCode && dbCode !== finalCode) {
+      existingConvertedCodes.add(dbCode);
+    }
+  }
+
+  for (const existingConvertedBomCode of existingConvertedCodes) {
     const otherBomRes = await client.query(`
       SELECT bom_code, status FROM public.bom_orders
       WHERE (bom_code = $1 OR id = $1)
@@ -760,22 +810,32 @@ async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
           `[PI Association Conflict] Source PI "${targetPi}" is already converted to BOM "${existingConvertedBomCode}".`
         );
       }
+    } else {
+      throw new Error(
+        `[PI Association Conflict] Source PI "${targetPi}" is already converted to BOM "${existingConvertedBomCode}".`
+      );
     }
   }
 
-  // 4. Update relational public.proforma_invoices within transaction
-  await client.query(`
-    UPDATE public.proforma_invoices
-    SET status = 'Converted to BOM',
-        updated_at = NOW()
-    WHERE LOWER(pi_no) = $1 OR LOWER(id) = $1
-  `, [lowerPi]);
+  // 4. Update relational public.proforma_invoices within transaction if present
+  if (regCheck?.rows?.[0]?.reg) {
+    await client.query(`
+      UPDATE public.proforma_invoices
+      SET status = 'Converted to BOM',
+          converted_bom_code = $2,
+          updated_at = NOW()
+      WHERE LOWER(pi_no) = $1 OR LOWER(id) = $1
+    `, [lowerPi, finalCode]);
+  }
 
-  // 5. Update authoritative public.controlroom_store ('sales_pi_store') within transaction
-  if (piList.length > 0) {
+  // 5. Update authoritative public.controlroom_store keys containing the PI within transaction
+  for (const key of AUTHORITATIVE_PI_STORE_KEYS) {
+    const list = storeMap.get(key);
+    if (!list || !Array.isArray(list) || list.length === 0) continue;
+
     let changed = false;
-    const updatedPiList = piList.map(p => {
-      if (p && String(p.piNo || p.id || '').trim().toLowerCase() === lowerPi) {
+    const updatedList = list.map(p => {
+      if (isPiMatch(p, lowerPi)) {
         changed = true;
         // Strictly preserve all existing customer, salesperson, financial, line items, and terms
         return {
@@ -793,8 +853,8 @@ async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
       await client.query(`
         UPDATE public.controlroom_store
         SET data = $1, updated_at = NOW()
-        WHERE key = 'sales_pi_store'
-      `, [JSON.stringify(updatedPiList)]);
+        WHERE key = $2
+      `, [JSON.stringify(updatedList), key]);
     }
   }
 }

@@ -40,6 +40,21 @@ import {
   verifySyntheticLeadOwnership,
   verifySyntheticEmployeeEvidence
 } from './recover_phase9y_test_residue.js';
+import {
+  validateAndSyncSourcePi,
+  isPiMatch,
+  AUTHORITATIVE_PI_STORE_KEYS
+} from '../server/bomPersistence.js';
+import {
+  verifySyntheticLeadOwnership304,
+  verifySyntheticEmployeeEvidence304,
+  verifySyntheticQuotationOwnership304,
+  verifySyntheticPiOwnership304,
+  runResidueRecovery304,
+  TARGET_RUN_ID,
+  TARGET_SYNTH_TAG
+} from './recover_phase9y_run_70304_residue.js';
+import { queryTableCount } from './test_phase9y_real_db_workflow_integration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1105,6 +1120,351 @@ runTest('8.32 Fail-closed protection across single-column, composite, invalid, a
       hasPred: false
     });
   }, /is NOT unique/, 'Non-unique index must fail closed');
+});
+
+// =============================================================================
+// TEST GROUP 9: Phase 9AA PI-to-BOM Multi-Store Consistency & Cleanup Safeguards
+// =============================================================================
+console.log('\n--- TEST GROUP 9: Phase 9AA PI-to-BOM Multi-Store Consistency & Cleanup Safeguards ---');
+
+runTest('9.1 isPiMatch helper matches PI across id, piNo, pi_no, proformaInvoiceNumber, piNumber, invoiceNo', () => {
+  assert(isPiMatch({ id: 'PI-70304' }, 'pi-70304'), 'Must match id');
+  assert(isPiMatch({ piNo: 'PI-70304' }, 'pi-70304'), 'Must match piNo');
+  assert(isPiMatch({ pi_no: 'PI-70304' }, 'pi-70304'), 'Must match pi_no');
+  assert(isPiMatch({ proformaInvoiceNumber: 'PI-70304' }, 'pi-70304'), 'Must match proformaInvoiceNumber');
+  assert(isPiMatch({ piNumber: 'PI-70304' }, 'pi-70304'), 'Must match piNumber');
+  assert(isPiMatch({ invoiceNo: 'PI-70304' }, 'pi-70304'), 'Must match invoiceNo');
+  assert(!isPiMatch({ id: 'PI-99999' }, 'pi-70304'), 'Must not match different ID');
+  assert(!isPiMatch(null, 'pi-70304'), 'Must handle null safely');
+});
+
+runTest('9.2 AUTHORITATIVE_PI_STORE_KEYS includes customer_pis_store, sales_pi_store, and proforma_invoice_store', () => {
+  assert(AUTHORITATIVE_PI_STORE_KEYS.includes('customer_pis_store'), 'Must include customer_pis_store');
+  assert(AUTHORITATIVE_PI_STORE_KEYS.includes('sales_pi_store'), 'Must include sales_pi_store');
+  assert(AUTHORITATIVE_PI_STORE_KEYS.includes('proforma_invoice_store'), 'Must include proforma_invoice_store');
+});
+
+await runAsyncTest('9.3 validateAndSyncSourcePi succeeds when PI exists in customer_pis_store and updates conversion status', async () => {
+  let updatedData = null;
+  let updatedKey = null;
+
+  const mockClient = {
+    query: async (sql, params) => {
+      if (sql.includes('public.controlroom_store') && sql.includes('FOR UPDATE')) {
+        return {
+          rows: [
+            {
+              key: 'customer_pis_store',
+              data: [
+                {
+                  id: 'PI-70304',
+                  piNo: 'PI-70304',
+                  customerName: 'Solar Infra',
+                  grandTotal: 1850000,
+                  status: 'Issued',
+                  synthTag: 'SYNTH_P9Y_70304'
+                },
+                {
+                  id: 'PI-UNRELATED-1',
+                  piNo: 'PI-UNRELATED-1',
+                  customerName: 'Real Customer',
+                  grandTotal: 500000,
+                  status: 'Issued'
+                }
+              ]
+            }
+          ]
+        };
+      }
+      if (sql.includes("to_regclass('public.proforma_invoices')")) {
+        return { rows: [{ reg: null }] };
+      }
+      if (sql.includes('public.bom_orders') && sql.includes('LOWER(source_pi_no)')) {
+        return { rows: [] };
+      }
+      if (sql.includes('UPDATE public.controlroom_store')) {
+        updatedData = JSON.parse(params[0]);
+        updatedKey = params[1];
+        return { rowCount: 1 };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await validateAndSyncSourcePi(mockClient, 'PI-70304', 'BOM-70304', {});
+
+  assert.strictEqual(updatedKey, 'customer_pis_store', 'Must update customer_pis_store');
+  assert(Array.isArray(updatedData), 'Updated data must be array');
+  const matched = updatedData.find(p => p.id === 'PI-70304');
+  assert(matched, 'Matched PI must exist in updated store');
+  assert.strictEqual(matched.status, 'Converted to BOM', 'Status must be updated');
+  assert.strictEqual(matched.convertedToBom, true, 'convertedToBom must be true');
+  assert.strictEqual(matched.convertedBomCode, 'BOM-70304', 'convertedBomCode must match');
+  assert.strictEqual(matched.customerName, 'Solar Infra', 'Customer name must be preserved');
+  assert.strictEqual(matched.grandTotal, 1850000, 'Grand total must be preserved');
+  assert.strictEqual(matched.synthTag, 'SYNTH_P9Y_70304', 'Synth tag must be preserved');
+
+  // Verify unrelated record is 100% preserved
+  const unrelated = updatedData.find(p => p.id === 'PI-UNRELATED-1');
+  assert(unrelated, 'Unrelated PI must be preserved');
+  assert.strictEqual(unrelated.status, 'Issued', 'Unrelated PI status must be unchanged');
+  assert.strictEqual(unrelated.grandTotal, 500000, 'Unrelated PI total must be unchanged');
+});
+
+await runAsyncTest('9.4 validateAndSyncSourcePi succeeds when PI exists in sales_pi_store', async () => {
+  let updatedKey = null;
+
+  const mockClient = {
+    query: async (sql, params) => {
+      if (sql.includes('public.controlroom_store') && sql.includes('FOR UPDATE')) {
+        return {
+          rows: [
+            {
+              key: 'sales_pi_store',
+              data: [
+                { id: 'PI-80001', piNo: 'PI-80001', customerName: 'Sales Cust', status: 'Issued' }
+              ]
+            }
+          ]
+        };
+      }
+      if (sql.includes("to_regclass('public.proforma_invoices')")) {
+        return { rows: [{ reg: null }] };
+      }
+      if (sql.includes('public.bom_orders') && sql.includes('LOWER(source_pi_no)')) {
+        return { rows: [] };
+      }
+      if (sql.includes('UPDATE public.controlroom_store')) {
+        updatedKey = params[1];
+        return { rowCount: 1 };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await validateAndSyncSourcePi(mockClient, 'PI-80001', 'BOM-80001', {});
+  assert.strictEqual(updatedKey, 'sales_pi_store', 'Must update sales_pi_store');
+});
+
+await runAsyncTest('9.5 validateAndSyncSourcePi succeeds when PI exists in relational public.proforma_invoices table', async () => {
+  let dbUpdateExecuted = false;
+
+  const mockClient = {
+    query: async (sql, params) => {
+      if (sql.includes('public.controlroom_store') && sql.includes('FOR UPDATE')) {
+        return { rows: [] };
+      }
+      if (sql.includes("to_regclass('public.proforma_invoices')")) {
+        return { rows: [{ reg: 'public.proforma_invoices' }] };
+      }
+      if (sql.includes('SELECT * FROM public.proforma_invoices')) {
+        return { rows: [{ id: 'PI-90001', pi_no: 'PI-90001', customer_name: 'DB Cust', status: 'Issued' }] };
+      }
+      if (sql.includes('public.bom_orders') && sql.includes('LOWER(source_pi_no)')) {
+        return { rows: [] };
+      }
+      if (sql.includes('UPDATE public.proforma_invoices')) {
+        dbUpdateExecuted = true;
+        return { rowCount: 1 };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await validateAndSyncSourcePi(mockClient, 'PI-90001', 'BOM-90001', {});
+  assert(dbUpdateExecuted, 'Must update relational proforma_invoices table');
+});
+
+await runAsyncTest('9.6 validateAndSyncSourcePi throws explicit error when PI is missing from all authoritative stores', async () => {
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('public.controlroom_store') && sql.includes('FOR UPDATE')) {
+        return { rows: [] };
+      }
+      if (sql.includes("to_regclass('public.proforma_invoices')")) {
+        return { rows: [{ reg: null }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await validateAndSyncSourcePi(mockClient, 'PI-MISSING-999', 'BOM-999', {});
+    },
+    /\[PI Validation Error\] Source PI "PI-MISSING-999" does not exist in authoritative PI stores/,
+    'Must throw explicit validation error when PI is missing'
+  );
+});
+
+await runAsyncTest('9.7 validateAndSyncSourcePi rejects conflicting source PI association on base record', async () => {
+  const mockClient = { query: async () => ({ rows: [] }) };
+  await assert.rejects(
+    async () => {
+      await validateAndSyncSourcePi(mockClient, 'PI-NEW', 'BOM-100', { sourcePiNo: 'PI-ORIGINAL' });
+    },
+    /\[PI Association Conflict\] BOM "BOM-100" is already linked to source PI "PI-ORIGINAL", cannot re-associate to "PI-NEW"/,
+    'Must reject conflicting source PI on BOM'
+  );
+});
+
+await runAsyncTest('9.8 validateAndSyncSourcePi rejects when PI is already converted to a different active BOM in public.bom_orders', async () => {
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('public.controlroom_store') && sql.includes('FOR UPDATE')) {
+        return {
+          rows: [{ key: 'customer_pis_store', data: [{ id: 'PI-70304', piNo: 'PI-70304', status: 'Issued' }] }]
+        };
+      }
+      if (sql.includes("to_regclass('public.proforma_invoices')")) {
+        return { rows: [{ reg: null }] };
+      }
+      if (sql.includes('public.bom_orders') && sql.includes('LOWER(source_pi_no)')) {
+        return { rows: [{ bom_code: 'BOM-ACTIVE-PRIOR', id: 'BOM-ACTIVE-PRIOR', status: 'Sales Confirmed' }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await validateAndSyncSourcePi(mockClient, 'PI-70304', 'BOM-70304', {});
+    },
+    /\[PI Association Conflict\] Source PI "PI-70304" is already converted to active BOM "BOM-ACTIVE-PRIOR", cannot associate with BOM "BOM-70304"/,
+    'Must reject when PI is already converted to an active BOM'
+  );
+});
+
+await runAsyncTest('9.9 validateAndSyncSourcePi rejects when PI was previously converted to a cancelled BOM in public.bom_orders', async () => {
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('public.controlroom_store') && sql.includes('FOR UPDATE')) {
+        return {
+          rows: [{ key: 'customer_pis_store', data: [{ id: 'PI-70304', piNo: 'PI-70304', status: 'Issued' }] }]
+        };
+      }
+      if (sql.includes("to_regclass('public.proforma_invoices')")) {
+        return { rows: [{ reg: null }] };
+      }
+      if (sql.includes('public.bom_orders') && sql.includes('LOWER(source_pi_no)')) {
+        return { rows: [{ bom_code: 'BOM-CANCELLED-PRIOR', id: 'BOM-CANCELLED-PRIOR', status: 'Cancelled' }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await validateAndSyncSourcePi(mockClient, 'PI-70304', 'BOM-70304', {});
+    },
+    /\[PI Association Conflict\] Source PI "PI-70304" was previously converted to cancelled BOM "BOM-CANCELLED-PRIOR"\. Cannot associate with another BOM "BOM-70304"/,
+    'Must reject when PI was converted to a cancelled BOM'
+  );
+});
+
+await runAsyncTest('9.10 validateAndSyncSourcePi rejects when store PI object has a conflicting convertedBomCode', async () => {
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('public.controlroom_store') && sql.includes('FOR UPDATE')) {
+        return {
+          rows: [{ key: 'customer_pis_store', data: [{ id: 'PI-70304', piNo: 'PI-70304', convertedBomCode: 'BOM-OTHER' }] }]
+        };
+      }
+      if (sql.includes("to_regclass('public.proforma_invoices')")) {
+        return { rows: [{ reg: null }] };
+      }
+      if (sql.includes('public.bom_orders') && sql.includes('LOWER(source_pi_no)')) {
+        return { rows: [] };
+      }
+      if (sql.includes('public.bom_orders') && sql.includes('bom_code = $1')) {
+        return { rows: [{ bom_code: 'BOM-OTHER', status: 'Production Planning' }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await validateAndSyncSourcePi(mockClient, 'PI-70304', 'BOM-NEW', {});
+    },
+    /\[PI Association Conflict\] Source PI "PI-70304" is already converted to BOM "BOM-OTHER"/,
+    'Must reject when store PI has conflicting convertedBomCode'
+  );
+});
+
+await runAsyncTest('9.11 queryTableCount checks to_regclass before querying non-existent tables to prevent SQLSTATE 25P02 transaction abort', async () => {
+  let countQueryExecuted = false;
+  const mockClient = {
+    query: async (sql, params) => {
+      if (sql.includes('to_regclass')) {
+        // Table does not exist (returns null without throwing 42P01)
+        return { rows: [{ reg: null }] };
+      }
+      if (sql.includes('SELECT COUNT(*)')) {
+        countQueryExecuted = true;
+        return { rows: [{ cnt: '10' }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const count = await queryTableCount(mockClient, 'bom_items');
+  assert.strictEqual(count, 0, 'Non-existent table count must safely return 0');
+  assert(!countQueryExecuted, 'Must NEVER execute SELECT COUNT(*) on non-existent table inside transaction');
+});
+
+runTest('9.12 executeComprehensiveCleanup dynamically discovers referencing foreign keys from information_schema.table_constraints', () => {
+  assert(testScriptSrc.includes('information_schema.table_constraints'), 'Must query information_schema.table_constraints');
+  assert(testScriptSrc.includes("ccu.table_name = 'bom_orders'"), 'Must filter by foreign table bom_orders');
+  assert(testScriptSrc.includes("to_regclass"), 'Must verify child table existence with to_regclass');
+});
+
+runTest('9.13 executeComprehensiveCleanup implements bounded diagnostic logging (sqlState, failedStep, failedTarget, masked 300 chars)', () => {
+  assert(testScriptSrc.includes('currentCleanupStep'), 'Must track currentCleanupStep');
+  assert(testScriptSrc.includes('currentCleanupTarget'), 'Must track currentCleanupTarget');
+  assert(testScriptSrc.includes('sqlState'), 'Must capture SQLSTATE');
+  assert(testScriptSrc.includes('.slice(0, 300)'), 'Must bound error to 300 chars');
+  assert(testScriptSrc.includes('password=***'), 'Must sanitize password credentials');
+  assert(testScriptSrc.includes('x-session-id:***'), 'Must sanitize session tokens');
+});
+
+runTest('9.14 executeComprehensiveCleanup includes customer_pis_store, sales_pi_store, and proforma_invoice_store in storeCleanups', () => {
+  assert(testScriptSrc.includes("'customer_pis_store'"), 'Must include customer_pis_store');
+  assert(testScriptSrc.includes("'sales_pi_store'"), 'Must include sales_pi_store');
+  assert(testScriptSrc.includes("'proforma_invoice_store'"), 'Must include proforma_invoice_store');
+});
+
+runTest('9.15 recover_phase9y_run_70304_residue verifies strict synthetic ownership on leads, employees, quotes, and PIs', () => {
+  // Lead ownership
+  assert(verifySyntheticLeadOwnership304({ company_name: `Company ${TARGET_SYNTH_TAG}` }), 'Valid lead must pass');
+  assert(verifySyntheticLeadOwnership304({ notes: TARGET_SYNTH_TAG }), 'Valid lead notes must pass');
+  assert(!verifySyntheticLeadOwnership304({ company_name: 'Real Company', notes: 'Real Note' }), 'Unrelated lead must fail');
+
+  // Employee ownership
+  assert(verifySyntheticEmployeeEvidence304({ employee_code: 'TA-TEST-304', email: 'synth_admin_1793190270304@example.com' }), 'Valid TA must pass');
+  assert(verifySyntheticEmployeeEvidence304({ employee_code: 'SE-PEND-304', synthTag: TARGET_SYNTH_TAG }), 'Valid SE-PEND must pass');
+  assert(verifySyntheticEmployeeEvidence304({ employee_code: 'SE-ACT-304', email: 'synth_act_304@example.com' }), 'Valid SE-ACT must pass');
+  assert(!verifySyntheticEmployeeEvidence304({ employee_code: 'TA-TEST-304', email: 'generic_admin@example.com' }), 'Generic email must fail');
+  assert(!verifySyntheticEmployeeEvidence304({ employee_code: 'EMP-001', email: 'emp@example.com' }), 'Unrelated employee must fail');
+
+  // Quotation ownership
+  assert(verifySyntheticQuotationOwnership304({ quotationNo: 'QT-70304', synthTag: TARGET_SYNTH_TAG }), 'Valid quotation must pass');
+  assert(!verifySyntheticQuotationOwnership304({ quotationNo: 'QT-70304', customerName: 'Real Customer' }), 'Quotation without tag must fail');
+  assert(!verifySyntheticQuotationOwnership304({ quotationNo: 'QT-99999', synthTag: TARGET_SYNTH_TAG }), 'Different quote number must fail');
+
+  // PI ownership
+  assert(verifySyntheticPiOwnership304({ piNo: 'PI-70304', synthTag: TARGET_SYNTH_TAG }), 'Valid PI must pass');
+  assert(!verifySyntheticPiOwnership304({ piNo: 'PI-70304', customerName: 'Real Customer' }), 'PI without tag must fail');
+  assert(!verifySyntheticPiOwnership304({ piNo: 'PI-99999', synthTag: TARGET_SYNTH_TAG }), 'Different PI number must fail');
+});
+
+await runAsyncTest('9.16 recover_phase9y_run_70304_residue defaults to dry-run and enforces workspace and database isolation', async () => {
+  const result = await runResidueRecovery304({
+    bypassWorkspaceCheckForTesting: false,
+    databaseUrl: 'postgres://invalid:pass@192.168.1.1:5432/businz'
+  });
+  assert.strictEqual(result.success, false, 'Must fail closed on wrong workspace');
+  assert.strictEqual(result.dryRun, true, 'Default mode must be dryRun: true');
 });
 
 // =============================================================================

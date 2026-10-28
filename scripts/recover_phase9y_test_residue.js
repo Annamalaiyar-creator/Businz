@@ -38,7 +38,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const KNOWN_SYNTHETIC_LEADS = ['VRM-LD-2026-01'];
-export const KNOWN_SYNTHETIC_EMPLOYEES = ['TA-TEST-552', 'SE-PEND-552', 'SE-ACT-552', 'SE-TEST-396'];
+export const KNOWN_SYNTHETIC_EMPLOYEES = ['TA-TEST-552', 'SE-PEND-552', 'SE-ACT-552', 'SE-TEST-396', 'TA-TEST-304', 'SE-PEND-304', 'SE-ACT-304'];
 
 /**
  * Strict synthetic lead ownership verification

@@ -256,6 +256,10 @@ export function apiRequest(endpoint, { method = 'GET', headers = {}, body = null
 // =============================================================================
 export async function queryTableCount(client, tableName) {
   try {
+    const regCheck = await client.query('SELECT to_regclass($1) as reg', [`public.${tableName}`]);
+    if (!regCheck.rows[0]?.reg) {
+      return 0;
+    }
     const res = await client.query(`SELECT COUNT(*) as cnt FROM public.${tableName}`);
     return parseInt(res.rows[0]?.cnt || 0, 10);
   } catch (_) {
@@ -293,6 +297,8 @@ export async function collectDatabaseCounts(client) {
     stores: {
       quotations_store: await queryStoreItemCount(client, 'quotations_store'),
       customer_pis_store: await queryStoreItemCount(client, 'customer_pis_store'),
+      sales_pi_store: await queryStoreItemCount(client, 'sales_pi_store'),
+      proforma_invoice_store: await queryStoreItemCount(client, 'proforma_invoice_store'),
       reservations_store: await queryStoreItemCount(client, 'reservations_store'),
       employees_store: await queryStoreItemCount(client, 'employees_store'),
       invoice_store: await queryStoreItemCount(client, 'invoice_store'),
@@ -454,6 +460,8 @@ export async function executeComprehensiveCleanup(pool) {
 
   const client = await pool.connect();
   let inTransaction = false;
+  let currentCleanupStep = 'INITIALIZING';
+  let currentCleanupTarget = 'NONE';
 
   try {
     await client.query('BEGIN');
@@ -464,6 +472,9 @@ export async function executeComprehensiveCleanup(pool) {
     // -------------------------------------------------------------------------
     // If an API request returned HTTP 500 after persisting a record, dynamically
     // discover and register it in syntheticLedger using this run's unique SYNTH_TAG.
+    currentCleanupStep = 'STEP_0_RECOVERY';
+    currentCleanupTarget = 'unrecorded_records';
+
     const unrecordedLeads = await client.query(
       `SELECT id, lead_number FROM public.leads 
        WHERE (company_name LIKE $1 ESCAPE '\\' OR notes = $2) AND id NOT IN (
@@ -491,7 +502,9 @@ export async function executeComprehensiveCleanup(pool) {
     // -------------------------------------------------------------------------
     // DB STEP 1: Clean Leads & Foreign Key Child Records (No Suppressed Errors)
     // -------------------------------------------------------------------------
+    currentCleanupStep = 'STEP_1_LEADS';
     for (const lead of syntheticLedger.leads) {
+      currentCleanupTarget = `lead_${lead.id}`;
       const check = await client.query(
         'SELECT id, lead_number, company_name, notes FROM public.leads WHERE id = $1',
         [lead.id]
@@ -537,7 +550,9 @@ export async function executeComprehensiveCleanup(pool) {
     // -------------------------------------------------------------------------
     // DB STEP 2: Clean BOM Orders & BOM Child Records (No Suppressed Errors)
     // -------------------------------------------------------------------------
+    currentCleanupStep = 'STEP_2_BOMS';
     for (const bom of syntheticLedger.bomOrders) {
+      currentCleanupTarget = `bom_${bom.bomCode}`;
       const check = await client.query(
         'SELECT id, bom_code, customer_name FROM public.bom_orders WHERE id = $1 AND bom_code = $2',
         [bom.id, bom.bomCode]
@@ -550,7 +565,33 @@ export async function executeComprehensiveCleanup(pool) {
         throw new Error(`[SECURITY] BOM ownership check failed for "${bom.bomCode}". Expected tag "${SYNTH_TAG}".`);
       }
 
-      // Delete child bom_items without error suppression
+      // Discover referencing foreign keys dynamically from information_schema.table_constraints for bom_orders
+      const fkQuery = `
+        SELECT
+          tc.table_name,
+          kcu.column_name
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON ccu.constraint_name = tc.constraint_name
+          AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
+          AND ccu.table_name = 'bom_orders'
+      `;
+      const fkRes = await client.query(fkQuery);
+      for (const fkRow of fkRes.rows) {
+        const childTable = fkRow.table_name;
+        const childCol = fkRow.column_name;
+        const regCheck = await client.query('SELECT to_regclass($1) as reg', [`public.${childTable}`]);
+        if (regCheck.rows[0]?.reg) {
+          await client.query(`DELETE FROM public.${childTable} WHERE ${childCol} = $1 OR ${childCol} = $2`, [bom.id, bom.bomCode]);
+        }
+      }
+
+      // Delete child bom_items without error suppression if table exists
       const hasBomItems = await client.query("SELECT to_regclass('public.bom_items') as reg");
       if (hasBomItems.rows[0]?.reg) {
         await client.query('DELETE FROM public.bom_items WHERE bom_order_id = $1 OR bom_code = $2', [bom.id, bom.bomCode]);
@@ -570,9 +611,12 @@ export async function executeComprehensiveCleanup(pool) {
     // -------------------------------------------------------------------------
     // DB STEP 3: Clean Generic JSONB Stores Atomically (Item-Level with FOR UPDATE)
     // -------------------------------------------------------------------------
+    currentCleanupStep = 'STEP_3_STORES';
     const storeCleanups = [
       { key: 'quotations_store', ids: syntheticLedger.quotations.map(q => q.id || q.quotationNo || q), idField: 'quotationNo' },
       { key: 'customer_pis_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p), idField: 'piNo' },
+      { key: 'sales_pi_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p), idField: 'piNo' },
+      { key: 'proforma_invoice_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p), idField: 'piNo' },
       { key: 'reservations_store', ids: syntheticLedger.reservations.map(r => r.id || r), idField: 'id' },
       { key: 'employees_store', ids: syntheticLedger.registeredEmployees.map(e => e.employee_code || e), idField: 'employee_code' },
       { key: 'invoice_store', ids: syntheticLedger.invoices.map(i => i.id || i.invNo || i), idField: 'invNo' },
@@ -580,6 +624,7 @@ export async function executeComprehensiveCleanup(pool) {
     ];
 
     for (const sc of storeCleanups) {
+      currentCleanupTarget = `store_${sc.key}`;
       if (sc.ids.length === 0) continue;
       const res = await client.query('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE', [sc.key]);
       if (res.rows.length > 0 && Array.isArray(res.rows[0].data)) {
@@ -608,9 +653,23 @@ export async function executeComprehensiveCleanup(pool) {
       }
     }
 
+    // Clean public.proforma_invoices if table exists
+    const hasPiTable = await client.query("SELECT to_regclass('public.proforma_invoices') as reg");
+    if (hasPiTable.rows[0]?.reg && syntheticLedger.proformaInvoices.length > 0) {
+      currentCleanupTarget = 'table_proforma_invoices';
+      const piIds = syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p);
+      await client.query(`
+        DELETE FROM public.proforma_invoices
+        WHERE (pi_no = ANY($1) OR id = ANY($1))
+          AND (customer_name LIKE $2 ESCAPE '\\' OR vendor LIKE $2 ESCAPE '\\')
+      `, [piIds, `%${SYNTH_TAG.replace(/_/g, '\\_')}%`]);
+    }
+
     // -------------------------------------------------------------------------
     // DB STEP 4: PRE-COMMIT DATABASE BASELINE CHECK & CONDITIONAL ROLLBACK
     // -------------------------------------------------------------------------
+    currentCleanupStep = 'STEP_4_BASELINE';
+    currentCleanupTarget = 'pre_commit_baseline_check';
     const preCommitCounts = await collectDatabaseCounts(client);
     let preCommitMatches = true;
     const discrepancies = [];
@@ -669,12 +728,25 @@ export async function executeComprehensiveCleanup(pool) {
     cleanupReport.dbCleanup.committed = true;
 
   } catch (dbErr) {
+    const sqlState = dbErr.code || 'UNKNOWN_SQLSTATE';
+    const sanitizedMsg = String(dbErr.message || 'Unknown database error')
+      .replace(/password\s*=\s*[^\s;]+/gi, 'password=***')
+      .replace(/x-session-id\s*[:=]\s*[^\s;]+/gi, 'x-session-id:***')
+      .slice(0, 300);
+
+    cleanupReport.dbCleanup.failedStep = currentCleanupStep;
+    cleanupReport.dbCleanup.failedTarget = currentCleanupTarget;
+    cleanupReport.dbCleanup.sqlState = sqlState;
+    cleanupReport.dbCleanup.sanitizedError = sanitizedMsg;
+
+    console.error(`   [CLEANUP DIAGNOSTIC] Failed at step: ${currentCleanupStep}, target: ${currentCleanupTarget}, SQLSTATE: ${sqlState}, Error: ${sanitizedMsg}`);
+
     if (inTransaction) {
       await client.query('ROLLBACK').catch(() => {});
       cleanupReport.dbCleanup.status = 'ROLLED_BACK_ON_ERROR';
       cleanupReport.dbCleanup.committed = false;
     }
-    cleanupReport.failures.push(dbErr.message);
+    cleanupReport.failures.push(`[${currentCleanupStep}][${currentCleanupTarget}][${sqlState}] ${sanitizedMsg}`);
   } finally {
     client.release();
   }
