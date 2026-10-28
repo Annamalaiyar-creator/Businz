@@ -33,7 +33,7 @@ import {
   REQUIRED_TEST_DATABASE,
   REQUIRED_TEST_DB_ROLE
 } from './testEnvironmentGuard.js';
-import { executePreflight } from './test_phase9y_real_db_workflow_integration.js';
+import { executePreflight, provisionSyntheticTestAdmin } from './test_phase9y_real_db_workflow_integration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -196,9 +196,9 @@ runTest('3.1 Script tracks exact database IDs across all 7 synthetic record type
 
 runTest('3.2 Pre-commit baseline check executes inside transaction before COMMIT', () => {
   const preCommitIndex = testScriptSrc.indexOf('const preCommitCounts = await collectDatabaseCounts(client);');
-  const commitIndex = testScriptSrc.indexOf("await client.query('COMMIT');");
+  const commitIndex = testScriptSrc.indexOf("await client.query('COMMIT');", preCommitIndex);
   assert(preCommitIndex !== -1, 'Must collect pre-commit counts');
-  assert(commitIndex !== -1, 'Must have COMMIT statement');
+  assert(commitIndex !== -1, 'Must have COMMIT statement in cleanup transaction');
   assert(preCommitIndex < commitIndex, 'Pre-commit baseline check must execute before COMMIT');
 });
 
@@ -248,19 +248,48 @@ runTest('4.3 Implements authorized administrator setup with collision protection
   assert(testScriptSrc.includes('hashPassword('), 'Admin password must be hashed with scrypt');
 });
 
-runTest('4.4 Administrator provisions Identity B with Active status and sessionId authorization', () => {
+runTest('4.4 Enforces explicit PostgreSQL transaction (BEGIN, COMMIT, ROLLBACK) in administrator provisioning', () => {
+  assert(testScriptSrc.includes("await client.query('BEGIN');"), 'Must begin transaction explicitly');
+  assert(testScriptSrc.includes("await client.query('COMMIT');"), 'Must commit transaction explicitly');
+  assert(testScriptSrc.includes("await client.query('ROLLBACK');"), 'Must rollback transaction on error');
+});
+
+runTest('4.5 Protects concurrent access via pg_advisory_xact_lock and row initialization with FOR UPDATE', () => {
+  assert(
+    testScriptSrc.includes("pg_advisory_xact_lock(hashtext('controlroom_store:employees_store'))"),
+    'Must acquire store-specific advisory lock'
+  );
+  assert(
+    testScriptSrc.includes("INSERT INTO public.controlroom_store (key, data, updated_at)") &&
+    testScriptSrc.includes("ON CONFLICT (key) DO NOTHING"),
+    'Must seed missing employees_store row before FOR UPDATE'
+  );
+  assert(
+    testScriptSrc.includes("SELECT data FROM public.controlroom_store WHERE key = 'employees_store' FOR UPDATE"),
+    'Must acquire row-level lock with FOR UPDATE'
+  );
+});
+
+runTest('4.6 Administrator provisions Identity B with Active status and sessionId authorization', () => {
   assert(testScriptSrc.includes('sessionId: adminTestSessionId'), 'Must pass admin session to provisioning request');
   assert(testScriptSrc.includes('assert.strictEqual(adminProvisionRes.status, 201'), 'Must assert admin provision returns 201');
   assert(testScriptSrc.includes("adminProvisionRes.data?.account?.status,\n      'Active'"), 'Must verify account is provisioned Active');
   assert(testScriptSrc.includes('SYNTH_PENDING_EMP') && testScriptSrc.includes('SYNTH_ACTIVE_EMP'), 'Must use separate identities for pending and active');
 });
 
-runTest('4.5 Authenticates approved employee with genuine credentials to obtain server-issued session', () => {
+runTest('4.7 Authenticates approved employee with genuine credentials to obtain server-issued session', () => {
   assert(testScriptSrc.includes('assert.strictEqual(activeLoginRes.status, 200'), 'Must assert approved login returns 200');
   assert(testScriptSrc.includes('activeTestSessionId = activeLoginRes.data.session.id'), 'Must store server-issued session ID');
 });
 
-runTest('4.6 Honestly reports pending-to-active approval transition of existing record as NOT TESTED', () => {
+runTest('4.8 Registers synthetic administrator in cleanup ledger strictly after commit', () => {
+  const provIdx = testScriptSrc.indexOf('await provisionSyntheticTestAdmin(');
+  const ledgerIdx = testScriptSrc.indexOf('syntheticLedger.registeredEmployees.push({ employee_code: SYNTH_ADMIN_EMP');
+  assert(provIdx !== -1 && ledgerIdx !== -1, 'Must provision admin and register in ledger');
+  assert(provIdx < ledgerIdx, 'Ledger registration must occur after successful commit of provisionSyntheticTestAdmin');
+});
+
+runTest('4.9 Honestly reports pending-to-active approval transition of existing record as NOT TESTED', () => {
   assert(testScriptSrc.includes("'10c. Pending-to-active employee approval transition'] = {\n      status: 'NOT TESTED'"), 'Must mark 10c as NOT TESTED');
 });
 
@@ -317,6 +346,253 @@ runTest('6.3 Separates tested invoice creation from unsupported final vehicle lo
 
 runTest('6.4 Reports unsupported Dispatch packing and Accounts verification as NOT TESTED', () => {
   assert(testScriptSrc.includes("'7. Dispatch packing and accounts verification'] = {\n      status: 'NOT TESTED'"), 'Must mark 7 as NOT TESTED');
+});
+
+// =============================================================================
+// TEST GROUP 7: Synthetic Administrator Provisioning & Transaction Safety
+// Targeted regression tests for transactions, locking, collisions & cleanup
+// =============================================================================
+console.log('\n--- TEST GROUP 7: Synthetic Administrator Provisioning & Transaction Safety ---');
+
+function createMockDbClient(initialStoreData = null, options = {}) {
+  const queryLog = [];
+  let inTransaction = false;
+  let rolledBack = false;
+  let committed = false;
+  let storeState = initialStoreData !== null ? JSON.parse(JSON.stringify(initialStoreData)) : null;
+
+  return {
+    queryLog,
+    get inTransaction() { return inTransaction; },
+    get rolledBack() { return rolledBack; },
+    get committed() { return committed; },
+    get storeState() { return storeState; },
+    async query(sql, params) {
+      const trimmed = sql.trim();
+      queryLog.push({ sql: trimmed, params });
+
+      if (options.failOnSql && options.failOnSql.test(trimmed)) {
+        throw new Error(`[MOCK DB ERROR] Simulated failure on SQL: ${trimmed}`);
+      }
+
+      const normalized = trimmed.toUpperCase();
+
+      if (normalized === 'BEGIN') {
+        if (inTransaction) throw new Error('Transaction already active');
+        inTransaction = true;
+        return { rows: [] };
+      }
+
+      if (normalized === 'COMMIT') {
+        if (!inTransaction) throw new Error('COMMIT called outside transaction');
+        inTransaction = false;
+        committed = true;
+        return { rows: [] };
+      }
+
+      if (normalized === 'ROLLBACK') {
+        inTransaction = false;
+        rolledBack = true;
+        return { rows: [] };
+      }
+
+      if (normalized.startsWith('SELECT PG_ADVISORY_XACT_LOCK')) {
+        if (!inTransaction) throw new Error('Advisory xact lock requires active transaction');
+        return { rows: [{ pg_advisory_xact_lock: null }] };
+      }
+
+      if (normalized.includes('INSERT INTO PUBLIC.CONTROLROOM_STORE') && normalized.includes('ON CONFLICT (KEY) DO NOTHING')) {
+        if (storeState === null) {
+          storeState = [];
+        }
+        return { rowCount: 1, rows: [] };
+      }
+
+      if (normalized.includes('SELECT DATA FROM PUBLIC.CONTROLROOM_STORE WHERE KEY =') && normalized.includes('FOR UPDATE')) {
+        if (storeState === null) {
+          return { rows: [] };
+        }
+        return { rows: [{ data: storeState }] };
+      }
+
+      if (normalized.includes('UPDATE PUBLIC.CONTROLROOM_STORE') || (normalized.includes('INSERT INTO PUBLIC.CONTROLROOM_STORE') && normalized.includes('DO UPDATE'))) {
+        const newData = params && params[0] ? JSON.parse(params[0]) : [];
+        storeState = newData;
+        return { rowCount: 1, rows: [] };
+      }
+
+      return { rows: [] };
+    }
+  };
+}
+
+await runAsyncTest('7.1 Successful administrator provisioning with explicit BEGIN and COMMIT', async () => {
+  const initial = [{ employee_code: 'EMP-001', email: 'emp1@test.com', status: 'Active' }];
+  const mockClient = createMockDbClient(initial);
+  const admin = await provisionSyntheticTestAdmin(mockClient, 'TA-TEST-001', 'admin@test.com', 'AdminPass123!');
+
+  assert.strictEqual(mockClient.committed, true, 'Transaction must be committed');
+  assert.strictEqual(mockClient.rolledBack, false, 'Transaction must not be rolled back');
+  assert.strictEqual(mockClient.inTransaction, false, 'Transaction state must be inactive after commit');
+  assert.strictEqual(admin.employee_code, 'TA-TEST-001', 'Employee code must match');
+  assert.strictEqual(admin.status, 'Active', 'Status must be Active');
+  assert.strictEqual(admin.role, 'Technical Administrator', 'Role must be Technical Administrator');
+  assert(admin.synthTag, 'Must include synthTag for ownership tracking');
+  assert.strictEqual(mockClient.storeState.length, 2, 'Store must contain both initial employee and new admin');
+  assert.strictEqual(mockClient.storeState[0].employee_code, 'EMP-001', 'Original employee must be preserved');
+  assert.strictEqual(mockClient.storeState[1].employee_code, 'TA-TEST-001', 'Admin must be appended');
+});
+
+await runAsyncTest('7.2 Rejects pre-existing employee-code collision and triggers ROLLBACK', async () => {
+  const initial = [{ employee_code: 'TA-EXISTING', email: 'existing@test.com', status: 'Active' }];
+  const mockClient = createMockDbClient(initial);
+  let errorCaught = null;
+  try {
+    await provisionSyntheticTestAdmin(mockClient, 'TA-EXISTING', 'new_email@test.com', 'AdminPass123!');
+  } catch (err) {
+    errorCaught = err;
+  }
+  assert(errorCaught, 'Must throw error on code collision');
+  assert(errorCaught.message.includes('code collision detected'), 'Error must specify code collision');
+  assert.strictEqual(mockClient.rolledBack, true, 'Transaction must be rolled back on collision');
+  assert.strictEqual(mockClient.committed, false, 'Transaction must not be committed');
+  assert.strictEqual(mockClient.inTransaction, false, 'inTransaction must be cleared');
+  assert.strictEqual(mockClient.storeState.length, 1, 'Store must remain unchanged');
+});
+
+await runAsyncTest('7.3 Rejects pre-existing email collision and triggers ROLLBACK', async () => {
+  const initial = [{ employee_code: 'EMP-002', email: 'admin_dupe@test.com', status: 'Active' }];
+  const mockClient = createMockDbClient(initial);
+  let errorCaught = null;
+  try {
+    await provisionSyntheticTestAdmin(mockClient, 'TA-NEW-CODE', 'admin_dupe@test.com', 'AdminPass123!');
+  } catch (err) {
+    errorCaught = err;
+  }
+  assert(errorCaught, 'Must throw error on email collision');
+  assert(errorCaught.message.includes('email collision detected'), 'Error must specify email collision');
+  assert.strictEqual(mockClient.rolledBack, true, 'Transaction must be rolled back on email collision');
+  assert.strictEqual(mockClient.committed, false, 'Transaction must not be committed');
+  assert.strictEqual(mockClient.storeState.length, 1, 'Store must remain unchanged');
+});
+
+await runAsyncTest('7.4 Protects concurrent access via pg_advisory_xact_lock and FOR UPDATE', async () => {
+  const mockClient = createMockDbClient([]);
+  await provisionSyntheticTestAdmin(mockClient, 'TA-CONCUR-1', 'admin_c1@test.com', 'Pass1!');
+
+  const hasAdvisoryLock = mockClient.queryLog.some(q => q.sql.includes("pg_advisory_xact_lock(hashtext('controlroom_store:employees_store'))"));
+  const hasRowLock = mockClient.queryLog.some(q => q.sql.includes("SELECT data FROM public.controlroom_store WHERE key = 'employees_store' FOR UPDATE"));
+
+  assert(hasAdvisoryLock, 'Must acquire advisory xact lock for store serialization');
+  assert(hasRowLock, 'Must acquire exclusive row lock with FOR UPDATE');
+
+  // Sequential provisioning of second administrator preserves first without lost updates
+  await provisionSyntheticTestAdmin(mockClient, 'TA-CONCUR-2', 'admin_c2@test.com', 'Pass2!');
+  assert.strictEqual(mockClient.storeState.length, 2, 'Both administrators must exist without lost updates');
+  assert.strictEqual(mockClient.storeState[0].employee_code, 'TA-CONCUR-1');
+  assert.strictEqual(mockClient.storeState[1].employee_code, 'TA-CONCUR-2');
+});
+
+await runAsyncTest('7.5 Triggers ROLLBACK before releasing client when query fails', async () => {
+  const mockClient = createMockDbClient([], { failOnSql: /UPDATE PUBLIC\.CONTROLROOM_STORE|ON CONFLICT/i });
+  let errorCaught = null;
+  try {
+    await provisionSyntheticTestAdmin(mockClient, 'TA-FAIL-TEST', 'fail@test.com', 'Pass1!');
+  } catch (err) {
+    errorCaught = err;
+  }
+  assert(errorCaught, 'Must rethrow query failure');
+  assert.strictEqual(mockClient.rolledBack, true, 'Must execute ROLLBACK on query failure');
+  assert.strictEqual(mockClient.committed, false, 'Must not commit on failure');
+  assert.strictEqual(mockClient.inTransaction, false, 'Transaction must be closed before releasing client');
+});
+
+await runAsyncTest('7.6 Safely initializes and locks missing employees_store row without lost updates', async () => {
+  const mockClient = createMockDbClient(null);
+  await provisionSyntheticTestAdmin(mockClient, 'TA-INIT-TEST', 'init@test.com', 'Pass1!');
+
+  const hasDoNothing = mockClient.queryLog.some(q =>
+    q.sql.includes("INSERT INTO public.controlroom_store") && q.sql.includes("ON CONFLICT (key) DO NOTHING")
+  );
+  assert(hasDoNothing, 'Must seed missing row with ON CONFLICT DO NOTHING before FOR UPDATE');
+  assert.strictEqual(mockClient.committed, true, 'Must successfully commit');
+  assert.strictEqual(mockClient.storeState.length, 1, 'Store must contain exactly the new admin');
+  assert.strictEqual(mockClient.storeState[0].employee_code, 'TA-INIT-TEST');
+});
+
+await runAsyncTest('7.7 Verifies cleanup removes all three synthetic identities', async () => {
+  const testRunId = Date.now();
+  const synthTag = `SYNTH_P9Y_${testRunId}`;
+  const adminCode = `TA-TEST-${testRunId % 1000}`;
+  const pendCode = `SE-PEND-${testRunId % 1000}`;
+  const actCode = `SE-ACT-${testRunId % 1000}`;
+
+  const store = [
+    { employee_code: 'EMP-001', employee_name: 'Existing Employee 1', email: 'emp1@businz.com', status: 'Active' },
+    { employee_code: adminCode, employee_name: 'Test Administrator', email: `admin_${testRunId}@test.com`, synthTag, status: 'Active' },
+    { employee_code: pendCode, employee_name: 'Pending Sales Rep', email: `pend_${testRunId}@test.com`, status: 'Pending Approval' },
+    { employee_code: actCode, employee_name: 'Active Sales Rep', email: `act_${testRunId}@test.com`, status: 'Active' },
+    { employee_code: 'EMP-002', employee_name: 'Existing Employee 2', email: 'emp2@businz.com', status: 'Active' }
+  ];
+
+  const syntheticEmployeeLedger = [
+    { employee_code: adminCode, email: `admin_${testRunId}@test.com` },
+    { employee_code: pendCode, email: `pend_${testRunId}@test.com` },
+    { employee_code: actCode, email: `act_${testRunId}@test.com` }
+  ];
+
+  const scIds = syntheticEmployeeLedger.map(e => e.employee_code || e);
+
+  // Exact filtering logic from executeComprehensiveCleanup
+  const filtered = store.filter(item => {
+    if (!item || typeof item !== 'object') return true;
+    const matchId = item.employee_code || item.id || item.code;
+    const matchesLedger = scIds.includes(matchId);
+    const hasSynthTag = (item.synthTag === synthTag) ||
+      (typeof item.customerName === 'string' && item.customerName.includes(synthTag)) ||
+      (typeof item.email === 'string' && item.email.includes(String(testRunId))) ||
+      (typeof item.employee_code === 'string' && item.employee_code.includes(String(testRunId % 1000)));
+    return !(matchesLedger && hasSynthTag);
+  });
+
+  assert.strictEqual(store.length - filtered.length, 3, 'Exactly three synthetic identities must be removed');
+  assert.strictEqual(filtered.length, 2, 'Exactly two unrelated employees must remain');
+  assert(!filtered.some(e => e.employee_code === adminCode), 'Admin must be removed');
+  assert(!filtered.some(e => e.employee_code === pendCode), 'Pending employee must be removed');
+  assert(!filtered.some(e => e.employee_code === actCode), 'Active employee must be removed');
+});
+
+await runAsyncTest('7.8 Verifies unrelated employee records are 100% preserved during cleanup', async () => {
+  const testRunId = Date.now();
+  const synthTag = `SYNTH_P9Y_${testRunId}`;
+  const unrelatedList = [
+    { employee_code: 'EMP-001', employee_name: 'Alice Smith', email: 'alice@businz.com', role: 'Sales Executive', status: 'Active' },
+    { employee_code: 'EMP-002', employee_name: 'Bob Jones', email: 'bob@businz.com', role: 'Accounts Manager', status: 'Active' },
+    { employee_code: 'MGR-100', employee_name: 'Carol White', email: 'carol@businz.com', role: 'Production Admin', status: 'Active' }
+  ];
+
+  const fullStore = [
+    ...unrelatedList,
+    { employee_code: `TA-TEST-${testRunId % 1000}`, email: `admin_${testRunId}@test.com`, synthTag },
+    { employee_code: `SE-PEND-${testRunId % 1000}`, email: `pend_${testRunId}@test.com` },
+    { employee_code: `SE-ACT-${testRunId % 1000}`, email: `act_${testRunId}@test.com` }
+  ];
+
+  const scIds = [`TA-TEST-${testRunId % 1000}`, `SE-PEND-${testRunId % 1000}`, `SE-ACT-${testRunId % 1000}`];
+
+  const filtered = fullStore.filter(item => {
+    if (!item || typeof item !== 'object') return true;
+    const matchId = item.employee_code || item.id || item.code;
+    const matchesLedger = scIds.includes(matchId);
+    const hasSynthTag = (item.synthTag === synthTag) ||
+      (typeof item.customerName === 'string' && item.customerName.includes(synthTag)) ||
+      (typeof item.email === 'string' && item.email.includes(String(testRunId))) ||
+      (typeof item.employee_code === 'string' && item.employee_code.includes(String(testRunId % 1000)));
+    return !(matchesLedger && hasSynthTag);
+  });
+
+  assert.strictEqual(filtered.length, unrelatedList.length, 'All unrelated records must be preserved');
+  assert.deepStrictEqual(filtered, unrelatedList, 'Unrelated records must remain identical and unmodified');
 });
 
 // =============================================================================

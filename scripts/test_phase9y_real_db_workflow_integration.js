@@ -330,7 +330,7 @@ export function safeCleanDiskFile(filename, filterPredicate) {
 }
 
 // =============================================================================
-// PROTECTED TEST ADMINISTRATOR PROVISIONING (Requirement 2)
+// PROTECTED TEST ADMINISTRATOR PROVISIONING (Requirements 1, 2, 3, 4, 5, 6, 7)
 // =============================================================================
 export async function provisionSyntheticTestAdmin(client, synthAdminEmp, synthAdminEmail, synthAdminPass) {
   const passwordHash = hashPassword(synthAdminPass, 'scrypt');
@@ -344,42 +344,88 @@ export async function provisionSyntheticTestAdmin(client, synthAdminEmp, synthAd
     role: 'Technical Administrator',
     dashboard_type: 'Technical Administrator',
     status: 'Active',
+    synthTag: SYNTH_TAG,
     created_at: new Date().toISOString(),
     last_login: new Date().toISOString()
   };
 
-  // Lock row in controlroom_store for atomic collision check & insert
-  const res = await client.query("SELECT data FROM public.controlroom_store WHERE key = 'employees_store' FOR UPDATE");
-  let list = [];
-  if (res.rows.length > 0 && Array.isArray(res.rows[0].data)) {
-    list = res.rows[0].data;
+  let inTransaction = false;
+  try {
+    // 1. Explicit transaction start (Requirement 1)
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    // 2. Transaction-level advisory lock serializing concurrent access to employees_store (Requirements 2, 3)
+    // Uses 64-bit hashtext lock key specific to controlroom_store:employees_store
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext('controlroom_store:employees_store'))"
+    );
+
+    // 3. Ensure employees_store row exists in controlroom_store so row-level locking never misses (Requirement 2)
+    await client.query(`
+      INSERT INTO public.controlroom_store (key, data, updated_at)
+      VALUES ('employees_store', '[]'::jsonb, NOW())
+      ON CONFLICT (key) DO NOTHING
+    `);
+
+    // 4. Acquire exclusive row lock with FOR UPDATE to prevent lost updates (Requirement 3)
+    const res = await client.query(
+      "SELECT data FROM public.controlroom_store WHERE key = 'employees_store' FOR UPDATE"
+    );
+
+    let list = [];
+    if (res.rows.length > 0 && res.rows[0].data) {
+      if (Array.isArray(res.rows[0].data)) {
+        list = res.rows[0].data;
+      } else if (typeof res.rows[0].data === 'string') {
+        try {
+          const parsed = JSON.parse(res.rows[0].data);
+          if (Array.isArray(parsed)) list = parsed;
+        } catch (_) {}
+      }
+    }
+
+    // 5. Fail closed on any collision with pre-existing employee code or email (Requirement 4)
+    const norm = s => String(s || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
+    const targetCode = norm(synthAdminEmp);
+    const targetEmail = String(synthAdminEmail || '').trim().toLowerCase();
+
+    const codeCollision = list.find(e => norm(e.employee_code || e.code) === targetCode);
+    if (codeCollision) {
+      throw new Error(`[FAIL CLOSED] Synthetic administrator code collision detected: "${synthAdminEmp}" already exists. Aborting provisioning.`);
+    }
+
+    const emailCollision = list.find(e => String(e.email || '').trim().toLowerCase() === targetEmail);
+    if (emailCollision) {
+      throw new Error(`[FAIL CLOSED] Synthetic administrator email collision detected: "${synthAdminEmail}" already exists. Aborting provisioning.`);
+    }
+
+    // 6. Never remove or replace unrelated existing employees: append only (Requirement 5)
+    const updatedList = [...list, adminAccount];
+
+    await client.query(`
+      INSERT INTO public.controlroom_store (key, data, updated_at)
+      VALUES ('employees_store', $1::jsonb, NOW())
+      ON CONFLICT (key) DO UPDATE SET data = $1::jsonb, updated_at = NOW()
+    `, [JSON.stringify(updatedList)]);
+
+    // 7. Explicit transaction commit (Requirement 1)
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    return adminAccount;
+  } catch (err) {
+    // 8. Explicit rollback on any error before releasing database client (Requirement 6)
+    if (inTransaction) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rbErr) {
+        // Suppress secondary rollback error
+      }
+      inTransaction = false;
+    }
+    throw err;
   }
-
-  // Fail closed on any collision with existing employee code or email (Requirement 2)
-  const norm = s => String(s || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
-  const targetCode = norm(synthAdminEmp);
-  const targetEmail = String(synthAdminEmail || '').trim().toLowerCase();
-
-  const codeCollision = list.find(e => norm(e.employee_code || e.code) === targetCode);
-  if (codeCollision) {
-    throw new Error(`[FAIL CLOSED] Synthetic administrator code collision detected: "${synthAdminEmp}" already exists. Aborting provisioning.`);
-  }
-
-  const emailCollision = list.find(e => String(e.email || '').trim().toLowerCase() === targetEmail);
-  if (emailCollision) {
-    throw new Error(`[FAIL CLOSED] Synthetic administrator email collision detected: "${synthAdminEmail}" already exists. Aborting provisioning.`);
-  }
-
-  // Never remove or replace unrelated existing employees: append only
-  const updatedList = [...list, adminAccount];
-
-  await client.query(`
-    INSERT INTO public.controlroom_store (key, data, updated_at)
-    VALUES ('employees_store', $1, NOW())
-    ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
-  `, [JSON.stringify(updatedList)]);
-
-  return adminAccount;
 }
 
 // =============================================================================
