@@ -220,7 +220,7 @@ runTest('3.5 Generic JSONB stores use atomic row locks (FOR UPDATE) and item-lev
 });
 
 // =============================================================================
-// TEST GROUP 4: Synthetic Employee Approval & Pending Login Rejection (Issue 1)
+// TEST GROUP 4: Synthetic Employee Approval, Dual Identities & Pending Rejection
 // =============================================================================
 console.log('\n--- TEST GROUP 4: Synthetic Employee Approval & Pending Rejection ---');
 
@@ -236,21 +236,32 @@ runTest('4.2 Verifies login is rejected with HTTP 403 while approval is pending'
   assert(testScriptSrc.includes("pendingLoginRes.data?.error || '').toLowerCase().includes('pending approval')"), 'Must assert error contains pending approval');
 });
 
-runTest('4.3 Implements authorized administrator setup in isolated test database', () => {
+runTest('4.3 Implements authorized administrator setup with collision protection in test database', () => {
   assert(testScriptSrc.includes('provisionSyntheticTestAdmin'), 'Must define provisionSyntheticTestAdmin');
   assert(testScriptSrc.includes("role: 'Technical Administrator'"), 'Admin must have Technical Administrator role');
   assert(testScriptSrc.includes("status: 'Active'"), 'Admin must have Active status');
+  assert(
+    testScriptSrc.includes('Synthetic administrator code collision detected') &&
+    testScriptSrc.includes('Synthetic administrator email collision detected'),
+    'Admin must fail closed on collision'
+  );
   assert(testScriptSrc.includes('hashPassword('), 'Admin password must be hashed with scrypt');
 });
 
-runTest('4.4 Uses real server-side approval mechanism with authenticated administrator session', () => {
-  assert(testScriptSrc.includes('sessionId: adminTestSessionId'), 'Must pass admin session to approval request');
-  assert(testScriptSrc.includes("approveRes.data?.account?.status,\n      'Active'"), 'Must verify account becomes Active after admin approval');
+runTest('4.4 Administrator provisions Identity B with Active status and sessionId authorization', () => {
+  assert(testScriptSrc.includes('sessionId: adminTestSessionId'), 'Must pass admin session to provisioning request');
+  assert(testScriptSrc.includes('assert.strictEqual(adminProvisionRes.status, 201'), 'Must assert admin provision returns 201');
+  assert(testScriptSrc.includes("adminProvisionRes.data?.account?.status,\n      'Active'"), 'Must verify account is provisioned Active');
+  assert(testScriptSrc.includes('SYNTH_PENDING_EMP') && testScriptSrc.includes('SYNTH_ACTIVE_EMP'), 'Must use separate identities for pending and active');
 });
 
 runTest('4.5 Authenticates approved employee with genuine credentials to obtain server-issued session', () => {
-  assert(testScriptSrc.includes('assert.strictEqual(salesLoginRes.status, 200'), 'Must assert approved login returns 200');
-  assert(testScriptSrc.includes('activeTestSessionId = salesLoginRes.data.session.id'), 'Must store server-issued session ID');
+  assert(testScriptSrc.includes('assert.strictEqual(activeLoginRes.status, 200'), 'Must assert approved login returns 200');
+  assert(testScriptSrc.includes('activeTestSessionId = activeLoginRes.data.session.id'), 'Must store server-issued session ID');
+});
+
+runTest('4.6 Honestly reports pending-to-active approval transition of existing record as NOT TESTED', () => {
+  assert(testScriptSrc.includes("'10c. Pending-to-active employee approval transition'] = {\n      status: 'NOT TESTED'"), 'Must mark 10c as NOT TESTED');
 });
 
 // =============================================================================

@@ -7,31 +7,32 @@
  * and authoritative PostgreSQL persistence across CRM and Order-to-Dispatch stages.
  *
  * Corrected per Hostinger VPS Code Review:
- * 1. Synthetic Employee Approval:
- *    - Preserves application rule: unauthenticated self-registration strictly forced to Pending Approval.
- *    - Verifies login is rejected with HTTP 403 while approval is pending.
- *    - Implements test-only authorized administrator setup in isolated optimization database.
- *    - Uses real server-side approval with properly authenticated administrator session.
- *    - Authenticates approved employee with genuine credentials to obtain server-issued cryptographic session.
- *    - Fully includes all synthetic employee records in ledger and cleanup.
- * 2. Exit Code Integrity:
- *    - Any integration test failure, preflight failure, failed cleanup, or baseline mismatch sets process.exitCode = 1.
- *    - Successful cleanup does not hide or clear earlier test failures.
- *    - Cleanup is guaranteed to execute in finally block without premature process.exit().
- * 3. Transaction Cleanup & Rollback:
- *    - Audits table and store baseline counts INSIDE the transaction BEFORE COMMIT.
- *    - Rolls back immediately upon baseline mismatch or deletion failure.
- *    - Does NOT suppress child-record deletion failures (errors propagate to rollback).
- *    - Verifies exact ownership and parent-child relationships.
- *    - Preserves unrelated records and never resets global numbering sequences.
- *    - Distinguishes PostgreSQL transaction cleanup from non-transactional disk-file cleanup.
- * 4. Accurate Workflow Reporting:
- *    - Separates tested reservation store write (6a) from unsupported physical stock release (6b: NOT TESTED).
- *    - Separates tested invoice creation (8a) from unsupported final vehicle loading/dispatch (8b: NOT TESTED).
- *    - Honestly reports unsupported Dispatch, Accounts, loading, and stock-release stages as NOT TESTED.
- * 5. Session Security:
+ * 1. Two Independent Synthetic Test Identities (Correcting Duplicate Registration):
+ *    - Identity A (Pending Employee): Public self-registration forced to Pending Approval,
+ *      login verified rejected with HTTP 403. Never re-registered.
+ *    - Identity B (Administrator-Provisioned Employee): Registered via authenticated administrator
+ *      session with Active status, authenticated with genuine credentials to obtain cryptographic session.
+ *    - Approval transition of an existing pending record is honestly reported as NOT TESTED.
+ * 2. Protected Synthetic Administrator Provisioning:
+ *    - Fails closed immediately on employee code or email collisions.
+ *    - Never removes or replaces unrelated existing employees.
+ *    - Uses PostgreSQL transaction and row-level locking (FOR UPDATE).
+ *    - Tracks exact synthetic administrator identity in ledger for full cleanup.
+ * 3. Process Exit Code Integrity:
+ *    - Nonzero exit code (process.exitCode = 1) for workflow failures, baseline mismatches,
+ *      cleanup failures, and filesystem inconsistencies.
+ *    - Successful cleanup never clears or hides earlier test failures.
+ *    - Cleanup is guaranteed in finally block without premature process.exit().
+ * 4. Transaction Cleanup & Rollback:
+ *    - Pre-commit baseline checks INSIDE the transaction BEFORE COMMIT.
+ *    - Rolls back immediately on baseline mismatch or deletion failure.
+ *    - Does NOT suppress child-record deletion failures.
+ *    - Never wipes or resets global numbering sequences.
+ * 5. Accurate Workflow Reporting:
+ *    - Separates tested store writes (6a, 8a) from unsupported transitions (6b, 7, 8b, 10c).
+ * 6. Session Security:
  *    - Never uses x-user-emp-id or x-user-name headers as authentication.
- *    - Uses server-issued, cryptographically verified sessions (sess_...) for protected API requests.
+ *    - Uses genuine server-issued cryptographic sessions (sess_...) for protected calls.
  */
 
 import http from 'http';
@@ -60,15 +61,20 @@ const __dirname = path.dirname(__filename);
 export const RUN_ID = Date.now();
 export const SYNTH_TAG = `SYNTH_P9Y_${RUN_ID}`;
 
-// Synthetic Administrator Credentials (for test-only authorized approval setup)
+// Synthetic Administrator Credentials (for test-only authorized provisioning)
 export const SYNTH_ADMIN_EMP = `TA-TEST-${RUN_ID % 1000}`;
 export const SYNTH_ADMIN_EMAIL = `synth_admin_${RUN_ID}@example.com`;
 export const SYNTH_ADMIN_PASS = `AdminSecurePass123!`;
 
-// Synthetic Sales Executive Credentials (for standard CRM workflow testing)
-export const SYNTH_USER_EMP = `SE-TEST-${RUN_ID % 1000}`;
-export const SYNTH_USER_EMAIL = `synth_rep_${RUN_ID}@example.com`;
-export const SYNTH_USER_PASS = `RepSecurePass123!`;
+// Identity A: Synthetic Pending Employee (tests unauthenticated self-registration & 403 rejection)
+export const SYNTH_PENDING_EMP = `SE-PEND-${RUN_ID % 1000}`;
+export const SYNTH_PENDING_EMAIL = `synth_pend_${RUN_ID}@example.com`;
+export const SYNTH_PENDING_PASS = `PendingSecurePass123!`;
+
+// Identity B: Synthetic Active Employee (tests administrator-authorized provisioning & CRM session)
+export const SYNTH_ACTIVE_EMP = `SE-ACT-${RUN_ID % 1000}`;
+export const SYNTH_ACTIVE_EMAIL = `synth_act_${RUN_ID}@example.com`;
+export const SYNTH_ACTIVE_PASS = `ActiveSecurePass123!`;
 
 // Server-issued active session tokens
 export let adminTestSessionId = null;
@@ -195,7 +201,7 @@ export async function executePreflight(customCwd = null) {
 }
 
 // HTTP Helper for real requests targeting only 127.0.0.1:5101
-// Uses server-issued, cryptographically verified session token (Requirement 5)
+// Uses server-issued, cryptographically verified session token (Requirement 6)
 export function apiRequest(endpoint, { method = 'GET', headers = {}, body = null, sessionId = null, timeout = 10000 } = {}) {
   return new Promise((resolve, reject) => {
     if (!testApiUrl) {
@@ -246,7 +252,7 @@ export function apiRequest(endpoint, { method = 'GET', headers = {}, body = null
 }
 
 // =============================================================================
-// DATABASE & STORE AUDIT HELPERS (Requirements 1, 3, 4)
+// DATABASE & STORE AUDIT HELPERS
 // =============================================================================
 export async function queryTableCount(client, tableName) {
   try {
@@ -295,7 +301,6 @@ export async function collectDatabaseCounts(client) {
   };
 }
 
-// Safely resolve approved disk file path
 export function resolveApprovedDiskFilePath(filename) {
   try {
     return getStoreFilePath(filename);
@@ -308,7 +313,6 @@ export function resolveApprovedDiskFilePath(filename) {
   return null;
 }
 
-// Safely clean disk JSON files in approved test storage
 export function safeCleanDiskFile(filename, filterPredicate) {
   const filePath = resolveApprovedDiskFilePath(filename);
   if (filePath && fs.existsSync(filePath)) {
@@ -326,7 +330,7 @@ export function safeCleanDiskFile(filename, filterPredicate) {
 }
 
 // =============================================================================
-// TEST-ONLY AUTHORIZED EMPLOYEE PROVISIONING (Issue 1 Requirement)
+// PROTECTED TEST ADMINISTRATOR PROVISIONING (Requirement 2)
 // =============================================================================
 export async function provisionSyntheticTestAdmin(client, synthAdminEmp, synthAdminEmail, synthAdminPass) {
   const passwordHash = hashPassword(synthAdminPass, 'scrypt');
@@ -344,26 +348,42 @@ export async function provisionSyntheticTestAdmin(client, synthAdminEmp, synthAd
     last_login: new Date().toISOString()
   };
 
+  // Lock row in controlroom_store for atomic collision check & insert
   const res = await client.query("SELECT data FROM public.controlroom_store WHERE key = 'employees_store' FOR UPDATE");
   let list = [];
   if (res.rows.length > 0 && Array.isArray(res.rows[0].data)) {
     list = res.rows[0].data;
   }
 
-  const filtered = list.filter(e => e.employee_code !== synthAdminEmp && e.email !== synthAdminEmail);
-  filtered.push(adminAccount);
+  // Fail closed on any collision with existing employee code or email (Requirement 2)
+  const norm = s => String(s || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
+  const targetCode = norm(synthAdminEmp);
+  const targetEmail = String(synthAdminEmail || '').trim().toLowerCase();
+
+  const codeCollision = list.find(e => norm(e.employee_code || e.code) === targetCode);
+  if (codeCollision) {
+    throw new Error(`[FAIL CLOSED] Synthetic administrator code collision detected: "${synthAdminEmp}" already exists. Aborting provisioning.`);
+  }
+
+  const emailCollision = list.find(e => String(e.email || '').trim().toLowerCase() === targetEmail);
+  if (emailCollision) {
+    throw new Error(`[FAIL CLOSED] Synthetic administrator email collision detected: "${synthAdminEmail}" already exists. Aborting provisioning.`);
+  }
+
+  // Never remove or replace unrelated existing employees: append only
+  const updatedList = [...list, adminAccount];
 
   await client.query(`
     INSERT INTO public.controlroom_store (key, data, updated_at)
     VALUES ('employees_store', $1, NOW())
     ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
-  `, [JSON.stringify(filtered)]);
+  `, [JSON.stringify(updatedList)]);
 
   return adminAccount;
 }
 
 // =============================================================================
-// COMPREHENSIVE SYNTHETIC DATA CLEANUP (Requirement 3 & 4)
+// COMPREHENSIVE SYNTHETIC DATA CLEANUP (Requirements 1, 2, 4)
 // =============================================================================
 export async function executeComprehensiveCleanup(pool) {
   const cleanupReport = {
@@ -671,8 +691,10 @@ async function main() {
       '8a. Invoice creation and BOM linkage',
       '8b. Vehicle loading and final dispatch completion',
       '9. Multiple BOM concurrency and record isolation',
-      '10a. Pending-approval login rejection & administrator approval',
-      '10b. Session security and role-based access control'
+      '10a. Identity A: Unauthenticated registration & pending login rejection',
+      '10b. Identity B: Administrator-provisioned employee & session auth',
+      '10c. Pending-to-active employee approval transition',
+      '10d. Session security and role-based access control'
     ];
 
     allWorkflowNames.forEach(w => {
@@ -682,7 +704,7 @@ async function main() {
 
     printFinalReport();
 
-    // Set nonzero exit code on preflight failure (Issue 2 Requirement)
+    // Set nonzero exit code on preflight failure (Requirement 3)
     process.exitCode = 1;
     return;
   }
@@ -706,11 +728,11 @@ async function main() {
     }
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 10a: Synthetic Employee Approval Setup (Issue 1 Requirement)
+    // WORKFLOW 10a & 10b: Two Independent Synthetic Identities (Requirement 1)
     // -------------------------------------------------------------------------
-    console.log('🔐 Step 10a: Authorized employee approval setup & pending rejection testing...');
+    console.log('🔐 Step 10: Synthetic employee setup & authentication testing...');
 
-    // 1. Provision authorized synthetic administrator in isolated test database
+    // 1. Provision authorized synthetic administrator in isolated test database (Requirement 2)
     const adminSetupClient = await dbPool.connect();
     try {
       await provisionSyntheticTestAdmin(adminSetupClient, SYNTH_ADMIN_EMP, SYNTH_ADMIN_EMAIL, SYNTH_ADMIN_PASS);
@@ -735,14 +757,17 @@ async function main() {
     adminTestSessionId = adminSessionRes.data.session.id;
     console.log(`   ✅ Server-issued verified administrator session established: ${adminTestSessionId.slice(0, 16)}...`);
 
-    // 3. Self-register standard Sales Executive without admin session (Public Unauthenticated Request)
+    // -------------------------------------------------------------------------
+    // IDENTITY A: Pending Employee (Requirement 1)
+    // -------------------------------------------------------------------------
+    console.log('\n   [Identity A] Testing unauthenticated self-registration & pending login rejection...');
     const selfRegRes = await apiRequest('/api/auth/register-employee', {
       method: 'POST',
       body: {
-        employee_code: SYNTH_USER_EMP,
-        employee_name: 'Sanitized Employee Rep',
-        email: SYNTH_USER_EMAIL,
-        password: SYNTH_USER_PASS,
+        employee_code: SYNTH_PENDING_EMP,
+        employee_name: 'Pending Sales Rep',
+        email: SYNTH_PENDING_EMAIL,
+        password: SYNTH_PENDING_PASS,
         role: 'Sales Executive',
         status: 'Active' // Public caller attempts to grant self Active status
       }
@@ -753,15 +778,15 @@ async function main() {
       'Pending Approval',
       'Public unauthenticated self-registration must be strictly forced to Pending Approval'
     );
-    syntheticLedger.registeredEmployees.push({ employee_code: SYNTH_USER_EMP, email: SYNTH_USER_EMAIL });
-    console.log('   ✅ Public self-registration correctly forced to "Pending Approval".');
+    syntheticLedger.registeredEmployees.push({ employee_code: SYNTH_PENDING_EMP, email: SYNTH_PENDING_EMAIL });
+    console.log('   ✅ Identity A public registration correctly forced to "Pending Approval".');
 
-    // 4. Verify login is rejected while approval is pending (Requirement 1.2)
+    // Verify login is rejected while approval is pending
     const pendingLoginRes = await apiRequest('/api/sessions/register', {
       method: 'POST',
       body: {
-        empCode: SYNTH_USER_EMP,
-        password: SYNTH_USER_PASS
+        empCode: SYNTH_PENDING_EMP,
+        password: SYNTH_PENDING_PASS
       }
     });
     assert.strictEqual(pendingLoginRes.status, 403, 'Login must be rejected with HTTP 403 while approval is pending');
@@ -769,55 +794,74 @@ async function main() {
       String(pendingLoginRes.data?.error || '').toLowerCase().includes('pending approval'),
       `Error message must specify Pending Approval, got: ${pendingLoginRes.data?.error}`
     );
-    console.log('   ✅ Login for Pending Approval account successfully rejected with HTTP 403.');
+    console.log('   ✅ Identity A login rejected with HTTP 403 (Account is Pending Approval).');
 
-    // 5. Use real server-side approval mechanism with properly authenticated administrator session (Requirement 1.4)
-    const approveRes = await apiRequest('/api/auth/register-employee', {
-      method: 'POST',
-      sessionId: adminTestSessionId,
-      body: {
-        employee_code: SYNTH_USER_EMP,
-        employee_name: 'Sanitized Employee Rep',
-        email: SYNTH_USER_EMAIL,
-        password: SYNTH_USER_PASS,
-        role: 'Sales Executive',
-        status: 'Active'
-      }
-    });
-    assert.strictEqual(approveRes.status, 201, 'Admin approval request must return HTTP 201');
-    assert.strictEqual(
-      approveRes.data?.account?.status,
-      'Active',
-      'Admin-authorized approval must successfully transition status to Active'
-    );
-    console.log('   ✅ Sales Executive account approved to "Active" via authenticated admin session.');
-
-    // 6. Authenticate approved employee with genuine credentials to obtain server-issued session (Requirement 1.7)
-    const salesLoginRes = await apiRequest('/api/sessions/register', {
-      method: 'POST',
-      body: {
-        empCode: SYNTH_USER_EMP,
-        password: SYNTH_USER_PASS,
-        device: 'Sales Terminal',
-        browser: 'Node.js Test Engine'
-      }
-    });
-    assert.strictEqual(salesLoginRes.status, 200, 'Approved employee login must return HTTP 200');
-    assert(salesLoginRes.data?.session?.id, 'Approved employee login must return valid session token');
-    activeTestSessionId = salesLoginRes.data.session.id;
-    console.log(`   ✅ Approved Sales Executive session token established: ${activeTestSessionId.slice(0, 16)}...`);
-
-    testReport.workflows['10a. Pending-approval login rejection & administrator approval'] = {
+    testReport.workflows['10a. Identity A: Unauthenticated registration & pending login rejection'] = {
       status: 'PASS',
       httpStatus: 200,
-      evidence: `Public self-registration forced to Pending Approval; login rejected with HTTP 403; approved by authenticated administrator; genuine session issued`
+      evidence: `Public registration forced to Pending Approval; login rejected with HTTP 403 while approval pending`
     };
     testReport.summary.passed++;
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 10b: Session Security & Role-Based Access Control
+    // IDENTITY B: Administrator-Provisioned Employee (Requirement 1)
     // -------------------------------------------------------------------------
-    console.log('\n🔐 Step 10b: Session security and role-based access control verification...');
+    console.log('\n   [Identity B] Testing administrator-provisioned employee & genuine session auth...');
+    const adminProvisionRes = await apiRequest('/api/auth/register-employee', {
+      method: 'POST',
+      sessionId: adminTestSessionId,
+      body: {
+        employee_code: SYNTH_ACTIVE_EMP,
+        employee_name: 'Active Sales Rep',
+        email: SYNTH_ACTIVE_EMAIL,
+        password: SYNTH_ACTIVE_PASS,
+        role: 'Sales Executive',
+        status: 'Active'
+      }
+    });
+    assert.strictEqual(adminProvisionRes.status, 201, 'Admin provisioning request must return HTTP 201');
+    assert.strictEqual(
+      adminProvisionRes.data?.account?.status,
+      'Active',
+      'Admin-authorized request must successfully create account with Active status'
+    );
+    syntheticLedger.registeredEmployees.push({ employee_code: SYNTH_ACTIVE_EMP, email: SYNTH_ACTIVE_EMAIL });
+    console.log('   ✅ Identity B successfully provisioned with "Active" status by administrator.');
+
+    // Authenticate Identity B with genuine credentials to obtain server-issued cryptographic session
+    const activeLoginRes = await apiRequest('/api/sessions/register', {
+      method: 'POST',
+      body: {
+        empCode: SYNTH_ACTIVE_EMP,
+        password: SYNTH_ACTIVE_PASS,
+        device: 'Sales Terminal',
+        browser: 'Node.js Test Engine'
+      }
+    });
+    assert.strictEqual(activeLoginRes.status, 200, 'Approved employee login must return HTTP 200');
+    assert(activeLoginRes.data?.session?.id, 'Approved employee login must return valid session token');
+    activeTestSessionId = activeLoginRes.data.session.id;
+    console.log(`   ✅ Identity B genuine session token established: ${activeTestSessionId.slice(0, 16)}...`);
+
+    testReport.workflows['10b. Identity B: Administrator-provisioned employee & session auth'] = {
+      status: 'PASS',
+      httpStatus: 200,
+      evidence: `Identity B provisioned with Active status by admin; genuine cryptographic session token issued`
+    };
+    testReport.summary.passed++;
+
+    // Report pending-to-active approval transition of existing record as NOT TESTED (Requirement 1)
+    testReport.workflows['10c. Pending-to-active employee approval transition'] = {
+      status: 'NOT TESTED',
+      reason: 'Approval transition of an existing pending employee record requires a dedicated verified approval endpoint; duplicate registration of the same employee code is rejected with HTTP 409 by design.'
+    };
+    testReport.summary.notTested++;
+    console.log('   ⚠️ [NOT TESTED] Pending-to-active employee approval transition requires dedicated approval endpoint.');
+
+    // -------------------------------------------------------------------------
+    // WORKFLOW 10d: Session Security & Role-Based Access Control
+    // -------------------------------------------------------------------------
+    console.log('\n🔐 Step 10d: Session security and role-based access control verification...');
 
     // A: Unauthenticated request rejected with 401
     const unauthLeaves = await apiRequest('/api/store/leaves', {
@@ -848,7 +892,7 @@ async function main() {
     });
     assert.strictEqual(crossLeave.status, 403, 'Cross-employee leave tampering must return HTTP 403');
 
-    testReport.workflows['10b. Session security and role-based access control'] = {
+    testReport.workflows['10d. Session security and role-based access control'] = {
       status: 'PASS',
       httpStatus: 200,
       evidence: `HTTP 401 unauthenticated rejected; HTTP 403 privileged self-registration blocked; HTTP 403 cross-employee tampering blocked`
@@ -857,7 +901,7 @@ async function main() {
     console.log(`   ✅ Session security and RBAC invariants confirmed.`);
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 1: Lead Creation, Updating & Persistence
+    // WORKFLOW 1: Lead Creation, Updating & Persistence (Using Identity B Session)
     // -------------------------------------------------------------------------
     console.log('\n1️⃣ Workflow 1: Lead creation, updating, and persistence...');
     const synthLeadData = {
@@ -1035,7 +1079,7 @@ async function main() {
     console.log(`   ✅ Duplicate BOM-PI conversion collision correctly blocked.`);
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 6: Inventory Reservation & Release Reporting (Requirement 4)
+    // WORKFLOW 6: Inventory Reservation & Release Reporting
     // -------------------------------------------------------------------------
     console.log('\n6️⃣ Workflow 6a: Inventory reservation store persistence...');
     const synthReservationKey = `res_${SYNTH_TAG}`;
@@ -1064,7 +1108,6 @@ async function main() {
     testReport.summary.passed++;
     console.log(`   ✅ Inventory reservation held for BOM ${synthBomCode}.`);
 
-    // Report physical stock release as NOT TESTED
     testReport.workflows['6b. Inventory physical stock release'] = {
       status: 'NOT TESTED',
       reason: 'Physical inventory stock deduction and release occurs upon vehicle loading and dispatch confirmation; cannot be tested without interactive dispatch modal.'
@@ -1160,7 +1203,7 @@ async function main() {
     testReport.summary.failed++;
   } finally {
     // -------------------------------------------------------------------------
-    // GUARANTEED CLEANUP EXECUTION (Issue 1 & 2 Requirement)
+    // GUARANTEED CLEANUP EXECUTION (Requirements 1, 2, 3)
     // -------------------------------------------------------------------------
     if (dbPool) {
       console.log('\n--- STEP 4: Comprehensive Synthetic Record Cleanup ---');
@@ -1173,7 +1216,7 @@ async function main() {
   printFinalReport();
 
   // ---------------------------------------------------------------------------
-  // PROCESS EXIT CODE EVALUATION (Issue 2 Requirement)
+  // PROCESS EXIT CODE EVALUATION (Requirement 3)
   // ---------------------------------------------------------------------------
   const hasFailures =
     !testReport.environment.preflightPassed ||
