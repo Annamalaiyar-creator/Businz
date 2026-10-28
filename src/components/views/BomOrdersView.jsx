@@ -1836,7 +1836,7 @@ export default function BomOrdersView(props) {
 
     // 2. Individual items subtotal (exclude preset items because their cost is in kitSubtotal)
     const itemsSub = (bomMaterialsList || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       return acc + (q * r);
@@ -1847,7 +1847,7 @@ export default function BomOrdersView(props) {
 
     // 3. GST: Custom item GSTs + Preset kits GST (dynamically from each preset's selected gstRate)
     const itemsGst = (bomMaterialsList || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;

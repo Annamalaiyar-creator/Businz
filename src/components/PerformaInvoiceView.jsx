@@ -1676,7 +1676,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
 
     const itemsSub = (piItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       return acc + (q * r);
@@ -1694,9 +1694,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     };
 
     (piItems || []).forEach(item => {
-      if (item.isPresetItem) return;
+      if (item.isPresetItem || item.presetGroupId) return;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
+      if (r <= 0) return;
       const rowTot = q * r;
       const pct = extractRate(item.gstRate, 18);
       const amt = rowTot * (pct / 100);
@@ -1711,27 +1712,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const unitPrice = parseFloat(grp.kitPrice) || 0;
         const multiplier = parseInt(grp.setCount) || 1;
         const groupTotal = unitPrice * multiplier;
+        if (groupTotal <= 0) return;
 
-        const groupItems = (piItems || []).filter(it => (it.presetGroupId || 'legacy_default') === grpId);
-        const totalQty = groupItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 1), 0);
-
-        if (groupItems.length > 0 && totalQty > 0) {
-          groupItems.forEach(it => {
-            const itQty = parseFloat(it.qty) || 1;
-            const itemShare = groupTotal * (itQty / totalQty);
-            const itGstRate = extractRate(it.gstRate ?? grp.gstRate, 18);
-            const itAmt = itemShare * (itGstRate / 100);
-            if (!gstTiersMap[itGstRate]) gstTiersMap[itGstRate] = { rate: itGstRate, taxable: 0, gstAmt: 0 };
-            gstTiersMap[itGstRate].taxable += itemShare;
-            gstTiersMap[itGstRate].gstAmt += itAmt;
-          });
-        } else {
-          const gPct = extractRate(grp?.gstRate, 18);
-          const gAmt = groupTotal * (gPct / 100);
-          if (!gstTiersMap[gPct]) gstTiersMap[gPct] = { rate: gPct, taxable: 0, gstAmt: 0 };
-          gstTiersMap[gPct].taxable += groupTotal;
-          gstTiersMap[gPct].gstAmt += gAmt;
-        }
+        const gPct = extractRate(grp?.gstRate, 18);
+        const gAmt = groupTotal * (gPct / 100);
+        if (!gstTiersMap[gPct]) gstTiersMap[gPct] = { rate: gPct, taxable: 0, gstAmt: 0 };
+        gstTiersMap[gPct].taxable += groupTotal;
+        gstTiersMap[gPct].gstAmt += gAmt;
       }
     });
 
@@ -2446,10 +2433,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         ? piList[existingMatchIdx]
         : (isEditing && editIdx !== null ? piList[editIdx] : null);
 
-      const sanitizedItems = (piItems || []).map(it => ({
-        ...it,
-        hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it)).trim()
-      }));
+      const sanitizedItems = (piItems || []).map(it => {
+        const isPreset = Boolean(it.isPresetItem || it.presetGroupId);
+        return {
+          ...it,
+          isPresetItem: isPreset,
+          rate: isPreset ? '0' : String(it.rate || '0'),
+          taxable: isPreset ? 0 : ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)),
+          hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it)).trim()
+        };
+      });
 
       const newPI = {
         id: cleanPiNo,
@@ -5997,36 +5990,65 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
         const isSame = selectedPi.sameAsBilling || (!dStreet && !dCity);
         const piItemsList = Array.isArray(selectedPi.items) ? selectedPi.items : [];
-        const presetGroupsMap = selectedPi.presetGroups || {};
-        const hasPresets = Object.keys(presetGroupsMap).length > 0 || piItemsList.some(it => it.isPresetItem);
+        const presetGroupsMap = (selectedPi.presetGroups && typeof selectedPi.presetGroups === 'object') ? selectedPi.presetGroups : {};
+        const hasPresets = Object.keys(presetGroupsMap).length > 0 || piItemsList.some(it => it.isPresetItem || it.presetGroupId);
 
-        const subtotalVal = Number(selectedPi.unitValue) || piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
-        const grandTotalVal = parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || (subtotalVal * 1.18);
-        const totalGstVal = Math.max(0, grandTotalVal - subtotalVal);
+        // Accurate Subtotal Calculation (Preset Groups + Custom Standalone Items)
+        let presetKitsSubtotal = 0;
+        Object.values(presetGroupsMap).forEach(grp => {
+          if (!grp) return;
+          const uPrice = parseFloat(grp.kitPrice) || 0;
+          const sCount = parseInt(grp.setCount) || 1;
+          presetKitsSubtotal += (uPrice * sCount);
+        });
+        if (presetKitsSubtotal === 0 && selectedPi.kitSubtotal) {
+          presetKitsSubtotal = parseFloat(selectedPi.kitSubtotal) || 0;
+        }
+
+        const customItemsSubtotal = piItemsList.reduce((acc, it) => {
+          if (it.isPresetItem || it.presetGroupId) return acc;
+          const q = parseFloat(it.qty) || 0;
+          const r = parseFloat(it.rate) || 0;
+          return acc + (q * r);
+        }, 0);
+
+        const calculatedSubtotal = presetKitsSubtotal + customItemsSubtotal;
+        const subtotalVal = (selectedPi.unitValue !== undefined && selectedPi.unitValue !== null && !isNaN(parseFloat(selectedPi.unitValue)) && parseFloat(selectedPi.unitValue) > 0)
+          ? parseFloat(selectedPi.unitValue)
+          : ((selectedPi.subtotal !== undefined && selectedPi.subtotal !== null && !isNaN(parseFloat(selectedPi.subtotal)) && parseFloat(selectedPi.subtotal) > 0)
+            ? parseFloat(selectedPi.subtotal)
+            : (calculatedSubtotal > 0 ? calculatedSubtotal : (piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0))));
+
+        const rawGrandTotal = (selectedPi.grandTotal !== undefined && selectedPi.grandTotal !== null && !isNaN(parseFloat(selectedPi.grandTotal)) && parseFloat(selectedPi.grandTotal) > 0)
+          ? parseFloat(selectedPi.grandTotal)
+          : (parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || 0);
+
+        const grandTotalVal = rawGrandTotal > 0 ? rawGrandTotal : (subtotalVal * 1.18);
+        const authoritativeTax = (selectedPi.taxTotal !== undefined && selectedPi.taxTotal !== null && !isNaN(parseFloat(selectedPi.taxTotal)))
+          ? parseFloat(selectedPi.taxTotal)
+          : Math.max(0, grandTotalVal - subtotalVal);
+        const totalGstVal = authoritativeTax;
+
         const isDraft = (selectedPi.status === 'Draft' || selectedPi.statusType === 'draft');
         const matchedBoms = getConvertedBomsForPi(selectedPi);
         const hasSavedBom = matchedBoms.length > 0;
         const isConverted = !isDraft && hasSavedBom;
 
-        const modalGstTiersMap = {};
-        (piItemsList || []).forEach(it => {
-          const q = parseFloat(it.qty) || 1;
-          const r = parseFloat(it.rate) || 0;
-          const taxable = it.taxable !== undefined ? parseFloat(it.taxable) : (q * r);
-          const rawRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18';
-          const cleaned = String(rawRate).replace('%', '').trim();
-          const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
-          const amt = taxable * (rate / 100);
-          if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
-          modalGstTiersMap[rate].taxable += taxable;
-          modalGstTiersMap[rate].gstAmt += amt;
-        });
+        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
+        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
+        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
 
-        if (selectedPi.presetGroups) {
-          Object.values(selectedPi.presetGroups).forEach(grp => {
+        // Group GST by Rate Tier with Strict Conservation
+        const modalGstTiersMap = {};
+
+        // 1. Preset Kits (Kit Lump-Sum Prices)
+        if (Object.keys(presetGroupsMap).length > 0) {
+          Object.values(presetGroupsMap).forEach(grp => {
+            if (!grp) return;
             const unitPrice = parseFloat(grp.kitPrice) || 0;
             const multiplier = parseInt(grp.setCount) || 1;
             const groupTotal = unitPrice * multiplier;
+            if (groupTotal <= 0) return;
             const rawRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18';
             const cleaned = String(rawRate).replace('%', '').trim();
             const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
@@ -6037,13 +6059,44 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           });
         }
 
-        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
-        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
-        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
+        // 2. Custom Items ONLY (strictly exclude preset component items)
+        piItemsList.forEach(it => {
+          if (it.isPresetItem || it.presetGroupId) return; // Component of preset package - cost is inside presetGroups
+          const q = parseFloat(it.qty) || 0;
+          const r = parseFloat(it.rate) || 0;
+          if (r <= 0) return;
+          const taxable = q * r;
+          const rawRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18';
+          const cleaned = String(rawRate).replace('%', '').trim();
+          const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
+          const amt = taxable * (rate / 100);
+          if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
+          modalGstTiersMap[rate].taxable += taxable;
+          modalGstTiersMap[rate].gstAmt += amt;
+        });
 
-        const modalGstTiers = Object.values(modalGstTiersMap)
+        // 3. Fallback tier if empty but subtotal and tax exist
+        if (Object.keys(modalGstTiersMap).length === 0 && subtotalVal > 0) {
+          modalGstTiersMap[18] = { rate: 18, taxable: subtotalVal, gstAmt: totalGstVal };
+        }
+
+        // 4. Strict Conservation Reconciliation:
+        // Force the sum of all tax tiers to exactly match totalGstVal
+        // Guarantees: subtotalVal + sum(tier.gstAmt) === grandTotalVal (Zero Price Mismatch)
+        let modalGstTiers = Object.values(modalGstTiersMap)
           .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
           .sort((a, b) => a.rate - b.rate);
+
+        const sumCalculatedGst = modalGstTiers.reduce((s, t) => s + t.gstAmt, 0);
+        if (modalGstTiers.length === 1 && totalGstVal > 0) {
+          modalGstTiers[0].gstAmt = totalGstVal;
+        } else if (modalGstTiers.length > 1 && totalGstVal > 0 && Math.abs(sumCalculatedGst - totalGstVal) > 0.05) {
+          const scale = totalGstVal / (sumCalculatedGst || 1);
+          modalGstTiers = modalGstTiers.map(t => ({
+            ...t,
+            gstAmt: Math.round(t.gstAmt * scale * 100) / 100
+          }));
+        }
 
         return (
           <div
@@ -6725,10 +6778,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <span>Taxable Product Value:</span>
                       <strong style={{ color: '#0F172A' }}>₹ {subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </div>
-                    {selectedPi.kitSubtotal > 0 && (
+                    {(presetKitsSubtotal > 0 || selectedPi.kitSubtotal > 0) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
                         <span>Preset Kits Subtotal:</span>
-                        <strong style={{ color: '#0F172A' }}>₹ {Number(selectedPi.kitSubtotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        <strong style={{ color: '#0F172A' }}>₹ {(presetKitsSubtotal > 0 ? presetKitsSubtotal : Number(selectedPi.kitSubtotal)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                       </div>
                     )}
                     {modalGstTiers.length > 0 ? (
@@ -6764,7 +6817,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #0E7490', marginTop: '4px' }}>
                       <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>Total Invoice Amount:</span>
                       <strong style={{ fontSize: '18px', fontWeight: '900', color: '#0E7490' }}>
-                        {selectedPi.amount ? (selectedPi.amount.startsWith('₹') ? selectedPi.amount : `₹ ${selectedPi.amount}`) : `₹ ${grandTotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        ₹ {grandTotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </strong>
                     </div>
                   </div>

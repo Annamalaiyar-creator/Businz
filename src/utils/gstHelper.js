@@ -99,11 +99,16 @@ export function calculateGstTiers(items = [], options = {}) {
   let totalTaxable = 0;
 
   // 1. Process custom items
+  const hasPresetGroups = options.presetGroups && typeof options.presetGroups === 'object' && Object.keys(options.presetGroups).length > 0;
+
   (items || []).forEach(it => {
-    if (it.isPresetItem && options.presetGroups) return; // Handled under presetGroups
+    const isPreset = Boolean(it.isPresetItem || it.presetGroupId || (hasPresetGroups && (!it.rate || parseFloat(it.rate) === 0)));
+    if (isPreset && hasPresetGroups) return; // Handled under presetGroups
     const q = parseFloat(it.qty !== undefined ? it.qty : (it.invQty || it.bomQty || 1)) || 0;
     const r = parseFloat(it.rate !== undefined ? it.rate : (it.unitPrice || 0)) || 0;
-    const taxable = it.taxable !== undefined ? parseFloat(it.taxable) : (q * r);
+    if (isPreset && r <= 0) return; // Preset component item without custom rate
+    const taxable = (isPreset && r <= 0) ? 0 : (it.taxable !== undefined && r > 0 ? parseFloat(it.taxable) : (q * r));
+    if (taxable <= 0) return;
     const rateStr = it.gstRate !== undefined ? it.gstRate : (it.tax !== undefined ? it.tax : '18%');
     const rate = parseFloat(String(rateStr).replace('%', '')) || 18;
     const amt = taxable * (rate / 100);

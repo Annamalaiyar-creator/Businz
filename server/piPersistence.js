@@ -202,10 +202,13 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
     }
 
     const subTotal = parseFloat(piData.subtotal ?? piData.sub_total ?? piData.unitValue ?? (existingRow?.sub_total || 0)) || 0;
-    const taxTotal = parseFloat(piData.taxTotal ?? piData.gst_amount ?? (existingRow?.gst_amount || 0)) || 0;
-    const cgst = parseFloat(piData.cgst ?? piData.cgst_amount ?? (taxTotal / 2)) || 0;
-    const sgst = parseFloat(piData.sgst ?? piData.sgst_amount ?? (taxTotal / 2)) || 0;
+    let taxTotal = parseFloat(piData.taxTotal ?? piData.gst_amount ?? (existingRow?.gst_amount || 0)) || 0;
     const grandTotal = parseFloat(piData.grandTotal ?? piData.grand_total ?? (subTotal + taxTotal)) || (subTotal + taxTotal);
+    if (taxTotal === 0 && grandTotal > subTotal) {
+      taxTotal = Math.round((grandTotal - subTotal) * 100) / 100;
+    }
+    const cgst = parseFloat(piData.cgst ?? piData.cgst_amount ?? (taxTotal / 2)) || (taxTotal / 2);
+    const sgst = parseFloat(piData.sgst ?? piData.sgst_amount ?? (taxTotal / 2)) || (taxTotal / 2);
 
     const billingObj = (piData.billingAddress && typeof piData.billingAddress === 'object')
       ? piData.billingAddress

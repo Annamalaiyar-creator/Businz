@@ -188,6 +188,7 @@ export default function CreateBomFormPage(props) {
     const kitSubtotal = selectedPreset ? (kitUnitPrice * kitMultiplier) : 0;
 
     const itemsSub = (bomMaterialsList || []).reduce((acc, item) => {
+      if (selectedPreset && (item.isPresetItem || item.presetGroupId)) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       return acc + (q * r);
@@ -197,6 +198,7 @@ export default function CreateBomFormPage(props) {
     const disc = 0;
 
     const itemsGst = (bomMaterialsList || []).reduce((acc, item) => {
+      if (selectedPreset && (item.isPresetItem || item.presetGroupId)) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;

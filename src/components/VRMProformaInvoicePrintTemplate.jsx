@@ -954,8 +954,8 @@ export function VRMProformaInvoicePrintSheet({
   const presetSubtotalSum = Object.values(groupMetaMap).reduce((s, g) => s + g.groupSubtotal, 0);
   const presetGstSum = Object.values(groupMetaMap).reduce((s, g) => s + g.groupGst, 0);
 
-  const customSubtotal = items.filter(it => !it.isPresetItem).reduce((sum, item) => sum + item.taxable, 0);
-  const customGst = items.filter(it => !it.isPresetItem).reduce((sum, item) => sum + item.gstAmt, 0);
+  const customSubtotal = items.filter(it => !it.isPresetItem && !it.presetGroupId).reduce((sum, item) => sum + item.taxable, 0);
+  const customGst = items.filter(it => !it.isPresetItem && !it.presetGroupId).reduce((sum, item) => sum + item.gstAmt, 0);
 
   const subTotal = (presetSubtotalSum + customSubtotal) || (Number(pi.unitValue) || 0);
   const totalGst = presetGstSum + customGst;
@@ -975,7 +975,7 @@ export function VRMProformaInvoicePrintSheet({
   });
 
   // From custom non-preset line items
-  items.filter(it => !it.isPresetItem).forEach(it => {
+  items.filter(it => !it.isPresetItem && !it.presetGroupId).forEach(it => {
     const rate = it.gRate !== undefined && !isNaN(it.gRate) ? it.gRate : 18;
     if (!gstTiersMap[rate]) gstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
     gstTiersMap[rate].taxable += (it.taxable || 0);

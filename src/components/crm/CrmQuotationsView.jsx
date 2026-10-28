@@ -580,7 +580,7 @@ export default function CrmQuotationsView({
 
     // 2. Individual items subtotal
     const itemsSub = (quoteItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       return acc + (q * r);
@@ -590,7 +590,7 @@ export default function CrmQuotationsView({
 
     // 3. GST: Custom item GSTs + Preset kits GST (dynamically from preset's selected gstRate)
     const itemsGst = (quoteItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       const rowTot = q * r;
