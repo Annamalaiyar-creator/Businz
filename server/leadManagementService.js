@@ -770,6 +770,12 @@ export async function assignLead({
       });
     }
   } catch (notifErr) {
+    if (client) {
+      // Mandatory notification write failure within outer transaction (e.g. createLead)
+      // must propagate so the entire outer transaction is rolled back (leads, history, notifications)
+      throw notifErr;
+    }
+    // Preserve historical standalone assignment behavior: log warning without reversing already committed assignment
     console.warn('[Notification Notice]:', notifErr.message);
   }
 

@@ -41,6 +41,7 @@ END $$;
 -- ------------------------------------------------------------------------------
 -- STEP 1: PRE-CHECK TARGET INDEX METADATA (FAIL CLOSED ON UNRELATED INDEX OR MISMATCH)
 -- Inspect target index table, columns, uniqueness, and validity. Never drop an unrelated index.
+-- PostgreSQL 18.6 compatible: avoids int2vector function incompatibilities.
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -48,6 +49,10 @@ DECLARE
   v_cols TEXT[];
   v_is_valid BOOLEAN;
   v_is_unique BOOLEAN;
+  v_natts INTEGER;
+  v_nkeyatts INTEGER;
+  v_has_expr BOOLEAN;
+  v_has_pred BOOLEAN;
 BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_class c
@@ -56,31 +61,54 @@ BEGIN
   ) THEN
     SELECT 
       t.relname,
-      ARRAY_AGG(a.attname ORDER BY array_position(i.indkey, a.attnum)),
+      ARRAY[
+        (SELECT a1.attname FROM pg_attribute a1 WHERE a1.attrelid = t.oid AND a1.attnum = split_part(i.indkey::text, ' ', 1)::smallint),
+        (SELECT a2.attname FROM pg_attribute a2 WHERE a2.attrelid = t.oid AND a2.attnum = split_part(i.indkey::text, ' ', 2)::smallint)
+      ],
       i.indisvalid,
-      i.indisunique
-    INTO v_tbl, v_cols, v_is_valid, v_is_unique
+      i.indisunique,
+      i.indnatts,
+      i.indnkeyatts,
+      (i.indexprs IS NOT NULL),
+      (i.indpred IS NOT NULL)
+    INTO v_tbl, v_cols, v_is_valid, v_is_unique, v_natts, v_nkeyatts, v_has_expr, v_has_pred
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_index i ON i.indexrelid = c.oid
     JOIN pg_class t ON t.oid = i.indrelid
-    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
-    WHERE n.nspname = 'public' AND c.relname = 'idx_notif_recipient_unique'
-    GROUP BY t.relname, i.indisvalid, i.indisunique;
+    WHERE n.nspname = 'public' AND c.relname = 'idx_notif_recipient_unique';
 
     -- Fail-closed guard: NEVER drop or overwrite an unrelated index!
     IF v_tbl <> 'lead_notification_recipients' THEN
       RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique belongs to unrelated table "%", expected "lead_notification_recipients"! Never drop an unrelated index.', v_tbl;
     END IF;
 
+    -- Fail-closed guard: Must have exactly 2 key columns and 0 included columns
+    IF v_natts <> 2 OR v_nkeyatts <> 2 THEN
+      RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique has % total attributes and % key attributes (expected exactly 2 key columns, no included columns)! Failing closed.', v_natts, v_nkeyatts;
+    END IF;
+
+    -- Fail-closed guard: Must not be an expression index
+    IF v_has_expr THEN
+      RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique contains unexpected expressions (indexprs IS NOT NULL)! Failing closed.';
+    END IF;
+
+    -- Fail-closed guard: Must not be a partial index
+    IF v_has_pred THEN
+      RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique has an unexpected partial predicate (indpred IS NOT NULL)! Failing closed.';
+    END IF;
+
+    -- Fail-closed guard: Key columns must match expected target in required order
     IF v_cols <> ARRAY['notification_id', 'recipient_user_id'] THEN
-      RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique is defined on columns %, expected [notification_id, recipient_user_id]! Failing closed.', v_cols;
+      RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique key columns are %, expected [notification_id, recipient_user_id] in that exact order! Failing closed.', v_cols;
     END IF;
 
     IF v_is_valid IS TRUE AND v_is_unique IS TRUE THEN
       RAISE NOTICE '[INDEX-STATUS] Existing index idx_notif_recipient_unique is already VALID and UNIQUE on public.lead_notification_recipients(notification_id, recipient_user_id).';
     ELSIF v_is_valid IS FALSE THEN
       RAISE NOTICE '[INDEX-STATUS] Found invalid matching index idx_notif_recipient_unique (indisvalid = false). Guarded concurrent drop will execute outside transaction.';
+    ELSE
+      RAISE EXCEPTION '[INDEX-METADATA-MISMATCH] Existing index idx_notif_recipient_unique is NOT unique (indisunique = false)! Failing closed.';
     END IF;
   END IF;
 END $$;
@@ -88,7 +116,9 @@ END $$;
 -- ------------------------------------------------------------------------------
 -- STEP 2: SEPARATELY GUARDED CONCURRENT DROP OF INVALID MATCHING INDEX
 -- Drops the index CONCURRENTLY outside any transaction ONLY if it is invalid and matches
--- table public.lead_notification_recipients on columns (notification_id, recipient_user_id).
+-- table public.lead_notification_recipients on columns (notification_id, recipient_user_id)
+-- with exactly 2 key columns, no expressions, and no partial predicate.
+-- PostgreSQL 18.6 compatible: avoids int2vector function incompatibilities.
 -- ------------------------------------------------------------------------------
 SELECT 'DROP INDEX CONCURRENTLY IF EXISTS public.idx_notif_recipient_unique;'
 WHERE EXISTS (
@@ -96,13 +126,16 @@ WHERE EXISTS (
   JOIN pg_namespace n ON n.oid = c.relnamespace
   JOIN pg_index i ON i.indexrelid = c.oid
   JOIN pg_class t ON t.oid = i.indrelid
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
   WHERE n.nspname = 'public'
     AND c.relname = 'idx_notif_recipient_unique'
     AND t.relname = 'lead_notification_recipients'
     AND i.indisvalid IS FALSE
-  GROUP BY t.relname, i.indisvalid
-  HAVING ARRAY_AGG(a.attname ORDER BY array_position(i.indkey, a.attnum)) = ARRAY['notification_id', 'recipient_user_id']
+    AND i.indnatts = 2
+    AND i.indnkeyatts = 2
+    AND i.indexprs IS NULL
+    AND i.indpred IS NULL
+    AND (SELECT a1.attname FROM pg_attribute a1 WHERE a1.attrelid = t.oid AND a1.attnum = split_part(i.indkey::text, ' ', 1)::smallint) = 'notification_id'
+    AND (SELECT a2.attname FROM pg_attribute a2 WHERE a2.attrelid = t.oid AND a2.attnum = split_part(i.indkey::text, ' ', 2)::smallint) = 'recipient_user_id'
 ) \gexec
 
 -- ------------------------------------------------------------------------------
@@ -128,7 +161,8 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_notif_recipient_unique
 -- ------------------------------------------------------------------------------
 -- STEP 5: POST-CREATION VERIFICATION & FAIL-CLOSED METADATA VALIDATION
 -- Confirm the index is present, valid (indisvalid = true), unique (indisunique = true),
--- and defined on the exact intended table and columns. Fail closed on metadata mismatches.
+-- exactly two key columns in required order, no expressions, no partial predicates.
+-- PostgreSQL 18.6 compatible: avoids int2vector function incompatibilities.
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -136,20 +170,29 @@ DECLARE
   v_cols TEXT[];
   v_valid BOOLEAN;
   v_unique BOOLEAN;
+  v_natts INTEGER;
+  v_nkeyatts INTEGER;
+  v_has_expr BOOLEAN;
+  v_has_pred BOOLEAN;
 BEGIN
   SELECT 
     t.relname,
-    ARRAY_AGG(a.attname ORDER BY array_position(i.indkey, a.attnum)),
+    ARRAY[
+      (SELECT a1.attname FROM pg_attribute a1 WHERE a1.attrelid = t.oid AND a1.attnum = split_part(i.indkey::text, ' ', 1)::smallint),
+      (SELECT a2.attname FROM pg_attribute a2 WHERE a2.attrelid = t.oid AND a2.attnum = split_part(i.indkey::text, ' ', 2)::smallint)
+    ],
     i.indisvalid,
-    i.indisunique
-  INTO v_tbl, v_cols, v_valid, v_unique
+    i.indisunique,
+    i.indnatts,
+    i.indnkeyatts,
+    (i.indexprs IS NOT NULL),
+    (i.indpred IS NOT NULL)
+  INTO v_tbl, v_cols, v_valid, v_unique, v_natts, v_nkeyatts, v_has_expr, v_has_pred
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   JOIN pg_index i ON i.indexrelid = c.oid
   JOIN pg_class t ON t.oid = i.indrelid
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
-  WHERE n.nspname = 'public' AND c.relname = 'idx_notif_recipient_unique'
-  GROUP BY t.relname, i.indisvalid, i.indisunique;
+  WHERE n.nspname = 'public' AND c.relname = 'idx_notif_recipient_unique';
 
   IF NOT FOUND THEN
     RAISE EXCEPTION '[POST-CHECK-FAIL-CLOSED] Unique index idx_notif_recipient_unique was not created or not found!';
@@ -159,8 +202,20 @@ BEGIN
     RAISE EXCEPTION '[POST-CHECK-FAIL-CLOSED] Index idx_notif_recipient_unique was created on wrong table "%" (expected lead_notification_recipients)!', v_tbl;
   END IF;
 
+  IF v_natts <> 2 OR v_nkeyatts <> 2 THEN
+    RAISE EXCEPTION '[POST-CHECK-FAIL-CLOSED] Index idx_notif_recipient_unique has % total attributes and % key attributes (expected exactly 2 key columns, no included columns)!', v_natts, v_nkeyatts;
+  END IF;
+
+  IF v_has_expr THEN
+    RAISE EXCEPTION '[POST-CHECK-FAIL-CLOSED] Index idx_notif_recipient_unique contains unexpected expressions (indexprs IS NOT NULL)!';
+  END IF;
+
+  IF v_has_pred THEN
+    RAISE EXCEPTION '[POST-CHECK-FAIL-CLOSED] Index idx_notif_recipient_unique has an unexpected partial predicate (indpred IS NOT NULL)!';
+  END IF;
+
   IF v_cols <> ARRAY['notification_id', 'recipient_user_id'] THEN
-    RAISE EXCEPTION '[POST-CHECK-FAIL-CLOSED] Index idx_notif_recipient_unique columns mismatch: found %, expected [notification_id, recipient_user_id]!', v_cols;
+    RAISE EXCEPTION '[POST-CHECK-FAIL-CLOSED] Index idx_notif_recipient_unique columns mismatch: found %, expected [notification_id, recipient_user_id] in that exact order!', v_cols;
   END IF;
 
   IF NOT v_valid THEN
