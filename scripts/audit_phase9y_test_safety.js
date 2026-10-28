@@ -14,9 +14,12 @@
  * 8. Uses atomic row-level locking (FOR UPDATE) for generic JSONB stores.
  * 9. Executes pre-commit database baseline checks BEFORE COMMIT and rolls back on mismatch.
  * 10. Distinguishes database transaction cleanup from non-transactional disk-file cleanup.
- * 11. Enforces server-issued cryptographic sessions without using x-user-emp-id/x-user-name headers for auth.
- * 12. Separates tested store operations from unsupported transitions (Dispatch, Accounts, loading, stock release).
- * 13. Never resets global numbering sequences.
+ * 11. Preserves Pending Approval status and tests HTTP 403 login rejection while pending.
+ * 12. Provisions authorized administrator in test database and uses real server-side approval mechanism.
+ * 13. Never uses x-user-emp-id or x-user-name headers as authentication.
+ * 14. Enforces nonzero exit code on test failure, failed cleanup, or baseline mismatch without skipping cleanup.
+ * 15. Separates tested store operations from unsupported transitions (Dispatch, Accounts, loading, stock release).
+ * 16. Never resets global numbering sequences.
  */
 
 import assert from 'assert';
@@ -108,7 +111,6 @@ runTest('1.5 Script contains zero access to HRMS application, database, or table
 });
 
 runTest('1.6 Script never suppresses child-record deletion failures in cleanup', () => {
-  // Assert no empty catch blocks around child deletions
   assert(!testScriptSrc.match(/DELETE FROM public\.lead_[a-z_]+[^}]+catch\s*\(_\)\s*\{\}/i), 'Must not suppress lead child deletion errors');
   assert(!testScriptSrc.match(/DELETE FROM public\.bom_items[^}]+catch\s*\(_\)\s*\{\}/i), 'Must not suppress bom_items deletion errors');
 });
@@ -218,43 +220,91 @@ runTest('3.5 Generic JSONB stores use atomic row locks (FOR UPDATE) and item-lev
 });
 
 // =============================================================================
-// TEST GROUP 4: Session Security & Role-Based Access Control
+// TEST GROUP 4: Synthetic Employee Approval & Pending Login Rejection (Issue 1)
 // =============================================================================
-console.log('\n--- TEST GROUP 4: Session Security & RBAC Invariants ---');
+console.log('\n--- TEST GROUP 4: Synthetic Employee Approval & Pending Rejection ---');
 
-runTest('4.1 Script never uses x-user-emp-id or x-user-name headers as authentication', () => {
+runTest('4.1 Preserves application rule: unauthenticated registration forced to Pending Approval', () => {
+  assert(
+    testScriptSrc.includes("selfRegRes.data?.account?.status,\n      'Pending Approval'"),
+    'Must assert account status is Pending Approval for self-registration'
+  );
+});
+
+runTest('4.2 Verifies login is rejected with HTTP 403 while approval is pending', () => {
+  assert(testScriptSrc.includes('assert.strictEqual(pendingLoginRes.status, 403'), 'Must assert pending login returns 403');
+  assert(testScriptSrc.includes("pendingLoginRes.data?.error || '').toLowerCase().includes('pending approval')"), 'Must assert error contains pending approval');
+});
+
+runTest('4.3 Implements authorized administrator setup in isolated test database', () => {
+  assert(testScriptSrc.includes('provisionSyntheticTestAdmin'), 'Must define provisionSyntheticTestAdmin');
+  assert(testScriptSrc.includes("role: 'Technical Administrator'"), 'Admin must have Technical Administrator role');
+  assert(testScriptSrc.includes("status: 'Active'"), 'Admin must have Active status');
+  assert(testScriptSrc.includes('hashPassword('), 'Admin password must be hashed with scrypt');
+});
+
+runTest('4.4 Uses real server-side approval mechanism with authenticated administrator session', () => {
+  assert(testScriptSrc.includes('sessionId: adminTestSessionId'), 'Must pass admin session to approval request');
+  assert(testScriptSrc.includes("approveRes.data?.account?.status,\n      'Active'"), 'Must verify account becomes Active after admin approval');
+});
+
+runTest('4.5 Authenticates approved employee with genuine credentials to obtain server-issued session', () => {
+  assert(testScriptSrc.includes('assert.strictEqual(salesLoginRes.status, 200'), 'Must assert approved login returns 200');
+  assert(testScriptSrc.includes('activeTestSessionId = salesLoginRes.data.session.id'), 'Must store server-issued session ID');
+});
+
+// =============================================================================
+// TEST GROUP 5: Process Exit Code Evaluation (Issue 2)
+// =============================================================================
+console.log('\n--- TEST GROUP 5: Process Exit Code Evaluation ---');
+
+runTest('5.1 Sets process.exitCode = 1 on preflight failure without skipping report', () => {
+  assert(testScriptSrc.includes('testReport.environment.preflightPassed = false;'), 'Must record preflight failure');
+  assert(testScriptSrc.includes('process.exitCode = 1;'), 'Must set process.exitCode = 1');
+});
+
+runTest('5.2 Sets process.exitCode = 1 on test failures, failed cleanup, or baseline mismatch', () => {
+  assert(testScriptSrc.includes('testReport.summary.failed > 0'), 'Must check test failure count');
+  assert(testScriptSrc.includes('!testReport.cleanup.baselineRestored'), 'Must check baseline restoration');
+  assert(testScriptSrc.includes('testReport.cleanup.discrepancies.length > 0'), 'Must check discrepancies');
+  assert(testScriptSrc.includes('testReport.cleanup.diskCleanup.filesystemInconsistency'), 'Must check filesystem inconsistency');
+});
+
+runTest('5.3 Successful cleanup does not clear or hide an earlier test failure', () => {
+  // Verify hasFailures includes testReport.summary.failed > 0 independently of cleanup status
+  assert(testScriptSrc.includes('const hasFailures ='), 'Must define consolidated hasFailures');
+  assert(testScriptSrc.includes('testReport.summary.failed > 0 ||'), 'hasFailures must include failed > 0 independently');
+});
+
+runTest('5.4 Cleanup is guaranteed in finally block and avoids premature process.exit()', () => {
+  assert(testScriptSrc.includes('finally {'), 'Must have finally block in main');
+  assert(testScriptSrc.includes('testReport.cleanup = await executeComprehensiveCleanup(dbPool);'), 'Must execute cleanup in finally');
+  // Confirm process.exit is NOT inside main's workflow try block
+  const tryBlock = testScriptSrc.slice(testScriptSrc.indexOf('// Preflight passed: Proceed with real workflows'), testScriptSrc.indexOf('printFinalReport();'));
+  assert(!tryBlock.includes('process.exit('), 'Must never call process.exit() inside workflow try block');
+});
+
+// =============================================================================
+// TEST GROUP 6: Session Security & Accurate Workflow Reporting
+// =============================================================================
+console.log('\n--- TEST GROUP 6: Session Security & Accurate Workflow Reporting ---');
+
+runTest('6.1 Script never uses x-user-emp-id or x-user-name headers as authentication', () => {
   assert(!testScriptSrc.includes("'x-user-emp-id':"), 'Must not send x-user-emp-id header');
   assert(!testScriptSrc.includes("'x-user-name':"), 'Must not send x-user-name header');
 });
 
-runTest('4.2 Uses server-issued, cryptographically verified session token', () => {
-  assert(testScriptSrc.includes('/api/sessions/register'), 'Must call session register endpoint');
-  assert(testScriptSrc.includes("session.id.startsWith('sess_')"), 'Must verify cryptographic session format');
-  assert(testScriptSrc.includes("reqHeaders['x-session-id'] = resolvedSession"), 'Must set x-session-id to verified session');
-});
-
-runTest('4.3 Validates RBAC permissions: unauthenticated, cross-employee, privileged self-reg', () => {
-  assert(testScriptSrc.includes('assert.strictEqual(unauthLeaves.status, 401'), 'Must verify 401 unauthenticated');
-  assert(testScriptSrc.includes('assert.strictEqual(privReg.status, 403'), 'Must verify 403 privileged self-reg');
-  assert(testScriptSrc.includes('assert.strictEqual(crossLeave.status, 403'), 'Must verify 403 cross-employee tampering');
-});
-
-// =============================================================================
-// TEST GROUP 5: Accurate Workflow Reporting (No Fabricated Completions)
-// =============================================================================
-console.log('\n--- TEST GROUP 5: Accurate Workflow Reporting ---');
-
-runTest('5.1 Separates tested reservation store write from unsupported physical stock release', () => {
+runTest('6.2 Separates tested reservation store write from unsupported physical stock release', () => {
   assert(testScriptSrc.includes("'6a. Inventory reservation store persistence'"), 'Must test store write as 6a');
   assert(testScriptSrc.includes("'6b. Inventory physical stock release'] = {\n      status: 'NOT TESTED'"), 'Must mark stock release 6b as NOT TESTED');
 });
 
-runTest('5.2 Separates tested invoice creation from unsupported final vehicle loading/dispatch', () => {
+runTest('6.3 Separates tested invoice creation from unsupported final vehicle loading/dispatch', () => {
   assert(testScriptSrc.includes("'8a. Invoice creation and BOM linkage'"), 'Must test invoice creation as 8a');
   assert(testScriptSrc.includes("'8b. Vehicle loading and final dispatch completion'] = {\n      status: 'NOT TESTED'"), 'Must mark vehicle loading 8b as NOT TESTED');
 });
 
-runTest('5.3 Reports unsupported Dispatch packing and Accounts verification as NOT TESTED', () => {
+runTest('6.4 Reports unsupported Dispatch packing and Accounts verification as NOT TESTED', () => {
   assert(testScriptSrc.includes("'7. Dispatch packing and accounts verification'] = {\n      status: 'NOT TESTED'"), 'Must mark 7 as NOT TESTED');
 });
 

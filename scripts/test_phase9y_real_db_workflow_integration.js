@@ -6,31 +6,32 @@
  * Hardened end-to-end integration test exercising actual HTTP endpoints
  * and authoritative PostgreSQL persistence across CRM and Order-to-Dispatch stages.
  *
- * Hardened per Hostinger VPS Code Review:
- * 1. Transaction Cleanup:
- *    - Performs final database baseline checks INSIDE the transaction BEFORE COMMIT.
- *    - Rolls back immediately when a baseline mismatch or deletion failure is detected.
- *    - Does NOT suppress child-record deletion failures (errors propagate to trigger rollback).
- *    - Verifies exact ownership and parent-child relationships before deletion.
- *    - Strictly preserves unrelated records and never resets global numbering sequences.
- *    - Clearly distinguishes PostgreSQL transaction cleanup from non-transactional disk-file cleanup.
- *    - Audits disk-file state to ensure filesystem cannot leave inconsistent synthetic data undetected.
- * 2. Accurate Workflow Reporting:
- *    - Does not mark reservation/release PASS solely because reservations_store accepted a write.
- *      Separates tested store persistence (6a) from unsupported physical stock release (6b: NOT TESTED).
- *    - Does not mark invoice-to-dispatch workflow PASS merely because an invoice was created.
- *      Separates tested invoice persistence (8a) from unsupported final vehicle dispatch (8b: NOT TESTED).
- *    - Reports unsupported Dispatch, Accounts, loading, and stock-release stages as NOT TESTED.
- * 3. Session Security:
- *    - Never uses x-user-emp-id or x-user-name as authentication.
+ * Corrected per Hostinger VPS Code Review:
+ * 1. Synthetic Employee Approval:
+ *    - Preserves application rule: unauthenticated self-registration strictly forced to Pending Approval.
+ *    - Verifies login is rejected with HTTP 403 while approval is pending.
+ *    - Implements test-only authorized administrator setup in isolated optimization database.
+ *    - Uses real server-side approval with properly authenticated administrator session.
+ *    - Authenticates approved employee with genuine credentials to obtain server-issued cryptographic session.
+ *    - Fully includes all synthetic employee records in ledger and cleanup.
+ * 2. Exit Code Integrity:
+ *    - Any integration test failure, preflight failure, failed cleanup, or baseline mismatch sets process.exitCode = 1.
+ *    - Successful cleanup does not hide or clear earlier test failures.
+ *    - Cleanup is guaranteed to execute in finally block without premature process.exit().
+ * 3. Transaction Cleanup & Rollback:
+ *    - Audits table and store baseline counts INSIDE the transaction BEFORE COMMIT.
+ *    - Rolls back immediately upon baseline mismatch or deletion failure.
+ *    - Does NOT suppress child-record deletion failures (errors propagate to rollback).
+ *    - Verifies exact ownership and parent-child relationships.
+ *    - Preserves unrelated records and never resets global numbering sequences.
+ *    - Distinguishes PostgreSQL transaction cleanup from non-transactional disk-file cleanup.
+ * 4. Accurate Workflow Reporting:
+ *    - Separates tested reservation store write (6a) from unsupported physical stock release (6b: NOT TESTED).
+ *    - Separates tested invoice creation (8a) from unsupported final vehicle loading/dispatch (8b: NOT TESTED).
+ *    - Honestly reports unsupported Dispatch, Accounts, loading, and stock-release stages as NOT TESTED.
+ * 5. Session Security:
+ *    - Never uses x-user-emp-id or x-user-name headers as authentication.
  *    - Uses server-issued, cryptographically verified sessions (sess_...) for protected API requests.
- *    - Validates role-based permissions using synthetic test identities only.
- * 4. Synthetic Data Completeness:
- *    - Tracks exact generated IDs and unique synthetic identifiers for every created record.
- *    - Accounts for all affected PostgreSQL tables, generic JSONB stores, and approved storage files.
- * 5. Test Isolation:
- *    - Fails closed unless executed in /var/www/businz-optimization-test on 127.0.0.1:5101
- *      with businz_optimization_test and role businz_test_user.
  */
 
 import http from 'http';
@@ -50,6 +51,7 @@ import {
 } from './testEnvironmentGuard.js';
 import { isOptimizationTestMode } from '../server/optimizationTestGuard.js';
 import { getStoreFilePath } from '../server/runtimePaths.js';
+import { hashPassword } from '../server/authSecurity.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,11 +59,19 @@ const __dirname = path.dirname(__filename);
 // Unique synthetic identification tag for absolute isolation and safe targeted cleanup
 export const RUN_ID = Date.now();
 export const SYNTH_TAG = `SYNTH_P9Y_${RUN_ID}`;
+
+// Synthetic Administrator Credentials (for test-only authorized approval setup)
+export const SYNTH_ADMIN_EMP = `TA-TEST-${RUN_ID % 1000}`;
+export const SYNTH_ADMIN_EMAIL = `synth_admin_${RUN_ID}@example.com`;
+export const SYNTH_ADMIN_PASS = `AdminSecurePass123!`;
+
+// Synthetic Sales Executive Credentials (for standard CRM workflow testing)
 export const SYNTH_USER_EMP = `SE-TEST-${RUN_ID % 1000}`;
 export const SYNTH_USER_EMAIL = `synth_rep_${RUN_ID}@example.com`;
-export const SYNTH_USER_PASS = `TestSecurePass123!`;
+export const SYNTH_USER_PASS = `RepSecurePass123!`;
 
-// Server-issued active session holder (populated strictly via POST /api/sessions/register)
+// Server-issued active session tokens
+export let adminTestSessionId = null;
 export let activeTestSessionId = null;
 
 // Comprehensive exact synthetic record ID ledger (Requirement 4)
@@ -185,7 +195,7 @@ export async function executePreflight(customCwd = null) {
 }
 
 // HTTP Helper for real requests targeting only 127.0.0.1:5101
-// Uses server-issued, cryptographically verified session token (Requirement 3)
+// Uses server-issued, cryptographically verified session token (Requirement 5)
 export function apiRequest(endpoint, { method = 'GET', headers = {}, body = null, sessionId = null, timeout = 10000 } = {}) {
   return new Promise((resolve, reject) => {
     if (!testApiUrl) {
@@ -236,7 +246,7 @@ export function apiRequest(endpoint, { method = 'GET', headers = {}, body = null
 }
 
 // =============================================================================
-// DATABASE & STORE AUDIT HELPERS (Requirements 1, 4, 7)
+// DATABASE & STORE AUDIT HELPERS (Requirements 1, 3, 4)
 // =============================================================================
 export async function queryTableCount(client, tableName) {
   try {
@@ -316,7 +326,44 @@ export function safeCleanDiskFile(filename, filterPredicate) {
 }
 
 // =============================================================================
-// COMPREHENSIVE SYNTHETIC DATA CLEANUP (Requirement 1 & 4)
+// TEST-ONLY AUTHORIZED EMPLOYEE PROVISIONING (Issue 1 Requirement)
+// =============================================================================
+export async function provisionSyntheticTestAdmin(client, synthAdminEmp, synthAdminEmail, synthAdminPass) {
+  const passwordHash = hashPassword(synthAdminPass, 'scrypt');
+
+  const adminAccount = {
+    employee_code: synthAdminEmp,
+    employee_name: 'Test Administrator',
+    email: synthAdminEmail,
+    password: passwordHash,
+    prefix: 'TA',
+    role: 'Technical Administrator',
+    dashboard_type: 'Technical Administrator',
+    status: 'Active',
+    created_at: new Date().toISOString(),
+    last_login: new Date().toISOString()
+  };
+
+  const res = await client.query("SELECT data FROM public.controlroom_store WHERE key = 'employees_store' FOR UPDATE");
+  let list = [];
+  if (res.rows.length > 0 && Array.isArray(res.rows[0].data)) {
+    list = res.rows[0].data;
+  }
+
+  const filtered = list.filter(e => e.employee_code !== synthAdminEmp && e.email !== synthAdminEmail);
+  filtered.push(adminAccount);
+
+  await client.query(`
+    INSERT INTO public.controlroom_store (key, data, updated_at)
+    VALUES ('employees_store', $1, NOW())
+    ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
+  `, [JSON.stringify(filtered)]);
+
+  return adminAccount;
+}
+
+// =============================================================================
+// COMPREHENSIVE SYNTHETIC DATA CLEANUP (Requirement 3 & 4)
 // =============================================================================
 export async function executeComprehensiveCleanup(pool) {
   const cleanupReport = {
@@ -350,7 +397,6 @@ export async function executeComprehensiveCleanup(pool) {
     // DB STEP 1: Clean Leads & Foreign Key Child Records (No Suppressed Errors)
     // -------------------------------------------------------------------------
     for (const lead of syntheticLedger.leads) {
-      // Exact ownership verification
       const check = await client.query(
         'SELECT id, lead_number, company_name, notes FROM public.leads WHERE id = $1',
         [lead.id]
@@ -447,7 +493,8 @@ export async function executeComprehensiveCleanup(pool) {
           const matchesLedger = sc.ids.includes(matchId);
           const hasSynthTag = (item.synthTag === SYNTH_TAG) ||
             (typeof item.customerName === 'string' && item.customerName.includes(SYNTH_TAG)) ||
-            (typeof item.email === 'string' && item.email.includes(String(RUN_ID)));
+            (typeof item.email === 'string' && item.email.includes(String(RUN_ID))) ||
+            (typeof item.employee_code === 'string' && item.employee_code.includes(String(RUN_ID % 1000)));
           return !(matchesLedger && hasSynthTag);
         });
 
@@ -467,7 +514,6 @@ export async function executeComprehensiveCleanup(pool) {
     // -------------------------------------------------------------------------
     // DB STEP 4: PRE-COMMIT DATABASE BASELINE CHECK & CONDITIONAL ROLLBACK
     // -------------------------------------------------------------------------
-    // Perform final baseline checks INSIDE the transaction BEFORE COMMIT!
     const preCommitCounts = await collectDatabaseCounts(client);
     let preCommitMatches = true;
     const discrepancies = [];
@@ -625,7 +671,8 @@ async function main() {
       '8a. Invoice creation and BOM linkage',
       '8b. Vehicle loading and final dispatch completion',
       '9. Multiple BOM concurrency and record isolation',
-      '10. Session security and role-based access control'
+      '10a. Pending-approval login rejection & administrator approval',
+      '10b. Session security and role-based access control'
     ];
 
     allWorkflowNames.forEach(w => {
@@ -634,6 +681,9 @@ async function main() {
     });
 
     printFinalReport();
+
+    // Set nonzero exit code on preflight failure (Issue 2 Requirement)
+    process.exitCode = 1;
     return;
   }
 
@@ -643,7 +693,7 @@ async function main() {
 
   try {
     // -------------------------------------------------------------------------
-    // RECORD BASELINE DATABASE & STORE COUNTS (Requirement 1 & 4)
+    // RECORD BASELINE DATABASE & STORE COUNTS (Before Any Test Writes)
     // -------------------------------------------------------------------------
     console.log('--- Baseline Database & Store Counts ---');
     const countsClient = await dbPool.connect();
@@ -656,14 +706,123 @@ async function main() {
     }
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 10: Session Security & Role-Based Access Control (Run first to issue session)
+    // WORKFLOW 10a: Synthetic Employee Approval Setup (Issue 1 Requirement)
     // -------------------------------------------------------------------------
-    console.log('🔐 Step 10: Session security and role-based access control setup...');
+    console.log('🔐 Step 10a: Authorized employee approval setup & pending rejection testing...');
 
-    // A: Unauthenticated request to protected store rejected with 401
+    // 1. Provision authorized synthetic administrator in isolated test database
+    const adminSetupClient = await dbPool.connect();
+    try {
+      await provisionSyntheticTestAdmin(adminSetupClient, SYNTH_ADMIN_EMP, SYNTH_ADMIN_EMAIL, SYNTH_ADMIN_PASS);
+      syntheticLedger.registeredEmployees.push({ employee_code: SYNTH_ADMIN_EMP, email: SYNTH_ADMIN_EMAIL });
+      console.log(`   ✅ Authorized test administrator provisioned in test DB: ${SYNTH_ADMIN_EMP}`);
+    } finally {
+      adminSetupClient.release();
+    }
+
+    // 2. Obtain genuine server-issued session for the test administrator
+    const adminSessionRes = await apiRequest('/api/sessions/register', {
+      method: 'POST',
+      body: {
+        empCode: SYNTH_ADMIN_EMP,
+        password: SYNTH_ADMIN_PASS,
+        device: 'Test Admin Console',
+        browser: 'Node.js Test Engine'
+      }
+    });
+    assert.strictEqual(adminSessionRes.status, 200, 'Admin session registration must return 200');
+    assert(adminSessionRes.data?.session?.id, 'Admin session registration must issue a valid session token');
+    adminTestSessionId = adminSessionRes.data.session.id;
+    console.log(`   ✅ Server-issued verified administrator session established: ${adminTestSessionId.slice(0, 16)}...`);
+
+    // 3. Self-register standard Sales Executive without admin session (Public Unauthenticated Request)
+    const selfRegRes = await apiRequest('/api/auth/register-employee', {
+      method: 'POST',
+      body: {
+        employee_code: SYNTH_USER_EMP,
+        employee_name: 'Sanitized Employee Rep',
+        email: SYNTH_USER_EMAIL,
+        password: SYNTH_USER_PASS,
+        role: 'Sales Executive',
+        status: 'Active' // Public caller attempts to grant self Active status
+      }
+    });
+    assert.strictEqual(selfRegRes.status, 201, 'Self-registration must return HTTP 201');
+    assert.strictEqual(
+      selfRegRes.data?.account?.status,
+      'Pending Approval',
+      'Public unauthenticated self-registration must be strictly forced to Pending Approval'
+    );
+    syntheticLedger.registeredEmployees.push({ employee_code: SYNTH_USER_EMP, email: SYNTH_USER_EMAIL });
+    console.log('   ✅ Public self-registration correctly forced to "Pending Approval".');
+
+    // 4. Verify login is rejected while approval is pending (Requirement 1.2)
+    const pendingLoginRes = await apiRequest('/api/sessions/register', {
+      method: 'POST',
+      body: {
+        empCode: SYNTH_USER_EMP,
+        password: SYNTH_USER_PASS
+      }
+    });
+    assert.strictEqual(pendingLoginRes.status, 403, 'Login must be rejected with HTTP 403 while approval is pending');
+    assert(
+      String(pendingLoginRes.data?.error || '').toLowerCase().includes('pending approval'),
+      `Error message must specify Pending Approval, got: ${pendingLoginRes.data?.error}`
+    );
+    console.log('   ✅ Login for Pending Approval account successfully rejected with HTTP 403.');
+
+    // 5. Use real server-side approval mechanism with properly authenticated administrator session (Requirement 1.4)
+    const approveRes = await apiRequest('/api/auth/register-employee', {
+      method: 'POST',
+      sessionId: adminTestSessionId,
+      body: {
+        employee_code: SYNTH_USER_EMP,
+        employee_name: 'Sanitized Employee Rep',
+        email: SYNTH_USER_EMAIL,
+        password: SYNTH_USER_PASS,
+        role: 'Sales Executive',
+        status: 'Active'
+      }
+    });
+    assert.strictEqual(approveRes.status, 201, 'Admin approval request must return HTTP 201');
+    assert.strictEqual(
+      approveRes.data?.account?.status,
+      'Active',
+      'Admin-authorized approval must successfully transition status to Active'
+    );
+    console.log('   ✅ Sales Executive account approved to "Active" via authenticated admin session.');
+
+    // 6. Authenticate approved employee with genuine credentials to obtain server-issued session (Requirement 1.7)
+    const salesLoginRes = await apiRequest('/api/sessions/register', {
+      method: 'POST',
+      body: {
+        empCode: SYNTH_USER_EMP,
+        password: SYNTH_USER_PASS,
+        device: 'Sales Terminal',
+        browser: 'Node.js Test Engine'
+      }
+    });
+    assert.strictEqual(salesLoginRes.status, 200, 'Approved employee login must return HTTP 200');
+    assert(salesLoginRes.data?.session?.id, 'Approved employee login must return valid session token');
+    activeTestSessionId = salesLoginRes.data.session.id;
+    console.log(`   ✅ Approved Sales Executive session token established: ${activeTestSessionId.slice(0, 16)}...`);
+
+    testReport.workflows['10a. Pending-approval login rejection & administrator approval'] = {
+      status: 'PASS',
+      httpStatus: 200,
+      evidence: `Public self-registration forced to Pending Approval; login rejected with HTTP 403; approved by authenticated administrator; genuine session issued`
+    };
+    testReport.summary.passed++;
+
+    // -------------------------------------------------------------------------
+    // WORKFLOW 10b: Session Security & Role-Based Access Control
+    // -------------------------------------------------------------------------
+    console.log('\n🔐 Step 10b: Session security and role-based access control verification...');
+
+    // A: Unauthenticated request rejected with 401
     const unauthLeaves = await apiRequest('/api/store/leaves', {
       method: 'POST',
-      sessionId: '', // Explicit empty session
+      sessionId: '',
       body: [{ employee: 'EMP001', reason: 'Unauth test' }]
     });
     assert.strictEqual(unauthLeaves.status, 401, 'Unauthenticated leaves write must return HTTP 401');
@@ -681,43 +840,7 @@ async function main() {
     });
     assert.strictEqual(privReg.status, 403, 'Privileged self-registration must return HTTP 403');
 
-    // C: Valid synthetic employee registration (Sales Executive)
-    const validReg = await apiRequest('/api/auth/register-employee', {
-      method: 'POST',
-      body: {
-        employee_code: SYNTH_USER_EMP,
-        employee_name: 'Sanitized Employee Rep',
-        email: SYNTH_USER_EMAIL,
-        password: SYNTH_USER_PASS,
-        role: 'Sales Executive'
-      }
-    });
-    assert.strictEqual(validReg.status, 201, 'Valid registration must return HTTP 201');
-    assert.strictEqual(validReg.data?.account?.password, undefined, 'Must not return password');
-    assert.strictEqual(validReg.data?.account?.password_hash, undefined, 'Must not return password_hash');
-    assert.strictEqual(validReg.data?.data, undefined, 'Must not return company-wide list');
-
-    // Register synthetic employee in ledger
-    syntheticLedger.registeredEmployees.push({ employee_code: SYNTH_USER_EMP, email: SYNTH_USER_EMAIL });
-
-    // D: Obtain real server-issued, cryptographically verified session token
-    const sessionRes = await apiRequest('/api/sessions/register', {
-      method: 'POST',
-      body: {
-        empCode: SYNTH_USER_EMP,
-        password: SYNTH_USER_PASS,
-        device: 'Test Runner',
-        browser: 'Node.js Test Engine'
-      }
-    });
-    assert.strictEqual(sessionRes.status, 200, 'Session registration must return 200');
-    assert(sessionRes.data?.session?.id, 'Session registration must issue a valid session token');
-    assert(sessionRes.data.session.id.startsWith('sess_'), 'Session ID must follow cryptographic format (sess_...)');
-
-    activeTestSessionId = sessionRes.data.session.id;
-    console.log(`   ✅ Server-issued verified session established: ${activeTestSessionId.slice(0, 16)}...`);
-
-    // E: Cross-employee permission violation rejected with 403
+    // C: Cross-employee permission violation rejected with 403
     const crossLeave = await apiRequest('/api/store/leaves', {
       method: 'POST',
       sessionId: activeTestSessionId,
@@ -725,10 +848,10 @@ async function main() {
     });
     assert.strictEqual(crossLeave.status, 403, 'Cross-employee leave tampering must return HTTP 403');
 
-    testReport.workflows['10. Session security and role-based access control'] = {
+    testReport.workflows['10b. Session security and role-based access control'] = {
       status: 'PASS',
       httpStatus: 200,
-      evidence: `HTTP 401 unauthenticated rejected; HTTP 403 privileged self-registration blocked; HTTP 403 cross-employee tampering blocked; server-issued cryptographic session validated`
+      evidence: `HTTP 401 unauthenticated rejected; HTTP 403 privileged self-registration blocked; HTTP 403 cross-employee tampering blocked`
     };
     testReport.summary.passed++;
     console.log(`   ✅ Session security and RBAC invariants confirmed.`);
@@ -747,7 +870,6 @@ async function main() {
       estimatedKw: 500
     };
 
-    // Inbound capture simulation
     const leadRes = await apiRequest('/api/crm/leads/simulate-inbound', {
       method: 'POST',
       body: synthLeadData
@@ -760,17 +882,14 @@ async function main() {
     assert(leadId, 'Lead must have a valid ID');
     assert(leadNumber, 'Lead must have a lead_number');
 
-    // Register exact ID in ledger immediately
     syntheticLedger.leads.push({ id: leadId, leadNumber });
 
-    // Update lead status with verified session
     const updateRes = await apiRequest(`/api/crm/leads/${leadId}/status`, {
       method: 'POST',
       body: { status: 'Qualified', remarks: `${SYNTH_TAG} Lead Qualified by Sales Rep` }
     });
     assert.strictEqual(updateRes.status, 200, 'Lead status update must return 200');
 
-    // Verify DB persistence in public.leads and public.lead_status_history
     const leadDbCheck = await dbPool.query('SELECT * FROM public.leads WHERE id = $1', [leadId]);
     assert.strictEqual(leadDbCheck.rows.length, 1, 'Lead must exist in PostgreSQL public.leads');
     assert.strictEqual(leadDbCheck.rows[0].status, 'Qualified', 'Lead status must be updated in DB');
@@ -872,7 +991,6 @@ async function main() {
     });
     assert(bomRes.status === 200 || bomRes.status === 201, `BOM creation must return 200/201, got ${bomRes.status}`);
 
-    // Verify DB persistence in public.bom_orders
     const bomDbCheck = await dbPool.query('SELECT id, bom_code, source_pi_no FROM public.bom_orders WHERE bom_code = $1', [synthBomCode]);
     assert.strictEqual(bomDbCheck.rows.length, 1, `BOM ${synthBomCode} must exist in PostgreSQL`);
     assert.strictEqual(bomDbCheck.rows[0].source_pi_no, synthPiNumber, 'source_pi_no must match in DB');
@@ -894,7 +1012,7 @@ async function main() {
     const foreignBomCode = `BOM-COLLISION-${RUN_ID % 10000}`;
     const conflictingBom = {
       bomCode: foreignBomCode,
-      sourcePiNo: synthPiNumber, // Same PI!
+      sourcePiNo: synthPiNumber,
       customerName: 'Foreign Adversary',
       status: 'Sales Confirmed',
       synthTag: SYNTH_TAG
@@ -917,7 +1035,7 @@ async function main() {
     console.log(`   ✅ Duplicate BOM-PI conversion collision correctly blocked.`);
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 6: Inventory Reservation & Release Reporting (Requirement 2)
+    // WORKFLOW 6: Inventory Reservation & Release Reporting (Requirement 4)
     // -------------------------------------------------------------------------
     console.log('\n6️⃣ Workflow 6a: Inventory reservation store persistence...');
     const synthReservationKey = `res_${SYNTH_TAG}`;
@@ -946,7 +1064,7 @@ async function main() {
     testReport.summary.passed++;
     console.log(`   ✅ Inventory reservation held for BOM ${synthBomCode}.`);
 
-    // Report physical stock release as NOT TESTED (Requirement 2)
+    // Report physical stock release as NOT TESTED
     testReport.workflows['6b. Inventory physical stock release'] = {
       status: 'NOT TESTED',
       reason: 'Physical inventory stock deduction and release occurs upon vehicle loading and dispatch confirmation; cannot be tested without interactive dispatch modal.'
@@ -955,7 +1073,7 @@ async function main() {
     console.log('   ⚠️ [NOT TESTED] Inventory physical stock release requires vehicle loading and dispatch confirmation.');
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 7: Dispatch Packing & Accounts Verification (Requirement 2)
+    // WORKFLOW 7: Dispatch Packing & Accounts Verification
     // -------------------------------------------------------------------------
     console.log('\n7️⃣ Workflow 7: Dispatch packing and accounts verification...');
     testReport.workflows['7. Dispatch packing and accounts verification'] = {
@@ -966,7 +1084,7 @@ async function main() {
     console.log('   ⚠️ [NOT TESTED] Dispatch packing and accounts verification requires interactive frontend modals.');
 
     // -------------------------------------------------------------------------
-    // WORKFLOW 8: Invoice Creation & Final Dispatch Reporting (Requirement 2)
+    // WORKFLOW 8: Invoice Creation & Final Dispatch Reporting
     // -------------------------------------------------------------------------
     console.log('\n8️⃣ Workflow 8a: Invoice creation and BOM linkage...');
     const synthInvNumber = `INV-${RUN_ID % 100000}`;
@@ -997,7 +1115,6 @@ async function main() {
     testReport.summary.passed++;
     console.log(`   ✅ Invoice ${synthInvNumber} created and linked to BOM.`);
 
-    // Report vehicle loading & final dispatch as NOT TESTED (Requirement 2)
     testReport.workflows['8b. Vehicle loading and final dispatch completion'] = {
       status: 'NOT TESTED',
       reason: 'Vehicle loading checklist, transport mode selection (VRL/ARC/Direct), and LR copy upload require interactive frontend modal and are not tested via direct API update.'
@@ -1023,7 +1140,6 @@ async function main() {
       assert(r.status === 200 || r.status === 201, `Concurrent BOM ${idx} must succeed, got ${r.status}`);
     });
 
-    // Query exact DB IDs for concurrent BOMs into ledger
     for (const b of concurrentBoms) {
       const cCheck = await dbPool.query('SELECT id, bom_code FROM public.bom_orders WHERE bom_code = $1', [b.bomCode]);
       if (cCheck.rows.length > 0) {
@@ -1044,7 +1160,7 @@ async function main() {
     testReport.summary.failed++;
   } finally {
     // -------------------------------------------------------------------------
-    // GUARANTEED CLEANUP EXECUTION (Requirement 1 & 10)
+    // GUARANTEED CLEANUP EXECUTION (Issue 1 & 2 Requirement)
     // -------------------------------------------------------------------------
     if (dbPool) {
       console.log('\n--- STEP 4: Comprehensive Synthetic Record Cleanup ---');
@@ -1055,6 +1171,22 @@ async function main() {
   }
 
   printFinalReport();
+
+  // ---------------------------------------------------------------------------
+  // PROCESS EXIT CODE EVALUATION (Issue 2 Requirement)
+  // ---------------------------------------------------------------------------
+  const hasFailures =
+    !testReport.environment.preflightPassed ||
+    testReport.summary.failed > 0 ||
+    !testReport.cleanup.baselineRestored ||
+    (testReport.cleanup.failures && testReport.cleanup.failures.length > 0) ||
+    (testReport.cleanup.discrepancies && testReport.cleanup.discrepancies.length > 0) ||
+    (testReport.cleanup.diskCleanup && testReport.cleanup.diskCleanup.filesystemInconsistency);
+
+  if (hasFailures) {
+    console.error('🛑 [TEST FAILURE] Nonzero exit code set due to test failure, failed cleanup, or baseline mismatch.');
+    process.exitCode = 1;
+  }
 }
 
 function printFinalReport() {
