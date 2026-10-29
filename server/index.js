@@ -908,21 +908,35 @@ const getDatabaseStore = async (key) => {
         return dbRes.rows;
       } catch (err) {
         console.error('[getDatabaseStore leaves query error]:', err?.message || err);
+        throw err;
       }
     }
     return [];
   }
   // 0. Primary: Check PostgreSQL controlroom_store on Hostinger VPS
-  // Protection 1: PostgreSQL is authoritative whenever the store row exists
+  // Protection 1: PostgreSQL is authoritative whenever connected
   if (isDbConnected()) {
     try {
       const dbRes = await query('SELECT data FROM controlroom_store WHERE key = $1', [cleanKey]);
       if (dbRes.rows.length > 0 && dbRes.rows[0]?.data !== undefined && dbRes.rows[0]?.data !== null) {
-        const d = dbRes.rows[0].data;
+        let d = dbRes.rows[0].data;
+        if (typeof d === 'string') {
+          try { d = JSON.parse(d); } catch (_) {}
+        }
         supabaseMemoryStore[cleanKey] = d;
         supabaseMemoryStore[key] = d;
         return d;
       }
+      // Authoritative PostgreSQL check: row does not exist or has null data.
+      // Invalidate any stale in-memory cache for this key to prevent resurrecting deleted records.
+      // NEVER fall back to disk, memory, Supabase, or legacy storage merely because a PostgreSQL row is absent.
+      delete supabaseMemoryStore[cleanKey];
+      if (key) {
+        delete supabaseMemoryStore[key];
+        delete supabaseMemoryStore[String(key).toUpperCase()];
+      }
+      const OBJECT_BASED_STORES = new Set(['presets_store', 'templates_store', 'company_branding_store']);
+      return OBJECT_BASED_STORES.has(cleanKey) ? {} : [];
     } catch (dbErr) {
       console.error(`[getDatabaseStore PostgreSQL error for ${cleanKey}]:`, dbErr?.message || dbErr);
       throw dbErr; // Protection 2: Never silently swallow database errors; propagate to trigger HTTP 500

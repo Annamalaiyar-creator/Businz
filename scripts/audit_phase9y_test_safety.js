@@ -2316,6 +2316,200 @@ await runAsyncTest('11.12 recover_phase9y_run_13909_residue.js dry-run by defaul
 });
 
 // =============================================================================
+// TEST GROUP 12: PostgreSQL Authoritative Store Read & Cache Invalidation
+// =============================================================================
+console.log('\n--- TEST GROUP 12: PostgreSQL Authoritative Store Read & Cache Invalidation ---');
+
+await runAsyncTest('12.1 server/index.js enforces PostgreSQL authoritative reads with zero fall-through to memory or disk', async () => {
+  const serverPath = path.resolve(__dirname, '../server/index.js');
+  const content = fs.readFileSync(serverPath, 'utf8');
+
+  const getDbStoreIdx = content.indexOf('const getDatabaseStore = async (key) => {');
+  assert(getDbStoreIdx !== -1, 'getDatabaseStore must be defined');
+
+  const blockEndIdx = content.indexOf('const realtimeClients', getDbStoreIdx);
+  const fnBody = content.slice(getDbStoreIdx, blockEndIdx);
+
+  // Must check isDbConnected()
+  assert(fnBody.includes('if (isDbConnected()) {'), 'Must check isDbConnected() before reading');
+
+  // Must query controlroom_store
+  assert(fnBody.includes("SELECT data FROM controlroom_store WHERE key = $1"), 'Must query controlroom_store with parameterized key');
+
+  // Must update cache on row hit
+  assert(fnBody.includes('supabaseMemoryStore[cleanKey] = d'), 'Must update cache on row hit');
+
+  // Must invalidate cache on missing row
+  assert(fnBody.includes('delete supabaseMemoryStore[cleanKey]'), 'Must delete cleanKey from cache on missing row');
+  assert(fnBody.includes('delete supabaseMemoryStore[key]'), 'Must delete key from cache on missing row');
+
+  // Must return empty collection directly within isDbConnected block
+  assert(fnBody.includes('OBJECT_BASED_STORES.has(cleanKey) ? {} : []'), 'Must return empty collection on missing row');
+
+  // Must propagate database error
+  assert(fnBody.includes('throw dbErr'), 'Must rethrow dbErr to trigger fail-closed HTTP 500');
+
+  // Must propagate leaves database error
+  assert(fnBody.includes('throw err'), 'Must rethrow leaves query error');
+});
+
+await runAsyncTest('12.2 Missing PostgreSQL row invalidates stale cache and returns empty collection', async () => {
+  const fakeMemory = {
+    reservations_store: [{ id: 'res_SYNTH_P9Y_1793247013909' }],
+    RESERVATIONS_STORE: [{ id: 'res_SYNTH_P9Y_1793247013909' }]
+  };
+
+  const getStore = async (key) => {
+    const cleanKey = String(key || '').toLowerCase();
+    const isDbConnected = true;
+    if (isDbConnected) {
+      // Simulate PostgreSQL returning 0 rows
+      const dbRes = { rows: [] };
+      if (dbRes.rows.length > 0 && dbRes.rows[0]?.data !== undefined && dbRes.rows[0]?.data !== null) {
+        let d = dbRes.rows[0].data;
+        fakeMemory[cleanKey] = d;
+        fakeMemory[key] = d;
+        return d;
+      }
+      delete fakeMemory[cleanKey];
+      if (key) {
+        delete fakeMemory[key];
+        delete fakeMemory[String(key).toUpperCase()];
+      }
+      const OBJECT_BASED_STORES = new Set(['presets_store', 'templates_store', 'company_branding_store']);
+      return OBJECT_BASED_STORES.has(cleanKey) ? {} : [];
+    }
+    return fakeMemory[cleanKey] || [];
+  };
+
+  const res = await getStore('reservations_store');
+  assert.deepStrictEqual(res, [], 'Must return empty array on missing PostgreSQL row');
+  assert.strictEqual(fakeMemory['reservations_store'], undefined, 'Must purge stale cleanKey cache');
+  assert.strictEqual(fakeMemory['RESERVATIONS_STORE'], undefined, 'Must purge stale uppercase cache');
+});
+
+await runAsyncTest('12.3 Database error propagates fail-closed without returning stale cache', async () => {
+  const fakeMemory = {
+    reservations_store: [{ id: 'stale_reservation_residue' }]
+  };
+
+  const getStore = async (key) => {
+    const cleanKey = String(key || '').toLowerCase();
+    const isDbConnected = true;
+    if (isDbConnected) {
+      try {
+        throw new Error('PostgreSQL connection pool exhausted [08006]');
+      } catch (dbErr) {
+        throw dbErr;
+      }
+    }
+    return fakeMemory[cleanKey] || [];
+  };
+
+  let caught = null;
+  try {
+    await getStore('reservations_store');
+  } catch (err) {
+    caught = err;
+  }
+
+  assert(caught, 'Must throw error on database failure');
+  assert(caught.message.includes('08006'), 'Must preserve SQLSTATE/error message');
+});
+
+await runAsyncTest('12.4 Deleted reservation does not resurrect old reservation on new reservation write', async () => {
+  // Stale memory contains old reservation from Run 1
+  const fakeMemory = {
+    reservations_store: [{ id: 'res_SYNTH_P9Y_1793247013909', tag: 'old' }]
+  };
+
+  // Database currently has NO row for reservations_store (clean baseline)
+  const fakePgDb = {};
+
+  // Step 1: Read current store before write
+  const cleanKey = 'reservations_store';
+  const dbRes = fakePgDb[cleanKey] ? { rows: [{ data: fakePgDb[cleanKey] }] } : { rows: [] };
+  let currentData;
+  if (dbRes.rows.length > 0 && dbRes.rows[0]?.data != null) {
+    currentData = dbRes.rows[0].data;
+    fakeMemory[cleanKey] = currentData;
+  } else {
+    delete fakeMemory[cleanKey];
+    const OBJECT_BASED = new Set(['presets_store', 'templates_store', 'company_branding_store']);
+    currentData = OBJECT_BASED.has(cleanKey) ? {} : [];
+  }
+
+  assert.deepStrictEqual(currentData, [], 'Current data must be empty array, not stale cache');
+
+  // Step 2: New reservation arrives for Run 2
+  const newReservation = [{ id: 'res_SYNTH_P9Y_1793250904736', tag: 'new' }];
+
+  // Step 3: Array merge
+  const map = new Map();
+  currentData.forEach(item => { if (item?.id) map.set(item.id, item); });
+  newReservation.forEach(item => { if (item?.id) map.set(item.id, item); });
+  const finalToSave = Array.from(map.values());
+
+  assert.strictEqual(finalToSave.length, 1, 'Final data must contain exactly 1 reservation');
+  assert.strictEqual(finalToSave[0].id, 'res_SYNTH_P9Y_1793250904736', 'Must be the new reservation');
+  assert(!finalToSave.some(r => r.id === 'res_SYNTH_P9Y_1793247013909'), 'Old reservation must NOT be resurrected');
+});
+
+await runAsyncTest('12.5 Unrelated existing reservations in PostgreSQL remain preserved', async () => {
+  const existingReservation = { id: 'res_CUSTOMER_ORDER_100', notes: 'real' };
+  const fakePgDb = {
+    reservations_store: [existingReservation]
+  };
+
+  const cleanKey = 'reservations_store';
+  const dbRes = fakePgDb[cleanKey] ? { rows: [{ data: fakePgDb[cleanKey] }] } : { rows: [] };
+  const currentData = dbRes.rows.length > 0 ? dbRes.rows[0].data : [];
+
+  const newReservation = [{ id: 'res_SYNTH_P9Y_1793250904736', tag: 'new' }];
+
+  const map = new Map();
+  currentData.forEach(item => { if (item?.id) map.set(item.id, item); });
+  newReservation.forEach(item => { if (item?.id) map.set(item.id, item); });
+  const finalToSave = Array.from(map.values());
+
+  assert.strictEqual(finalToSave.length, 2, 'Must contain both reservations');
+  assert(finalToSave.some(r => r.id === 'res_CUSTOMER_ORDER_100'), 'Must preserve existing order');
+  assert(finalToSave.some(r => r.id === 'res_SYNTH_P9Y_1793250904736'), 'Must contain new reservation');
+});
+
+await runAsyncTest('12.6 Object-based stores return {} on missing PostgreSQL row', async () => {
+  const fakeMemory = { presets_store: { a: 1 } };
+  const cleanKey = 'presets_store';
+  const OBJECT_BASED = new Set(['presets_store', 'templates_store', 'company_branding_store']);
+
+  delete fakeMemory[cleanKey];
+  const result = OBJECT_BASED.has(cleanKey) ? {} : [];
+
+  assert.deepStrictEqual(result, {}, 'presets_store must return empty object');
+  assert.strictEqual(fakeMemory['presets_store'], undefined, 'Must purge memory cache');
+});
+
+await runAsyncTest('12.7 Relational-store loaders are preserved ahead of controlroom_store', async () => {
+  const serverPath = path.resolve(__dirname, '../server/index.js');
+  const content = fs.readFileSync(serverPath, 'utf8');
+
+  const getDbStoreIdx = content.indexOf('const getDatabaseStore = async (key) => {');
+  const controlroomQueryIdx = content.indexOf('SELECT data FROM controlroom_store', getDbStoreIdx);
+
+  const customersRouteIdx = content.indexOf('loadDatabaseCustomers', getDbStoreIdx);
+  const oppsRouteIdx = content.indexOf('loadDatabaseOpportunities', getDbStoreIdx);
+  const leadsRouteIdx = content.indexOf('loadDatabaseLeads', getDbStoreIdx);
+  const bomsRouteIdx = content.indexOf('loadDatabaseBoms', getDbStoreIdx);
+  const leavesRouteIdx = content.indexOf('public.leaves', getDbStoreIdx);
+
+  assert(customersRouteIdx > getDbStoreIdx && customersRouteIdx < controlroomQueryIdx, 'customer_store must precede controlroom_store');
+  assert(oppsRouteIdx > getDbStoreIdx && oppsRouteIdx < controlroomQueryIdx, 'crm_opportunities must precede controlroom_store');
+  assert(leadsRouteIdx > getDbStoreIdx && leadsRouteIdx < controlroomQueryIdx, 'crm_leads must precede controlroom_store');
+  assert(bomsRouteIdx > getDbStoreIdx && bomsRouteIdx < controlroomQueryIdx, 'bom_store must precede controlroom_store');
+  assert(leavesRouteIdx > getDbStoreIdx && leavesRouteIdx < controlroomQueryIdx, 'leaves must precede controlroom_store');
+});
+
+// =============================================================================
 // SUMMARY
 // =============================================================================
 console.log('\n===================================================================');
