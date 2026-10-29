@@ -140,21 +140,35 @@ await runTest('2.4 Live recovery (--execute-authorized) fails closed when backup
 // =============================================================================
 console.log('\n--- TEST GROUP 3: Multi-Run Synthetic Ownership Verification ---');
 
-await runTest('3.1 Verifies Run 1 (1793247013909) and Run 2 (1793250904736) leads, rejects real leads', () => {
+await runTest('3.1 Verifies Run 1 and Run 2 leads by exact marker, rejects real and ambiguous leads', () => {
   // Run 1 Lead
   const lead1 = { id: 101, lead_number: 'VRM-LD-2026-01', company_name: 'SYNTH_P9Y_1793247013909 Solar Infra', notes: 'SYNTH_P9Y_1793247013909' };
   const res1 = verifySyntheticLeadOwnership(lead1);
   assert(res1 && res1.verified, 'Lead 1 must be verified');
   assert.strictEqual(res1.runId, '1793247013909');
 
-  // Run 2 Lead
-  const lead2 = { id: 102, lead_number: 'VRM-LD-2026-02', company_name: 'SYNTH_P9Y_1793250904736 Solar Infra', notes: 'SYNTH_P9Y_1793250904736' };
-  const res2 = verifySyntheticLeadOwnership(lead2);
-  assert(res2 && res2.verified, 'Lead 2 must be verified');
-  assert.strictEqual(res2.runId, '1793250904736');
+  // Actual Hostinger case: lead_number is VRM-LD-2026-01 but company_name has Run 2 marker -> MUST ATTRIBUTE TO RUN 2
+  const hostingerLead = {
+    id: 10,
+    lead_number: 'VRM-LD-2026-01',
+    company_name: 'SYNTH_P9Y_1793250904736 Solar Infra',
+    notes: 'SYNTH_P9Y_1793250904736 Lead Qualified by Sales Rep'
+  };
+  const resHostinger = verifySyntheticLeadOwnership(hostingerLead);
+  assert(resHostinger && resHostinger.verified, 'Hostinger lead must be verified');
+  assert.strictEqual(resHostinger.runId, '1793250904736', 'Must attribute to Run 2 by exact marker, not lead_number');
+
+  // Ambiguous lead containing conflicting markers from multiple runs -> MUST BE REJECTED
+  const ambiguousLead = {
+    id: 55,
+    lead_number: 'VRM-LD-2026-01',
+    company_name: 'SYNTH_P9Y_1793247013909 Solar Infra',
+    notes: 'SYNTH_P9Y_1793250904736 conflict'
+  };
+  assert.strictEqual(verifySyntheticLeadOwnership(ambiguousLead), false, 'Ambiguous lead must be rejected');
 
   // Unrelated real customer lead -> MUST BE REJECTED!
-  const realLead = { id: 999, lead_number: 'LD-REAL-100', company_name: 'Tata Power Solar Systems', notes: 'Customer inquiry' };
+  const realLead = { id: 999, lead_number: 'VRM-LD-2026-01', company_name: 'Tata Power Solar Systems', notes: 'Customer inquiry' };
   assert.strictEqual(verifySyntheticLeadOwnership(realLead), false, 'Real lead must never be verified as synthetic');
 });
 
@@ -361,7 +375,7 @@ function createMockPostgresClient(initialState = {}) {
 
 const mockInitialState = {
   leads: [
-    { id: 10, lead_number: 'VRM-LD-2026-02', company_name: 'SYNTH_P9Y_1793250904736 Solar Infra', notes: 'SYNTH_P9Y_1793250904736 Lead Qualified by Sales Rep' }
+    { id: 10, lead_number: 'VRM-LD-2026-01', company_name: 'SYNTH_P9Y_1793250904736 Solar Infra', notes: 'SYNTH_P9Y_1793250904736 Lead Qualified by Sales Rep' }
   ],
   lead_notifications: [{ id: 50, lead_id: 10 }],
   lead_notification_recipients: Array(9).fill(null).map((_, i) => ({ id: i + 1, notification_id: 50 })),
@@ -440,7 +454,7 @@ await runTest('4.1 Dry run audits exact observed counts without performing any w
   // Assert counts and IDs attributed to Run 2 (1793250904736)
   // All active business residue in DB belongs to Run 2
   assert.strictEqual(res.auditReport.byRun['1793250904736'].leads.length, 1);
-  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].leads, ['VRM-LD-2026-02']);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].leads, ['VRM-LD-2026-01']);
   assert.strictEqual(res.auditReport.byRun['1793250904736'].boms.length, 4);
   assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].boms, ['BOM-4736', 'BOM-C1-4736', 'BOM-C2-4736', 'BOM-C3-4736']);
   assert.strictEqual(res.auditReport.byRun['1793250904736'].employees.length, 3);

@@ -164,16 +164,19 @@ export function verifySyntheticLeadOwnership(lead) {
   if (!lead || typeof lead !== 'object') return false;
   const companyName = String(lead.company_name || '');
   const notes = String(lead.notes || '');
-  const leadNo = String(lead.lead_number || '');
 
+  const matchedRuns = [];
   for (const r of TARGET_RUNS) {
-    if (
-      companyName.includes(r.synthTag) || notes.includes(r.synthTag) ||
-      companyName.includes(r.runId) || notes.includes(r.runId) ||
-      (r.runId === '1793247013909' && (leadNo === 'VRM-LD-2026-01' || companyName.includes('13909')))
-    ) {
-      return { verified: true, runId: r.runId, synthTag: r.synthTag };
+    const tagMatch = companyName.includes(r.synthTag) || notes.includes(r.synthTag);
+    const idMatch = companyName.includes(r.runId) || notes.includes(r.runId);
+    if (tagMatch || idMatch) {
+      matchedRuns.push(r);
     }
+  }
+
+  // Reject ambiguous ownership (matched multiple runs) or no match
+  if (matchedRuns.length === 1) {
+    return { verified: true, runId: matchedRuns[0].runId, synthTag: matchedRuns[0].synthTag };
   }
   return false;
 }
@@ -184,13 +187,18 @@ export function verifySyntheticBomOwnership(bom) {
   const cust = String(bom.customerName || bom.customer_name || '');
   const synthTag = String(bom.synthTag || '').trim();
 
+  const matchedRuns = [];
   for (const r of TARGET_RUNS) {
     const tagMatch = synthTag === r.synthTag || cust.includes(r.synthTag) || cust.includes(r.runId);
     const idMatch = code.includes(r.tagSuffix) || code.includes(r.runId) ||
       (r.runId === '1793247013909' && (code === 'BOM-13909' || code.includes('3909')));
     if (tagMatch || idMatch) {
-      return { verified: true, runId: r.runId, synthTag: r.synthTag };
+      matchedRuns.push(r);
     }
+  }
+
+  if (matchedRuns.length === 1) {
+    return { verified: true, runId: matchedRuns[0].runId, synthTag: matchedRuns[0].synthTag };
   }
   return false;
 }
@@ -201,13 +209,18 @@ export function verifySyntheticEmployeeOwnership(emp) {
   const email = String(emp.email || '').toLowerCase().trim();
   const synthTag = String(emp.synthTag || '').trim();
 
+  const matchedRuns = [];
   for (const r of TARGET_RUNS) {
     const tagMatch = synthTag === r.synthTag || synthTag.includes(r.runId);
     const emailMatch = email.includes(r.runId) || email.includes(`${r.shortTag}@example.com`);
     const codeMatch = code.includes(r.shortTag) || code.includes(r.runId);
     if ((codeMatch || emailMatch) && (tagMatch || emailMatch || email.endsWith('@example.com'))) {
-      return { verified: true, runId: r.runId, synthTag: r.synthTag };
+      matchedRuns.push(r);
     }
+  }
+
+  if (matchedRuns.length === 1) {
+    return { verified: true, runId: matchedRuns[0].runId, synthTag: matchedRuns[0].synthTag };
   }
   return false;
 }
@@ -218,13 +231,18 @@ export function verifySyntheticQuotationOwnership(quote) {
   const cust = String(quote.customerName || '');
   const synthTag = String(quote.synthTag || '').trim();
 
+  const matchedRuns = [];
   for (const r of TARGET_RUNS) {
     if (
       synthTag === r.synthTag || cust.includes(r.synthTag) ||
       qNo.includes(r.tagSuffix) || qNo.includes(r.runId) || cust.includes(r.tagSuffix)
     ) {
-      return { verified: true, runId: r.runId, synthTag: r.synthTag };
+      matchedRuns.push(r);
     }
+  }
+
+  if (matchedRuns.length === 1) {
+    return { verified: true, runId: matchedRuns[0].runId, synthTag: matchedRuns[0].synthTag };
   }
   return false;
 }
@@ -235,13 +253,18 @@ export function verifySyntheticPiOwnership(pi) {
   const cust = String(pi.customerName || pi.vendor || '');
   const synthTag = String(pi.synthTag || '').trim();
 
+  const matchedRuns = [];
   for (const r of TARGET_RUNS) {
     if (
       synthTag === r.synthTag || cust.includes(r.synthTag) ||
       pNo.includes(r.tagSuffix) || pNo.includes(r.runId) || cust.includes(r.tagSuffix)
     ) {
-      return { verified: true, runId: r.runId, synthTag: r.synthTag };
+      matchedRuns.push(r);
     }
+  }
+
+  if (matchedRuns.length === 1) {
+    return { verified: true, runId: matchedRuns[0].runId, synthTag: matchedRuns[0].synthTag };
   }
   return false;
 }
@@ -252,13 +275,18 @@ export function verifySyntheticInvoiceOwnership(inv) {
   const cust = String(inv.customerName || '');
   const synthTag = String(inv.synthTag || '').trim();
 
+  const matchedRuns = [];
   for (const r of TARGET_RUNS) {
     if (
       synthTag === r.synthTag || cust.includes(r.synthTag) ||
       invNo.includes(r.tagSuffix) || invNo.includes(r.runId) || cust.includes(r.tagSuffix)
     ) {
-      return { verified: true, runId: r.runId, synthTag: r.synthTag };
+      matchedRuns.push(r);
     }
+  }
+
+  if (matchedRuns.length === 1) {
+    return { verified: true, runId: matchedRuns[0].runId, synthTag: matchedRuns[0].synthTag };
   }
   return false;
 }
@@ -268,13 +296,18 @@ export function verifySyntheticReservationOwnership(res) {
   const rId = String(res.id || res.reservationId || res.bomCode || '').trim();
   const synthTag = String(res.synthTag || '').trim();
 
+  const matchedRuns = [];
   for (const r of TARGET_RUNS) {
     if (
       synthTag === r.synthTag || rId === `res_${r.synthTag}` ||
       rId.includes(r.synthTag) || rId.includes(r.runId) || rId.includes(r.tagSuffix)
     ) {
-      return { verified: true, runId: r.runId, synthTag: r.synthTag };
+      matchedRuns.push(r);
     }
+  }
+
+  if (matchedRuns.length === 1) {
+    return { verified: true, runId: matchedRuns[0].runId, synthTag: matchedRuns[0].synthTag };
   }
   return false;
 }
