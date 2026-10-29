@@ -63,13 +63,25 @@ export const TARGET_RUNS = Object.freeze([
     runId: '1793247013909',
     synthTag: 'SYNTH_P9Y_1793247013909',
     tagSuffix: '13909',
-    shortTag: '909'
+    shortTag: '909',
+    employees: ['TA-TEST-909', 'SE-PEND-909', 'SE-ACT-909'],
+    quotations: ['QT-13909'],
+    pis: ['PI-13909'],
+    invoices: ['INV-13909'],
+    boms: ['BOM-13909', 'BOM-C1-3909', 'BOM-C2-3909', 'BOM-C3-3909'],
+    reservations: ['res_SYNTH_P9Y_1793247013909']
   },
   {
     runId: '1793250904736',
     synthTag: 'SYNTH_P9Y_1793250904736',
-    tagSuffix: '04736',
-    shortTag: '736'
+    tagSuffix: '4736',
+    shortTag: '736',
+    employees: ['TA-TEST-736', 'SE-PEND-736', 'SE-ACT-736'],
+    quotations: ['QT-4736', 'QT-04736'],
+    pis: ['PI-4736', 'PI-04736'],
+    invoices: ['INV-4736', 'INV-04736'],
+    boms: ['BOM-4736', 'BOM-04736', 'BOM-C1-4736', 'BOM-C2-4736', 'BOM-C3-4736'],
+    reservations: ['res_SYNTH_P9Y_1793250904736']
   }
 ]);
 
@@ -355,8 +367,30 @@ export async function runMixedResidueRecovery(options = {}) {
     reservationsFound: [],
     newlyCreatedStoreKeys: [],
     byRun: {
-      [TARGET_RUNS[0].runId]: { leads: 0, boms: 0, employees: 0, quotations: 0, pis: 0, invoices: 0, bomStore: 0, reservations: 0 },
-      [TARGET_RUNS[1].runId]: { leads: 0, boms: 0, employees: 0, quotations: 0, pis: 0, invoices: 0, bomStore: 0, reservations: 0 }
+      [TARGET_RUNS[0].runId]: {
+        synthTag: TARGET_RUNS[0].synthTag,
+        leads: [],
+        boms: [],
+        employees: [],
+        quotations: [],
+        pis: [],
+        invoices: [],
+        bomStore: [],
+        reservations: [],
+        childRecords: { statusHistory: 0, notifications: 0, recipients: 0 }
+      },
+      [TARGET_RUNS[1].runId]: {
+        synthTag: TARGET_RUNS[1].synthTag,
+        leads: [],
+        boms: [],
+        employees: [],
+        quotations: [],
+        pis: [],
+        invoices: [],
+        bomStore: [],
+        reservations: [],
+        childRecords: { statusHistory: 0, notifications: 0, recipients: 0 }
+      }
     },
     executed: false,
     committed: false
@@ -369,7 +403,7 @@ export async function runMixedResidueRecovery(options = {}) {
     console.log('\n--- Step 4: Inspecting Target Synthetic Leads & Dependencies ---');
     const leadRes = await client.query(
       `SELECT id, lead_number, company_name, notes, created_at FROM public.leads 
-       WHERE company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%' OR lead_number = 'VRM-LD-2026-01'`
+       WHERE company_name LIKE '%SYNTH_P9Y_%' OR notes LIKE '%SYNTH_P9Y_%' OR lead_number LIKE 'VRM-LD-2026-%'`
     );
 
     for (const leadRow of leadRes.rows) {
@@ -402,7 +436,10 @@ export async function runMixedResidueRecovery(options = {}) {
       auditReport.leadsFound.push(leadRow);
       auditReport.childRecordsFound[leadId] = childCounts;
       if (auditReport.byRun[ownership.runId]) {
-        auditReport.byRun[ownership.runId].leads++;
+        auditReport.byRun[ownership.runId].leads.push(leadRow.lead_number || String(leadRow.id));
+        auditReport.byRun[ownership.runId].childRecords.statusHistory += childCounts.lead_status_history;
+        auditReport.byRun[ownership.runId].childRecords.notifications += childCounts.lead_notifications;
+        auditReport.byRun[ownership.runId].childRecords.recipients += childCounts.lead_notification_recipients;
       }
       console.log(`   🎯 Found target synthetic lead: ${leadRow.id} (${leadRow.company_name}) [Run: ${ownership.runId}]`);
       console.log(`      Child records: ${childCounts.lead_status_history} status history, ${childCounts.lead_notifications} notifications, ${childCounts.lead_notification_recipients} recipients`);
@@ -423,7 +460,7 @@ export async function runMixedResidueRecovery(options = {}) {
         if (ownership && ownership.verified) {
           auditReport.bomsFound.push(bRow);
           if (auditReport.byRun[ownership.runId]) {
-            auditReport.byRun[ownership.runId].boms++;
+            auditReport.byRun[ownership.runId].boms.push(bRow.bom_code);
           }
           console.log(`   🎯 Found target synthetic BOM order: ${bRow.id} (${bRow.bom_code}) [Run: ${ownership.runId}]`);
         }
@@ -443,7 +480,7 @@ export async function runMixedResidueRecovery(options = {}) {
         if (ownership && ownership.verified) {
           auditReport.employeesFound.push(emp);
           if (auditReport.byRun[ownership.runId]) {
-            auditReport.byRun[ownership.runId].employees++;
+            auditReport.byRun[ownership.runId].employees.push(emp.employee_code || emp.code);
           }
           console.log(`   🎯 Found synthetic employee: ${emp.employee_code || emp.code} [Run: ${ownership.runId}]`);
         }
@@ -458,7 +495,7 @@ export async function runMixedResidueRecovery(options = {}) {
         if (ownership && ownership.verified) {
           auditReport.quotationsFound.push(q);
           if (auditReport.byRun[ownership.runId]) {
-            auditReport.byRun[ownership.runId].quotations++;
+            auditReport.byRun[ownership.runId].quotations.push(q.quotationNo || q.id);
           }
           console.log(`   🎯 Found synthetic quotation: ${q.quotationNo || q.id} [Run: ${ownership.runId}]`);
         }
@@ -473,7 +510,7 @@ export async function runMixedResidueRecovery(options = {}) {
         if (ownership && ownership.verified) {
           auditReport.pisFound.push(p);
           if (auditReport.byRun[ownership.runId]) {
-            auditReport.byRun[ownership.runId].pis++;
+            auditReport.byRun[ownership.runId].pis.push(p.piNo || p.id || p.pi_no);
           }
           console.log(`   🎯 Found synthetic PI: ${p.piNo || p.id || p.pi_no} [Run: ${ownership.runId}]`);
         }
@@ -500,7 +537,9 @@ export async function runMixedResidueRecovery(options = {}) {
             const ownership = verifySyntheticBomOwnership(item);
             if (ownership && ownership.verified) {
               auditReport.bomStoreItemsFound.push(item);
-              if (auditReport.byRun[ownership.runId]) auditReport.byRun[ownership.runId].bomStore++;
+              if (auditReport.byRun[ownership.runId]) {
+                auditReport.byRun[ownership.runId].bomStore.push(item.bomCode || item.code || item.id);
+              }
             }
           }
         } else if (newKey === 'invoice_store' && Array.isArray(kData)) {
@@ -508,7 +547,9 @@ export async function runMixedResidueRecovery(options = {}) {
             const ownership = verifySyntheticInvoiceOwnership(item);
             if (ownership && ownership.verified) {
               auditReport.invoicesFound.push(item);
-              if (auditReport.byRun[ownership.runId]) auditReport.byRun[ownership.runId].invoices++;
+              if (auditReport.byRun[ownership.runId]) {
+                auditReport.byRun[ownership.runId].invoices.push(item.invNo || item.invoiceNo || item.id);
+              }
             }
           }
         } else if (newKey === 'reservations_store' && Array.isArray(kData)) {
@@ -516,7 +557,9 @@ export async function runMixedResidueRecovery(options = {}) {
             const ownership = verifySyntheticReservationOwnership(item);
             if (ownership && ownership.verified) {
               auditReport.reservationsFound.push(item);
-              if (auditReport.byRun[ownership.runId]) auditReport.byRun[ownership.runId].reservations++;
+              if (auditReport.byRun[ownership.runId]) {
+                auditReport.byRun[ownership.runId].reservations.push(item.id || item.reservationId || item.bomCode);
+              }
               console.log(`      -> Reservation: ${item.id || item.reservationId} [Run: ${ownership.runId}]`);
             }
           }
@@ -527,18 +570,21 @@ export async function runMixedResidueRecovery(options = {}) {
     // -------------------------------------------------------------------------
     // STEP 8: Proposed Deletion Summary & Dry-Run Exit
     // -------------------------------------------------------------------------
-    console.log('\n--- Step 8: Proposed Deletion Counts by Run Marker ---');
+    console.log('\n--- Step 8: Proposed Deletion Breakdown by Run Marker ---');
     for (const r of TARGET_RUNS) {
       const stats = auditReport.byRun[r.runId];
-      console.log(`   🏷️  Run Marker ${r.synthTag} (${r.runId}):`);
-      console.log(`      Leads:        ${stats.leads}`);
-      console.log(`      BOM orders:   ${stats.boms}`);
-      console.log(`      Employees:    ${stats.employees}`);
-      console.log(`      Quotations:   ${stats.quotations}`);
-      console.log(`      PIs:          ${stats.pis}`);
-      console.log(`      Invoices:     ${stats.invoices}`);
-      console.log(`      BOM store:    ${stats.bomStore}`);
-      console.log(`      Reservations: ${stats.reservations}`);
+      console.log(`\n   🏷️  Run Marker: ${r.synthTag} (${r.runId})`);
+      console.log(`      Leads:        ${stats.leads.length}${stats.leads.length > 0 ? ` [${stats.leads.join(', ')}]` : ''}`);
+      if (stats.childRecords.notifications > 0 || stats.childRecords.recipients > 0 || stats.childRecords.statusHistory > 0) {
+        console.log(`         -> Child records: ${stats.childRecords.statusHistory} status history, ${stats.childRecords.notifications} notifications, ${stats.childRecords.recipients} recipients`);
+      }
+      console.log(`      BOM orders:   ${stats.boms.length}${stats.boms.length > 0 ? ` [${stats.boms.join(', ')}]` : ''}`);
+      console.log(`      Employees:    ${stats.employees.length}${stats.employees.length > 0 ? ` [${stats.employees.join(', ')}]` : ''}`);
+      console.log(`      Quotations:   ${stats.quotations.length}${stats.quotations.length > 0 ? ` [${stats.quotations.join(', ')}]` : ''}`);
+      console.log(`      PIs:          ${stats.pis.length}${stats.pis.length > 0 ? ` [${stats.pis.join(', ')}]` : ''}`);
+      console.log(`      Invoices:     ${stats.invoices.length}${stats.invoices.length > 0 ? ` [${stats.invoices.join(', ')}]` : ''}`);
+      console.log(`      BOM store:    ${stats.bomStore.length}${stats.bomStore.length > 0 ? ` [${stats.bomStore.join(', ')}]` : ''}`);
+      console.log(`      Reservations: ${stats.reservations.length}${stats.reservations.length > 0 ? ` [${stats.reservations.join(', ')}]` : ''}`);
     }
 
     console.log('\n   📦 Store Row Actions:');
@@ -648,7 +694,7 @@ export async function runMixedResidueRecovery(options = {}) {
     const hasPiTable = await client.query("SELECT to_regclass('public.proforma_invoices') as reg");
     if (hasPiTable.rows[0]?.reg) {
       await client.query(
-        "DELETE FROM public.proforma_invoices WHERE pi_no LIKE '%13909%' OR pi_no LIKE '%04736%' OR customer_name LIKE '%SYNTH_P9Y_%'"
+        "DELETE FROM public.proforma_invoices WHERE pi_no LIKE '%13909%' OR pi_no LIKE '%04736%' OR pi_no LIKE '%4736%' OR customer_name LIKE '%SYNTH_P9Y_%'"
       );
     }
 

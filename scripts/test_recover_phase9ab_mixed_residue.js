@@ -168,9 +168,13 @@ await runTest('3.2 Verifies synthetic BOM orders across both runs, rejects real 
   assert(resB2 && resB2.verified && resB2.runId === '1793247013909');
 
   // Run 2 BOM
-  const b3 = { id: 3, bom_code: 'BOM-04736', customer_name: 'SYNTH_P9Y_1793250904736 Solar Infra' };
+  const b3 = { id: 3, bom_code: 'BOM-4736', customer_name: 'SYNTH_P9Y_1793250904736 Solar Infra' };
   const resB3 = verifySyntheticBomOwnership(b3);
   assert(resB3 && resB3.verified && resB3.runId === '1793250904736');
+
+  const b4 = { id: 4, bom_code: 'BOM-04736', customer_name: 'SYNTH_P9Y_1793250904736 Solar Infra' };
+  const resB4 = verifySyntheticBomOwnership(b4);
+  assert(resB4 && resB4.verified && resB4.runId === '1793250904736');
 
   // Real BOM order -> MUST BE REJECTED!
   const realBom = { id: 88, bom_code: 'BOM-2026-0044', customer_name: 'Adani Solar Infrastructure', synthTag: null };
@@ -198,21 +202,25 @@ await runTest('3.3 Verifies synthetic reservations from BOTH runs and strictly p
   assert.strictEqual(verifySyntheticReservationOwnership(randomRes), false, 'Arbitrary reservation must never be verified');
 });
 
-await runTest('3.4 Verifies synthetic employees, quotes, PIs, invoices and rejects real ones', () => {
+await runTest('3.4 Verifies synthetic employees, quotes, PIs, invoices across runs and rejects real ones', () => {
   // Employees
   assert(verifySyntheticEmployeeOwnership({ employee_code: 'TA-TEST-909', email: 'synth_admin_1793247013909@example.com' }));
+  assert(verifySyntheticEmployeeOwnership({ employee_code: 'TA-TEST-736', email: 'synth_admin_1793250904736@example.com' }));
   assert(!verifySyntheticEmployeeOwnership({ employee_code: 'EMP-001', email: 'director@businz.com' }));
 
   // Quotations
   assert(verifySyntheticQuotationOwnership({ quotationNo: 'QT-13909', customerName: 'SYNTH_P9Y_1793247013909 Solar' }));
+  assert(verifySyntheticQuotationOwnership({ quotationNo: 'QT-4736', customerName: 'SYNTH_P9Y_1793250904736 Solar' }));
   assert(!verifySyntheticQuotationOwnership({ quotationNo: 'QT-2026-098', customerName: 'JSW Steel' }));
 
   // PIs
   assert(verifySyntheticPiOwnership({ piNo: 'PI-13909', customerName: 'SYNTH_P9Y_1793247013909' }));
+  assert(verifySyntheticPiOwnership({ piNo: 'PI-4736', customerName: 'SYNTH_P9Y_1793250904736' }));
   assert(!verifySyntheticPiOwnership({ piNo: 'PI-70044', customerName: 'Hero Future Energies' }));
 
   // Invoices
   assert(verifySyntheticInvoiceOwnership({ invNo: 'INV-13909', customerName: 'SYNTH_P9Y_1793247013909' }));
+  assert(verifySyntheticInvoiceOwnership({ invNo: 'INV-4736', customerName: 'SYNTH_P9Y_1793250904736' }));
   assert(!verifySyntheticInvoiceOwnership({ invNo: 'INV-2026-0033', customerName: 'L&T Construction' }));
 });
 
@@ -315,7 +323,12 @@ function createMockPostgresClient(initialState = {}) {
           return { rows: b ? [b] : [] };
         }
         if (sql.includes('count(*)::int')) {
-          const count = state.bom_orders.filter(x => x.customer_name?.includes('SYNTH_P9Y_') || x.bom_code?.includes('13909') || x.bom_code?.includes('3909')).length;
+          const count = state.bom_orders.filter(x =>
+            x.customer_name?.includes('SYNTH_P9Y_') ||
+            x.bom_code?.includes('13909') ||
+            x.bom_code?.includes('3909') ||
+            x.bom_code?.includes('4736')
+          ).length;
           return { rows: [{ count }] };
         }
         return { rows: [...state.bom_orders] };
@@ -348,37 +361,37 @@ function createMockPostgresClient(initialState = {}) {
 
 const mockInitialState = {
   leads: [
-    { id: 10, lead_number: 'VRM-LD-2026-01', company_name: 'SYNTH_P9Y_1793247013909 Solar Infra', notes: 'SYNTH_P9Y_1793247013909' }
+    { id: 10, lead_number: 'VRM-LD-2026-02', company_name: 'SYNTH_P9Y_1793250904736 Solar Infra', notes: 'SYNTH_P9Y_1793250904736 Lead Qualified by Sales Rep' }
   ],
   lead_notifications: [{ id: 50, lead_id: 10 }],
   lead_notification_recipients: Array(9).fill(null).map((_, i) => ({ id: i + 1, notification_id: 50 })),
   lead_status_history: [{ id: 1, lead_id: 10 }],
   bom_orders: [
-    { id: 1, bom_code: 'BOM-13909', customer_name: 'SYNTH_P9Y_1793247013909 Solar Infra' },
-    { id: 2, bom_code: 'BOM-C1-3909', customer_name: 'SYNTH_P9Y_1793247013909 Client 1' },
-    { id: 3, bom_code: 'BOM-C2-3909', customer_name: 'SYNTH_P9Y_1793247013909 Client 2' },
-    { id: 4, bom_code: 'BOM-C3-3909', customer_name: 'SYNTH_P9Y_1793247013909 Client 3' }
+    { id: 1, bom_code: 'BOM-4736', customer_name: 'SYNTH_P9Y_1793250904736 Solar Infra' },
+    { id: 2, bom_code: 'BOM-C1-4736', customer_name: 'SYNTH_P9Y_1793250904736 Client 1' },
+    { id: 3, bom_code: 'BOM-C2-4736', customer_name: 'SYNTH_P9Y_1793250904736 Client 2' },
+    { id: 4, bom_code: 'BOM-C3-4736', customer_name: 'SYNTH_P9Y_1793250904736 Client 3' }
   ],
   controlroom_store: {
     employees_store: [
-      { employee_code: 'TA-TEST-909', email: 'synth_admin_1793247013909@example.com' },
-      { employee_code: 'SE-PEND-909', email: 'synth_pend_1793247013909@example.com' },
-      { employee_code: 'SE-ACT-909', email: 'synth_act_1793247013909@example.com' }
+      { employee_code: 'TA-TEST-736', email: 'synth_admin_1793250904736@example.com' },
+      { employee_code: 'SE-PEND-736', email: 'synth_pend_1793250904736@example.com' },
+      { employee_code: 'SE-ACT-736', email: 'synth_act_1793250904736@example.com' }
     ],
     quotations_store: [
-      { quotationNo: 'QT-13909', customerName: 'SYNTH_P9Y_1793247013909 Solar Infra' }
+      { quotationNo: 'QT-4736', customerName: 'SYNTH_P9Y_1793250904736 Solar Infra' }
     ],
     customer_pis_store: [
-      { piNo: 'PI-13909', customerName: 'SYNTH_P9Y_1793247013909 Solar Infra' }
+      { piNo: 'PI-4736', customerName: 'SYNTH_P9Y_1793250904736 Solar Infra' }
     ],
     bom_store: [
-      { bomCode: 'BOM-13909', synthTag: 'SYNTH_P9Y_1793247013909' },
-      { bomCode: 'BOM-C1-3909', synthTag: 'SYNTH_P9Y_1793247013909' },
-      { bomCode: 'BOM-C2-3909', synthTag: 'SYNTH_P9Y_1793247013909' },
-      { bomCode: 'BOM-C3-3909', synthTag: 'SYNTH_P9Y_1793247013909' }
+      { bomCode: 'BOM-4736', synthTag: 'SYNTH_P9Y_1793250904736' },
+      { bomCode: 'BOM-C1-4736', synthTag: 'SYNTH_P9Y_1793250904736' },
+      { bomCode: 'BOM-C2-4736', synthTag: 'SYNTH_P9Y_1793250904736' },
+      { bomCode: 'BOM-C3-4736', synthTag: 'SYNTH_P9Y_1793250904736' }
     ],
     invoice_store: [
-      { invNo: 'INV-13909', synthTag: 'SYNTH_P9Y_1793247013909' }
+      { invNo: 'INV-4736', synthTag: 'SYNTH_P9Y_1793250904736' }
     ],
     reservations_store: [
       { id: 'res_SYNTH_P9Y_1793247013909', synthTag: 'SYNTH_P9Y_1793247013909' },
@@ -399,7 +412,7 @@ await runTest('4.1 Dry run audits exact observed counts without performing any w
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.dryRun, true);
 
-  // Assert audited counts
+  // Assert overall audited counts
   assert.strictEqual(res.auditReport.leadsFound.length, 1);
   assert.strictEqual(res.auditReport.bomsFound.length, 4);
   assert.strictEqual(res.auditReport.employeesFound.length, 3);
@@ -409,9 +422,42 @@ await runTest('4.1 Dry run audits exact observed counts without performing any w
   assert.strictEqual(res.auditReport.bomStoreItemsFound.length, 4);
   assert.strictEqual(res.auditReport.reservationsFound.length, 2); // 1 from each run!
 
-  // Assert counts by run
-  assert.strictEqual(res.auditReport.byRun['1793247013909'].reservations, 1);
-  assert.strictEqual(res.auditReport.byRun['1793250904736'].reservations, 1);
+  // Assert counts and IDs attributed to Run 1 (1793247013909)
+  // Run 1 business records were already cleaned up; only resurrected reservation remains!
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].leads.length, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].boms.length, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].employees.length, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].quotations.length, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].pis.length, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].invoices.length, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].bomStore.length, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].reservations.length, 1);
+  assert.deepStrictEqual(res.auditReport.byRun['1793247013909'].reservations, ['res_SYNTH_P9Y_1793247013909']);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].childRecords.statusHistory, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].childRecords.notifications, 0);
+  assert.strictEqual(res.auditReport.byRun['1793247013909'].childRecords.recipients, 0);
+
+  // Assert counts and IDs attributed to Run 2 (1793250904736)
+  // All active business residue in DB belongs to Run 2
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].leads.length, 1);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].leads, ['VRM-LD-2026-02']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].boms.length, 4);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].boms, ['BOM-4736', 'BOM-C1-4736', 'BOM-C2-4736', 'BOM-C3-4736']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].employees.length, 3);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].employees, ['TA-TEST-736', 'SE-PEND-736', 'SE-ACT-736']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].quotations.length, 1);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].quotations, ['QT-4736']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].pis.length, 1);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].pis, ['PI-4736']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].invoices.length, 1);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].invoices, ['INV-4736']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].bomStore.length, 4);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].bomStore, ['BOM-4736', 'BOM-C1-4736', 'BOM-C2-4736', 'BOM-C3-4736']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].reservations.length, 1);
+  assert.deepStrictEqual(res.auditReport.byRun['1793250904736'].reservations, ['res_SYNTH_P9Y_1793250904736']);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].childRecords.statusHistory, 1);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].childRecords.notifications, 1);
+  assert.strictEqual(res.auditReport.byRun['1793250904736'].childRecords.recipients, 9);
 
   // Assert ZERO writes occurred
   assert(!mockClient.queryLog.some(q => q.sql === 'BEGIN'), 'Dry-run must not call BEGIN');
