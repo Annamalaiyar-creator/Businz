@@ -1996,13 +1996,28 @@ function RecordedProofViewerModal({
                   alt="Document Proof Attachment"
                   style={{ maxWidth: '100%', maxHeight: '480px', objectFit: 'contain', borderRadius: '8px' }}
                   onError={(e) => {
-                    // Try alternative direct /api/uploads path if original failed
-                    if (docName) {
-                      const altUrl = `/api/uploads/${encodeURIComponent(docName)}`;
-                      if (e.currentTarget.src !== altUrl && !e.currentTarget.src.endsWith(encodeURIComponent(docName))) {
-                        e.currentTarget.src = altUrl;
-                        return;
-                      }
+                    if (!e.currentTarget.dataset.retried && docName) {
+                      e.currentTarget.dataset.retried = 'true';
+                      fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data?.found && data?.url) {
+                            const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                            setDocUrl(cleanUrl);
+                          } else if (!e.currentTarget.src.includes('/api/uploads/')) {
+                            e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                          } else {
+                            setImageError(true);
+                          }
+                        })
+                        .catch(() => {
+                          if (!e.currentTarget.src.includes('/api/uploads/')) {
+                            e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                          } else {
+                            setImageError(true);
+                          }
+                        });
+                      return;
                     }
                     setImageError(true);
                   }}

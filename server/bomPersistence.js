@@ -548,8 +548,11 @@ export function mergeBomRecords(existing, incoming) {
     // Preserve financial totals if incoming is 0 and existing is non-zero
     grandTotal: (Number(incoming.grandTotal) > 0) ? Number(incoming.grandTotal) : (existing.grandTotal || 0),
     subTotal: (Number(incoming.subTotal) > 0) ? Number(incoming.subTotal) : (existing.subTotal || 0),
-    // Workflow progression safety: do not allow a stale lower-rank status to regress progress
-    status: (iRank >= eRank) ? incoming.status : existing.status,
+    // Workflow progression safety: do not allow a stale lower-rank status to regress progress,
+    // while explicitly honoring legitimate cancellation / stock restoration requests.
+    status: (incoming.cancelled || String(incoming.status || '').toLowerCase().includes('cancel') || String(incoming.status || '').toLowerCase().includes('stock restored') || iRank >= eRank)
+      ? incoming.status
+      : existing.status,
     packingStatus: (iRank >= eRank) ? (incoming.packingStatus || existing.packingStatus) : existing.packingStatus,
     fullyCompleted: (iRank >= eRank) ? (incoming.fullyCompleted ?? existing.fullyCompleted) : existing.fullyCompleted,
     // Deep merge dispatch packing and accounts verification

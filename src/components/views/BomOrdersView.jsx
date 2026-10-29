@@ -12,7 +12,7 @@ import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
 import { uploadBomDocumentFile, validateClientFile } from '../../utils/bomStorageClient';
-import { resolveDocumentUrlAsync } from '../../utils/documentResolver';
+import { resolveDocumentUrl, resolveDocumentUrlAsync } from '../../utils/documentResolver';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import SearchablePresetSelector from '../SearchablePresetSelector';
@@ -1930,8 +1930,12 @@ export default function BomOrdersView(props) {
       const c1 = rawDoc.name ? getMediaFromCache(rawDoc.name) : null;
       const c2 = rawDoc.id ? getMediaFromCache(rawDoc.id) : null;
       const cacheVal = c1 || c2 || null;
+      const directResolved = rawDoc ? resolveDocumentUrl(rawDoc) : null;
 
-      resolvedData = d || u || prevUrl || f || p || cacheVal;
+      resolvedData = d || u || prevUrl || f || p || cacheVal || directResolved;
+      if (resolvedData && typeof resolvedData === 'string' && resolvedData.startsWith('/uploads/')) {
+        resolvedData = `/api${resolvedData}`;
+      }
       if (!resolvedData && rawDoc._rawFile && (rawDoc._rawFile instanceof Blob || rawDoc._rawFile instanceof File)) {
         try {
           resolvedData = URL.createObjectURL(rawDoc._rawFile);
@@ -1951,7 +1955,8 @@ export default function BomOrdersView(props) {
       resolveDocumentUrlAsync(rawDoc, bCode)
         .then(url => {
           if (url) {
-            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: url, dataUrl: url, _fetchingStorage: false } } : null);
+            const cleanUrl = url.startsWith('/uploads/') ? `/api${url}` : url;
+            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: cleanUrl, dataUrl: cleanUrl, _fetchingStorage: false } } : null);
           } else {
             if (typeof rawDoc === 'object') rawDoc._fetchingStorageDone = true;
             setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, _fetchingStorage: false, _fetchingStorageDone: true } } : null);
@@ -1972,14 +1977,17 @@ export default function BomOrdersView(props) {
           .then(r => r.json())
           .then(data => {
             if (data?.found && data?.url) {
-              saveMediaToCache(docName, data.url);
-              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url, _fetchingServer: false } } : null);
+              const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+              saveMediaToCache(docName, cleanUrl);
+              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: cleanUrl, dataUrl: cleanUrl, _fetchingServer: false } } : null);
             } else {
-              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, _fetchingServer: false, _fetchingServerDone: true } } : null);
+              const fallbackUrl = `/api/uploads/${encodeURIComponent(docName)}`;
+              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: fallbackUrl, dataUrl: fallbackUrl, _fetchingServer: false, _fetchingServerDone: true } } : null);
             }
           })
           .catch(() => {
-            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, _fetchingServer: false, _fetchingServerDone: true } } : null);
+            const fallbackUrl = `/api/uploads/${encodeURIComponent(docName)}`;
+            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: fallbackUrl, dataUrl: fallbackUrl, _fetchingServer: false, _fetchingServerDone: true } } : null);
           });
       }
     }
@@ -2129,10 +2137,17 @@ export default function BomOrdersView(props) {
                       .then(r => r.json())
                       .then(data => {
                         if (data?.found && data?.url) {
-                          saveMediaToCache(docName, data.url);
-                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url } } : null);
+                          const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                          saveMediaToCache(docName, cleanUrl);
+                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: cleanUrl, dataUrl: cleanUrl } } : null);
+                        } else if (!e.currentTarget.src.includes('/api/uploads/')) {
+                          e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
                         }
-                      }).catch(() => {});
+                      }).catch(() => {
+                        if (!e.currentTarget.src.includes('/api/uploads/')) {
+                          e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                        }
+                      });
                   }
                 }}
                 style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
@@ -2150,10 +2165,17 @@ export default function BomOrdersView(props) {
                       .then(r => r.json())
                       .then(data => {
                         if (data?.found && data?.url) {
-                          saveMediaToCache(docName, data.url);
-                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url } } : null);
+                          const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                          saveMediaToCache(docName, cleanUrl);
+                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: cleanUrl, dataUrl: cleanUrl } } : null);
+                        } else if (!e.currentTarget.src.includes('/api/uploads/')) {
+                          e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
                         }
-                      }).catch(() => {});
+                      }).catch(() => {
+                        if (!e.currentTarget.src.includes('/api/uploads/')) {
+                          e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                        }
+                      });
                   }
                 }}
                 style={{ maxWidth: '100%', maxHeight: '68vh', borderRadius: '8px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
@@ -8800,9 +8822,14 @@ export default function BomOrdersView(props) {
                         <button
                           type="button"
                           onClick={() => {
+                            const bCode = uploadPaymentModal.bomCode || uploadPaymentModal.code;
+                            const dUrl = proofData || (typeof proofObj === 'object' ? proofObj?.dataUrl : null) || (proofObj ? resolveDocumentUrl(proofObj) : null);
                             setPreviewDocModal({
                               title: 'Payment Proof Document',
-                              doc: typeof proofObj === 'object' && proofObj !== null ? { ...proofObj, dataUrl: proofData } : { name: proofName, dataUrl: proofData }
+                              bomCode: bCode,
+                              doc: typeof proofObj === 'object' && proofObj !== null
+                                ? { ...proofObj, bomCode: bCode, dataUrl: dUrl || proofObj.dataUrl }
+                                : { name: proofName, dataUrl: dUrl, bomCode: bCode }
                             });
                           }}
                           style={{ fontSize: '12px', fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '6px 12px', borderRadius: '8px', border: '1px solid #BFDBFE', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}

@@ -1796,7 +1796,9 @@ app.use('/api/store', (req, res, next) => {
   }
 
   // 2. Stream-level size enforcement for chunked transfer encoding and streaming body parsing
-  storeJsonParser(req, res, (err) => {
+  const isFormUrlencoded = String(req.headers['content-type'] || '').includes('application/x-www-form-urlencoded');
+  const parser = isFormUrlencoded ? storeUrlencodedParser : storeJsonParser;
+  parser(req, res, (err) => {
     if (err) {
       if (err.type === 'entity.too.large' || err.status === 413) {
         return res.status(413).json({
@@ -1806,18 +1808,7 @@ app.use('/api/store', (req, res, next) => {
       }
       return next(err);
     }
-    storeUrlencodedParser(req, res, (err2) => {
-      if (err2) {
-        if (err2.type === 'entity.too.large' || err2.status === 413) {
-          return res.status(413).json({
-            success: false,
-            error: '[Payload Too Large] Payload size exceeds 15 MB store limit. Document attachments must use media storage.'
-          });
-        }
-        return next(err2);
-      }
-      next();
-    });
+    next();
   });
 });
 
@@ -2099,6 +2090,192 @@ function getCachedUploadsFileList(dir) {
   return cachedUploadsFileList;
 }
 
+const MIME_BY_EXT = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.csv': 'text/csv',
+  '.json': 'application/json'
+};
+
+const handleUploadFallback = async (req, res) => {
+  try {
+    let relPath = Array.isArray(req.params.filePath) ? req.params.filePath.join('/') : (req.params.filePath || '');
+    if (!relPath) {
+      relPath = (req.path || '').replace(/^\/(?:api\/)?uploads\/?/, '');
+    }
+    const decoded = decodeURIComponent(relPath || '').trim();
+    if (!decoded || decoded.includes('..')) {
+      return res.status(400).json({ success: false, error: 'Invalid file path' });
+    }
+
+    const baseName = path.basename(decoded);
+    const sanitizedName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ext = path.extname(baseName).toLowerCase();
+
+    const sendMatchedFile = (filePath) => {
+      const fExt = path.extname(filePath).toLowerCase();
+      const mime = MIME_BY_EXT[fExt] || 'application/octet-stream';
+      if (req.method === 'HEAD') {
+        try {
+          const stat = fs.statSync(filePath);
+          res.setHeader('Content-Type', mime);
+          res.setHeader('Content-Length', stat.size);
+          res.setHeader('Accept-Ranges', 'bytes');
+          return res.status(200).end();
+        } catch (_) {}
+      }
+      res.setHeader('Content-Type', mime);
+      return res.sendFile(path.resolve(filePath), { acceptRanges: true });
+    };
+
+    const sendBufferData = (buffer, mimeType) => {
+      res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Accept-Ranges', 'bytes');
+      if (req.method === 'HEAD') {
+        return res.status(200).end();
+      }
+      return res.status(200).send(buffer);
+    };
+
+    // Tier 1: Direct candidates
+    const directCandidates = [
+      path.join(uploadsDir, decoded),
+      path.join(uploadsDir, baseName),
+      path.join(uploadsDir, sanitizedName),
+      path.join(uploadsDir, 'bom-documents', decoded),
+      path.join(uploadsDir, 'bom-documents', baseName),
+      path.join(uploadsDir, 'bom-documents', sanitizedName)
+    ];
+    for (const cand of directCandidates) {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        return sendMatchedFile(cand);
+      }
+    }
+
+    // Tier 2: Search cached recursive uploads file list (exact or sanitized)
+    const allFiles = getCachedUploadsFileList(uploadsDir);
+    const exactMatch = allFiles.find(f => {
+      const bn = path.basename(f).toLowerCase();
+      return bn === baseName.toLowerCase() || bn === sanitizedName.toLowerCase();
+    });
+    if (exactMatch && fs.existsSync(exactMatch) && fs.statSync(exactMatch).isFile()) {
+      return sendMatchedFile(exactMatch);
+    }
+
+    // Tier 3: Slug match (ignoring timestamps / prefix hashes)
+    const searchSlug = path.basename(baseName, ext).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    if (searchSlug && searchSlug.length >= 3) {
+      const slugMatch = allFiles.find(f => {
+        const fExt = path.extname(f).toLowerCase();
+        if (ext && fExt !== ext) return false;
+        const fSlug = path.basename(f, fExt).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return fSlug && (fSlug.includes(searchSlug) || searchSlug.includes(fSlug));
+      });
+      if (slugMatch && fs.existsSync(slugMatch) && fs.statSync(slugMatch).isFile()) {
+        return sendMatchedFile(slugMatch);
+      }
+    }
+
+    // Tier 4: Check media_cache.json
+    const mediaCache = getCachedMediaMap();
+    if (mediaCache && typeof mediaCache === 'object') {
+      const normBase = baseName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
+      for (const [k, v] of Object.entries(mediaCache)) {
+        if (!v || typeof v !== 'string') continue;
+        const normKey = String(k || '').replace(/[\s_]+/g, ' ').toLowerCase().trim();
+        if (normKey === normBase || normKey.includes(normBase) || normBase.includes(normKey)) {
+          if (v.startsWith('data:')) {
+            const matches = v.match(/^data:([^;]+);base64,(.+)$/);
+            if (matches) {
+              const mime = matches[1];
+              const buf = Buffer.from(matches[2], 'base64');
+              try {
+                const saveDisk = path.join(uploadsDir, sanitizedName);
+                if (!fs.existsSync(saveDisk)) fs.writeFileSync(saveDisk, buf);
+              } catch (_) {}
+              return sendBufferData(buf, mime);
+            }
+          } else if (v.startsWith('http://') || v.startsWith('https://')) {
+            return res.redirect(v);
+          }
+        }
+      }
+    }
+
+    // Tier 5: Check BOM store records in PostgreSQL / bom_store.json
+    try {
+      const bomStoreFile = getStoreFilePath('bom_store.json');
+      let bomList = [];
+      if (fs.existsSync(bomStoreFile)) {
+        bomList = JSON.parse(fs.readFileSync(bomStoreFile, 'utf8') || '[]');
+      }
+      if (Array.isArray(bomList)) {
+        const normSearch = baseName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
+        for (const bom of bomList) {
+          const docCandidates = [
+            bom.paymentProofDoc,
+            ...(Array.isArray(bom.paymentProofDocs) ? bom.paymentProofDocs : []),
+            bom.deliveryAddressProofDoc,
+            ...(Array.isArray(bom.deliveryAddressProofDocs) ? bom.deliveryAddressProofDocs : []),
+            bom.balanceProofDoc,
+            bom.payments?.proofDocObj,
+            bom.payments?.balanceProofDocObj
+          ].filter(Boolean);
+
+          for (const d of docCandidates) {
+            const dName = typeof d === 'string' ? d : (d.name || d.originalName || '');
+            const normD = dName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
+            if (normD && (normD === normSearch || normD.includes(normSearch) || normSearch.includes(normD))) {
+              if (d.storagePath) {
+                const spClean = d.storagePath.replace(/^bom-documents\//, '');
+                const diskP = path.join(uploadsDir, 'bom-documents', spClean);
+                if (fs.existsSync(diskP) && fs.statSync(diskP).isFile()) {
+                  return sendMatchedFile(diskP);
+                }
+              }
+              const dRaw = d.dataUrl || d.fileData || d.proofDocData;
+              if (dRaw && typeof dRaw === 'string' && dRaw.startsWith('data:')) {
+                const m = dRaw.match(/^data:([^;]+);base64,(.+)$/);
+                if (m) {
+                  const mime = m[1];
+                  const buf = Buffer.from(m[2], 'base64');
+                  try {
+                    const saveDisk = path.join(uploadsDir, sanitizedName);
+                    if (!fs.existsSync(saveDisk)) fs.writeFileSync(saveDisk, buf);
+                  } catch (_) {}
+                  return sendBufferData(buf, mime);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return res.status(404).json({
+      success: false,
+      error: 'File not found',
+      requested: decoded
+    });
+  } catch (err) {
+    console.error('[Upload Fallback Error]:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+app.get(['/api/uploads/*filePath', '/uploads/*filePath'], handleUploadFallback);
+app.head(['/api/uploads/*filePath', '/uploads/*filePath'], handleUploadFallback);
+
 app.get('/api/media/find/:name', (req, res) => {
   try {
     const rawSearch = decodeURIComponent(req.params.name || '').toLowerCase().trim();
@@ -2158,6 +2335,45 @@ app.get('/api/media/find/:name', (req, res) => {
         }
       }
     }
+
+    // Fast Path 4: Search BOM store records for matching documents
+    try {
+      const bomStoreFile = getStoreFilePath('bom_store.json');
+      let bomList = [];
+      if (fs.existsSync(bomStoreFile)) {
+        bomList = JSON.parse(fs.readFileSync(bomStoreFile, 'utf8') || '[]');
+      }
+      if (Array.isArray(bomList)) {
+        const normSearch = rawSearch.replace(/[\s_]+/g, ' ').trim();
+        for (const bom of bomList) {
+          const candidates = [
+            bom.paymentProofDoc,
+            ...(Array.isArray(bom.paymentProofDocs) ? bom.paymentProofDocs : []),
+            bom.deliveryAddressProofDoc,
+            ...(Array.isArray(bom.deliveryAddressProofDocs) ? bom.deliveryAddressProofDocs : []),
+            bom.balanceProofDoc,
+            bom.payments?.proofDocObj,
+            bom.payments?.balanceProofDocObj
+          ].filter(Boolean);
+
+          for (const doc of candidates) {
+            const dName = typeof doc === 'string' ? doc : (doc.name || doc.originalName || '');
+            const normDoc = dName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
+            if (normDoc && (normDoc === normSearch || normDoc.includes(normSearch) || normSearch.includes(normDoc))) {
+              if (doc.storagePath) {
+                const spClean = doc.storagePath.replace(/^bom-documents\//, '');
+                return res.json({ found: true, url: `/api/uploads/bom-documents/${spClean}`, filename: dName });
+              }
+              const dData = doc.dataUrl || doc.fileData || doc.proofDocData;
+              if (dData && typeof dData === 'string') {
+                return res.json({ found: true, url: dData, filename: dName });
+              }
+              return res.json({ found: true, url: `/api/uploads/${encodeURIComponent(dName)}`, filename: dName });
+            }
+          }
+        }
+      }
+    } catch (_) {}
 
     res.json({ found: false });
   } catch (err) {
@@ -2903,6 +3119,53 @@ export async function getVerifiedUserSession(req) {
   return { valid: false, error: sessionResult?.error || 'Unauthorized: Invalid or expired session' };
 }
 
+export const normalizeUserRole = (role) => String(role || '').toLowerCase().trim();
+
+export const isExecutiveOrAdminRole = (role) => {
+  const r = normalizeUserRole(role);
+  return ['ceo', 'md', 'managing director', 'technical administrator', 'admin', 'super admin'].some(k => r.includes(k));
+};
+
+export const hasAnyUserRole = (sessionRole, allowedRoles = []) => {
+  if (isExecutiveOrAdminRole(sessionRole)) return true;
+  const r = normalizeUserRole(sessionRole);
+  return allowedRoles.some(allowed => r.includes(String(allowed || '').toLowerCase()));
+};
+
+export const requireBusinzSession = async (req, res, next) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  req.userSession = session;
+  if (typeof next === 'function') next();
+  return session;
+};
+
+export const requireRole = (allowedRoles = []) => {
+  return async (req, res, next) => {
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({
+        success: false,
+        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+      });
+    }
+    req.userSession = session;
+    if (!hasAnyUserRole(session.role, allowedRoles)) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${session.role}" is not authorized for this operation.`
+      });
+    }
+    if (typeof next === 'function') next();
+    return session;
+  };
+};
+
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   const employeeFilter = req.query.employee;
@@ -2922,116 +3185,15 @@ app.get('/api/store/:key', async (req, res) => {
           error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
         });
       }
-
-      const userRole = String(session.role || '').trim();
-      const userRoleLower = userRole.toLowerCase();
-      const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator'].some(r => userRoleLower.includes(r));
-
-      // Client requested a specific role filter
-      if (req.query.role) {
-        const reqRoleLower = String(req.query.role).trim().toLowerCase();
-        // If non-executive tries to query an executive or different department's notifications
-        if (!isExecutive && !reqRoleLower.includes(userRoleLower) && reqRoleLower !== 'all') {
-          return res.status(403).json({
-            success: false,
-            error: `Forbidden: Role "${userRole}" is not authorized to access notifications targeted to "${req.query.role}".`
-          });
-        }
-      }
-
-      const fullList = await getDatabaseStore('notifications_store');
-      const list = Array.isArray(fullList) ? fullList : [];
-      const total = list.length;
-
-      // Scoping logic:
-      // If executive: can view all notifications (or filter by req.query.role if provided)
-      // If non-executive: strictly scoped to notifications targeting their verified session role OR 'All'
-      let scopedList = list;
-      if (!isExecutive) {
-        scopedList = scopedList.filter(n => {
-          if (!n) return false;
-          const roles = Array.isArray(n.targetRoles) ? n.targetRoles : (n.role ? [n.role] : ['All']);
-          return roles.some(r => {
-            const rLower = String(r).toLowerCase().trim();
-            return rLower === 'all' || rLower.includes(userRoleLower) || userRoleLower.includes(rLower);
-          });
-        });
-      } else if (req.query.role) {
-        const reqRole = String(req.query.role).trim().toLowerCase();
-        scopedList = scopedList.filter(n => {
-          if (!n) return false;
-          const roles = Array.isArray(n.targetRoles) ? n.targetRoles : (n.role ? [n.role] : ['All']);
-          return roles.some(r => String(r).toLowerCase().includes(reqRole) || r === 'All');
-        });
-      }
-
-      // Incremental sync via ?sinceId= (returns newer notifications ahead of sinceId)
-      if (req.query.sinceId) {
-        const sinceIdx = scopedList.findIndex(n => n && (n.id === req.query.sinceId));
-        const newerSlice = sinceIdx > 0 ? scopedList.slice(0, sinceIdx) : (sinceIdx === 0 ? [] : scopedList.slice(0, 50));
-        return res.json({
-          success: true,
-          mode: 'incremental',
-          sinceId: req.query.sinceId,
-          total: scopedList.length,
-          count: newerSlice.length,
-          data: newerSlice
-        });
-      }
-
-      // Incremental sync via ?since= (ISO timestamp or epoch)
-      if (req.query.since) {
-        const sinceTime = new Date(req.query.since).getTime();
-        const newerSlice = !isNaN(sinceTime)
-          ? scopedList.filter(n => n && n.createdAt && new Date(n.createdAt).getTime() > sinceTime)
-          : scopedList.slice(0, 50);
-        return res.json({
-          success: true,
-          mode: 'incremental',
-          since: req.query.since,
-          total: scopedList.length,
-          count: newerSlice.length,
-          data: newerSlice
-        });
-      }
-
-      // Filter by unread if requested
-      let filtered = scopedList;
-      if (req.query.unread === 'true') {
-        filtered = filtered.filter(n => n && Boolean(n.unread));
-      }
-
-      // Explicit ?all=true returns all permitted records without pagination
-      if (req.query.all === 'true') {
-        return res.json({
-          success: true,
-          page: 1,
-          limit: filtered.length,
-          total: scopedList.length,
-          filteredTotal: filtered.length,
-          totalPages: 1,
-          hasMore: false,
-          data: filtered
-        });
-      }
-
-      // Server-side pagination (default 50 items per page, capped at 200)
-      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 50), 200);
-      const startIndex = (page - 1) * limit;
-      const pagedData = filtered.slice(startIndex, startIndex + limit);
-
       return res.json({
         success: true,
-        page,
-        limit,
-        total: scopedList.length,
-        filteredTotal: filtered.length,
-        totalPages: Math.ceil(filtered.length / limit),
-        hasMore: startIndex + limit < filtered.length,
-        data: pagedData
+        mode: 'decommissioned',
+        total: 0,
+        count: 0,
+        data: []
       });
     }
+
     const data = await getDatabaseStore(key);
     return res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
@@ -3175,34 +3337,74 @@ app.post('/api/store/:key', async (req, res) => {
   const storeData = (key === 'notifications_store' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) && rawBody.data !== undefined)
     ? rawBody.data
     : rawBody;
+
+  // 3. Enforce active session for all write operations
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+
+  // 4. Role-based access control for sensitive stores
+  const sessionRole = session.role;
+  if (cleanKey === 'employees_store') {
+    if (!isExecutiveOrAdminRole(sessionRole) && !normalizeUserRole(sessionRole).includes('hr')) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${sessionRole}" is not authorized to write to employees_store.`
+      });
+    }
+  } else if (['settings', 'system_settings', 'api_keys', 'integrations', 'credentials'].includes(cleanKey)) {
+    if (!isExecutiveOrAdminRole(sessionRole)) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${sessionRole}" is not authorized to write to ${cleanKey}.`
+      });
+    }
+  } else if (cleanKey === 'po_store') {
+    if (!hasAnyUserRole(sessionRole, ['procurement', 'purchase', 'accounts', 'finance'])) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${sessionRole}" is not authorized to write to po_store.`
+      });
+    }
+  } else if (cleanKey === 'bom_store') {
+    if (!hasAnyUserRole(sessionRole, ['sales', 'accounts', 'dispatch', 'billing', 'production'])) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${sessionRole}" is not authorized to write to bom_store.`
+      });
+    }
+  } else if (cleanKey === 'invoice_store') {
+    if (!hasAnyUserRole(sessionRole, ['billing', 'accounts', 'finance'])) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${sessionRole}" is not authorized to write to invoice_store.`
+      });
+    }
+  } else if (cleanKey === 'item_store' || cleanKey === 'raw_materials_store') {
+    if (!hasAnyUserRole(sessionRole, ['procurement', 'purchase', 'production', 'dispatch'])) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${sessionRole}" is not authorized to write to ${cleanKey}.`
+      });
+    }
+  }
+
+  if (key === 'notifications_store') {
+    return res.json({ success: true, message: 'Notifications store decommissioned', count: 0 });
+  }
+
   if (!isDbConnected()) {
     return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot persist store "${key}".` });
   }
 
-  if (key === 'notifications_store') {
-    const session = await getVerifiedUserSession(req);
-    if (!session || !session.valid) {
-      return res.status(401).json({
-        success: false,
-        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
-      });
-    }
-  }
-
   // Dedicated relational leaves handler to eliminate JSONB bloat (Phase 9R Issue 3)
   if (cleanKey === 'leaves') {
-    // 1. Require authenticated session
-    const session = await getVerifiedUserSession(req);
-    if (!session || !session.valid) {
-      return res.status(401).json({
-        success: false,
-        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
-      });
-    }
-
     const sessionEmpCode = String(session.empCode || session.user?.employee_code || session.employee_code || '').trim().toUpperCase();
-    const sessionRole = String(session.role || '').toLowerCase();
-    const isExecutiveOrHr = ['ceo', 'md', 'managing director', 'technical administrator', 'admin', 'super admin', 'hr'].some(r => sessionRole.includes(r));
+    const isExecutiveOrHr = isExecutiveOrAdminRole(sessionRole) || normalizeUserRole(sessionRole).includes('hr');
 
     return enqueueStoreOperation('leaves', async () => {
       try {
@@ -5300,7 +5502,9 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
     // 2. Update raw_materials_store.json
     const rawMatsPath = getStoreFilePath('raw_materials_store.json');
     let rawMats = [];
-    if (fs.existsSync(rawMatsPath)) {
+    if (Array.isArray(supabaseMemoryStore.raw_materials_store) && supabaseMemoryStore.raw_materials_store.length > 0) {
+      rawMats = supabaseMemoryStore.raw_materials_store;
+    } else if (fs.existsSync(rawMatsPath)) {
       try { rawMats = JSON.parse(fs.readFileSync(rawMatsPath, 'utf8')); } catch (_) {}
     }
     if (Array.isArray(rawMats) && rawMats.length > 0) {
@@ -5320,25 +5524,31 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
           isMr300 ? (allocations.get('mr-300mm') || allocations.get('mr100n') || 0) : 0
         );
 
-        let baseline = isMr300 ? 2000 : (isAlu2414 ? 250 : 0);
-        if (m?.openingStock !== undefined && m?.openingStock !== null && Number(m.openingStock) > 0) {
+        let baseline;
+        if (m?.physicalStock !== undefined && m?.physicalStock !== null && !isNaN(Number(m.physicalStock))) {
+          baseline = Number(m.physicalStock);
+        } else if (m?.openingStock !== undefined && m?.openingStock !== null && !isNaN(Number(m.openingStock))) {
           baseline = Number(m.openingStock);
+        } else if (m?.stock !== undefined && m?.stock !== null && !isNaN(Number(m.stock))) {
+          baseline = Number(m.stock);
+        } else {
+          baseline = isMr300 ? 2000 : (isAlu2414 ? 250 : 0);
         }
 
         const newStock = Math.max(0, baseline - blocked);
         const minL = parseFloat(m?.minLevel || 100) || 100;
         const newStatus = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
 
-        if (m.stock !== newStock || m.reserved !== blocked || m.status !== newStatus || m.openingStock !== baseline) {
-          m.openingStock = baseline;
-          m.physicalStock = baseline;
-          m.stock = newStock;
-          m.availableStock = newStock;
-          m.reserved = blocked;
-          m.blockedForBom = blocked;
-          m.status = newStatus;
+        if (m.stock !== newStock || m.reserved !== blocked || m.status !== newStatus || m.physicalStock !== baseline || m.availableStock !== newStock) {
           changed = true;
         }
+        m.openingStock = (m.openingStock !== undefined && m.openingStock !== null && !isNaN(Number(m.openingStock))) ? Number(m.openingStock) : baseline;
+        m.physicalStock = baseline;
+        m.stock = newStock;
+        m.availableStock = newStock;
+        m.reserved = blocked;
+        m.blockedForBom = blocked;
+        m.status = newStatus;
       });
 
       if (changed) {
@@ -5352,7 +5562,9 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
     // 3. Update item_store.json
     const itemsPath = getStoreFilePath('item_store.json');
     let items = [];
-    if (fs.existsSync(itemsPath)) {
+    if (Array.isArray(supabaseMemoryStore.item_store) && supabaseMemoryStore.item_store.length > 0) {
+      items = supabaseMemoryStore.item_store;
+    } else if (fs.existsSync(itemsPath)) {
       try { items = JSON.parse(fs.readFileSync(itemsPath, 'utf8')); } catch (_) {}
     }
     if (Array.isArray(items) && items.length > 0) {
@@ -5372,24 +5584,30 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
           isMr300 ? (allocations.get('mr-300mm') || allocations.get('mr100n') || 0) : 0
         );
 
-        let baseline = isMr300 ? 2000 : (isAlu2414 ? 250 : 0);
-        if (it?.openingStock !== undefined && it?.openingStock !== null && Number(it.openingStock) > 0 && Number(it.openingStock) < 5000) {
+        let baseline;
+        if (it?.physicalStock !== undefined && it?.physicalStock !== null && !isNaN(Number(it.physicalStock))) {
+          baseline = Number(it.physicalStock);
+        } else if (it?.openingStock !== undefined && it?.openingStock !== null && !isNaN(Number(it.openingStock))) {
           baseline = Number(it.openingStock);
+        } else if (it?.stock !== undefined && it?.stock !== null && !isNaN(Number(it.stock))) {
+          baseline = Number(it.stock);
+        } else {
+          baseline = isMr300 ? 2000 : (isAlu2414 ? 250 : 0);
         }
 
         const newStock = Math.max(0, baseline - blocked);
         const minL = parseFloat(it?.minLevel || 20) || 20;
         const newStatus = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
 
-        if (it.stock !== newStock || it.reserved !== blocked || it.status !== newStatus || it.openingStock !== baseline) {
-          it.openingStock = baseline;
-          it.physicalStock = baseline;
-          it.stock = newStock;
-          it.availableStock = newStock;
-          it.reserved = blocked;
-          it.status = newStatus;
+        if (it.stock !== newStock || it.reserved !== blocked || it.status !== newStatus || it.physicalStock !== baseline || it.availableStock !== newStock) {
           changed = true;
         }
+        it.openingStock = (it.openingStock !== undefined && it.openingStock !== null && !isNaN(Number(it.openingStock))) ? Number(it.openingStock) : baseline;
+        it.physicalStock = baseline;
+        it.stock = newStock;
+        it.availableStock = newStock;
+        it.reserved = blocked;
+        it.status = newStatus;
       });
 
       if (changed) {
@@ -5406,12 +5624,38 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
 };
 
 app.post('/api/inventory/reconcile-boms', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['production', 'procurement', 'purchase', 'dispatch', 'accounts', 'billing'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to reconcile inventory.`
+    });
+  }
   await reconcileServerInventoryWithBoms();
   res.json({ success: true, message: 'Server inventory reconciled with active BOMs' });
 });
 
 // Centralized atomic BOM creation/update endpoint - guarantees sequential non-clashing codes
 app.post('/api/boms', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['sales', 'accounts', 'dispatch', 'billing', 'production'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to modify BOMs.`
+    });
+  }
   return new Promise((resolveOuter) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
@@ -5730,20 +5974,6 @@ app.delete('/api/boms/:id', async (req, res) => {
 // Browser receives ZERO direct storage CRUD access.
 // ==============================================================================
 
-// Session validation middleware for BOM document operations
-const requireBusinzSession = async (req, res, next) => {
-  const session = await getVerifiedUserSession(req);
-  if (!session || !session.valid) {
-    return res.status(401).json({
-      success: false,
-      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
-    });
-  }
-
-  req.userSession = session;
-  next();
-};
-
 // POST /api/boms/:bomCode/documents - Upload document to bom-documents private bucket
 app.post('/api/boms/:bomCode/documents', requireBusinzSession, async (req, res) => {
   try {
@@ -6025,6 +6255,19 @@ app.get('/api/invoices', async (req, res) => {
 
 // Endpoint to CREATE a Sales Invoice in BUSINZ Authoritative Store (Native BUSINZ Store)
 app.post('/api/invoices', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['billing', 'accounts', 'finance'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to create or update invoices.`
+    });
+  }
   try {
     const normalizeInvoiceDate = (dateVal) => {
       if (!dateVal) return new Date().toISOString().split('T')[0];
@@ -6071,11 +6314,28 @@ app.post('/api/invoices', async (req, res) => {
     }
     if (!Array.isArray(localInvList)) localInvList = [];
 
+    const targetBomCode = invRecord.bomCode || invRecord.poNo;
+
+    // Prevent duplicate invoices for the same BOM
+    if (targetBomCode) {
+      const existingDuplicate = localInvList.find(i =>
+        i &&
+        (i.bomCode === targetBomCode || i.poNo === targetBomCode) &&
+        i.invNo !== assignedInvNo &&
+        i.id !== (invRecord.id || assignedInvNo)
+      );
+      if (existingDuplicate) {
+        return res.status(409).json({
+          success: false,
+          error: `[Duplicate Invoice] Invoice ${existingDuplicate.invNo || existingDuplicate.id} already exists for BOM ${targetBomCode}. Duplicate invoices are not permitted.`
+        });
+      }
+    }
+
     const matchIdx = localInvList.findIndex(i =>
       (invRecord.invNo && i.invNo === invRecord.invNo) ||
       (invRecord.id && i.id === invRecord.id) ||
-      (invRecord.bomCode && (i.bomCode === invRecord.bomCode || i.poNo === invRecord.bomCode)) ||
-      (invRecord.poNo && (i.poNo === invRecord.poNo || i.bomCode === invRecord.poNo))
+      (targetBomCode && (i.bomCode === targetBomCode || i.poNo === targetBomCode))
     );
     if (matchIdx !== -1) {
       localInvList[matchIdx] = { ...localInvList[matchIdx], ...invRecord };
@@ -6085,28 +6345,36 @@ app.post('/api/invoices', async (req, res) => {
     fs.writeFileSync(invStorePath, JSON.stringify(localInvList, null, 2), 'utf8');
     if (!supabaseMemoryStore['invoice_store']) supabaseMemoryStore['invoice_store'] = [];
     supabaseMemoryStore['invoice_store'] = localInvList;
-    pushStoreToSupabase('invoice_store', localInvList).catch(() => {});
+    if (isDbConnected()) {
+      await saveDatabaseStore('invoice_store', localInvList);
+    }
 
     // Synchronize matching BOM record with assigned invoice
-    const targetBomCode = invRecord.bomCode || invRecord.poNo;
     if (targetBomCode) {
       try {
         const bomPath = getStoreFilePath('bom_store.json');
         let diskBoms = [];
-        if (fs.existsSync(bomPath)) {
+        if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+          diskBoms = supabaseMemoryStore.bom_store;
+        } else if (fs.existsSync(bomPath)) {
           try { diskBoms = JSON.parse(fs.readFileSync(bomPath, 'utf8')); } catch (_) {}
         }
         if (Array.isArray(diskBoms)) {
           let bomChanged = false;
+          let matchedBom = null;
           diskBoms = diskBoms.map(b => {
             if (b && (b.bomCode === targetBomCode || b.code === targetBomCode || b.id === targetBomCode)) {
               bomChanged = true;
-              return {
+              const nextStatus = (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered')
+                ? b.status
+                : 'Awaiting Vehicle Loading & Dispatch';
+              matchedBom = {
                 ...b,
                 invoiceNo: assignedInvNo,
                 invoiceConfirmed: true,
-                status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch'
+                status: nextStatus
               };
+              return matchedBom;
             }
             return b;
           });
@@ -6114,12 +6382,28 @@ app.post('/api/invoices', async (req, res) => {
             fs.writeFileSync(bomPath, JSON.stringify(diskBoms, null, 2), 'utf8');
             supabaseMemoryStore.bom_store = diskBoms;
             cachedBomsResult = diskBoms;
-            try {
-              const matched = diskBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode);
-              if (matched) {
-                broadcastRealtimeEvent('bom_updated', { action: 'update', recordId: targetBomCode, bom: matched });
+            if (isDbConnected()) {
+              try {
+                await query(
+                  `UPDATE public.bom_orders
+                   SET invoice_no = $1,
+                       invoice_confirmed = true,
+                       status = CASE
+                         WHEN status ILIKE '%complete%' OR status ILIKE '%dispatched%' OR status ILIKE '%delivered%' THEN status
+                         ELSE 'Awaiting Vehicle Loading & Dispatch'
+                       END,
+                       updated_at = NOW()
+                   WHERE bom_code = $2 OR code = $2`,
+                  [assignedInvNo, targetBomCode]
+                );
+                await saveDatabaseStore('bom_store', diskBoms);
+              } catch (dbBomErr) {
+                console.warn('[POST /api/invoices BOM DB update warning]:', dbBomErr?.message);
               }
-            } catch (_) {}
+            }
+            if (matchedBom) {
+              broadcastRealtimeEvent('bom_updated', { action: 'update', recordId: targetBomCode, bom: matchedBom });
+            }
           }
         }
       } catch (bErr) {
@@ -7663,6 +7947,19 @@ app.get('/api/raw-materials', async (req, res) => {
 
 // Endpoint to update Raw Materials inventory
 app.post('/api/raw-materials', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['procurement', 'purchase', 'production', 'dispatch'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to update raw materials.`
+    });
+  }
   try {
     const updatedMats = req.body;
     if (Array.isArray(updatedMats)) {
@@ -7873,20 +8170,65 @@ app.post('/api/items/delete', async (req, res) => {
 
 // Endpoint to atomically deduct stock for BOM orders across all roles
 app.post('/api/raw-materials/deduct', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['dispatch', 'production', 'billing', 'accounts'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to deduct raw materials.`
+    });
+  }
   try {
     const { bomCode, items, user } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.json({ success: true, message: 'No items to deduct' });
     }
 
+    const targetBomCode = String(bomCode || '').trim();
+    const bomPath = getStoreFilePath('bom_store.json');
+    let diskBoms = [];
+    if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+      diskBoms = supabaseMemoryStore.bom_store;
+    } else if (fs.existsSync(bomPath)) {
+      try { diskBoms = JSON.parse(fs.readFileSync(bomPath, 'utf8')); } catch (_) {}
+    }
+    if (!Array.isArray(diskBoms)) diskBoms = [];
+
+    // Idempotency guarantee: prevent double deduction if already processed for this BOM
+    if (targetBomCode) {
+      const matchedBom = diskBoms.find(b =>
+        b && String(b.bomCode || b.code || b.id || '').toUpperCase() === targetBomCode.toUpperCase()
+      );
+      if (matchedBom && (matchedBom.stockDeducted === true || matchedBom.inventoryDeducted === true)) {
+        return res.json({
+          success: true,
+          message: `Stock already deducted for BOM ${targetBomCode}. Operation is idempotent.`,
+          alreadyDeducted: true,
+          deducted: [],
+          rawMaterials: (Array.isArray(supabaseMemoryStore.raw_materials_store) && supabaseMemoryStore.raw_materials_store.length > 0)
+            ? supabaseMemoryStore.raw_materials_store
+            : loadLocalRawMaterials()
+        });
+      }
+    }
+
     const rawMatsPath = getStoreFilePath('raw_materials_store.json');
-    let rawMats = loadLocalRawMaterials();
+    let rawMats = (Array.isArray(supabaseMemoryStore.raw_materials_store) && supabaseMemoryStore.raw_materials_store.length > 0)
+      ? supabaseMemoryStore.raw_materials_store
+      : loadLocalRawMaterials();
     if (!Array.isArray(rawMats) || rawMats.length === 0) {
       rawMats = [];
     }
 
     const itemsPath = getStoreFilePath('item_store.json');
-    let itemsList = loadLocalItems();
+    let itemsList = (Array.isArray(supabaseMemoryStore.item_store) && supabaseMemoryStore.item_store.length > 0)
+      ? supabaseMemoryStore.item_store
+      : loadLocalItems();
     if (!Array.isArray(itemsList)) itemsList = [];
 
     const deductedList = [];
@@ -7917,7 +8259,7 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
         mat.availableStock = newStock;
         mat.reserved = Math.max(0, (parseFloat(mat.reserved) || 0) - qty);
         mat.blockedForBom = mat.reserved;
-        mat.lastUpdated = `Deducted ${qty} for BOM ${bomCode || 'Order'} by ${user || 'System'}`;
+        mat.lastUpdated = `Deducted ${qty} for BOM ${bomCode || 'Order'} by ${user || session.user || 'System'}`;
         deductedList.push({ code: mat.code, name: mat.name, deducted: qty, remaining: newStock });
       }
 
@@ -7953,6 +8295,26 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
       supabaseMemoryStore.item_store = itemsList;
       pushStoreToSupabase('item_store', itemsList).catch(() => {});
       broadcastRealtimeEvent('item_store_updated', { action: 'deduct', bomCode, deducted: deductedList });
+
+      // Mark BOM as stockDeducted
+      if (targetBomCode && diskBoms.length > 0) {
+        let bChanged = false;
+        diskBoms = diskBoms.map(b => {
+          if (b && String(b.bomCode || b.code || b.id || '').toUpperCase() === targetBomCode.toUpperCase()) {
+            bChanged = true;
+            return { ...b, stockDeducted: true, inventoryDeducted: true, deductedAt: new Date().toISOString() };
+          }
+          return b;
+        });
+        if (bChanged) {
+          safeWriteJsonFileAsync(bomPath, diskBoms);
+          supabaseMemoryStore.bom_store = diskBoms;
+          pushStoreToSupabase('bom_store', diskBoms).catch(() => {});
+          if (isDbConnected()) {
+            query(`UPDATE public.bom_orders SET accounts_verification = jsonb_set(COALESCE(accounts_verification, '{}'::jsonb), '{stockDeducted}', 'true'::jsonb, true), updated_at = NOW() WHERE bom_code = $1 OR code = $1`, [targetBomCode]).catch(() => {});
+          }
+        }
+      }
 
       console.log(`[INVENTORY DEDUCTION] Deducted stock for BOM ${bomCode}:`, deductedList);
     }
@@ -8021,6 +8383,19 @@ app.get('/api/items/:id', async (req, res) => {
 
 // Endpoint to update item details in BUSINZ Authoritative Store (Native BUSINZ Store)
 app.put('/api/items/:id', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['procurement', 'purchase', 'production'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to update items.`
+    });
+  }
   const targetId = req.params.id;
   const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
 
@@ -8052,6 +8427,19 @@ app.put('/api/items/:id', async (req, res) => {
 
 // Endpoint to create a new product in BUSINZ Authoritative Store (Native BUSINZ Store)
 app.post('/api/items', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['procurement', 'purchase', 'production'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to create items.`
+    });
+  }
   try {
     const localItems = loadLocalItems();
 
@@ -8191,6 +8579,19 @@ app.post('/api/items', async (req, res) => {
 
 // Universal Stock Reset Endpoint: Resets all stock to 0, wipes allocations, and sets each item to exactly 5,000
 app.all('/api/inventory/reset-to-5000', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!isExecutiveOrAdminRole(session.role)) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to execute inventory reset.`
+    });
+  }
   try {
     const localItems = loadLocalItems();
     const existingRaw = supabaseMemoryStore.raw_materials_store || [];
@@ -8834,7 +9235,7 @@ app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
   }
 });
 
-// Lead Notifications (Independent per-recipient read status)
+// Lead Notifications (DECOMMISSIONED)
 app.get('/api/crm/leads/notifications', async (req, res) => {
   try {
     const session = await getVerifiedUserSession(req);
@@ -8845,29 +9246,7 @@ app.get('/api/crm/leads/notifications', async (req, res) => {
       });
     }
 
-    const callerRole = String(session.role || '').toLowerCase().trim();
-    const callerEmpCode = String(session.empCode || '').trim();
-    const requestedEmpCode = String(req.query.employeeCode || req.headers['x-user-emp-id'] || '').trim();
-
-    const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator', 'tech support', 'technical support'].some(r => callerRole.includes(r));
-
-    let effectiveEmpCode = callerEmpCode;
-    if (requestedEmpCode && requestedEmpCode !== callerEmpCode) {
-      if (!isExecutive) {
-        return res.status(403).json({
-          success: false,
-          error: `Forbidden: User with role "${session.role}" cannot access notifications for employee "${requestedEmpCode}".`
-        });
-      }
-      effectiveEmpCode = requestedEmpCode;
-    }
-
-    if (!effectiveEmpCode) {
-      return res.json({ success: true, count: 0, notifications: [], data: [] });
-    }
-
-    const notifications = await getNotificationsForEmployee(effectiveEmpCode);
-    res.json({ success: true, count: notifications.length, notifications, data: notifications });
+    res.json({ success: true, count: 0, notifications: [], data: [] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -8883,26 +9262,7 @@ app.post('/api/crm/leads/notifications/:id/read', async (req, res) => {
       });
     }
 
-    const { id } = req.params;
-    const callerRole = String(session.role || '').toLowerCase().trim();
-    const callerEmpCode = String(session.empCode || '').trim();
-    const requestedEmpCode = String(req.body.employeeCode || req.headers['x-user-emp-id'] || '').trim();
-
-    const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator'].some(r => callerRole.includes(r));
-
-    let effectiveEmpCode = callerEmpCode;
-    if (requestedEmpCode && requestedEmpCode !== callerEmpCode) {
-      if (!isExecutive) {
-        return res.status(403).json({
-          success: false,
-          error: `Forbidden: Cannot mark notification as read for employee "${requestedEmpCode}".`
-        });
-      }
-      effectiveEmpCode = requestedEmpCode;
-    }
-
-    const result = await markNotificationRead(id, effectiveEmpCode);
-    res.json({ success: true, ...result });
+    res.json({ success: true, message: 'Notifications decommissioned' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -9445,7 +9805,9 @@ if (fs.existsSync(distPath)) {
 
 app.supabaseMemoryStore = supabaseMemoryStore;
 
-if (isOptimizationTestMode()) {
+if (process.env.BUSINZ_SKIP_LISTEN === 'true') {
+  console.log('🛡️ [Server Startup] Module import mode: automatic app.listen() skipped.');
+} else if (isOptimizationTestMode()) {
   app.listen(PORT, '127.0.0.1', () => {
     console.log(`🛡️ [Server Startup] BUSINZ Optimization Test Server bound exclusively to 127.0.0.1:${PORT}`);
     console.log(`🛡️ [Server Startup] External network access to port ${PORT} is strictly blocked (localhost only).`);
@@ -9482,6 +9844,7 @@ export {
   getDatabaseStore,
   enqueueStoreOperation,
   storeWriteQueues,
-  STORE_PAYLOAD_LIMIT_BYTES
+  STORE_PAYLOAD_LIMIT_BYTES,
+  reconcileServerInventoryWithBoms
 };
 

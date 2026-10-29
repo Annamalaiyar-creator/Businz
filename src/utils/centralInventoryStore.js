@@ -1,6 +1,5 @@
 import { VRM_PRODUCTS, resolveProductCode, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from './vrmProductsData.js';
 import { fetchCloudStore, saveCloudStore } from './supabaseDataSync.js';
-import { sendWorkflowNotification } from '../services/notificationService.js';
 
 // Initial Seed Item Master derived strictly from official VRM catalog (All items initialized with 5000 units stock)
 export const INITIAL_CENTRAL_ITEMS = VRM_PRODUCTS.map((p, idx) => ({
@@ -313,19 +312,8 @@ class CentralInventoryStore {
       this.saveReservations();
     }
 
-    // 7. Load Notifications
-    const savedNotif = safeStorageGet(this.storageKeyNotifications);
-    if (savedNotif) {
-      try {
-        this.notifications = (JSON.parse(savedNotif) || []).filter(
-          n => n && n.id !== 'NOTIF-001' && !String(n.title || '').includes('System Central Inventory Initialized')
-        );
-      } catch (e) {
-        this.notifications = [];
-      }
-    } else {
-      this.notifications = [];
-    }
+    // 7. Notifications (Decommissioned)
+    this.notifications = [];
   }
 
   // Helper Persistence Methods
@@ -354,14 +342,7 @@ class CentralInventoryStore {
     saveCloudStore('reservations_store', this.reservations);
   }
   saveNotifications() {
-    const validNotifs = (this.notifications || []).filter(
-      n => n && n.id !== 'NOTIF-001' && !String(n.title || '').includes('System Central Inventory Initialized')
-    );
-    try { localStorage.setItem(this.storageKeyNotifications, JSON.stringify(validNotifs)); } catch (_) {}
-    if (this._saveNotifsTimer) clearTimeout(this._saveNotifsTimer);
-    this._saveNotifsTimer = setTimeout(() => {
-      saveCloudStore('notifications_store', validNotifs);
-    }, 2000);
+    // No-op: Notifications decommissioned
   }
 
   notifyChange() {
@@ -592,81 +573,20 @@ class CentralInventoryStore {
     });
   }
 
-  addNotification({ type, title, message, targetDepartments, itemName, itemCode }) {
-    const exists = this.notifications.some(n => n.title === title && !n.read && n.date === new Date().toISOString().split('T')[0]);
-    if (!exists) {
-      const isStockAlert = type === 'OUT_OF_STOCK' || type === 'LOW_STOCK' || type === 'STOCK_SHORTAGE';
-      const targetRoles = isStockAlert
-        ? ['Procurement Head', 'Procurement Executive', 'Procurement Admin', 'Purchase Manager', 'Production Head', 'Technical Administrator', 'CEO', 'MD']
-        : ['Procurement', 'Production'];
-
-      const newNotif = {
-        id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        type: type || 'INFO',
-        title,
-        message,
-        targetTab: 'Raw Material Inventory',
-        targetRoles,
-        targetDepartments: isStockAlert ? ['Procurement'] : (targetDepartments || ['Procurement', 'Production']),
-        metadata: {
-          isProcurementOnly: isStockAlert,
-          isStockAlert: isStockAlert,
-          type: type || 'INFO',
-          step: isStockAlert ? 'STOCK_SHORTAGE' : '',
-          itemName: itemName || '',
-          itemCode: itemCode || ''
-        },
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        date: new Date().toISOString().split('T')[0],
-        read: false
-      };
-      this.notifications.unshift(newNotif);
-      this.saveNotifications();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('central_notification_added'));
-        if (isStockAlert) {
-          sendWorkflowNotification({
-            title,
-            message,
-            targetTab: 'Raw Material Inventory',
-            targetRoles,
-            type: 'alert',
-            soundType: 'alert',
-            metadata: {
-              isProcurementOnly: true,
-              isStockAlert: true,
-              type,
-              step: 'STOCK_SHORTAGE',
-              itemName: itemName || '',
-              itemCode: itemCode || ''
-            }
-          });
-        }
-      }
-    }
+  addNotification() {
+    // No-op: Notifications decommissioned
   }
 
-  getNotifications(userDept = 'All') {
-    if (userDept === 'All') return this.notifications;
-    return this.notifications.filter(n => n.targetDepartments.includes('All') || n.targetDepartments.includes(userDept));
+  getNotifications() {
+    return [];
   }
 
-  markNotificationRead(id) {
-    const n = this.notifications.find(x => x.id === id);
-    if (n) {
-      n.read = true;
-      this.saveNotifications();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('central_notification_added'));
-      }
-    }
+  markNotificationRead() {
+    // No-op
   }
 
   markAllNotificationsRead() {
-    this.notifications.forEach(n => { n.read = true; });
-    this.saveNotifications();
-    localStorage.setItem('controlroom_notifications_read', 'true');
-    window.dispatchEvent(new Event('central_notification_added'));
+    // No-op
   }
 
   // ----------------------------------------------------
