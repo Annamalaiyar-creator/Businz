@@ -105,7 +105,9 @@ export function validateCategory(category) {
   if (!category || typeof category !== 'string') {
     return 'general';
   }
-  const clean = category.trim().toLowerCase();
+  let clean = category.trim().toLowerCase();
+  if (clean.startsWith('payment-proof')) clean = 'payment-proof';
+  if (clean.startsWith('delivery-proof')) clean = 'delivery-proof';
   if (!ALLOWED_CATEGORIES.has(clean)) {
     throw new Error(`Invalid category "${clean}". Allowed: ${Array.from(ALLOWED_CATEGORIES).join(', ')}`);
   }
