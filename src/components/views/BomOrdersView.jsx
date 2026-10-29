@@ -5033,8 +5033,7 @@ export default function BomOrdersView(props) {
                         let finalAssignedCode = null;
                         let sResOk = false;
                         const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: true });
-                        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-                        const endpoints = isHttps ? ['/api/boms'] : ['/api/boms', 'http://localhost:5001/api/boms'];
+                        const endpoints = ['/api/boms'];
                         for (const url of endpoints) {
                           try {
                             const controller = new AbortController();

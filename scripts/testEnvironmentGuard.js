@@ -14,7 +14,7 @@
  * 8. Never exposes credentials in logs or errors.
  */
 
-export const FORBIDDEN_PORTS = ['5001', '5002'];
+export const FORBIDDEN_PORTS = ['5001', '5002', '5003', '5004'];
 export const REQUIRED_TEST_PORT = '5101';
 export const REQUIRED_TEST_DATABASE = 'businz_optimization_test';
 export const REQUIRED_TEST_DB_ROLE = 'businz_test_user';

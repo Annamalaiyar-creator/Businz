@@ -2129,8 +2129,7 @@ export default function CreateBomFormPage(props) {
 
                     let sResOk = false;
                     const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: !isDraft });
-                    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-                    const endpoints = isHttps ? ['/api/boms'] : ['/api/boms', 'http://localhost:5001/api/boms'];
+                    const endpoints = ['/api/boms'];
                     for (const url of endpoints) {
                       try {
                         const controller = new AbortController();

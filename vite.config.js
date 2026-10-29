@@ -3,24 +3,38 @@ import react from '@vitejs/plugin-react'
 import { spawn } from 'child_process'
 import http from 'http'
 
-// Vite plugin to automatically start the backend server on port 5001 if not already running
+const isTestMode = process.env.BUSINZ_OPTIMIZATION_TEST_MODE === 'true' || process.env.BUSINZ_OPTIMIZATION_TEST_MODE === '1';
+
+const defaultPort = isTestMode ? '5101' : '5001';
+const backendPort = process.env.VITE_BACKEND_PORT || process.env.PORT || defaultPort;
+
+if (isTestMode && ['5001', '5002', '5003', '5004'].includes(String(backendPort))) {
+  throw new Error(`[ISOLATION ERROR] Vite in test mode cannot default or proxy to production/dev port ${backendPort}. Target must be 5101.`);
+}
+
+const backendTarget = process.env.VITE_BACKEND_URL || `http://127.0.0.1:${backendPort}`;
+
+// Vite plugin to automatically start the backend server on port 5001 if not already running (strictly disabled in test mode)
 function autoStartBackendPlugin() {
+  if (isTestMode) {
+    return { name: 'auto-start-backend-disabled-in-test' };
+  }
   let backendProc = null;
   return {
     name: 'auto-start-backend',
     configureServer() {
       const checkBackend = () => {
-        const req = http.get('http://localhost:5001/api/customers', (res) => {
+        const req = http.get(`${backendTarget}/api/customers`, (res) => {
           // Backend is already up and responding
         });
         req.on('error', () => {
           // Backend is not running, spawn it automatically
           if (!backendProc) {
-            console.log('\n🚀 [Auto-Backend] Starting BUSINZ Node.js backend server on port 5001...');
+            console.log(`\n🚀 [Auto-Backend] Starting BUSINZ Node.js backend server on port ${backendPort}...`);
             backendProc = spawn('node', ['server/index.js'], {
               stdio: 'inherit',
               shell: true,
-              env: { ...process.env, PORT: '5001' }
+              env: { ...process.env, PORT: backendPort }
             });
             backendProc.on('exit', (code) => {
               console.log(`[Auto-Backend] Server process exited with code ${code}`);
@@ -51,12 +65,12 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false
       },
       '/uploads': {
-        target: 'http://localhost:5001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false
       }
@@ -67,12 +81,12 @@ export default defineConfig({
     port: 4173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false
       },
       '/uploads': {
-        target: 'http://localhost:5001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false
       }

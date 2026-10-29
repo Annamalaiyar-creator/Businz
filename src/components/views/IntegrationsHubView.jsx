@@ -91,7 +91,7 @@ export default function IntegrationsHubView({ _userRole = 'Tech Support', userRo
       statusBg: '#ECFDF5',
       statusBorder: '#A7F3D0',
       description: 'Baileys Multi-Session QR code engine powering real-time chat, customer technical media sharing, and automated order notifications.',
-      endpoint: 'http://localhost:5001/api/whatsapp/sessions',
+      endpoint: '/api/whatsapp/sessions',
       authType: 'Session Auth / Multi-Device QR',
       targetTab: 'WhatsApp Inbox',
       metrics: [
