@@ -258,7 +258,7 @@ export default function LoginScreen({ onLoginSuccess }) {
     setErrorMsg('');
   };
 
-  const finalizeSuccessfulLogin = (roleName, empCode, emailStr, displayNameStr, passwordStr = null) => {
+  const finalizeSuccessfulLogin = async (roleName, empCode, emailStr, displayNameStr, passwordStr = null) => {
     // Generate fresh session token so we never inherit a previously revoked session ID
     createNewSessionId();
 
@@ -269,7 +269,7 @@ export default function LoginScreen({ onLoginSuccess }) {
     localStorage.setItem('controlroom_logged_user_name', displayNameStr);
 
     try {
-      registerActiveSession(emailStr, empCode, displayNameStr, roleName, passwordStr || passwordInput);
+      await registerActiveSession(emailStr, empCode, displayNameStr, roleName, passwordStr || passwordInput);
     } catch (e) {}
 
     setShowSuccessBanner(false);
@@ -480,11 +480,12 @@ export default function LoginScreen({ onLoginSuccess }) {
     }
 
     // Direct successful login transition
-    finalizeSuccessfulLogin(
+    await finalizeSuccessfulLogin(
       result.userRole,
       empIdInput.trim() || result.matchedRole?.empCode || 'EMP-101',
       result.username,
-      result.displayName
+      result.displayName,
+      passwordInput
     );
     setIsLoggingIn(false);
   };

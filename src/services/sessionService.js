@@ -123,13 +123,19 @@ export async function heartbeatActiveSession() {
     }).catch(() => null);
 
     if (res && res.status === 401) {
-      console.warn('Session is invalid or expired. Logging out.');
-      localStorage.removeItem('controlroom_is_authenticated');
-      localStorage.removeItem('controlroom_user_role');
-      localStorage.removeItem('controlroom_device_session_id');
-      localStorage.removeItem('controlroom_session_start_time');
-      window.location.reload();
-      return;
+      const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
+      if ((Date.now() - sessionStartTime) / 1000 > 15) {
+        console.warn('Session is invalid or expired. Logging out.');
+        localStorage.removeItem('controlroom_is_authenticated');
+        localStorage.removeItem('controlroom_user_role');
+        localStorage.removeItem('controlroom_device_session_id');
+        localStorage.removeItem('controlroom_session_start_time');
+        window.location.reload();
+        return;
+      } else {
+        console.warn('[SessionService] Session in initial grace period; skipping 401 logout.');
+        return;
+      }
     }
 
     if (res && res.ok) {

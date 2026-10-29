@@ -1684,9 +1684,15 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
 
   // Direct persistence to self-hosted Node server endpoint
   try {
+    const sesId = typeof window !== 'undefined' && window.localStorage
+      ? localStorage.getItem('controlroom_device_session_id')
+      : null;
     await fetch(`/api/store/${storeKey}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sesId ? { 'x-session-id': sesId } : {})
+      },
       body: JSON.stringify(storeData)
     }).catch(() => {});
   } catch (err) {}

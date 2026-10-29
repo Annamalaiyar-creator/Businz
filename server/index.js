@@ -2133,7 +2133,12 @@ const handleUploadFallback = async (req, res) => {
         } catch (_) {}
       }
       res.setHeader('Content-Type', mime);
-      return res.sendFile(path.resolve(filePath), { acceptRanges: true });
+      try {
+        const buf = fs.readFileSync(filePath);
+        return sendBufferData(buf, mime);
+      } catch (_) {
+        return res.sendFile(path.resolve(filePath), { acceptRanges: true });
+      }
     };
 
     const sendBufferData = (buffer, mimeType) => {
