@@ -2255,8 +2255,10 @@ const handleUploadFallback = async (req, res) => {
                   const mime = m[1];
                   const buf = Buffer.from(m[2], 'base64');
                   try {
-                    const saveDisk = path.join(uploadsDir, sanitizedName);
-                    if (!fs.existsSync(saveDisk)) fs.writeFileSync(saveDisk, buf);
+                    if (process.env.BUSINZ_TEST_MODE !== 'true' && !isOptimizationTestMode()) {
+                      const saveDisk = path.join(uploadsDir, sanitizedName);
+                      if (!fs.existsSync(saveDisk)) fs.writeFileSync(saveDisk, buf);
+                    }
                   } catch (_) {}
                   return sendBufferData(buf, mime);
                 }

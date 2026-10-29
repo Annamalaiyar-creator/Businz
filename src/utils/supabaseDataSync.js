@@ -1124,9 +1124,15 @@ export async function saveCloudBomRow(bom) {
     try {
       const baseUrl = (typeof window !== 'undefined' && window.location?.origin) ? '' : (process.env.BUSINZ_TEST_API_URL || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : ''));
       if (baseUrl !== undefined) {
+        const sesId = typeof window !== 'undefined' && window.localStorage
+          ? localStorage.getItem('controlroom_device_session_id')
+          : null;
         fetch(`${baseUrl}/api/boms`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sesId ? { 'x-session-id': sesId } : {})
+          },
           body: JSON.stringify({ bom: consumerBom, isUpdate: true })
         }).catch(() => {});
       }
@@ -1167,8 +1173,14 @@ export async function deleteCloudBomRow(bomId) {
     try {
       const baseUrl = (typeof window !== 'undefined' && window.location?.origin) ? '' : (process.env.BUSINZ_TEST_API_URL || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : ''));
       if (baseUrl !== undefined) {
+        const sesId = typeof window !== 'undefined' && window.localStorage
+          ? localStorage.getItem('controlroom_device_session_id')
+          : null;
         fetch(`${baseUrl}/api/boms/${encodeURIComponent(cleanId)}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: {
+            ...(sesId ? { 'x-session-id': sesId } : {})
+          }
         }).catch(() => {});
       }
     } catch (_) {}

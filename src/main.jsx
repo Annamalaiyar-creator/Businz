@@ -66,6 +66,38 @@ document.addEventListener('wheel', (e) => {
   }
 }, { passive: true });
 
+// Global Fetch Interceptor: Automatically attach x-session-id to all /api/ requests
+if (typeof window !== 'undefined' && window.fetch) {
+  const originalFetch = window.fetch;
+  window.fetch = function (resource, init = {}) {
+    try {
+      const url = typeof resource === 'string' ? resource : resource?.url;
+      if (url && (url.startsWith('/api') || url.includes('/api/'))) {
+        const sessionId = localStorage.getItem('controlroom_device_session_id');
+        if (sessionId) {
+          init = init || {};
+          let headers;
+          if (init.headers instanceof Headers) {
+            headers = init.headers;
+          } else if (Array.isArray(init.headers)) {
+            headers = new Headers(init.headers);
+          } else if (init.headers && typeof init.headers === 'object') {
+            headers = new Headers(init.headers);
+          } else {
+            headers = new Headers();
+          }
+
+          if (!headers.has('x-session-id')) {
+            headers.set('x-session-id', sessionId);
+            init.headers = headers;
+          }
+        }
+      }
+    } catch (_) {}
+    return originalFetch.call(this, resource, init);
+  };
+}
+
 // Auto-heal on new deployment: reload the page when a stale lazy-loaded chunk is requested
 window.addEventListener('vite:preloadError', (event) => {
   console.warn('[BUSINZ] New bundle version detected on server. Automatically reloading page...', event);

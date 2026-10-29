@@ -5198,9 +5198,15 @@ export default function BomOrdersView(props) {
                         // Atomically push created BOM order to Supabase and Node server API
                         saveCloudBomRow(sanitizedNewBom);
                         try {
+                          const sesId = typeof window !== 'undefined' && window.localStorage
+                            ? localStorage.getItem('controlroom_device_session_id')
+                            : null;
                           fetch('/api/boms', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                              'Content-Type': 'application/json',
+                              ...(sesId ? { 'x-session-id': sesId } : {})
+                            },
                             body: JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: false })
                           }).catch(err => console.error('Error syncing created BOM to server:', err));
                         } catch (_) {}
@@ -5760,9 +5766,15 @@ export default function BomOrdersView(props) {
                   // Push to Supabase and server immediately so Dispatch sees it in real time
                   saveCloudBomRow(updatedBomData);
                   try {
+                    const sesId = typeof window !== 'undefined' && window.localStorage
+                      ? localStorage.getItem('controlroom_device_session_id')
+                      : null;
                     fetch('/api/boms', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(sesId ? { 'x-session-id': sesId } : {})
+                      },
                       body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
                     }).catch(err => console.error('Error updating BOM to Dispatch:', err));
                   } catch (_) {}
