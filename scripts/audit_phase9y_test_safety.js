@@ -55,11 +55,29 @@ import {
   TARGET_SYNTH_TAG
 } from './recover_phase9y_run_70304_residue.js';
 import {
+  runResidueRecovery13909,
+  verifySyntheticLeadOwnership909,
+  verifySyntheticEmployeeEvidence909,
+  verifySyntheticQuotationOwnership909,
+  verifySyntheticPiOwnership909,
+  verifySyntheticBomOwnership909,
+  verifySyntheticInvoiceOwnership909,
+  verifySyntheticReservationOwnership909,
+  BASELINE_STORE_KEYS_909,
+  NEWLY_CREATED_STORE_KEYS_909,
+  TARGET_RUN_ID as TARGET_RUN_ID_909,
+  TARGET_SYNTH_TAG as TARGET_SYNTH_TAG_909
+} from './recover_phase9y_run_13909_residue.js';
+import {
   queryTableCount,
   queryStoreItemCount,
   collectDatabaseCounts,
   executeComprehensiveCleanup,
   testReport,
+  syntheticLedger,
+  isSyntheticStoreItem,
+  SYNTH_TAG,
+  RUN_ID,
   ALLOWED_AUDIT_TABLES,
   OPTIONAL_AUDIT_TABLES,
   ALLOWED_AUDIT_STORES
@@ -1792,6 +1810,474 @@ await runAsyncTest('10.12 Database cleanup rolls back when baseline count discre
   } finally {
     testReport.baselines = origBaselines;
   }
+});
+
+// =============================================================================
+// TEST GROUP 11: Phase 9AB Transactional JSONB Store Baseline Restoration Safeguards
+// =============================================================================
+console.log('\n--- TEST GROUP 11: Phase 9AB Transactional JSONB Store Baseline Restoration Safeguards ---');
+
+await runAsyncTest('11.1 Baseline captures store keys as an array of strings in alphabetical order', async () => {
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('SELECT key FROM public.controlroom_store')) {
+        return {
+          rows: [
+            { key: 'customer_pis_store' },
+            { key: 'employees_store' },
+            { key: 'quotations_store' }
+          ]
+        };
+      }
+      if (sql.includes('to_regclass')) {
+        return { rows: [{ reg: 'public.mock' }] };
+      }
+      if (sql.includes('SELECT COUNT(*)')) {
+        return { rows: [{ cnt: '0' }] };
+      }
+      if (sql.includes('SELECT data FROM public.controlroom_store')) {
+        return { rows: [{ data: [] }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const counts = await collectDatabaseCounts(mockClient);
+  assert(Array.isArray(counts.storeKeys), 'storeKeys must be an array');
+  assert.strictEqual(counts.storeKeys.length, 3, 'Must contain exactly 3 store keys');
+  assert.deepStrictEqual(counts.storeKeys, ['customer_pis_store', 'employees_store', 'quotations_store'], 'Keys must match alphabetical order');
+});
+
+await runAsyncTest('11.2 Pre-existing store key with remaining items updates row without deletion', async () => {
+  const queryLog = [];
+  const origBaselines = testReport.baselines;
+  const origEmployees = [...syntheticLedger.registeredEmployees];
+
+  syntheticLedger.registeredEmployees = [{ employee_code: 'TA-TEST-909', email: 'synth_admin_909@example.com' }];
+  testReport.baselines = {
+    tables: {},
+    storeKeys: ['employees_store'],
+    stores: { employees_store: 1 }
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql, params) => {
+          queryLog.push({ sql, params });
+          if (sql.includes('BEGIN')) return {};
+          if (sql.includes('COMMIT')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.table' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '0' }] };
+          if (sql.includes('SELECT key FROM public.controlroom_store')) return { rows: [{ key: 'employees_store' }] };
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE')) {
+            return {
+              rows: [{
+                data: [
+                  { employee_code: 'TA-TEST-909', email: 'synth_admin_909@example.com', synthTag: SYNTH_TAG },
+                  { employee_code: 'EMP-GENUINE', email: 'genuine@businz.com', employee_name: 'Genuine Staff' }
+                ]
+              }]
+            };
+          }
+          if (sql.includes('UPDATE public.controlroom_store')) return { rowCount: 1 };
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1')) {
+            return { rows: [{ data: [{ employee_code: 'EMP-GENUINE' }] }] };
+          }
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+
+    // Verify row was updated, NOT deleted
+    const updateCall = queryLog.find(q => q.sql.includes('UPDATE public.controlroom_store') && q.params && q.params[1] === 'employees_store');
+    assert(updateCall, 'Must execute UPDATE on employees_store');
+    const updatedData = JSON.parse(updateCall.params[0]);
+    assert.strictEqual(updatedData.length, 1, 'Updated data must retain remaining genuine employee');
+    assert.strictEqual(updatedData[0].employee_code, 'EMP-GENUINE', 'Must retain genuine employee record');
+
+    const deleteCall = queryLog.find(q => q.sql.includes('DELETE FROM public.controlroom_store') && q.params && q.params[0] === 'employees_store');
+    assert(!deleteCall, 'Must NOT delete pre-existing employees_store row');
+    assert.strictEqual(cleanupReport.dbCleanup.storesCleaned['employees_store']?.deletedRow, false, 'deletedRow must be false');
+  } finally {
+    testReport.baselines = origBaselines;
+    syntheticLedger.registeredEmployees = origEmployees;
+  }
+});
+
+await runAsyncTest('11.3 Pre-existing store key empty after cleanup updates row to \'[]\' without deleting row', async () => {
+  const queryLog = [];
+  const origBaselines = testReport.baselines;
+  const origQuotations = [...syntheticLedger.quotations];
+
+  syntheticLedger.quotations = [{ id: 'QT-13909', quotationNo: 'QT-13909' }];
+  testReport.baselines = {
+    tables: {},
+    storeKeys: ['quotations_store'],
+    stores: { quotations_store: 0 }
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql, params) => {
+          queryLog.push({ sql, params });
+          if (sql.includes('BEGIN')) return {};
+          if (sql.includes('COMMIT')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.table' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '0' }] };
+          if (sql.includes('SELECT key FROM public.controlroom_store')) return { rows: [{ key: 'quotations_store' }] };
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE')) {
+            return {
+              rows: [{
+                data: [
+                  { quotationNo: 'QT-13909', synthTag: SYNTH_TAG }
+                ]
+              }]
+            };
+          }
+          if (sql.includes('UPDATE public.controlroom_store')) return { rowCount: 1 };
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1')) {
+            return { rows: [{ data: [] }] };
+          }
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+
+    const updateCall = queryLog.find(q => q.sql.includes('UPDATE public.controlroom_store') && q.params && q.params[1] === 'quotations_store');
+    assert(updateCall, 'Must execute UPDATE on quotations_store to empty array');
+    assert.strictEqual(updateCall.params[0], '[]', 'Data must be updated to empty array');
+
+    const deleteCall = queryLog.find(q => q.sql.includes('DELETE FROM public.controlroom_store') && q.params && q.params[0] === 'quotations_store');
+    assert(!deleteCall, 'Must NOT delete pre-existing quotations_store row even when empty');
+    assert.strictEqual(cleanupReport.dbCleanup.storesCleaned['quotations_store']?.deletedRow, false, 'deletedRow must be false');
+  } finally {
+    testReport.baselines = origBaselines;
+    syntheticLedger.quotations = origQuotations;
+  }
+});
+
+await runAsyncTest('11.4 Newly created store key with exclusively owned synthetic items deletes row from controlroom_store', async () => {
+  const queryLog = [];
+  const origBaselines = testReport.baselines;
+  const origBoms = [...syntheticLedger.bomOrders];
+
+  syntheticLedger.bomOrders = [{ id: 'BOM-13909', bomCode: 'BOM-13909' }];
+  testReport.baselines = {
+    tables: {},
+    storeKeys: ['employees_store'], // bom_store was NOT present at baseline!
+    stores: {}
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql, params) => {
+          queryLog.push({ sql, params });
+          if (sql.includes('BEGIN')) return {};
+          if (sql.includes('COMMIT')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.table' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '0' }] };
+          if (sql.includes('SELECT key FROM public.controlroom_store')) {
+            // After deletion, only employees_store remains
+            return { rows: [{ key: 'employees_store' }] };
+          }
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE')) {
+            if (params[0] === 'bom_store') {
+              return {
+                rows: [{
+                  data: [
+                    { bomCode: 'BOM-13909', synthTag: SYNTH_TAG }
+                  ]
+                }]
+              };
+            }
+            return { rows: [{ data: [] }] };
+          }
+          if (sql.includes('DELETE FROM public.controlroom_store')) return { rowCount: 1 };
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1')) {
+            return { rows: [] };
+          }
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+
+    const deleteCall = queryLog.find(q => q.sql.includes('DELETE FROM public.controlroom_store') && q.params && q.params[0] === 'bom_store');
+    assert(deleteCall, 'Must DELETE newly created bom_store row when exclusively owned');
+    assert.strictEqual(cleanupReport.dbCleanup.storesCleaned['bom_store']?.deletedRow, true, 'deletedRow must be true');
+    assert.strictEqual(cleanupReport.dbCleanup.committed, true, 'Transaction must commit when baseline restored');
+  } finally {
+    testReport.baselines = origBaselines;
+    syntheticLedger.bomOrders = origBoms;
+  }
+});
+
+await runAsyncTest('11.5 Newly created store key with any unrelated record is NOT deleted (preserved) and triggers baseline mismatch', async () => {
+  const queryLog = [];
+  const origBaselines = testReport.baselines;
+  const origBoms = [...syntheticLedger.bomOrders];
+
+  syntheticLedger.bomOrders = [{ id: 'BOM-13909', bomCode: 'BOM-13909' }];
+  testReport.baselines = {
+    tables: {},
+    storeKeys: ['employees_store'], // bom_store was absent at baseline
+    stores: {}
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql, params) => {
+          queryLog.push({ sql, params });
+          if (sql.includes('BEGIN')) return {};
+          if (sql.includes('ROLLBACK')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.table' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '0' }] };
+          if (sql.includes('SELECT key FROM public.controlroom_store')) {
+            // bom_store remains in controlroom_store
+            return { rows: [{ key: 'bom_store' }, { key: 'employees_store' }] };
+          }
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE')) {
+            if (params[0] === 'bom_store') {
+              return {
+                rows: [{
+                  data: [
+                    { bomCode: 'BOM-13909', synthTag: SYNTH_TAG },
+                    { bomCode: 'BOM-GENUINE-PROD', customerName: 'Genuine Customer' } // Unrelated!
+                  ]
+                }]
+              };
+            }
+            return { rows: [{ data: [] }] };
+          }
+          if (sql.includes('UPDATE public.controlroom_store')) return { rowCount: 1 };
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+
+    // Verify row was NOT deleted
+    const deleteCall = queryLog.find(q => q.sql.includes('DELETE FROM public.controlroom_store') && q.params && q.params[0] === 'bom_store');
+    assert(!deleteCall, 'Must NOT delete newly created store row when unrelated record is present');
+    assert.strictEqual(cleanupReport.dbCleanup.storesCleaned['bom_store']?.deletedRow, false, 'deletedRow must be false');
+
+    // Verify baseline mismatch was detected and triggered rollback
+    assert.strictEqual(cleanupReport.dbCleanup.committed, false, 'Transaction must NOT commit');
+    assert.strictEqual(cleanupReport.dbCleanup.status, 'ROLLED_BACK_BASELINE_MISMATCH', 'Status must be ROLLED_BACK_BASELINE_MISMATCH');
+    assert(cleanupReport.discrepancies.some(d => d.target === 'storeKeys:extra' && d.extraKeys.includes('bom_store')), 'Discrepancies must include extra store key bom_store');
+  } finally {
+    testReport.baselines = origBaselines;
+    syntheticLedger.bomOrders = origBoms;
+  }
+});
+
+await runAsyncTest('11.6 Newly created store key without exclusive ownership is NOT deleted', async () => {
+  const queryLog = [];
+  const origBaselines = testReport.baselines;
+  const origInvoices = [...syntheticLedger.invoices];
+
+  syntheticLedger.invoices = [{ id: 'INV-13909', invNo: 'INV-13909' }];
+  testReport.baselines = {
+    tables: {},
+    storeKeys: ['employees_store'],
+    stores: {}
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql, params) => {
+          queryLog.push({ sql, params });
+          if (sql.includes('BEGIN')) return {};
+          if (sql.includes('ROLLBACK')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.table' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '0' }] };
+          if (sql.includes('SELECT key FROM public.controlroom_store')) return { rows: [{ key: 'employees_store' }, { key: 'invoice_store' }] };
+          if (sql.includes('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE')) {
+            if (params[0] === 'invoice_store') {
+              return {
+                rows: [{
+                  data: [
+                    // Item lacks synthetic markers (no synthTag, no matching run ID)
+                    { invNo: 'INV-OTHER', customerName: 'Other Entity' }
+                  ]
+                }]
+              };
+            }
+            return { rows: [{ data: [] }] };
+          }
+          if (sql.includes('UPDATE public.controlroom_store')) return { rowCount: 1 };
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+    const deleteCall = queryLog.find(q => q.sql.includes('DELETE FROM public.controlroom_store') && q.params && q.params[0] === 'invoice_store');
+    assert(!deleteCall, 'Must NOT delete store row lacking exclusive synthetic ownership');
+    assert.strictEqual(cleanupReport.dbCleanup.storesCleaned['invoice_store']?.deletedRow, false, 'deletedRow must be false');
+    assert.strictEqual(cleanupReport.dbCleanup.committed, false, 'Transaction must NOT commit');
+  } finally {
+    testReport.baselines = origBaselines;
+    syntheticLedger.invoices = origInvoices;
+  }
+});
+
+await runAsyncTest('11.7 Pre-commit audit detects unexpected extra store key and sets preCommitMatches = false', async () => {
+  const origBaselines = testReport.baselines;
+  testReport.baselines = {
+    tables: {},
+    storeKeys: ['customer_pis_store', 'employees_store'],
+    stores: {}
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql) => {
+          if (sql.includes('BEGIN') || sql.includes('ROLLBACK')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.table' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '0' }] };
+          if (sql.includes('SELECT key FROM public.controlroom_store')) {
+            return { rows: [{ key: 'customer_pis_store' }, { key: 'employees_store' }, { key: 'reservations_store' }] };
+          }
+          if (sql.includes('SELECT data FROM public.controlroom_store')) return { rows: [{ data: [] }] };
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+    assert.strictEqual(cleanupReport.dbCleanup.committed, false, 'Must not commit on extra store key');
+    assert.strictEqual(cleanupReport.dbCleanup.status, 'ROLLED_BACK_BASELINE_MISMATCH', 'Status must be ROLLED_BACK_BASELINE_MISMATCH');
+    const extraDisc = cleanupReport.discrepancies.find(d => d.target === 'storeKeys:extra');
+    assert(extraDisc, 'Must record storeKeys:extra discrepancy');
+    assert.deepStrictEqual(extraDisc.extraKeys, ['reservations_store'], 'Extra key must be reservations_store');
+  } finally {
+    testReport.baselines = origBaselines;
+  }
+});
+
+await runAsyncTest('11.8 Pre-commit audit detects missing expected baseline store key and sets preCommitMatches = false', async () => {
+  const origBaselines = testReport.baselines;
+  testReport.baselines = {
+    tables: {},
+    storeKeys: ['customer_pis_store', 'employees_store', 'quotations_store'],
+    stores: {}
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql) => {
+          if (sql.includes('BEGIN') || sql.includes('ROLLBACK')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.table' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '0' }] };
+          if (sql.includes('SELECT key FROM public.controlroom_store')) {
+            // quotations_store is missing
+            return { rows: [{ key: 'customer_pis_store' }, { key: 'employees_store' }] };
+          }
+          if (sql.includes('SELECT data FROM public.controlroom_store')) return { rows: [{ data: [] }] };
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+    assert.strictEqual(cleanupReport.dbCleanup.committed, false, 'Must not commit on missing baseline store key');
+    assert.strictEqual(cleanupReport.dbCleanup.status, 'ROLLED_BACK_BASELINE_MISMATCH', 'Status must be ROLLED_BACK_BASELINE_MISMATCH');
+    const missingDisc = cleanupReport.discrepancies.find(d => d.target === 'storeKeys:missing');
+    assert(missingDisc, 'Must record storeKeys:missing discrepancy');
+    assert.deepStrictEqual(missingDisc.missingKeys, ['quotations_store'], 'Missing key must be quotations_store');
+  } finally {
+    testReport.baselines = origBaselines;
+  }
+});
+
+await runAsyncTest('11.9 Synthetic identifier matching supports bom_store (bomCode, code, id)', async () => {
+  const known = ['BOM-13909'];
+  const runId = '1793247013909';
+  const tag = `SYNTH_P9Y_${runId}`;
+
+  // bomCode match
+  assert(isSyntheticStoreItem('bom_store', { bomCode: 'BOM-13909', synthTag: tag }, known, runId, tag), 'Must match bomCode');
+  // code match
+  assert(isSyntheticStoreItem('bom_store', { code: 'BOM-13909', synthTag: tag }, known, runId, tag), 'Must match code');
+  // id match
+  assert(isSyntheticStoreItem('bom_store', { id: 'BOM-13909', customerName: tag }, known, runId, tag), 'Must match id');
+  // Unrelated BOM
+  assert(!isSyntheticStoreItem('bom_store', { bomCode: 'BOM-99999', customerName: 'Genuine Company' }, known, runId, tag), 'Must reject unrelated BOM');
+});
+
+await runAsyncTest('11.10 Synthetic identifier matching supports invoice_store (invNo, id, code, bomCode, invoiceNo)', async () => {
+  const known = ['INV-13909'];
+  const runId = '1793247013909';
+  const tag = `SYNTH_P9Y_${runId}`;
+
+  assert(isSyntheticStoreItem('invoice_store', { invNo: 'INV-13909', synthTag: tag }, known, runId, tag), 'Must match invNo');
+  assert(isSyntheticStoreItem('invoice_store', { id: 'INV-13909', synthTag: tag }, known, runId, tag), 'Must match id');
+  assert(isSyntheticStoreItem('invoice_store', { code: 'INV-13909', customerName: tag }, known, runId, tag), 'Must match code');
+  assert(isSyntheticStoreItem('invoice_store', { bomCode: 'BOM-13909', synthTag: tag }, ['BOM-13909'], runId, tag), 'Must match bomCode');
+  assert(isSyntheticStoreItem('invoice_store', { invoiceNo: 'INV-13909', synthTag: tag }, known, runId, tag), 'Must match invoiceNo');
+
+  // Unrelated invoice
+  assert(!isSyntheticStoreItem('invoice_store', { invNo: 'INV-00001', customerName: 'Real Client' }, known, runId, tag), 'Must reject unrelated invoice');
+});
+
+await runAsyncTest('11.11 Synthetic identifier matching supports reservations_store (id, code, reservationId, bomCode)', async () => {
+  const resKey = 'res_SYNTH_P9Y_1793247013909';
+  const known = [resKey, 'BOM-13909'];
+  const runId = '1793247013909';
+  const tag = `SYNTH_P9Y_${runId}`;
+
+  assert(isSyntheticStoreItem('reservations_store', { id: resKey, synthTag: tag }, known, runId, tag), 'Must match id');
+  assert(isSyntheticStoreItem('reservations_store', { code: resKey, synthTag: tag }, known, runId, tag), 'Must match code');
+  assert(isSyntheticStoreItem('reservations_store', { reservationId: resKey, synthTag: tag }, known, runId, tag), 'Must match reservationId');
+  assert(isSyntheticStoreItem('reservations_store', { bomCode: 'BOM-13909', synthTag: tag }, known, runId, tag), 'Must match bomCode');
+
+  // Unrelated reservation
+  assert(!isSyntheticStoreItem('reservations_store', { id: 'res_real_order_99', notes: 'normal stock' }, known, runId, tag), 'Must reject unrelated reservation');
+});
+
+await runAsyncTest('11.12 recover_phase9y_run_13909_residue.js dry-run by default, requires --execute-authorized, validates target DB and workspace', async () => {
+  // Test A: Fails closed on workspace mismatch outside /var/www/businz-optimization-test
+  const workspaceRes = await runResidueRecovery13909({
+    bypassWorkspaceCheckForTesting: false
+  });
+  assert.strictEqual(workspaceRes.success, false, 'Must fail closed when workspace is not /var/www/businz-optimization-test');
+  assert.strictEqual(workspaceRes.reason, 'Workspace mismatch', 'Must specify workspace mismatch');
+  assert.strictEqual(workspaceRes.dryRun, true, 'Default must be dry-run');
+
+  // Test B: Rejects unauthorized database URL
+  const dbUrlRes = await runResidueRecovery13909({
+    bypassWorkspaceCheckForTesting: true,
+    databaseUrl: 'postgresql://postgres:pass@127.0.0.1:5432/businz' // Production database!
+  });
+  assert.strictEqual(dbUrlRes.success, false, 'Must fail closed on production database URL');
+  assert.strictEqual(dbUrlRes.dryRun, true, 'Must remain dry-run');
+
+  // Test C: Verifies constants and baseline keys exported
+  assert.deepStrictEqual([...BASELINE_STORE_KEYS_909].sort(), ['customer_pis_store', 'employees_store', 'quotations_store']);
+  assert.deepStrictEqual([...NEWLY_CREATED_STORE_KEYS_909].sort(), ['bom_store', 'invoice_store', 'reservations_store']);
+  assert.strictEqual(TARGET_RUN_ID_909, '1793247013909');
+  assert.strictEqual(TARGET_SYNTH_TAG_909, 'SYNTH_P9Y_1793247013909');
 });
 
 // =============================================================================

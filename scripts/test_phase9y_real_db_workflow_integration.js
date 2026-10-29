@@ -99,6 +99,7 @@ export const testReport = {
   },
   baselines: {
     tables: {},
+    storeKeys: [],
     stores: {}
   },
   workflows: {},
@@ -376,6 +377,9 @@ export async function queryStoreItemCount(client, storeKey) {
 }
 
 export async function collectDatabaseCounts(client) {
+  const keysRes = await client.query('SELECT key FROM public.controlroom_store ORDER BY key');
+  const existingStoreKeys = (keysRes.rows || []).map(r => r.key);
+
   return {
     tables: {
       leads: await queryTableCount(client, 'leads'),
@@ -390,6 +394,7 @@ export async function collectDatabaseCounts(client) {
       bom_items: await queryTableCount(client, 'bom_items'),
       controlroom_store: await queryTableCount(client, 'controlroom_store')
     },
+    storeKeys: existingStoreKeys,
     stores: {
       quotations_store: await queryStoreItemCount(client, 'quotations_store'),
       customer_pis_store: await queryStoreItemCount(client, 'customer_pis_store'),
@@ -527,6 +532,120 @@ export async function provisionSyntheticTestAdmin(client, synthAdminEmp, synthAd
       inTransaction = false;
     }
     throw err;
+  }
+}
+
+// =============================================================================
+// SYNTHETIC STORE ITEM IDENTIFICATION (Phase 9AB Strict Run Ownership)
+// =============================================================================
+/**
+ * Verifies whether a JSON item in a controlroom_store row belongs to this test run.
+ * Evaluates exact identifier mappings and run ownership markers.
+ * 
+ * Supports:
+ * - bom_store: bomCode, code, id
+ * - invoice_store: invNo, id, code, bomCode, invoiceNo
+ * - reservations_store: id, code, reservationId, bomCode
+ * - customer_pis_store / sales_pi_store / proforma_invoice_store: piNo, id, pi_no
+ * - quotations_store: quotationNo, id, code
+ * - employees_store: employee_code, code, email
+ */
+export function isSyntheticStoreItem(storeKey, item, knownIds = [], runId = RUN_ID, synthTag = SYNTH_TAG) {
+  if (!item || typeof item !== 'object') return false;
+  const tagStr = String(synthTag || '');
+  const runIdStr = String(runId || '');
+  const empSuffix = runIdStr ? String(Number(runIdStr) % 1000) : '';
+
+  const hasTagMarker = Boolean(
+    (tagStr && item.synthTag === tagStr) ||
+    (tagStr && typeof item.customerName === 'string' && item.customerName.includes(tagStr)) ||
+    (tagStr && typeof item.companyName === 'string' && item.companyName.includes(tagStr)) ||
+    (tagStr && typeof item.notes === 'string' && item.notes.includes(tagStr))
+  );
+
+  switch (storeKey) {
+    case 'bom_store': {
+      const matchId = item.bomCode || item.code || item.id;
+      const idMatches = Boolean(
+        (knownIds.length > 0 && knownIds.includes(matchId)) ||
+        (typeof matchId === 'string' && runIdStr && matchId.includes(runIdStr))
+      );
+      const hasBomOwnership = hasTagMarker ||
+        (typeof matchId === 'string' && runIdStr && matchId.includes(runIdStr)) ||
+        (typeof item.customerName === 'string' && tagStr && item.customerName.includes(tagStr));
+      return Boolean(idMatches && hasBomOwnership);
+    }
+    case 'invoice_store': {
+      const matchId = item.invNo || item.id || item.code || item.bomCode || item.invoiceNo;
+      const idMatches = Boolean(
+        (knownIds.length > 0 && (knownIds.includes(matchId) || knownIds.includes(item.invoiceNo) || knownIds.includes(item.invNo))) ||
+        (typeof matchId === 'string' && runIdStr && matchId.includes(runIdStr))
+      );
+      const hasInvOwnership = hasTagMarker ||
+        (typeof item.invoiceNo === 'string' && runIdStr && item.invoiceNo.includes(runIdStr)) ||
+        (typeof item.invNo === 'string' && runIdStr && item.invNo.includes(runIdStr)) ||
+        (typeof item.customerName === 'string' && tagStr && item.customerName.includes(tagStr));
+      return Boolean(idMatches && hasInvOwnership);
+    }
+    case 'reservations_store': {
+      const matchId = item.id || item.code || item.reservationId || item.bomCode;
+      const idMatches = Boolean(
+        (knownIds.length > 0 && (knownIds.includes(matchId) || knownIds.includes(item.reservationId) || knownIds.includes(item.bomCode))) ||
+        (typeof matchId === 'string' && ((tagStr && matchId.includes(tagStr)) || (runIdStr && matchId.includes(runIdStr))))
+      );
+      const hasResOwnership = hasTagMarker ||
+        (typeof item.id === 'string' && tagStr && item.id.includes(tagStr)) ||
+        (typeof item.reservationId === 'string' && tagStr && item.reservationId.includes(tagStr)) ||
+        (typeof item.bomCode === 'string' && runIdStr && item.bomCode.includes(runIdStr));
+      return Boolean(idMatches && hasResOwnership);
+    }
+    case 'customer_pis_store':
+    case 'sales_pi_store':
+    case 'proforma_invoice_store': {
+      const matchId = item.piNo || item.id || item.pi_no;
+      const idMatches = Boolean(
+        (knownIds.length > 0 && knownIds.includes(matchId)) ||
+        (typeof matchId === 'string' && runIdStr && matchId.includes(runIdStr))
+      );
+      const hasPiOwnership = hasTagMarker ||
+        (typeof item.piNo === 'string' && runIdStr && item.piNo.includes(runIdStr)) ||
+        (typeof item.customerName === 'string' && tagStr && item.customerName.includes(tagStr)) ||
+        (typeof item.vendor === 'string' && tagStr && item.vendor.includes(tagStr));
+      return Boolean(idMatches && hasPiOwnership);
+    }
+    case 'quotations_store': {
+      const matchId = item.quotationNo || item.id || item.code;
+      const idMatches = Boolean(
+        (knownIds.length > 0 && knownIds.includes(matchId)) ||
+        (typeof matchId === 'string' && runIdStr && matchId.includes(runIdStr))
+      );
+      const hasQtOwnership = hasTagMarker ||
+        (typeof item.quotationNo === 'string' && runIdStr && item.quotationNo.includes(runIdStr)) ||
+        (typeof item.customerName === 'string' && tagStr && item.customerName.includes(tagStr));
+      return Boolean(idMatches && hasQtOwnership);
+    }
+    case 'employees_store': {
+      const matchId = item.employee_code || item.code || item.email;
+      const emailMatches = Boolean(
+        typeof item.email === 'string' && (
+          (runIdStr && item.email.includes(runIdStr)) ||
+          (knownIds.length > 0 && knownIds.includes(item.email))
+        )
+      );
+      const codeMatches = Boolean(
+        typeof item.employee_code === 'string' && (
+          (empSuffix && item.employee_code.includes(empSuffix)) ||
+          (knownIds.length > 0 && knownIds.includes(item.employee_code))
+        )
+      );
+      const isSynthAdminOrTest = (tagStr && item.synthTag === tagStr) ||
+        (typeof item.employee_name === 'string' && item.employee_name.includes('Test Administrator'));
+      return Boolean((isSynthAdminOrTest || emailMatches || codeMatches) && (knownIds.includes(matchId) || emailMatches || codeMatches));
+    }
+    default: {
+      const matchId = item.id || item.code;
+      return Boolean(knownIds.includes(matchId) && hasTagMarker);
+    }
   }
 }
 
@@ -709,43 +828,94 @@ export async function executeComprehensiveCleanup(pool) {
     // -------------------------------------------------------------------------
     currentCleanupStep = 'STEP_3_STORES';
     const storeCleanups = [
-      { key: 'quotations_store', ids: syntheticLedger.quotations.map(q => q.id || q.quotationNo || q), idField: 'quotationNo' },
-      { key: 'customer_pis_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p), idField: 'piNo' },
-      { key: 'sales_pi_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p), idField: 'piNo' },
-      { key: 'proforma_invoice_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p), idField: 'piNo' },
-      { key: 'reservations_store', ids: syntheticLedger.reservations.map(r => r.id || r), idField: 'id' },
-      { key: 'employees_store', ids: syntheticLedger.registeredEmployees.map(e => e.employee_code || e), idField: 'employee_code' },
-      { key: 'invoice_store', ids: syntheticLedger.invoices.map(i => i.id || i.invNo || i), idField: 'invNo' },
-      { key: 'bom_store', ids: syntheticLedger.bomOrders.map(b => b.bomCode), idField: 'bomCode' }
+      { key: 'quotations_store', ids: syntheticLedger.quotations.map(q => q.id || q.quotationNo || q).filter(Boolean) },
+      { key: 'customer_pis_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p).filter(Boolean) },
+      { key: 'sales_pi_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p).filter(Boolean) },
+      { key: 'proforma_invoice_store', ids: syntheticLedger.proformaInvoices.map(p => p.id || p.piNo || p).filter(Boolean) },
+      { key: 'reservations_store', ids: syntheticLedger.reservations.map(r => r.id || r.reservationId || r.bomCode || r).filter(Boolean) },
+      { key: 'employees_store', ids: syntheticLedger.registeredEmployees.map(e => e.employee_code || e.code || e.email || e).filter(Boolean) },
+      { key: 'invoice_store', ids: syntheticLedger.invoices.map(i => i.id || i.invNo || i.invoiceNo || i).filter(Boolean) },
+      { key: 'bom_store', ids: syntheticLedger.bomOrders.map(b => b.bomCode || b.id || b).filter(Boolean) }
     ];
+
+    const baselineStoreKeys = Array.isArray(testReport.baselines?.storeKeys)
+      ? testReport.baselines.storeKeys
+      : [];
 
     for (const sc of storeCleanups) {
       currentCleanupTarget = `store_${sc.key}`;
-      if (sc.ids.length === 0) continue;
       const res = await client.query('SELECT data FROM public.controlroom_store WHERE key = $1 FOR UPDATE', [sc.key]);
-      if (res.rows.length > 0 && Array.isArray(res.rows[0].data)) {
-        const originalList = res.rows[0].data;
-        const filteredList = originalList.filter(item => {
-          if (!item || typeof item !== 'object') return true;
-          const matchId = item[sc.idField] || item.id || item.code;
-          const matchesLedger = sc.ids.includes(matchId);
-          const hasSynthTag = (item.synthTag === SYNTH_TAG) ||
-            (typeof item.customerName === 'string' && item.customerName.includes(SYNTH_TAG)) ||
-            (typeof item.email === 'string' && item.email.includes(String(RUN_ID))) ||
-            (typeof item.employee_code === 'string' && item.employee_code.includes(String(RUN_ID % 1000)));
-          return !(matchesLedger && hasSynthTag);
-        });
+      if (res.rows.length === 0) {
+        continue;
+      }
 
-        await client.query('UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = $2', [
-          JSON.stringify(filteredList),
-          sc.key
-        ]);
+      let originalList = res.rows[0].data;
+      if (typeof originalList === 'string') {
+        try { originalList = JSON.parse(originalList); } catch (_) { originalList = []; }
+      }
+      if (!Array.isArray(originalList)) {
+        originalList = [];
+      }
 
+      const existedAtBaseline = baselineStoreKeys.includes(sc.key);
+
+      const filteredList = originalList.filter(item => {
+        const matchId = item.id || item.code || item.bomCode || item.invNo || item.piNo || item.quotationNo || item.employee_code;
+        const matchesLedger = sc.ids.includes(matchId);
+        const hasSynthTag = (item.synthTag === SYNTH_TAG) ||
+          (typeof item.customerName === 'string' && item.customerName.includes(SYNTH_TAG)) ||
+          (typeof item.email === 'string' && item.email.includes(String(RUN_ID)));
+        const isSynth = isSyntheticStoreItem(sc.key, item, sc.ids, RUN_ID, SYNTH_TAG) || (matchesLedger && hasSynthTag);
+        return !isSynth;
+      });
+
+      if (existedAtBaseline) {
+        // Pre-existing store key: NEVER delete row, even if item list becomes empty!
+        await client.query(
+          'UPDATE public.controlroom_store SET data = $1::jsonb, updated_at = NOW() WHERE key = $2',
+          [JSON.stringify(filteredList), sc.key]
+        );
         cleanupReport.dbCleanup.storesCleaned[sc.key] = {
           before: originalList.length,
           after: filteredList.length,
-          removed: originalList.length - filteredList.length
+          removed: originalList.length - filteredList.length,
+          deletedRow: false
         };
+      } else {
+        // Newly created store key (absent at baseline):
+        // Only DELETE the row if exclusive test ownership is established:
+        // 1. filteredList.length === 0 (all items were identified as synthetic)
+        // 2. originalList.length > 0
+        // 3. Every single item in originalList was verified as synthetic for this run
+        const allItemsAreSynthetic = originalList.length > 0 && originalList.every(item =>
+          isSyntheticStoreItem(sc.key, item, sc.ids, RUN_ID, SYNTH_TAG)
+        );
+        const hasExclusiveOwnership = allItemsAreSynthetic && (filteredList.length === 0);
+
+        if (hasExclusiveOwnership) {
+          await client.query('DELETE FROM public.controlroom_store WHERE key = $1', [sc.key]);
+          cleanupReport.dbCleanup.storesCleaned[sc.key] = {
+            before: originalList.length,
+            after: 0,
+            removed: originalList.length,
+            deletedRow: true
+          };
+          console.log(`   [STORE CLEANUP] Deleted newly created store row "${sc.key}" (exclusive test ownership established)`);
+        } else {
+          // Unrelated records exist, or exclusive ownership cannot be proven!
+          // NEVER DELETE the row! Update with filteredList to preserve unrelated records.
+          await client.query(
+            'UPDATE public.controlroom_store SET data = $1::jsonb, updated_at = NOW() WHERE key = $2',
+            [JSON.stringify(filteredList), sc.key]
+          );
+          cleanupReport.dbCleanup.storesCleaned[sc.key] = {
+            before: originalList.length,
+            after: filteredList.length,
+            removed: originalList.length - filteredList.length,
+            deletedRow: false
+          };
+          console.warn(`   ⚠️ [STORE CLEANUP] Newly created store row "${sc.key}" contains unrelated data or lacks exclusive ownership; row preserved!`);
+        }
       }
     }
 
@@ -770,6 +940,7 @@ export async function executeComprehensiveCleanup(pool) {
     let preCommitMatches = true;
     const discrepancies = [];
 
+    // 1. Table row counts comparison
     for (const [tbl, baseCount] of Object.entries(testReport.baselines.tables || {})) {
       const current = preCommitCounts.tables[tbl] ?? 0;
       if (current !== baseCount) {
@@ -778,6 +949,38 @@ export async function executeComprehensiveCleanup(pool) {
       }
     }
 
+    // 2. Exact Store Keys Set Comparison
+    const baselineKeys = Array.isArray(testReport.baselines.storeKeys)
+      ? [...testReport.baselines.storeKeys].sort()
+      : [];
+    const currentKeys = Array.isArray(preCommitCounts.storeKeys)
+      ? [...preCommitCounts.storeKeys].sort()
+      : [];
+
+    const extraKeys = currentKeys.filter(k => !baselineKeys.includes(k));
+    const missingKeys = baselineKeys.filter(k => !currentKeys.includes(k));
+
+    if (extraKeys.length > 0 || missingKeys.length > 0) {
+      preCommitMatches = false;
+      if (extraKeys.length > 0) {
+        discrepancies.push({
+          target: 'storeKeys:extra',
+          extraKeys,
+          baselineCount: baselineKeys.length,
+          currentCount: currentKeys.length
+        });
+      }
+      if (missingKeys.length > 0) {
+        discrepancies.push({
+          target: 'storeKeys:missing',
+          missingKeys,
+          baselineCount: baselineKeys.length,
+          currentCount: currentKeys.length
+        });
+      }
+    }
+
+    // 3. Store item counts comparison
     for (const [st, baseCount] of Object.entries(testReport.baselines.stores || {})) {
       const current = preCommitCounts.stores[st] ?? 0;
       if (current !== baseCount) {
@@ -986,6 +1189,7 @@ async function main() {
     try {
       testReport.baselines = await collectDatabaseCounts(countsClient);
       console.log('   Baseline table counts:', JSON.stringify(testReport.baselines.tables));
+      console.log('   Baseline store keys:', JSON.stringify(testReport.baselines.storeKeys));
       console.log('   Baseline store counts:', JSON.stringify(testReport.baselines.stores), '\n');
     } finally {
       countsClient.release();
