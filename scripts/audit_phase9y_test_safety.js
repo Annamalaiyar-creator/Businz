@@ -54,7 +54,16 @@ import {
   TARGET_RUN_ID,
   TARGET_SYNTH_TAG
 } from './recover_phase9y_run_70304_residue.js';
-import { queryTableCount } from './test_phase9y_real_db_workflow_integration.js';
+import {
+  queryTableCount,
+  queryStoreItemCount,
+  collectDatabaseCounts,
+  executeComprehensiveCleanup,
+  testReport,
+  ALLOWED_AUDIT_TABLES,
+  OPTIONAL_AUDIT_TABLES,
+  ALLOWED_AUDIT_STORES
+} from './test_phase9y_real_db_workflow_integration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1465,6 +1474,324 @@ await runAsyncTest('9.16 recover_phase9y_run_70304_residue defaults to dry-run a
   });
   assert.strictEqual(result.success, false, 'Must fail closed on wrong workspace');
   assert.strictEqual(result.dryRun, true, 'Default mode must be dryRun: true');
+});
+
+// =============================================================================
+// TEST GROUP 10: Fail-Closed Database Audit & Baseline Verification Safeguards
+// =============================================================================
+console.log('\n--- TEST GROUP 10: Fail-Closed Database Audit & Baseline Verification Safeguards ---');
+
+await runAsyncTest('10.1 Missing optional table is handled safely and returns 0 without executing COUNT(*)', async () => {
+  let countQueryExecuted = false;
+  const mockClient = {
+    query: async (sql, params) => {
+      if (sql.includes('to_regclass')) {
+        return { rows: [{ reg: null }] };
+      }
+      if (sql.includes('SELECT COUNT(*)')) {
+        countQueryExecuted = true;
+        return { rows: [{ cnt: '99' }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const count = await queryTableCount(mockClient, 'bom_items');
+  assert.strictEqual(count, 0, 'Verified missing optional table must safely return 0');
+  assert(!countQueryExecuted, 'Must NEVER execute COUNT(*) on missing optional table');
+
+  // Also verify explicit optional override on another table
+  const countExplicit = await queryTableCount(mockClient, 'leads', { optional: true });
+  assert.strictEqual(countExplicit, 0, 'Explicitly optional missing table must safely return 0');
+});
+
+await runAsyncTest('10.2 Missing required table fails closed with explicit error', async () => {
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('to_regclass')) {
+        return { rows: [{ reg: null }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'leads');
+    },
+    /\[Database Audit Error\] Required table "public\.leads" is missing from database schema\./,
+    'Must fail closed when required table is missing'
+  );
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'bom_orders');
+    },
+    /\[Database Audit Error\] Required table "public\.bom_orders" is missing from database schema\./,
+    'Must fail closed when bom_orders is missing'
+  );
+
+  // Even bom_items with { optional: false } must fail closed
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'bom_items', { optional: false });
+    },
+    /\[Database Audit Error\] Required table "public\.bom_items" is missing from database schema\./,
+    'Must fail closed when optional: false table is missing'
+  );
+});
+
+await runAsyncTest('10.3 Unapproved table names are strictly rejected by allowlist', async () => {
+  const mockClient = { query: async () => ({ rows: [] }) };
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'malicious_table');
+    },
+    /\[Database Audit Error\] Table "malicious_table" is not in the approved audit allowlist\./,
+    'Must reject table not in allowlist'
+  );
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'users; DROP TABLE leads');
+    },
+    /\[Database Audit Error\] Table "users; DROP TABLE leads" is not in the approved audit allowlist\./,
+    'Must reject SQL injection in table name'
+  );
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, '');
+    },
+    /\[Database Audit Error\] Invalid table name parameter/,
+    'Must reject empty table name'
+  );
+});
+
+await runAsyncTest('10.4 PostgreSQL permission failure (SQLSTATE 42501) propagates from queryTableCount', async () => {
+  const permError = Object.assign(new Error('permission denied for table leads'), { code: '42501' });
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('to_regclass')) {
+        throw permError;
+      }
+      return { rows: [] };
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'leads');
+    },
+    (err) => {
+      assert.strictEqual(err.code, '42501', 'Must preserve SQLSTATE 42501');
+      assert(err.message.includes('permission denied'), 'Must preserve original error message');
+      return true;
+    },
+    'Permission failure on to_regclass must propagate directly'
+  );
+});
+
+await runAsyncTest('10.5 PostgreSQL connection failure (SQLSTATE 08006) propagates from queryTableCount', async () => {
+  const connError = Object.assign(new Error('connection failure: client disconnected'), { code: '08006' });
+  const mockClient = {
+    query: async () => {
+      throw connError;
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'bom_orders');
+    },
+    (err) => {
+      assert.strictEqual(err.code, '08006', 'Must preserve SQLSTATE 08006');
+      return true;
+    },
+    'Connection failure must propagate directly'
+  );
+});
+
+await runAsyncTest('10.6 Failed COUNT query cannot become zero and must propagate exception', async () => {
+  const countError = Object.assign(new Error('statement timeout while counting'), { code: '57014' });
+  const mockClient = {
+    query: async (sql) => {
+      if (sql.includes('to_regclass')) {
+        return { rows: [{ reg: 'public.leads' }] };
+      }
+      if (sql.includes('SELECT COUNT(*)')) {
+        throw countError;
+      }
+      return { rows: [] };
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await queryTableCount(mockClient, 'leads');
+    },
+    (err) => {
+      assert.strictEqual(err.code, '57014', 'Failed COUNT query error code must propagate');
+      return true;
+    },
+    'Failed COUNT query must NEVER be swallowed as zero'
+  );
+});
+
+await runAsyncTest('10.7 queryStoreItemCount returns 0 for non-existent key and empty array, length for array, 1 for other JSON', async () => {
+  // Scenario A: Key does not exist in controlroom_store (0 rows)
+  const mockClientNoRow = {
+    query: async () => ({ rows: [] })
+  };
+  const countNoRow = await queryStoreItemCount(mockClientNoRow, 'customer_pis_store');
+  assert.strictEqual(countNoRow, 0, 'Non-existent store key must return 0');
+
+  // Scenario B: Stored value is null/undefined
+  const mockClientNull = {
+    query: async () => ({ rows: [{ data: null }] })
+  };
+  const countNull = await queryStoreItemCount(mockClientNull, 'quotations_store');
+  assert.strictEqual(countNull, 0, 'Null store data must return 0');
+
+  // Scenario C: Stored value is a valid empty array []
+  const mockClientEmptyArray = {
+    query: async () => ({ rows: [{ data: [] }] })
+  };
+  const countEmpty = await queryStoreItemCount(mockClientEmptyArray, 'sales_pi_store');
+  assert.strictEqual(countEmpty, 0, 'Valid empty array must return 0');
+
+  // Scenario D: Stored value is an array with items
+  const mockClientArray = {
+    query: async () => ({ rows: [{ data: [{ id: 'PI-1' }, { id: 'PI-2' }, { id: 'PI-3' }] }] })
+  };
+  const countArray = await queryStoreItemCount(mockClientArray, 'customer_pis_store');
+  assert.strictEqual(countArray, 3, 'Array store must return element count');
+
+  // Scenario E: Stored value is a valid JSON object
+  const mockClientObject = {
+    query: async () => ({ rows: [{ data: { branding: 'BUSINZ', active: true } }] })
+  };
+  const countObject = await queryStoreItemCount(mockClientObject, 'invoice_store');
+  assert.strictEqual(countObject, 1, 'Non-array JSON value must return 1');
+});
+
+await runAsyncTest('10.8 queryStoreItemCount propagates database read failures and never masks SQL exceptions as zero', async () => {
+  const permError = Object.assign(new Error('permission denied for relation controlroom_store'), { code: '42501' });
+  const mockClient = {
+    query: async () => {
+      throw permError;
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await queryStoreItemCount(mockClient, 'employees_store');
+    },
+    (err) => {
+      assert.strictEqual(err.code, '42501', 'Must preserve SQLSTATE 42501 on store query');
+      return true;
+    },
+    'Store query permission failure must propagate'
+  );
+});
+
+await runAsyncTest('10.9 queryStoreItemCount rejects unapproved store keys', async () => {
+  const mockClient = { query: async () => ({ rows: [] }) };
+
+  await assert.rejects(
+    async () => {
+      await queryStoreItemCount(mockClient, 'unapproved_secret_store');
+    },
+    /\[Database Audit Error\] Store key "unapproved_secret_store" is not in the approved audit allowlist\./,
+    'Must reject store key not in allowlist'
+  );
+});
+
+await runAsyncTest('10.10 Aborted transaction (SQLSTATE 25P02) cannot produce a passing baseline', async () => {
+  const abortedTxError = Object.assign(
+    new Error('current transaction is aborted, commands ignored until end of transaction block'),
+    { code: '25P02' }
+  );
+
+  const mockAbortedClient = {
+    query: async () => {
+      throw abortedTxError;
+    }
+  };
+
+  await assert.rejects(
+    async () => {
+      await collectDatabaseCounts(mockAbortedClient);
+    },
+    (err) => {
+      assert.strictEqual(err.code, '25P02', 'Must fail closed on SQLSTATE 25P02');
+      return true;
+    },
+    'Aborted transaction must throw and cannot return false zero baselines'
+  );
+});
+
+await runAsyncTest('10.11 Database cleanup rolls back when baseline verification fails or throws an exception', async () => {
+  const queryLog = [];
+  const testError = Object.assign(new Error('relation leads is locked by another transaction'), { code: '55P03' });
+
+  const mockPool = {
+    connect: async () => ({
+      query: async (sql) => {
+        queryLog.push(sql);
+        if (sql.includes('BEGIN')) return {};
+        if (sql.includes('ROLLBACK')) return {};
+        // Simulate error during pre-commit check (e.g. leads query fails)
+        if (sql.includes('to_regclass') && sql.includes('leads')) {
+          throw testError;
+        }
+        return { rows: [] };
+      },
+      release: () => {}
+    })
+  };
+
+  const cleanupReport = await executeComprehensiveCleanup(mockPool);
+
+  assert.strictEqual(cleanupReport.dbCleanup.committed, false, 'Transaction must NOT be committed on baseline failure');
+  assert.strictEqual(cleanupReport.dbCleanup.status, 'ROLLED_BACK_ON_ERROR', 'Cleanup status must reflect transaction rollback');
+  assert.strictEqual(cleanupReport.baselineRestored, false, 'baselineRestored must be false');
+  assert(queryLog.some(q => q.includes('ROLLBACK')), 'ROLLBACK query must be issued to PostgreSQL');
+});
+
+await runAsyncTest('10.12 Database cleanup rolls back when baseline count discrepancies are detected', async () => {
+  const queryLog = [];
+  const origBaselines = testReport.baselines;
+  testReport.baselines = {
+    tables: { leads: 10 },
+    stores: {}
+  };
+
+  try {
+    const mockPool = {
+      connect: async () => ({
+        query: async (sql, params) => {
+          queryLog.push(sql);
+          if (sql.includes('BEGIN')) return {};
+          if (sql.includes('ROLLBACK')) return {};
+          if (sql.includes('to_regclass')) return { rows: [{ reg: 'public.leads' }] };
+          if (sql.includes('SELECT COUNT(*)')) return { rows: [{ cnt: '9999' }] }; // Discrepancy with baseCount (10 vs 9999)
+          if (sql.includes('SELECT data FROM public.controlroom_store')) return { rows: [{ data: [] }] };
+          return { rows: [] };
+        },
+        release: () => {}
+      })
+    };
+
+    const cleanupReport = await executeComprehensiveCleanup(mockPool);
+    assert.strictEqual(cleanupReport.dbCleanup.committed, false, 'Discrepancy must prevent COMMIT');
+    assert.strictEqual(cleanupReport.dbCleanup.status, 'ROLLED_BACK_BASELINE_MISMATCH', 'Status must be ROLLED_BACK_BASELINE_MISMATCH');
+    assert.strictEqual(cleanupReport.baselineRestored, false, 'baselineRestored must be false on discrepancy');
+    assert(queryLog.some(q => q.includes('ROLLBACK')), 'ROLLBACK query must be issued to PostgreSQL');
+  } finally {
+    testReport.baselines = origBaselines;
+  }
 });
 
 // =============================================================================

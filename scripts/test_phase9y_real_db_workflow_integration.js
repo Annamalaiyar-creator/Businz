@@ -252,31 +252,127 @@ export function apiRequest(endpoint, { method = 'GET', headers = {}, body = null
 }
 
 // =============================================================================
-// DATABASE & STORE AUDIT HELPERS
+// DATABASE & STORE AUDIT HELPERS (Phase 9AA Fail-Closed Verification)
 // =============================================================================
-export async function queryTableCount(client, tableName) {
-  try {
-    const regCheck = await client.query('SELECT to_regclass($1) as reg', [`public.${tableName}`]);
-    if (!regCheck.rows[0]?.reg) {
+export const ALLOWED_AUDIT_TABLES = Object.freeze([
+  'leads',
+  'lead_status_history',
+  'lead_notifications',
+  'lead_notification_recipients',
+  'lead_assignment_history',
+  'lead_activities',
+  'lead_followups',
+  'lead_inactivity_incidents',
+  'bom_orders',
+  'bom_items',
+  'crm_leads_activities',
+  'proforma_invoices',
+  'controlroom_store'
+]);
+
+export const OPTIONAL_AUDIT_TABLES = Object.freeze(new Set([
+  'bom_items',
+  'crm_leads_activities',
+  'proforma_invoices'
+]));
+
+export const ALLOWED_AUDIT_STORES = Object.freeze([
+  'quotations_store',
+  'customer_pis_store',
+  'sales_pi_store',
+  'proforma_invoice_store',
+  'reservations_store',
+  'employees_store',
+  'invoice_store',
+  'bom_store',
+  'notifications_store'
+]);
+
+/**
+ * Queries row count for an approved database table in a fail-closed manner.
+ * 
+ * - Validates tableName against ALLOWED_AUDIT_TABLES allowlist.
+ * - Uses to_regclass to safely check table existence without aborting PostgreSQL transactions.
+ * - Returns 0 ONLY when the table is verified absent AND is explicitly optional.
+ * - Throws a fail-closed error if a required table is missing.
+ * - Propagates all PostgreSQL query errors (never swallows SQLSTATE errors).
+ * 
+ * @param {Object} client - PostgreSQL client
+ * @param {string} tableName - Unqualified table name in public schema
+ * @param {Object} [options]
+ * @param {boolean} [options.optional] - Explicitly override optionality
+ * @returns {Promise<number>}
+ */
+export async function queryTableCount(client, tableName, options = {}) {
+  if (!tableName || typeof tableName !== 'string') {
+    throw new Error(`[Database Audit Error] Invalid table name parameter: ${tableName}`);
+  }
+
+  const cleanTable = tableName.trim().toLowerCase();
+  if (!ALLOWED_AUDIT_TABLES.includes(cleanTable)) {
+    throw new Error(`[Database Audit Error] Table "${tableName}" is not in the approved audit allowlist.`);
+  }
+
+  const isOptional = options.optional !== undefined
+    ? Boolean(options.optional)
+    : OPTIONAL_AUDIT_TABLES.has(cleanTable);
+
+  const regCheck = await client.query('SELECT to_regclass($1) as reg', [`public.${cleanTable}`]);
+  const exists = Boolean(regCheck.rows[0]?.reg);
+
+  if (!exists) {
+    if (isOptional) {
       return 0;
     }
-    const res = await client.query(`SELECT COUNT(*) as cnt FROM public.${tableName}`);
-    return parseInt(res.rows[0]?.cnt || 0, 10);
-  } catch (_) {
-    return 0;
+    throw new Error(`[Database Audit Error] Required table "public.${cleanTable}" is missing from database schema.`);
   }
+
+  const res = await client.query(`SELECT COUNT(*) as cnt FROM public.${cleanTable}`);
+  return parseInt(res.rows[0]?.cnt || 0, 10);
 }
 
+/**
+ * Queries item count for an approved store key in public.controlroom_store in a fail-closed manner.
+ * 
+ * - Validates storeKey against ALLOWED_AUDIT_STORES allowlist.
+ * - Returns 0 when the store key genuinely does not exist (zero rows returned).
+ * - Returns 0 when the stored JSON value is null/undefined or an empty array.
+ * - Returns array length for JSON arrays.
+ * - Returns 1 for other valid non-empty JSON values (objects, numbers, etc.).
+ * - Propagates all PostgreSQL query errors (never masks SQL exceptions as 0).
+ * 
+ * @param {Object} client - PostgreSQL client
+ * @param {string} storeKey - Key in public.controlroom_store
+ * @returns {Promise<number>}
+ */
 export async function queryStoreItemCount(client, storeKey) {
-  try {
-    const res = await client.query('SELECT data FROM public.controlroom_store WHERE key = $1', [storeKey]);
-    if (res.rows.length === 0 || !res.rows[0].data) return 0;
-    const d = res.rows[0].data;
-    if (Array.isArray(d)) return d.length;
-    return 1;
-  } catch (_) {
+  if (!storeKey || typeof storeKey !== 'string') {
+    throw new Error(`[Database Audit Error] Invalid store key parameter: ${storeKey}`);
+  }
+
+  const cleanKey = storeKey.trim().toLowerCase();
+  if (!ALLOWED_AUDIT_STORES.includes(cleanKey)) {
+    throw new Error(`[Database Audit Error] Store key "${storeKey}" is not in the approved audit allowlist.`);
+  }
+
+  const res = await client.query('SELECT data FROM public.controlroom_store WHERE key = $1', [cleanKey]);
+  if (res.rows.length === 0 || res.rows[0].data === null || res.rows[0].data === undefined) {
     return 0;
   }
+
+  let d = res.rows[0].data;
+  if (typeof d === 'string') {
+    try {
+      d = JSON.parse(d);
+    } catch (_) {
+      return 1;
+    }
+  }
+
+  if (Array.isArray(d)) {
+    return d.length;
+  }
+  return 1;
 }
 
 export async function collectDatabaseCounts(client) {
