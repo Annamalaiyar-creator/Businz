@@ -56,6 +56,8 @@ import {
 } from './recover_phase9y_run_70304_residue.js';
 import {
   runResidueRecovery13909,
+  verifyWorkspaceIsolation,
+  EXPECTED_OPTIMIZATION_TEST_WORKSPACE,
   verifySyntheticLeadOwnership909,
   verifySyntheticEmployeeEvidence909,
   verifySyntheticQuotationOwnership909,
@@ -2257,27 +2259,60 @@ await runAsyncTest('11.11 Synthetic identifier matching supports reservations_st
 });
 
 await runAsyncTest('11.12 recover_phase9y_run_13909_residue.js dry-run by default, requires --execute-authorized, validates target DB and workspace', async () => {
-  // Test A: Fails closed on workspace mismatch outside /var/www/businz-optimization-test
-  const workspaceRes = await runResidueRecovery13909({
-    bypassWorkspaceCheckForTesting: false
+  // Test A: Fails closed on workspace mismatch when invoked from an invalid workspace path (isolated context)
+  const invalidWorkspaceRes = await runResidueRecovery13909({
+    workspaceDir: '/var/www/businz' // Genuine production workspace -> MUST BE REJECTED
   });
-  assert.strictEqual(workspaceRes.success, false, 'Must fail closed when workspace is not /var/www/businz-optimization-test');
-  assert.strictEqual(workspaceRes.reason, 'Workspace mismatch', 'Must specify workspace mismatch');
-  assert.strictEqual(workspaceRes.dryRun, true, 'Default must be dry-run');
+  assert.strictEqual(invalidWorkspaceRes.success, false, 'Must fail closed when workspace is not /var/www/businz-optimization-test');
+  assert.strictEqual(invalidWorkspaceRes.reason, 'Workspace mismatch', 'Must specify workspace mismatch');
+  assert.strictEqual(invalidWorkspaceRes.dryRun, true, 'Default mode must be dry-run');
 
-  // Test B: Rejects unauthorized database URL
+  const randomWorkspaceRes = await runResidueRecovery13909({
+    workspaceDir: '/tmp/unauthorized-workspace'
+  });
+  assert.strictEqual(randomWorkspaceRes.success, false, 'Must fail closed on arbitrary directory');
+  assert.strictEqual(randomWorkspaceRes.reason, 'Workspace mismatch', 'Must specify workspace mismatch');
+
+  // Test B: Pure workspace isolation validator verifies approved vs unapproved workspaces
+  assert.strictEqual(verifyWorkspaceIsolation('/var/www/businz-optimization-test'), true, 'Approved optimization test workspace must pass');
+  assert.strictEqual(verifyWorkspaceIsolation('/var/www/businz'), false, 'Production workspace must be rejected');
+  assert.strictEqual(verifyWorkspaceIsolation('/var/www/businz-dev'), false, 'Development workspace must be rejected');
+  assert.strictEqual(verifyWorkspaceIsolation('/var/www/hrms'), false, 'HRMS workspace must be rejected');
+
+  // Test C: Unauthorized PostgreSQL URL rejection tested independently (fails BEFORE connection or writes)
   const dbUrlRes = await runResidueRecovery13909({
-    bypassWorkspaceCheckForTesting: true,
+    workspaceDir: EXPECTED_OPTIMIZATION_TEST_WORKSPACE,
     databaseUrl: 'postgresql://postgres:pass@127.0.0.1:5432/businz' // Production database!
   });
   assert.strictEqual(dbUrlRes.success, false, 'Must fail closed on production database URL');
   assert.strictEqual(dbUrlRes.dryRun, true, 'Must remain dry-run');
+  assert(
+    typeof dbUrlRes.reason === 'string' && dbUrlRes.reason.includes('FORBIDDEN DATABASE TARGET "businz"'),
+    'Must explicitly state forbidden database target'
+  );
 
-  // Test C: Verifies constants and baseline keys exported
+  const nonLocalDbRes = await runResidueRecovery13909({
+    workspaceDir: EXPECTED_OPTIMIZATION_TEST_WORKSPACE,
+    databaseUrl: 'postgresql://businz_test_user:pass@192.168.1.100:5432/businz_optimization_test' // Non-local IP!
+  });
+  assert.strictEqual(nonLocalDbRes.success, false, 'Must fail closed on non-local database host');
+  assert.strictEqual(nonLocalDbRes.dryRun, true, 'Must remain dry-run');
+
+  // Test D: Live recovery strictly refuses unauthorized execution or workspace tampering
+  const liveRecoveryBlocked = await runResidueRecovery13909({
+    executeAuthorized: true,
+    workspaceDir: '/var/www/businz',
+    databaseUrl: 'postgresql://postgres:pass@127.0.0.1:5432/businz'
+  });
+  assert.strictEqual(liveRecoveryBlocked.success, false, 'Live recovery must fail closed on unauthorized target');
+  assert.strictEqual(liveRecoveryBlocked.dryRun, false, 'executeAuthorized reflects live flag');
+
+  // Test E: Verifies constants and baseline keys exported
   assert.deepStrictEqual([...BASELINE_STORE_KEYS_909].sort(), ['customer_pis_store', 'employees_store', 'quotations_store']);
   assert.deepStrictEqual([...NEWLY_CREATED_STORE_KEYS_909].sort(), ['bom_store', 'invoice_store', 'reservations_store']);
   assert.strictEqual(TARGET_RUN_ID_909, '1793247013909');
   assert.strictEqual(TARGET_SYNTH_TAG_909, 'SYNTH_P9Y_1793247013909');
+  assert.strictEqual(EXPECTED_OPTIMIZATION_TEST_WORKSPACE, '/var/www/businz-optimization-test');
 });
 
 // =============================================================================

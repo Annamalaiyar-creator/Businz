@@ -164,6 +164,17 @@ export function verifySyntheticReservationOwnership909(res) {
   return synthTag === TARGET_SYNTH_TAG || rId.includes(TARGET_SYNTH_TAG) || rId.includes('13909');
 }
 
+export const EXPECTED_OPTIMIZATION_TEST_WORKSPACE = '/var/www/businz-optimization-test';
+
+/**
+ * Validates whether the given workspace path matches the dedicated test worktree.
+ * Pure function: allows deterministic testing of workspace validation logic
+ * across both Hostinger VPS (/var/www/businz-optimization-test) and development environments.
+ */
+export function verifyWorkspaceIsolation(workspaceDir = path.resolve(__dirname, '..')) {
+  return workspaceDir === EXPECTED_OPTIMIZATION_TEST_WORKSPACE;
+}
+
 export async function runResidueRecovery13909(options = {}) {
   const isExecuteAuthorized = Boolean(
     options.executeAuthorized || process.argv.includes('--execute-authorized')
@@ -179,10 +190,24 @@ export async function runResidueRecovery13909(options = {}) {
   // STEP 1: Strict Environment Preflight Checks
   // ---------------------------------------------------------------------------
   console.log('--- Step 1: Isolation & Environment Validation ---');
-  const workspaceDir = path.resolve(__dirname, '..');
-  const expectedWorkspace = '/var/www/businz-optimization-test';
+  const actualWorkspace = path.resolve(__dirname, '..');
+  const expectedWorkspace = EXPECTED_OPTIMIZATION_TEST_WORKSPACE;
 
-  if (workspaceDir !== expectedWorkspace && !options.bypassWorkspaceCheckForTesting) {
+  // RULE 4: Live recovery (--execute-authorized) can NEVER bypass workspace protection.
+  // Overrides are strictly forbidden for live execution.
+  if (isExecuteAuthorized && actualWorkspace !== expectedWorkspace) {
+    console.error(`🛑 [FAIL-CLOSED] Live recovery workspace mismatch:`);
+    console.error(`   Expected: "${expectedWorkspace}"`);
+    console.error(`   Actual:   "${actualWorkspace}"`);
+    console.error('   Live residue recovery can only be executed on the isolated Hostinger VPS test worktree.');
+    process.exitCode = 1;
+    return { success: false, reason: 'Workspace mismatch', dryRun: false };
+  }
+
+  // In dry-run mode, allow testing invalid workspace rejection by passing options.workspaceDir
+  const workspaceDir = (isDryRun && options.workspaceDir) ? options.workspaceDir : actualWorkspace;
+
+  if (workspaceDir !== expectedWorkspace) {
     console.error(`🛑 [FAIL-CLOSED] Workspace mismatch:`);
     console.error(`   Expected: "${expectedWorkspace}"`);
     console.error(`   Actual:   "${workspaceDir}"`);
@@ -191,6 +216,7 @@ export async function runResidueRecovery13909(options = {}) {
     return { success: false, reason: 'Workspace mismatch', dryRun: isDryRun };
   }
 
+  // Database URL Validation (strictly before Pool creation or DB connection)
   let dbUrl;
   try {
     dbUrl = resolveAndValidateTestDatabaseUrl(options.databaseUrl);
