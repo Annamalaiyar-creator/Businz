@@ -4040,7 +4040,7 @@ export default function BomOrdersView(props) {
                       groupId: groupId || 'legacy_default',
                       presetName: item.presetName || selectedPreset || 'Preset Kit',
                       setCount: presetSetCount || 1,
-                      unitType: presetUnitType || 'Sets',
+                      unitType: (item.unitType || item.unit || 'Sets'),
                       kitPrice: presetKitPrice || ''
                     };
 
