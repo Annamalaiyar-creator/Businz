@@ -331,6 +331,22 @@ function App() {
     return () => window.removeEventListener('controlroom_navigate_tab', handleCustomNavigate);
   }, []);
 
+  // Listen for real-time workflow notifications and local ERP toasts
+  useEffect(() => {
+    const handleIncomingToast = (e) => {
+      if (!e || !e.detail) return;
+      setToastAlert(e.detail);
+    };
+
+    window.addEventListener('businz_notification_received', handleIncomingToast);
+    window.addEventListener('businz_show_toast', handleIncomingToast);
+
+    return () => {
+      window.removeEventListener('businz_notification_received', handleIncomingToast);
+      window.removeEventListener('businz_show_toast', handleIncomingToast);
+    };
+  }, []);
+
   const handleRoleSwitch = (newRole) => {
     setUserRole(newRole);
     localStorage.setItem('controlroom_user_role', newRole);
@@ -787,6 +803,13 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Modern WhatsApp / SaaS Real-Time Notification Card */}
+      <NotificationToast 
+        alert={toastAlert} 
+        onClose={() => setToastAlert(null)} 
+        onNavigate={(tab, extra) => handleTabChange(tab, extra)} 
+      />
 
       {/* Sidebar Navigation */}
     </div>

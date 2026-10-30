@@ -125,11 +125,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [endDate, setEndDate] = useState('');
 
   const showTopToast = (message, type = 'success', duration = 5000) => {
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    setTopToast({ message, type });
-    toastTimeoutRef.current = setTimeout(() => {
-      setTopToast(null);
-    }, duration);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('businz_show_toast', {
+        detail: {
+          message: String(message || '').replace(/^[✅📝❌⏳⚠️\s]+/, '').trim(),
+          title: type === 'error' ? 'Attention Required' : 'Proforma Invoice Update',
+          type,
+          document_type: 'PI',
+          duration: Math.round(duration / 1000)
+        }
+      }));
+    }
   };
 
   const [bomList, setBomList] = useState(() => {
@@ -2797,57 +2803,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-24)', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-
-      {/* ==================== IN-APP TOP NOTIFICATION (SELF-DISMISSING, NO BROWSER ALERT) ==================== */}
-      {topToast && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 999999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '12px 24px',
-          borderRadius: '50px',
-          backgroundColor: topToast.type === 'error' ? '#DC2626' : '#0E7490',
-          color: '#FFFFFF',
-          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.2) inset',
-          fontSize: '13.5px',
-          fontWeight: '700',
-          letterSpacing: '-0.2px',
-          maxWidth: '90vw',
-          pointerEvents: 'auto',
-          transition: 'all 0.25s ease'
-        }}>
-          {topToast.type === 'error' ? (
-            <AlertCircle size={18} style={{ color: '#FEE2E2', flexShrink: 0 }} />
-          ) : (
-            <CheckCircle size={18} style={{ color: '#A7F3D0', flexShrink: 0 }} />
-          )}
-          <span>{topToast.message}</span>
-          <button
-            type="button"
-            onClick={() => setTopToast(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'rgba(255, 255, 255, 0.75)',
-              cursor: 'pointer',
-              marginLeft: '6px',
-              padding: '0 4px',
-              display: 'flex',
-              alignItems: 'center',
-              fontSize: '15px',
-              lineHeight: 1
-            }}
-            title="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* ==================== CONVERTING PI TO BOM ANIMATED MODAL ==================== */}
       {isConvertingToBom && (

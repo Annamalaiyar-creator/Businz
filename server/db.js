@@ -607,6 +607,34 @@ export async function initPostgresDatabase() {
         CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
           ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);
 
+        CREATE TABLE IF NOT EXISTS public.internal_notifications (
+          id TEXT PRIMARY KEY,
+          recipient_emp_code TEXT,
+          recipient_role TEXT,
+          event_type TEXT NOT NULL,
+          document_type TEXT NOT NULL,
+          document_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          actor_emp_code TEXT,
+          actor_name TEXT,
+          actor_role TEXT,
+          target_tab TEXT,
+          target_record_id TEXT,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          is_read BOOLEAN NOT NULL DEFAULT false,
+          read_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          dedup_id TEXT UNIQUE NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_internal_notifs_recipient 
+          ON public.internal_notifications(recipient_emp_code, is_read, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_internal_notifs_role 
+          ON public.internal_notifications(recipient_role, is_read, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_internal_notifs_doc 
+          ON public.internal_notifications(document_type, document_id);
+
         DO $$
         BEGIN
           IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quotations') THEN

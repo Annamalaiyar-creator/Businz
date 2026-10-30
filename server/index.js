@@ -114,6 +114,12 @@ import {
   syncIndiaMartLeads,
   getIndiaMartSyncLogs
 } from './indiaMartService.js';
+import {
+  createInternalNotification,
+  getNotificationsForUser,
+  markNotificationAsRead,
+  registerNotificationClient
+} from './internalNotificationService.js';
 
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
@@ -2836,6 +2842,16 @@ app.get('/api/realtime-events', (req, res) => {
   res.write(`id: ${sseSequenceId}\nevent: message\ndata: ${JSON.stringify({ type: 'connected', seq: sseSequenceId, timestamp: new Date().toISOString() })}\n\n`);
   realtimeClients.add(res);
 
+  // Register client for authenticated enterprise workflow notification dispatch
+  const clientInfo = {
+    res,
+    empCode: req.query.empCode || req.headers['x-employee-code'] || '',
+    role: req.query.role || req.headers['x-user-role'] || '',
+    userName: req.query.userName || req.headers['x-user-name'] || '',
+    connectedAt: new Date().toISOString()
+  };
+  const unregisterNotifClient = registerNotificationClient(clientInfo);
+
   // If client reconnected with lastEventId, check for ring buffer overflow or server sequence reset
   if (lastEventId > 0) {
     const oldestSeq = sseEventHistory.length > 0 ? sseEventHistory[0].seq : 0;
@@ -2870,17 +2886,62 @@ app.get('/api/realtime-events', (req, res) => {
       } else {
         clearInterval(keepAliveInterval);
         realtimeClients.delete(res);
+        unregisterNotifClient();
       }
     } catch (_) {
       clearInterval(keepAliveInterval);
       realtimeClients.delete(res);
+      unregisterNotifClient();
     }
   }, 25000);
 
   req.on('close', () => {
     clearInterval(keepAliveInterval);
     realtimeClients.delete(res);
+    unregisterNotifClient();
   });
+});
+
+// ==========================================
+// 🔔 REAL-TIME INTERNAL NOTIFICATION ENDPOINTS
+// ==========================================
+app.get('/api/notifications', async (req, res) => {
+  const empCode = req.query.empCode || req.headers['x-employee-code'] || '';
+  const role = req.query.role || req.headers['x-user-role'] || '';
+  const unreadOnly = req.query.unreadOnly === 'true';
+  const limit = parseInt(req.query.limit, 10) || 50;
+  const since = req.query.since || null;
+
+  try {
+    const result = await getNotificationsForUser({ empCode, role, unreadOnly, limit, since });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/notifications/unread-count', async (req, res) => {
+  const empCode = req.query.empCode || req.headers['x-employee-code'] || '';
+  const role = req.query.role || req.headers['x-user-role'] || '';
+
+  try {
+    const { unreadCount } = await getNotificationsForUser({ empCode, role, unreadOnly: true, limit: 1 });
+    res.json({ success: true, unreadCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/notifications/mark-read', async (req, res) => {
+  const { notificationId, all } = req.body || {};
+  const empCode = req.body?.empCode || req.headers['x-employee-code'] || '';
+
+  try {
+    const result = await markNotificationAsRead({ notificationId, empCode, all: Boolean(all) });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ⚡ Lightweight Native Active Session Management with Strict Server-Side Authentication
@@ -5753,6 +5814,116 @@ app.post('/api/boms', async (req, res) => {
             bomCode: persistedBom?.bomCode || persistedBom?.code
           });
         } catch (_) {}
+
+        // 5b. Enterprise Precise Workflow Notifications (Outbox Pattern)
+        try {
+          const actorEmp = req.headers['x-employee-code'] || req.body?.actorEmpCode || bom?.salesPersonId || null;
+          const actorName = req.headers['x-user-name'] || bom?.createdBy || bom?.salesPerson || 'Sales Executive';
+          const actorRole = req.headers['x-user-role'] || 'Sales Executive';
+          const custName = persistedBom.customerName || persistedBom.companyName || 'Customer';
+
+          if (persistedBom.cancelled || persistedBom.status === 'Cancelled & Stock Restored') {
+            // Workflow: BOM Cancellation -> Notify Sales Person who created it
+            createInternalNotification({
+              recipientEmpCode: persistedBom.salesPersonId || null,
+              recipientRole: 'Sales Executive',
+              eventType: 'BOM_CANCELLED',
+              documentType: 'bom',
+              documentId: finalCode,
+              title: `❌ BOM ${finalCode} Cancelled`,
+              message: `BOM ${finalCode} (${custName}) was cancelled by ${persistedBom.cancelledByNameAndRole || persistedBom.cancelledBy || actorName}. Reason: ${persistedBom.cancellationReason || 'No reason specified'}`,
+              actorEmpCode: actorEmp,
+              actorName,
+              actorRole,
+              targetTab: 'Sales BOM',
+              targetRecordId: finalCode,
+              dedupId: `bom_cancel_${finalCode}_${persistedBom.cancelledAt || Date.now()}`
+            });
+          } else if (persistedBom.status === 'COMPLETED & DISPATCHED' || persistedBom.tabGroup === 'Closed') {
+            // Workflow: Final Vehicle Loading / Dispatched -> Notify Sales
+            createInternalNotification({
+              recipientEmpCode: persistedBom.salesPersonId || null,
+              recipientRole: 'Sales Executive',
+              eventType: 'ORDER_DISPATCHED',
+              documentType: 'bom',
+              documentId: finalCode,
+              title: `🚀 Order Dispatched: BOM ${finalCode}`,
+              message: `Order ${finalCode} (${custName}) has been dispatched via ${persistedBom.vehicleLoading?.transporterName || 'Transporter'} (LR: ${persistedBom.vehicleLoading?.lrNumber || 'N/A'}).`,
+              actorEmpCode: actorEmp,
+              actorName,
+              actorRole,
+              targetTab: 'Sales BOM',
+              targetRecordId: finalCode,
+              dedupId: `bom_dispatched_${finalCode}`
+            });
+          } else if (persistedBom.status === 'Invoice Confirmed' || persistedBom.invoiceNo) {
+            // Workflow: Billing -> Dispatch: Tax Invoice confirmed, ready for vehicle loading
+            createInternalNotification({
+              recipientRole: 'Dispatch Head',
+              eventType: 'INVOICE_COMPLETED',
+              documentType: 'bom',
+              documentId: finalCode,
+              title: `🚚 Invoice Confirmed — Ready for Loading`,
+              message: `Tax Invoice confirmed for BOM ${finalCode} (${custName}). Ready for vehicle loading verification.`,
+              actorEmpCode: actorEmp,
+              actorName,
+              actorRole,
+              targetTab: 'Dispatch Orders',
+              targetRecordId: finalCode,
+              dedupId: `bom_invoice_ready_loading_${finalCode}`
+            });
+          } else if (persistedBom.accountsVerification?.verified) {
+            // Workflow: Accounts -> Billing: Payment verified, ready for Tax Invoice
+            createInternalNotification({
+              recipientRole: 'Billing',
+              eventType: 'ACCOUNTS_APPROVED',
+              documentType: 'bom',
+              documentId: finalCode,
+              title: `📄 Accounts Verified: BOM ${finalCode}`,
+              message: `Payment verified for BOM ${finalCode} (${custName}). Ready for tax invoice generation.`,
+              actorEmpCode: actorEmp,
+              actorName,
+              actorRole,
+              targetTab: 'Invoice Management',
+              targetRecordId: finalCode,
+              dedupId: `bom_accounts_approved_${finalCode}`
+            });
+          } else if (persistedBom.accountsVerification?.readyForAccounts || persistedBom.status === 'Packed & Awaiting Accounts Verification' || persistedBom.status === 'PACKING VERIFIED - SENT TO ACCOUNTS') {
+            // Workflow: Dispatch -> Accounts: Packing verified, ready for payment verification
+            createInternalNotification({
+              recipientRole: 'Accounts Head',
+              eventType: 'PACKING_VERIFIED',
+              documentType: 'bom',
+              documentId: finalCode,
+              title: `💳 Packing Verified: BOM ${finalCode}`,
+              message: `BOM ${finalCode} (${custName}) packed and verified by Dispatch. Ready for accounts verification.`,
+              actorEmpCode: actorEmp,
+              actorName,
+              actorRole,
+              targetTab: 'Accounts Verification',
+              targetRecordId: finalCode,
+              dedupId: `bom_packing_verified_${finalCode}`
+            });
+          } else if (shouldAssignNewCode || isNew) {
+            // Workflow: Sales -> Dispatch: New BOM submitted, ready for packing
+            createInternalNotification({
+              recipientRole: 'Dispatch Head',
+              eventType: 'BOM_SUBMITTED',
+              documentType: 'bom',
+              documentId: finalCode,
+              title: `📦 New BOM Submitted: ${finalCode}`,
+              message: `BOM ${finalCode} (${custName}) submitted by ${actorName}. Ready for dispatch packing verification.`,
+              actorEmpCode: actorEmp,
+              actorName,
+              actorRole,
+              targetTab: 'Dispatch Orders',
+              targetRecordId: finalCode,
+              dedupId: `bom_submitted_${finalCode}`
+            });
+          }
+        } catch (notifErr) {
+          console.warn('[BOM Workflow Notification Notice]:', notifErr.message);
+        }
 
         // 6. Update sequence metadata in leaves table if needed
         try {

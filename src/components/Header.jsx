@@ -4,6 +4,7 @@ import {
   Menu, ChevronRight, LayoutDashboard, GitBranch, Users, ShieldCheck, 
   X, Share2, MessageSquare, Mail, Sliders, ExternalLink, Check, RefreshCw 
 } from 'lucide-react';
+import NotificationCenter from './NotificationCenter';
 
 export const filterCompletedBomNotifications = () => [];
 export const addLiveNotification = () => {};
@@ -253,6 +254,9 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
         >
           <HelpCircle style={{ width: '18px', height: '18px', color: '#1E293B' }} />
         </button>
+
+        {/* Real-time Enterprise Notification Center */}
+        <NotificationCenter onNavigateTab={onSelectTab} />
 
         {/* Vertical Separator */}
         <div style={{ width: '1px', height: '22px', backgroundColor: 'rgba(255, 255, 255, 0.25)' }} />

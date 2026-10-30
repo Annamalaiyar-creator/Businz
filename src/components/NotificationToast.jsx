@@ -1,19 +1,71 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
+import {
+  Bell, Check, CheckCircle, AlertCircle, AlertTriangle, Info, X,
+  ArrowRight, ExternalLink, GitBranch, UserCheck, CreditCard,
+  FileText, Truck, ShoppingCart, Volume2
+} from 'lucide-react';
+import { speakNotificationVoice } from '../services/notificationService';
 
-export default function NotificationToast({ alert, onClose, onRetry, onLearnMore }) {
+function getToastIcon(docType, eventType, rawType) {
+  const dt = String(docType || '').toLowerCase();
+  const et = String(eventType || '').toLowerCase();
+  const rt = String(rawType || '').toLowerCase();
+
+  if (dt === 'lead') {
+    return { icon: <UserCheck size={18} />, bg: '#EFF6FF', fg: '#2563EB', tag: 'LEAD' };
+  }
+  if (dt === 'bom') {
+    if (et.includes('cancel')) {
+      return { icon: <X size={18} />, bg: '#FEF2F2', fg: '#DC2626', tag: 'BOM CANCELLED' };
+    }
+    if (et.includes('pack')) {
+      return { icon: <Truck size={18} />, bg: '#F0FDF4', fg: '#16A34A', tag: 'DISPATCH PACKING' };
+    }
+    return { icon: <GitBranch size={18} />, bg: '#ECFEFF', fg: '#0E7490', tag: 'BOM ORDER' };
+  }
+  if (dt === 'po') {
+    return { icon: <ShoppingCart size={18} />, bg: '#FAF5FF', fg: '#9333EA', tag: 'PURCHASE ORDER' };
+  }
+  if (dt === 'pi' || dt === 'invoice') {
+    return { icon: <FileText size={18} />, bg: '#F0FDF4', fg: '#16A34A', tag: dt === 'pi' ? 'PROFORMA INVOICE' : 'TAX INVOICE' };
+  }
+  if (et.includes('account') || et.includes('pay')) {
+    return { icon: <CreditCard size={18} />, bg: '#FFFBEB', fg: '#D97706', tag: 'ACCOUNTS' };
+  }
+  if (rt === 'error' || rt === 'danger') {
+    return { icon: <AlertCircle size={18} />, bg: '#FEF2F2', fg: '#DC2626', tag: 'ALERT' };
+  }
+  if (rt === 'warning') {
+    return { icon: <AlertTriangle size={18} />, bg: '#FFFBEB', fg: '#D97706', tag: 'ATTENTION' };
+  }
+  return { icon: <CheckCircle size={18} />, bg: '#F0FDF4', fg: '#16A34A', tag: 'UPDATE' };
+}
+
+export default function NotificationToast({ alert, onClose, onNavigate }) {
+  if (!alert) return null;
+
   const alertObj = typeof alert === 'string' ? { message: alert, type: 'success' } : alert;
   const rawMessage = alertObj?.message || alertObj?.text || '';
   const rawType = alertObj?.type || 'success';
-  const hasDetails = Boolean(alertObj && Array.isArray(alertObj.details) && alertObj.details.length > 0);
-  const initialDuration = alertObj?.duration || (hasDetails ? 10 : 4);
+  const docType = alertObj?.document_type || alertObj?.docType || '';
+  const eventType = alertObj?.event_type || alertObj?.eventType || '';
+  const initialDuration = alertObj?.duration || 6;
   const [countdown, setCountdown] = useState(initialDuration);
 
+  // Play voice and sound announcement on toast mount
+  useEffect(() => {
+    try {
+      speakNotificationVoice(alertObj);
+    } catch (_) {}
+  }, [alertObj?.id || alertObj?.message]);
+
+  // Countdown timer for auto-dismiss
   useEffect(() => {
     setCountdown(initialDuration);
     if (alertObj?.persistent) return;
+
     const timer = setInterval(() => {
-      setCountdown(prev => {
+      setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
           if (onClose) onClose();
@@ -26,207 +78,257 @@ export default function NotificationToast({ alert, onClose, onRetry, onLearnMore
     return () => clearInterval(timer);
   }, [alertObj, onClose, initialDuration]);
 
-  if (!alert) return null;
+  const { icon, bg, fg, tag } = getToastIcon(docType, eventType, rawType);
 
-  const isError = rawType === 'error' || rawType === 'danger' || (rawMessage && (
-    rawMessage.toLowerCase().includes('wrong') ||
-    rawMessage.toLowerCase().includes('error') ||
-    rawMessage.toLowerCase().includes('failed') ||
-    rawMessage.toLowerCase().includes('unable')
-  ));
-  const isWarning = rawType === 'warning';
-  const isSuccess = rawType === 'success' || (!isError && !isWarning);
+  const titleText = alertObj?.title || (
+    rawType === 'error' ? 'Attention Required' :
+    docType ? `${tag} Update` :
+    'Action Successful'
+  );
 
-  const containerBg = isError
-    ? '#FFF0F2'
-    : isWarning
-      ? '#FFF7ED'
-      : isSuccess
-        ? '#F0FDF4'
-        : '#EFF6FF';
-
-  const iconBg = isError
-    ? '#FEE2E2'
-    : isWarning
-      ? '#FFEDD5'
-      : isSuccess
-        ? '#DCFCE7'
-        : '#DBEAFE';
-
-  const iconFg = isError
-    ? '#DC2626'
-    : isWarning
-      ? '#EA580C'
-      : isSuccess
-        ? '#16A34A'
-        : '#2563EB';
-
-  const titleText = alertObj?.title || (isError ? 'Uh oh! Something went wrong' : isSuccess ? 'Action Successful' : isWarning ? 'Attention Required' : 'System Notification');
-  const bodyText = rawMessage || (isError ? 'We apologize for the inconvenience you experienced.' : 'Operation completed successfully.');
+  const handleActionClick = () => {
+    if (onNavigate && alertObj?.target_tab) {
+      onNavigate(alertObj.target_tab, {
+        recordId: alertObj.target_record_id || alertObj.document_id,
+        highlightId: alertObj.document_id
+      });
+    }
+    if (onClose) onClose();
+  };
 
   return (
     <>
       <style>{`
         @keyframes toastSlideInRight {
-          from {
-            transform: translateX(120%);
+          0% {
+            transform: translateX(110%) scale(0.96);
             opacity: 0;
           }
-          to {
-            transform: translateX(0);
+          70% {
+            transform: translateX(-2%) scale(1.01);
+            opacity: 1;
+          }
+          100% {
+            transform: translateX(0) scale(1);
             opacity: 1;
           }
         }
+        @keyframes toastProgressAnim {
+          from { width: 100%; }
+          to { width: 0%; }
+        }
+        @keyframes toastPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.85); }
+        }
       `}</style>
-      <div style={{
-        position: 'fixed',
-        top: '20px',
-        right: '20px',
-        zIndex: 9999999,
-        maxWidth: hasDetails ? '460px' : '380px',
-        width: 'calc(100% - 40px)',
-        backgroundColor: containerBg,
-        borderRadius: '16px',
-        padding: '8px 10px 10px 10px',
-        boxShadow: '0 12px 30px -6px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-        fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif",
-        animation: 'toastSlideInRight 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        boxSizing: 'border-box'
-      }}>
-        {/* Inner White Card */}
-        <div style={{
+
+      <div
+        role="alert"
+        aria-live="polite"
+        style={{
+          position: 'fixed',
+          top: '20px',
+          right: '24px',
+          zIndex: 99999999,
+          width: '390px',
+          maxWidth: 'calc(100vw - 32px)',
           backgroundColor: '#FFFFFF',
-          borderRadius: '12px',
-          padding: '12px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          boxShadow: '0 1px 4px rgba(0, 0, 0, 0.04)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-            {/* Left Side: Circular Icon + Title/Subtitle */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0 }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
+          borderRadius: '16px',
+          boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.08)',
+          fontFamily: "'Plus Jakarta Sans', 'DM Sans', -apple-system, sans-serif",
+          animation: 'toastSlideInRight 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          overflow: 'hidden',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* Top Header Strip: App Branding + Tag + Timestamp + Close Button */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 14px 8px 14px',
+            backgroundColor: '#FAFAFC',
+            borderBottom: '1px solid #F1F5F9'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              style={{
+                fontSize: '10.5px',
+                fontWeight: '900',
+                letterSpacing: '0.6px',
+                color: '#0E7490',
+                textTransform: 'uppercase'
+              }}
+            >
+              BUSINZ
+            </span>
+
+            <span style={{ color: '#CBD5E1', fontSize: '11px' }}>•</span>
+
+            <span
+              style={{
+                backgroundColor: bg,
+                color: fg,
+                fontSize: '10px',
+                fontWeight: '800',
+                padding: '2px 7px',
+                borderRadius: '6px',
+                letterSpacing: '0.3px',
+                textTransform: 'uppercase'
+              }}
+            >
+              {tag}
+            </span>
+
+            {/* Live Indicator Dot */}
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
                 borderRadius: '50%',
-                backgroundColor: iconBg,
-                color: iconFg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                marginTop: '1px'
-              }}>
-                {isError ? (
-                  <AlertCircle size={18} strokeWidth={2.2} />
-                ) : isWarning ? (
-                  <AlertTriangle size={18} strokeWidth={2.2} />
-                ) : isSuccess ? (
-                  <CheckCircle size={18} strokeWidth={2.2} />
-                ) : (
-                  <Info size={18} strokeWidth={2.2} />
-                )}
-              </div>
+                backgroundColor: '#10B981',
+                animation: 'toastPulse 1.8s infinite ease-in-out',
+                display: 'inline-block'
+              }}
+            />
+          </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', margin: 0, lineHeight: '1.25' }}>
-                  {titleText}
-                </h4>
-                <div style={{ fontSize: '11.5px', color: '#64748B', lineHeight: '1.35', wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
-                  {bodyText}
-                </div>
-              </div>
-            </div>
-
-            {/* Close Button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '600' }}>
+              Just now
+            </span>
             <button
               type="button"
               onClick={onClose}
+              title="Dismiss notification"
               style={{
-                width: '24px',
-                height: '24px',
+                width: '22px',
+                height: '22px',
                 borderRadius: '50%',
-                border: '1px solid #E2E8F0',
-                backgroundColor: '#FFFFFF',
-                color: '#64748B',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#94A3B8',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                flexShrink: 0,
                 transition: 'all 0.15s ease'
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.color = '#64748B'; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#E2E8F0';
+                e.currentTarget.style.color = '#0F172A';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#94A3B8';
+              }}
             >
-              <X size={13} strokeWidth={2.2} />
+              <X size={13} strokeWidth={2.4} />
             </button>
           </div>
-
-          {/* Missing Details Interactive List */}
-          {hasDetails && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-              {alert.details.map((d, i) => {
-                const fName = typeof d === 'string' ? d : (d.field || 'Missing Field');
-                const fMsg = typeof d === 'object' ? (d.message || d.desc) : '';
-                const tId = typeof d === 'object' ? d.targetId : null;
-                return (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      if (tId) {
-                        const el = document.getElementById(tId);
-                        if (el) {
-                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          el.focus();
-                          if (onClose) onClose();
-                        }
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                      padding: '6px 10px',
-                      borderRadius: '8px',
-                      backgroundColor: '#FEF2F2',
-                      border: '1px solid #FECACA',
-                      cursor: tId ? 'pointer' : 'default',
-                      fontSize: '11.5px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', minWidth: 0, flex: 1 }}>
-                      <AlertCircle size={13} style={{ color: '#DC2626', marginTop: '2px', flexShrink: 0 }} />
-                      <div style={{ minWidth: 0 }}>
-                        <span style={{ fontWeight: '800', color: '#991B1B' }}>{fName}</span>
-                        {fMsg && <span style={{ color: '#B91C1C', marginLeft: '4px' }}>— {fMsg}</span>}
-                      </div>
-                    </div>
-                    {tId && (
-                      <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '2px 6px', borderRadius: '4px', flexShrink: 0 }}>
-                        Go →
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
 
-        {/* Countdown Timer Banner Text */}
-        {!alert?.persistent && (
-          <div style={{
-            textAlign: 'right',
-            marginTop: '6px',
-            paddingRight: '4px',
-            fontSize: '11px',
-            fontWeight: '600',
-            color: '#64748B'
-          }}>
-            Auto close in <span style={{ color: iconFg, fontWeight: '800' }}>{countdown}s</span>
+        {/* Main Content Body */}
+        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          {/* Left Avatar Icon */}
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: bg,
+              color: fg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+            }}
+          >
+            {icon}
+          </div>
+
+          {/* Right Text Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 }}>
+            <h4
+              style={{
+                fontSize: '13.5px',
+                fontWeight: '800',
+                color: '#0F172A',
+                margin: 0,
+                lineHeight: '1.3'
+              }}
+            >
+              {titleText}
+            </h4>
+            <div
+              style={{
+                fontSize: '12px',
+                color: '#475569',
+                lineHeight: '1.45',
+                wordBreak: 'break-word'
+              }}
+            >
+              {rawMessage}
+            </div>
+
+            {/* Quick Action Button */}
+            {alertObj?.target_tab && (
+              <div style={{ marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={handleActionClick}
+                  style={{
+                    border: 'none',
+                    backgroundColor: '#ECFEFF',
+                    color: '#0E7490',
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    padding: '5px 12px',
+                    borderRadius: '7px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#0E7490';
+                    e.currentTarget.style.color = '#FFFFFF';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ECFEFF';
+                    e.currentTarget.style.color = '#0E7490';
+                  }}
+                >
+                  <span>Open {tag}</span>
+                  <ArrowRight size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Animated Auto-Dismiss Progress Bar at Bottom */}
+        {!alertObj?.persistent && (
+          <div
+            style={{
+              height: '3px',
+              backgroundColor: '#F1F5F9',
+              width: '100%',
+              overflow: 'hidden'
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                backgroundColor: fg,
+                animation: `toastProgressAnim ${initialDuration}s linear forwards`
+              }}
+            />
           </div>
         )}
       </div>
