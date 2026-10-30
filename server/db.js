@@ -26,14 +26,19 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
 // Resolve default database name - strictly require dedicated test DB in test mode
-let defaultDbName = 'businz';
+const isDevServer = process.env.PORT === '5002' || process.env.NODE_ENV === 'development' || process.env.APP_ENV === 'development';
+let defaultDbName = isDevServer ? 'businz_dev' : 'businz';
 if (isOptimizationTestMode()) {
   defaultDbName = (process.env.BUSINZ_TEST_DATABASE || process.env.PGDATABASE || '').trim();
 }
 
 // PostgreSQL connection config for Hostinger VPS (Self-hosted)
-const connectionString = process.env.DATABASE_URL || 
-  process.env.PG_CONNECTION_STRING || 
+let resolvedConnString = process.env.DATABASE_URL || process.env.PG_CONNECTION_STRING;
+if (isDevServer && resolvedConnString && resolvedConnString.includes('/businz') && !resolvedConnString.includes('/businz_dev')) {
+  // Enforce dev database isolation on dev server port 5002 so it automatically connects to businz_dev
+  resolvedConnString = resolvedConnString.replace(/\/businz(\?|$)/, '/businz_dev$1');
+}
+const connectionString = resolvedConnString || 
   (defaultDbName ? `postgres://${process.env.PGUSER || 'postgres'}:${encodeURIComponent(process.env.PGPASSWORD || 'postgres')}@${process.env.PGHOST || '127.0.0.1'}:${process.env.PGPORT || 5432}/${defaultDbName}` : '');
 
 // Fail closed immediately before creating pool if optimization test mode is active and database is unverified or forbidden

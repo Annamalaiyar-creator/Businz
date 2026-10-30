@@ -5638,7 +5638,7 @@ app.post('/api/inventory/reconcile-boms', async (req, res) => {
       error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
     });
   }
-  if (!hasAnyUserRole(session.role, ['production', 'procurement', 'purchase', 'dispatch', 'accounts', 'billing'])) {
+  if (!hasAnyUserRole(session.role, ['sales', 'production', 'procurement', 'purchase', 'dispatch', 'accounts', 'billing', 'admin', 'technical administrator', 'ceo', 'director'])) {
     return res.status(403).json({
       success: false,
       error: `Forbidden: Role "${session.role}" is not authorized to reconcile inventory.`

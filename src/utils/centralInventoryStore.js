@@ -319,7 +319,13 @@ class CentralInventoryStore {
   // Helper Persistence Methods
   saveItems() {
     try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
-    saveCloudStore('item_store', this.items);
+    try {
+      const role = (localStorage.getItem('controlroom_user_role') || localStorage.getItem('controlroom_logged_user_role') || '').toLowerCase();
+      const canWriteItemStore = ['procurement', 'purchase', 'production', 'dispatch', 'admin', 'technical administrator', 'ceo', 'director'].some(r => role.includes(r));
+      if (canWriteItemStore) {
+        saveCloudStore('item_store', this.items);
+      }
+    } catch (_) {}
   }
   saveTransactions() {
     try { localStorage.setItem(this.storageKeyTx, JSON.stringify(this.transactions)); } catch (_) {}
