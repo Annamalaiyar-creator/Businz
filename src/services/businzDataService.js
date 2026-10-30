@@ -274,7 +274,9 @@ export async function getVendors() {
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
-        saveCloudStore('vendor_store', data);
+        try {
+          localStorage.setItem('controlroom_vendor_store', JSON.stringify(data));
+        } catch (_) {}
         return data;
       }
     }
@@ -391,7 +393,10 @@ export async function getItems() {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
         const clean = sanitize(data);
-        saveCloudStore('item_store', clean);
+        try {
+          localStorage.setItem('controlroom_item_store', JSON.stringify(clean));
+          localStorage.setItem('controlroom_items_list', JSON.stringify(clean));
+        } catch (_) {}
         return clean;
       }
     }
