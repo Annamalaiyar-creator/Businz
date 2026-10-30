@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { VRM_OFFICIAL_LOGO } from '../utils/vrmOfficialAssets';
-import { isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 
 // Helper to clean, deduplicate and format addresses into neat lines
 function formatAddressLines(rawAddr, city, state, pin) {
@@ -810,10 +809,10 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                             </div>
                           </td>
 
-                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside; completely empty for fixed-quantity presets */}
+                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside */}
                           <td
                             style={{
-                              padding: (isMiddle && !isFixedKit) ? '4px 6px' : '0',
+                              padding: isMiddle ? '4px 6px' : '0',
                               textAlign: 'center',
                               verticalAlign: 'middle',
                               color: '#0E7490',
@@ -825,7 +824,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                               whiteSpace: 'nowrap'
                             }}
                           >
-                            {(isMiddle && !isFixedKit) ? (
+                            {isMiddle ? (
                               <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                 <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                                   {kg.setCount || 1}
@@ -973,7 +972,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                   </td>
                   <td
                     style={{
-                      padding: (idx === fallbackMid && fallbackSetVal && !isFixed) ? '4px 6px' : '0',
+                      padding: (idx === fallbackMid && fallbackSetVal) ? '4px 6px' : '0',
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       color: '#0E7490',
@@ -987,7 +986,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {idx === fallbackMid && fallbackSetVal && !isFixed ? (
+                    {idx === fallbackMid && fallbackSetVal ? (
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                         <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                           {fallbackSetVal}
