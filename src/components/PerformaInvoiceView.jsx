@@ -233,36 +233,23 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       const sPi = String(b.sourcePiNo || b.source_pi_no || '').trim().toLowerCase();
       const bCode = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
+      const bId = String(b.id || '').trim().toLowerCase();
 
       // STRICT HARD BARRIER: BOM-659 belongs strictly and exclusively to PI-00061.
       if (bCode === 'bom-659' && piNum !== 'pi-00061') {
         return false;
       }
 
-      // 1. Strict 1-to-1 match by source PI number (with customer verification guard)
+      // 1. Authoritative 1-to-1 match by explicit converted BOM code on the PI
+      if (explicitCode && (bCode === explicitCode || bId === explicitCode)) {
+        return true;
+      }
+
+      // 2. Strict 1-to-1 match by source PI number on the BOM
       if (sPi && sPi === piNum) {
-        const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
-        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
-        if (piCust && bCust && piCust !== bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
-          return false;
-        }
         return true;
       }
 
-      // 2. If this BOM is explicitly owned by a DIFFERENT PI, it CANNOT match this PI!
-      if (sPi && sPi !== piNum) return false;
-
-      // 3. Fallback only if BOM has NO sourcePiNo recorded, but explicit convertedBomCode matches
-      if (!sPi && explicitCode && bCode && bCode === explicitCode) {
-        if (bCode === 'bom-659') return false;
-        // Double check customer name if available to avoid cross-customer cross-linking
-        const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
-        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
-        if (piCust && bCust && piCust !== bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
-          return false;
-        }
-        return true;
-      }
       return false;
     });
 
@@ -829,9 +816,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const pGroups = pi.presetGroups || {};
     const pGroupList = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
-    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} Set${g.setCount > 1 ? 's' : ''})`).join(' + ') : null);
+    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} ${g.unit || (g.setCount > 1 ? 'Sets' : 'Set')})`).join(' + ') : null);
     const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null));
-    const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseInt(g.setCount) || 1), 0) : 1);
+    const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseFloat(g.setCount) || 1), 0) : 1);
 
     const conversionData = {
       sourcePiNo: pi.piNo,
@@ -1011,6 +998,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [showCreateSetModal, setShowCreateSetModal] = useState(false);
   const [newSetName, setNewSetName] = useState('');
   const [newSetCount, setNewSetCount] = useState(1);
+  const [newSetUnit, setNewSetUnit] = useState('Sets');
   const [newSetPrice, setNewSetPrice] = useState('');
   const [newSetGstRate, setNewSetGstRate] = useState('18%');
   const [piConfirmModal, setPiConfirmModal] = useState(null); // 'cancel' | 'draft' | 'create'
@@ -1670,13 +1658,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
 
     const itemsSub = (piItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       return acc + (q * r);
@@ -1694,9 +1682,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     };
 
     (piItems || []).forEach(item => {
-      if (item.isPresetItem) return;
+      if (item.isPresetItem || item.presetGroupId) return;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
+      if (r <= 0) return;
       const rowTot = q * r;
       const pct = extractRate(item.gstRate, 18);
       const amt = rowTot * (pct / 100);
@@ -1709,29 +1698,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         const groupTotal = unitPrice * multiplier;
+        if (groupTotal <= 0) return;
 
-        const groupItems = (piItems || []).filter(it => (it.presetGroupId || 'legacy_default') === grpId);
-        const totalQty = groupItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 1), 0);
-
-        if (groupItems.length > 0 && totalQty > 0) {
-          groupItems.forEach(it => {
-            const itQty = parseFloat(it.qty) || 1;
-            const itemShare = groupTotal * (itQty / totalQty);
-            const itGstRate = extractRate(it.gstRate ?? grp.gstRate, 18);
-            const itAmt = itemShare * (itGstRate / 100);
-            if (!gstTiersMap[itGstRate]) gstTiersMap[itGstRate] = { rate: itGstRate, taxable: 0, gstAmt: 0 };
-            gstTiersMap[itGstRate].taxable += itemShare;
-            gstTiersMap[itGstRate].gstAmt += itAmt;
-          });
-        } else {
-          const gPct = extractRate(grp?.gstRate, 18);
-          const gAmt = groupTotal * (gPct / 100);
-          if (!gstTiersMap[gPct]) gstTiersMap[gPct] = { rate: gPct, taxable: 0, gstAmt: 0 };
-          gstTiersMap[gPct].taxable += groupTotal;
-          gstTiersMap[gPct].gstAmt += gAmt;
-        }
+        const gPct = extractRate(grp?.gstRate, 18);
+        const gAmt = groupTotal * (gPct / 100);
+        if (!gstTiersMap[gPct]) gstTiersMap[gPct] = { rate: gPct, taxable: 0, gstAmt: 0 };
+        gstTiersMap[gPct].taxable += groupTotal;
+        gstTiersMap[gPct].gstAmt += gAmt;
       }
     });
 
@@ -1930,6 +1905,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId: 'custom_set',
         presetName: cleanName,
         setCount: 1,
+        unit: 'Sets',
         kitPrice: convertPresetPrice ? String(convertPresetPrice) : '',
         gstRate: gst,
         hsn: getHsnCode(cleanName),
@@ -1970,7 +1946,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const handleCreateCustomSet = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
-    const count = Math.max(1, parseInt(newSetCount) || 1);
+    const unit = newSetUnit || 'Sets';
+    const count = unit === 'kW' ? Math.max(0.01, parseFloat(newSetCount) || 1) : Math.max(1, parseInt(newSetCount) || 1);
     const groupId = 'custom_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const setGst = newSetGstRate || '18%';
 
@@ -1981,6 +1958,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId: 'custom_set',
         presetName: cleanName,
         setCount: count,
+        unit,
         kitPrice: newSetPrice ? String(newSetPrice) : '',
         gstRate: setGst,
         hsn: getHsnCode(cleanName),
@@ -1991,8 +1969,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const initialItem = {
       name: '',
       category: '',
-      uom: 'NOS',
-      qty: String(1 * count),
+      uom: unit === 'kW' ? 'kW' : 'NOS',
+      qty: '1',
       baseQty: 1,
       rate: '0',
       gstRate: setGst,
@@ -2006,6 +1984,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     setNewSetName('');
     setNewSetCount(1);
+    setNewSetUnit('Sets');
     setNewSetPrice('');
     setNewSetGstRate('18%');
     setShowCreateSetModal(false);
@@ -2036,6 +2015,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId,
         presetName,
         setCount: multiplier,
+        unit: targetPreset.unit || 'Sets',
         kitPrice: defaultPrice,
         gstRate: initialGstRate,
         hsn: presetHsn
@@ -2052,7 +2032,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+        qty: String(baseQ),
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || presetHsn,
@@ -2095,7 +2075,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         subPresetId,
         subPresetName,
         baseQty: baseQ,
-        qty: String(Math.round(baseQ * multiplier)),
+        qty: String(baseQ),
         rate: '0',
         gstRate: it.gstRate || parentGroup.gstRate || '18%',
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || parentGroup.hsn,
@@ -2446,10 +2426,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         ? piList[existingMatchIdx]
         : (isEditing && editIdx !== null ? piList[editIdx] : null);
 
-      const sanitizedItems = (piItems || []).map(it => ({
-        ...it,
-        hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it)).trim()
-      }));
+      const sanitizedItems = (piItems || []).map(it => {
+        const isPreset = Boolean(it.isPresetItem || it.presetGroupId);
+        return {
+          ...it,
+          isPresetItem: isPreset,
+          rate: isPreset ? '0' : String(it.rate || '0'),
+          taxable: isPreset ? 0 : ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)),
+          hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it)).trim()
+        };
+      });
 
       const newPI = {
         id: cleanPiNo,
@@ -2555,9 +2541,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           body: JSON.stringify(sanitizedPayload)
         });
 
-        const data = await response.json();
+        const respText = await response.text();
+        let data = null;
+        try {
+          data = respText ? JSON.parse(respText) : null;
+        } catch (_) {
+          data = null;
+        }
+
         if (!response.ok || !data || data.success === false) {
-          throw new Error(data?.error || `Server returned error status ${response.status}`);
+          throw new Error(data?.error || `Server communication error (HTTP ${response.status}). Please check backend status.`);
         }
 
         const serverAssignedPiNo = data?.pi?.piNo || data?.estimate?.piNo;
@@ -4799,7 +4792,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       }}
                     >
                       <Layers size={13} style={{ color: '#0E7490' }} />
-                      {grp.presetName} ({grp.setCount} Set{grp.setCount > 1 ? 's' : ''})
+                      {grp.presetName} ({grp.setCount} {grp.unit || (grp.setCount > 1 ? 'Sets' : 'Set')})
                       <button
                         type="button"
                         onClick={() => handleAddPresetItem(grp.groupId)}
@@ -4864,13 +4857,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 {/* Items Table */}
               <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                <table style={{ width: '100%', minWidth: hasAnyPreset ? '1380px' : '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '12px 4px', width: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
+                      <th style={{ padding: '12px 4px', width: '38px', minWidth: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
                         <GripVertical size={14} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
                       </th>
-                      <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
+                      <th style={{ padding: '12px 8px', width: '42px', minWidth: '42px', textAlign: 'center' }}>
                         <input id="performa-invoice-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           checked={piItems.length > 0 && selectedItemIndexes.length === piItems.length}
@@ -4884,20 +4877,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                          />
                       </th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '28%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>HSN / SAC</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>UOM</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '7%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'center' }}>GST Rate</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
+                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>UOM</th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
                       {hasAnyPreset && (
-                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '130px', minWidth: '130px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
                           Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                         </th>
                       )}
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'right' }}>Taxable (₹)</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Total (₹)</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px', textAlign: 'right' }}>Taxable (₹)</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'right' }}>Total (₹)</th>
+                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '48px', minWidth: '48px', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5302,7 +5295,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   )}
                                 </div>
                               </td>
-                              <td style={{ padding: '12px 6px' }}>
+                              <td style={{ padding: '12px 6px', textAlign: 'center' }}>
                                 <input id={`performa-invoice-hsn-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hsn_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HSN / SAC"
                                   type="text"
                                   readOnly
@@ -5311,6 +5304,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   value={item.hsn !== undefined && item.hsn !== '' ? item.hsn : (item.name ? getHsnCode(item) : '')}
                                   style={{
                                     width: '100%',
+                                    minWidth: '100px',
                                     height: '38px',
                                     borderRadius: '8px',
                                     border: '1px solid #E2E8F0',
@@ -5327,21 +5321,22 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   title="HSN / SAC Code (Auto-populated from master catalog; read-only)"
                                 />
                               </td>
-                              <td style={{ padding: '12px 10px' }}>
+                              <td style={{ padding: '12px 4px', textAlign: 'center', width: '105px', minWidth: '105px', whiteSpace: 'nowrap' }}>
                                 <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
-                                  value={['MTR', 'PCS', 'NOS'].includes(item.uom) ? item.uom : 'NOS'}
+                                  value={['NOS', 'SET', 'KW', 'KG', 'MTR', 'PCS', 'BOX', 'PKT', 'PAIR'].includes(item.uom) ? item.uom : 'NOS'}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                   }}
                                   style={{
                                     width: '100%',
+                                    minWidth: '95px',
                                     height: '38px',
                                     borderRadius: '8px',
                                     border: '1px solid #E2E8F0',
-                                    padding: '0 6px',
+                                    padding: '0 6px 0 10px',
                                     fontSize: '12px',
-                                    fontWeight: '600',
+                                    fontWeight: '700',
                                     color: '#0F172A',
                                     backgroundColor: '#FFFFFF',
                                     outline: 'none',
@@ -5350,12 +5345,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     textAlign: 'center'
                                   }}
                                 >
+                                  <option value="NOS">NOS</option>
+                                  <option value="SET">SET</option>
+                                  <option value="KW">KW</option>
+                                  <option value="KG">KG</option>
                                   <option value="MTR">MTR</option>
                                   <option value="PCS">PCS</option>
-                                  <option value="NOS">NOS</option>
+                                  <option value="BOX">BOX</option>
+                                  <option value="PKT">PKT</option>
+                                  <option value="PAIR">PAIR</option>
                                 </select>
                               </td>
-                              <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '12px 6px', verticalAlign: 'middle' }}>
                                 <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                   <input id={`performa-invoice-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                                     type="number"
@@ -5374,7 +5375,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         };
                                       }));
                                     }}
-                                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
+                                    style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF' }}
                                   />
                                 </div>
                               </td>
@@ -5475,14 +5476,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             </span>
                                           )}
 
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ fontSize: '10.5px', color: theme.primary, fontWeight: '700' }}>
                                               {groupCount} items ×
                                             </span>
                                             <input id="performa-invoice-set-count" name="setCount" aria-label="SetCount"
                                               type="number"
                                               min="0"
-                                              max="999"
+                                              step={(currentGroup?.unit || 'Sets') === 'kW' ? 'any' : '1'}
+                                              max="99999"
                                               value={currentGroup?.setCount !== undefined && currentGroup?.setCount !== null ? currentGroup.setCount : ''}
                                               onFocus={(e) => e.target.select()}
                                               onChange={(e) => {
@@ -5496,7 +5498,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                   }
                                                   return;
                                                 }
-                                                const parsed = parseInt(rawVal);
+                                                const parsed = parseFloat(rawVal);
                                                 const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
                                                 if (groupId) {
                                                   setPresetGroups(prev => ({
@@ -5504,26 +5506,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                     [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                   }));
                                                 }
-                                                const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
-                                                const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                                setPiItems(prev => prev.map(mat => {
-                                                  if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                    return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                                  }
-                                                  return mat;
-                                                }));
                                               }}
                                               style={{
-                                                width: '42px', height: '26px', borderRadius: '6px',
-                                                border: `1.5px solid ${theme.border}`, fontSize: '13px',
+                                                width: '50px', height: '26px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, fontSize: '12px',
                                                 fontWeight: '800', color: theme.primary, textAlign: 'center',
                                                 padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box'
                                               }}
-                                              title="Sets multiplier for this preset"
+                                              title={(currentGroup?.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this preset"}
                                             />
-                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '600' }}>
-                                              set{(parseInt(currentGroup?.setCount) || 1) !== 1 ? 's' : ''}
-                                            </span>
+                                            <select
+                                              value={currentGroup?.unit || 'Sets'}
+                                              onChange={(e) => {
+                                                const newUnit = e.target.value;
+                                                if (groupId) {
+                                                  setPresetGroups(prev => ({
+                                                    ...prev,
+                                                    [groupId]: { ...(prev[groupId] || currentGroup), unit: newUnit }
+                                                  }));
+                                                }
+                                              }}
+                                              style={{
+                                                height: '26px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, padding: '0 2px',
+                                                fontSize: '11px', fontWeight: '800',
+                                                color: theme.primary, backgroundColor: '#FFFFFF',
+                                                outline: 'none', cursor: 'pointer'
+                                              }}
+                                              title="Choose unit: Sets or kW"
+                                            >
+                                              <option value="Sets">Sets</option>
+                                              <option value="kW">kW</option>
+                                            </select>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                                             <span style={{ fontSize: '10px', color: theme.primary, fontWeight: '700' }}>GST:</span>
@@ -6005,36 +6019,65 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
         const isSame = selectedPi.sameAsBilling || (!dStreet && !dCity);
         const piItemsList = Array.isArray(selectedPi.items) ? selectedPi.items : [];
-        const presetGroupsMap = selectedPi.presetGroups || {};
-        const hasPresets = Object.keys(presetGroupsMap).length > 0 || piItemsList.some(it => it.isPresetItem);
+        const presetGroupsMap = (selectedPi.presetGroups && typeof selectedPi.presetGroups === 'object') ? selectedPi.presetGroups : {};
+        const hasPresets = Object.keys(presetGroupsMap).length > 0 || piItemsList.some(it => it.isPresetItem || it.presetGroupId);
 
-        const subtotalVal = Number(selectedPi.unitValue) || piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
-        const grandTotalVal = parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || (subtotalVal * 1.18);
-        const totalGstVal = Math.max(0, grandTotalVal - subtotalVal);
+        // Accurate Subtotal Calculation (Preset Groups + Custom Standalone Items)
+        let presetKitsSubtotal = 0;
+        Object.values(presetGroupsMap).forEach(grp => {
+          if (!grp) return;
+          const uPrice = parseFloat(grp.kitPrice) || 0;
+          const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 0;
+          presetKitsSubtotal += (uPrice * sCount);
+        });
+        if (presetKitsSubtotal === 0 && selectedPi.kitSubtotal) {
+          presetKitsSubtotal = parseFloat(selectedPi.kitSubtotal) || 0;
+        }
+
+        const customItemsSubtotal = piItemsList.reduce((acc, it) => {
+          if (it.isPresetItem || it.presetGroupId) return acc;
+          const q = parseFloat(it.qty) || 0;
+          const r = parseFloat(it.rate) || 0;
+          return acc + (q * r);
+        }, 0);
+
+        const calculatedSubtotal = presetKitsSubtotal + customItemsSubtotal;
+        const subtotalVal = (selectedPi.unitValue !== undefined && selectedPi.unitValue !== null && !isNaN(parseFloat(selectedPi.unitValue)) && parseFloat(selectedPi.unitValue) > 0)
+          ? parseFloat(selectedPi.unitValue)
+          : ((selectedPi.subtotal !== undefined && selectedPi.subtotal !== null && !isNaN(parseFloat(selectedPi.subtotal)) && parseFloat(selectedPi.subtotal) > 0)
+            ? parseFloat(selectedPi.subtotal)
+            : (calculatedSubtotal > 0 ? calculatedSubtotal : (piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0))));
+
+        const rawGrandTotal = (selectedPi.grandTotal !== undefined && selectedPi.grandTotal !== null && !isNaN(parseFloat(selectedPi.grandTotal)) && parseFloat(selectedPi.grandTotal) > 0)
+          ? parseFloat(selectedPi.grandTotal)
+          : (parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || 0);
+
+        const grandTotalVal = rawGrandTotal > 0 ? rawGrandTotal : (subtotalVal * 1.18);
+        const authoritativeTax = (selectedPi.taxTotal !== undefined && selectedPi.taxTotal !== null && !isNaN(parseFloat(selectedPi.taxTotal)))
+          ? parseFloat(selectedPi.taxTotal)
+          : Math.max(0, grandTotalVal - subtotalVal);
+        const totalGstVal = authoritativeTax;
+
         const isDraft = (selectedPi.status === 'Draft' || selectedPi.statusType === 'draft');
         const matchedBoms = getConvertedBomsForPi(selectedPi);
         const hasSavedBom = matchedBoms.length > 0;
         const isConverted = !isDraft && hasSavedBom;
 
-        const modalGstTiersMap = {};
-        (piItemsList || []).forEach(it => {
-          const q = parseFloat(it.qty) || 1;
-          const r = parseFloat(it.rate) || 0;
-          const taxable = it.taxable !== undefined ? parseFloat(it.taxable) : (q * r);
-          const rawRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18';
-          const cleaned = String(rawRate).replace('%', '').trim();
-          const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
-          const amt = taxable * (rate / 100);
-          if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
-          modalGstTiersMap[rate].taxable += taxable;
-          modalGstTiersMap[rate].gstAmt += amt;
-        });
+        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
+        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
+        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
 
-        if (selectedPi.presetGroups) {
-          Object.values(selectedPi.presetGroups).forEach(grp => {
+        // Group GST by Rate Tier with Strict Conservation
+        const modalGstTiersMap = {};
+
+        // 1. Preset Kits (Kit Lump-Sum Prices)
+        if (Object.keys(presetGroupsMap).length > 0) {
+          Object.values(presetGroupsMap).forEach(grp => {
+            if (!grp) return;
             const unitPrice = parseFloat(grp.kitPrice) || 0;
-            const multiplier = parseInt(grp.setCount) || 1;
+            const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
             const groupTotal = unitPrice * multiplier;
+            if (groupTotal <= 0) return;
             const rawRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18';
             const cleaned = String(rawRate).replace('%', '').trim();
             const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
@@ -6045,13 +6088,44 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           });
         }
 
-        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
-        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
-        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
+        // 2. Custom Items ONLY (strictly exclude preset component items)
+        piItemsList.forEach(it => {
+          if (it.isPresetItem || it.presetGroupId) return; // Component of preset package - cost is inside presetGroups
+          const q = parseFloat(it.qty) || 0;
+          const r = parseFloat(it.rate) || 0;
+          if (r <= 0) return;
+          const taxable = q * r;
+          const rawRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18';
+          const cleaned = String(rawRate).replace('%', '').trim();
+          const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
+          const amt = taxable * (rate / 100);
+          if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
+          modalGstTiersMap[rate].taxable += taxable;
+          modalGstTiersMap[rate].gstAmt += amt;
+        });
 
-        const modalGstTiers = Object.values(modalGstTiersMap)
+        // 3. Fallback tier if empty but subtotal and tax exist
+        if (Object.keys(modalGstTiersMap).length === 0 && subtotalVal > 0) {
+          modalGstTiersMap[18] = { rate: 18, taxable: subtotalVal, gstAmt: totalGstVal };
+        }
+
+        // 4. Strict Conservation Reconciliation:
+        // Force the sum of all tax tiers to exactly match totalGstVal
+        // Guarantees: subtotalVal + sum(tier.gstAmt) === grandTotalVal (Zero Price Mismatch)
+        let modalGstTiers = Object.values(modalGstTiersMap)
           .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
           .sort((a, b) => a.rate - b.rate);
+
+        const sumCalculatedGst = modalGstTiers.reduce((s, t) => s + t.gstAmt, 0);
+        if (modalGstTiers.length === 1 && totalGstVal > 0) {
+          modalGstTiers[0].gstAmt = totalGstVal;
+        } else if (modalGstTiers.length > 1 && totalGstVal > 0 && Math.abs(sumCalculatedGst - totalGstVal) > 0.05) {
+          const scale = totalGstVal / (sumCalculatedGst || 1);
+          modalGstTiers = modalGstTiers.map(t => ({
+            ...t,
+            gstAmt: Math.round(t.gstAmt * scale * 100) / 100
+          }));
+        }
 
         return (
           <div
@@ -6441,18 +6515,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                       {Object.values(presetGroupsMap).map((grp, gIdx) => {
                         const uPrice = parseFloat(grp.kitPrice) || 0;
-                        const sCount = parseInt(grp.setCount) || 1;
+                        const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 0;
                         const gTotal = uPrice * sCount;
+                        const unitName = grp.unit || 'Sets';
+                        const isKw = unitName === 'kW';
                         return (
                           <div key={gIdx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', borderRadius: '10px', padding: '12px' }}>
                             <div style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>{grp.presetName}</div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '6px' }}>
-                              <span>Total Quantity: <strong>{sCount} Set{sCount > 1 ? 's' : ''}</strong></span>
+                              <span>{isKw ? 'Total Capacity' : 'Total Quantity'}: <strong>{sCount} {isKw ? 'kW' : `Set${sCount !== 1 ? 's' : ''}`}</strong></span>
                               <span>GST: <strong>{grp.gstRate || '18%'}</strong></span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '4px' }}>
-                              <span>Kit Rate: <strong>₹{uPrice.toLocaleString('en-IN')}</strong></span>
-                              <span>Total: <strong style={{ color: '#15803D' }}>₹{gTotal.toLocaleString('en-IN')}</strong></span>
+                              <span>{isKw ? 'Rate / kW' : 'Kit Rate'}: <strong>₹{uPrice.toLocaleString('en-IN')}</strong></span>
+                              <span>Total: <strong style={{ color: '#15803D' }}>₹{Math.round(gTotal).toLocaleString('en-IN')}</strong></span>
                             </div>
                           </div>
                         );
@@ -6563,11 +6639,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           color: theme.tagText,
                                           border: `1px solid ${theme.border}`
                                         }}>
-                                          Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                          {currentGroup?.unit === 'kW' ? `Total Capacity: ${currentGroup?.setCount || 1} kW (${groupCount} components)` : `Total Quantity: ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) !== 1 ? 's' : ''} (${groupCount} components)`}
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong>{(parseInt(currentGroup?.setCount) || 1) > 1 ? ` (${currentGroup?.setCount || 1} Sets × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
+                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseFloat(currentGroup?.setCount || 1) || 0)).toLocaleString('en-IN')}</strong>{(parseFloat(currentGroup?.setCount || 1) || 0) !== 1 ? ` (${currentGroup?.setCount || 1} ${currentGroup?.unit || 'Sets'} × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
                                       </div>
                                     </div>
                                   </td>
@@ -6733,10 +6809,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <span>Taxable Product Value:</span>
                       <strong style={{ color: '#0F172A' }}>₹ {subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </div>
-                    {selectedPi.kitSubtotal > 0 && (
+                    {(presetKitsSubtotal > 0 || selectedPi.kitSubtotal > 0) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
                         <span>Preset Kits Subtotal:</span>
-                        <strong style={{ color: '#0F172A' }}>₹ {Number(selectedPi.kitSubtotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        <strong style={{ color: '#0F172A' }}>₹ {(presetKitsSubtotal > 0 ? presetKitsSubtotal : Number(selectedPi.kitSubtotal)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                       </div>
                     )}
                     {modalGstTiers.length > 0 ? (
@@ -6772,7 +6848,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #0E7490', marginTop: '4px' }}>
                       <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>Total Invoice Amount:</span>
                       <strong style={{ fontSize: '18px', fontWeight: '900', color: '#0E7490' }}>
-                        {selectedPi.amount ? (selectedPi.amount.startsWith('₹') ? selectedPi.amount : `₹ ${selectedPi.amount}`) : `₹ ${grandTotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        ₹ {grandTotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </strong>
                     </div>
                   </div>
@@ -7652,17 +7728,62 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 />
               </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Pricing / Capacity Unit
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('Sets')}
+                    style={{
+                      flex: 1, height: '36px', borderRadius: '8px',
+                      border: newSetUnit === 'Sets' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1',
+                      backgroundColor: newSetUnit === 'Sets' ? '#F5F3FF' : '#FFFFFF',
+                      color: newSetUnit === 'Sets' ? '#7C3AED' : '#475569',
+                      fontWeight: '800', fontSize: '12.5px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    <span>Sets (Set-based)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('kW')}
+                    style={{
+                      flex: 1, height: '36px', borderRadius: '8px',
+                      border: newSetUnit === 'kW' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1',
+                      backgroundColor: newSetUnit === 'kW' ? '#F5F3FF' : '#FFFFFF',
+                      color: newSetUnit === 'kW' ? '#7C3AED' : '#475569',
+                      fontWeight: '800', fontSize: '12.5px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    <span>kW (Kilowatt Capacity)</span>
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Number of Sets
+                    {newSetUnit === 'kW' ? 'Capacity (kW)' : 'Number of Sets'}
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    max="999"
+                    min={newSetUnit === 'kW' ? '0.01' : '1'}
+                    step={newSetUnit === 'kW' ? 'any' : '1'}
+                    max="99999"
                     value={newSetCount}
-                    onChange={(e) => setNewSetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setNewSetCount('');
+                        return;
+                      }
+                      setNewSetCount(newSetUnit === 'kW' ? (parseFloat(val) || '') : (parseInt(val) || ''));
+                    }}
+                    placeholder={newSetUnit === 'kW' ? 'e.g. 50 or 10.5' : '1'}
                     style={{
                       width: '100%', height: '40px', borderRadius: '8px',
                       border: '1.5px solid #CBD5E1', padding: '0 12px',
@@ -7696,7 +7817,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Kit / Set Lump-Sum Price (₹) <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
+                  {newSetUnit === 'kW' ? 'Rate per kW (₹)' : 'Kit / Set Lump-Sum Price (₹)'} <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
                 </label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: '#64748B' }}>₹</span>
@@ -7706,7 +7827,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     step="any"
                     value={newSetPrice}
                     onChange={(e) => setNewSetPrice(e.target.value)}
-                    placeholder="Enter total taxable price for 1 set"
+                    placeholder={newSetUnit === 'kW' ? 'Enter rate per 1 kW' : 'Enter total taxable price for 1 set'}
                     style={{
                       width: '100%', height: '40px', borderRadius: '8px',
                       border: '1.5px solid #CBD5E1', padding: '0 12px 0 28px',

@@ -208,22 +208,6 @@ export const initRealtimeSync = () => {
             window.dispatchEvent(new CustomEvent('controlroom_whatsapp_chats_updated', { detail: payload }));
           }
 
-          // 10. Real-time Workflow Notifications (Instant push across different logins / machines)
-          else if (type === 'workflow_notification' || (type === 'store_updated' && payload?.key === 'notifications_store')) {
-            const notif = payload?.notification || (Array.isArray(payload?.storeData) ? payload.storeData[0] : null);
-            if (notif && notif.id !== 'NOTIF-001' && !String(notif.title || '').includes('System Central Inventory Initialized')) {
-              try {
-                const existing = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
-                if (!existing.some(e => e.id === notif.id)) {
-                  localStorage.setItem('vrm_live_notifications', JSON.stringify([notif, ...existing].slice(0, 50)));
-                }
-              } catch (_) {}
-              window.dispatchEvent(new CustomEvent('vrm_workflow_toast', { detail: { ...notif, fromBroadcast: true } }));
-              window.dispatchEvent(new Event('vrm_notifications_updated'));
-            }
-            // DO NOT call emitStorageUpdate() on notifications to prevent notification fetch storms
-          }
-
           // Global broadcast for any custom listeners
           window.dispatchEvent(new CustomEvent('controlroom_realtime_event', { detail: data }));
         } catch (parseErr) {

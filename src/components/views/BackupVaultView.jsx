@@ -706,21 +706,25 @@ export default function BackupVaultView({ userRole }) {
           bottom: '24px',
           left: '50%',
           transform: 'translateX(-50%)',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
           borderRadius: '50px',
-          backgroundColor: '#0F172A',
-          color: '#FFFFFF',
-          padding: '10px 24px',
-          boxShadow: '0 12px 30px rgba(0,0,0,0.3)',
+          boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+          padding: '8px 16px',
           display: 'flex',
           flexDirection: 'row',
           flexWrap: 'nowrap',
-          whiteSpace: 'nowrap',
           alignItems: 'center',
-          gap: '16px',
-          zIndex: 99999
+          whiteSpace: 'nowrap',
+          gap: '8px',
+          zIndex: 10000,
+          width: 'max-content',
+          maxWidth: 'calc(100vw - 32px)',
+          overflowX: 'auto',
+          fontFamily: "'Plus Jakarta Sans', sans-serif"
         }}>
-          <span style={{ fontSize: '13px', fontWeight: '800', color: '#38BDF8' }}>
-            {selectedRowFilenames.length} Selected
+          <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px', paddingRight: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedRowFilenames.length}</strong> Selected
           </span>
 
           <button
@@ -729,20 +733,26 @@ export default function BackupVaultView({ userRole }) {
               setSelectedRowFilenames([]);
             }}
             style={{
-              backgroundColor: '#1E293B',
-              border: '1px solid #334155',
-              color: '#F8FAFC',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              color: '#0E7490',
+              borderRadius: '10px',
               padding: '6px 14px',
-              borderRadius: '20px',
               fontSize: '12px',
               fontWeight: '700',
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              transition: 'all 0.15s ease'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ECFEFF'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
           >
-            <Download size={13} /> Download Selected
+            <Download size={14} style={{ color: '#0E7490' }} /> Download Selected
           </button>
 
           <button
@@ -752,13 +762,16 @@ export default function BackupVaultView({ userRole }) {
               border: 'none',
               color: '#94A3B8',
               cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '800',
-              padding: '0 6px'
+              padding: '4px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '6px',
+              flexShrink: 0
             }}
             title="Deselect all"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
       )}

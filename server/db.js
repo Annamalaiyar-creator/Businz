@@ -602,27 +602,6 @@ export async function initPostgresDatabase() {
         CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
           ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);
 
-        CREATE TABLE IF NOT EXISTS public.lead_notifications (
-          id TEXT PRIMARY KEY,
-          lead_id TEXT REFERENCES public.leads(id) ON DELETE SET NULL,
-          incident_id TEXT REFERENCES public.lead_inactivity_incidents(id) ON DELETE SET NULL,
-          type TEXT NOT NULL,
-          title TEXT NOT NULL,
-          message TEXT NOT NULL,
-          metadata JSONB,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS public.lead_notification_recipients (
-          id TEXT PRIMARY KEY,
-          notification_id TEXT NOT NULL REFERENCES public.lead_notifications(id) ON DELETE CASCADE,
-          recipient_user_id TEXT NOT NULL,
-          recipient_role TEXT,
-          read BOOLEAN DEFAULT false,
-          read_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
         DO $$
         BEGIN
           IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quotations') THEN

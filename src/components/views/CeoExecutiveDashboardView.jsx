@@ -15,7 +15,24 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigateTab }) {
   // Navigation & filtering states
-  const [activeSubTab, setActiveSubTab] = useState('overview'); // 'overview' | 'personnel' | 'sales' | 'procurement' | 'accounts' | 'production' | 'dispatch' | 'billing' | 'engineering'
+  const [activeSubTab, setActiveSubTab] = useState(() => {
+    return localStorage.getItem('controlroom_ceo_sub_tab') || 'overview';
+  });
+
+  useEffect(() => {
+    const handleSubTabChange = (e) => {
+      if (e?.detail?.subTab) {
+        setActiveSubTab(e.detail.subTab);
+      }
+    };
+    window.addEventListener('controlroom_ceo_subtab_change', handleSubTabChange);
+    const initial = localStorage.getItem('controlroom_ceo_sub_tab');
+    if (initial) {
+      setActiveSubTab(initial);
+    }
+    return () => window.removeEventListener('controlroom_ceo_subtab_change', handleSubTabChange);
+  }, []);
+
   const [selectedPeriod, setSelectedPeriod] = useState('MTD');
   const [personDeptFilter, setPersonDeptFilter] = useState('all');
   const [personSearchQuery, setPersonSearchQuery] = useState('');

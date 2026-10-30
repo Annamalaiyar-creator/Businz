@@ -198,69 +198,72 @@ export default function ProductionTableView({
       </div>
 
       {/* 4. MAIN DATA TABLE (EXACT MATCH FOR PI & PO DESIGN) */}
-      <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', width: '100%', boxSizing: 'border-box', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }}>
-        <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ color: '#334155', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: '700', height: '48px' }}>
-                <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input id="production-table-select-row" name="selectRow" aria-label="SelectRow"
-                    type="checkbox"
-                    style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    checked={filteredRows.length > 0 && selectedRows.length === filteredRows.length}
-                    onChange={(e) => handleSelectAllGeneric(e, filteredRows, 'code')}
-                   />
-                </th>
-                {pageConfig.headers.map((h, i) => {
-                  const isRight = h.includes('Amount') || h.includes('Cost') || h.includes('Value') || h.includes('Price') || h.includes('Spend');
-                  const isCenter = h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status' || h === 'Action';
-                  let colWidth = 'auto';
-                  let minColWidth = '140px';
-                  if (i === 0) { colWidth = '160px'; minColWidth = '150px'; }
-                  else if (i === 1) { minColWidth = '200px'; }
-                  else if (isCenter) { colWidth = '160px'; minColWidth = '150px'; }
-                  else if (isRight) { colWidth = '150px'; minColWidth = '140px'; }
-                  else if (h.includes('Date') || h.includes('Time')) { colWidth = '145px'; minColWidth = '140px'; }
-                  else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '140px'; }
-
-                  return (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '12px 16px',
-                        textAlign: isRight ? 'right' : (isCenter ? 'center' : 'left'),
-                        width: colWidth,
-                        minWidth: minColWidth,
-                        boxSizing: 'border-box',
-                        whiteSpace: 'nowrap',
-                        color: '#334155',
-                        fontWeight: '700',
-                        fontSize: '12px',
-                        letterSpacing: '0.01em'
-                      }}
-                    >
-                      {h}
+      {(() => {
+        const visibleHeaders = (pageConfig.headers || []).filter(h => h !== 'Action' && h !== 'Actions');
+        return (
+          <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', width: '100%', boxSizing: 'border-box', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }}>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ color: '#334155', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: '700', height: '48px' }}>
+                    <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
+                      <input id="production-table-select-row" name="selectRow" aria-label="SelectRow"
+                        type="checkbox"
+                        style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
+                        checked={filteredRows.length > 0 && selectedRows.length === filteredRows.length}
+                        onChange={(e) => handleSelectAllGeneric(e, filteredRows, 'code')}
+                       />
                     </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
-                const indexOfLastRow = currentPage * rowsPerPage;
-                const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-                const currentRows = filteredRows.slice(indexOfFirstRow, indexOfLastRow);
+                    {visibleHeaders.map((h, i) => {
+                      const isRight = h.includes('Amount') || h.includes('Cost') || h.includes('Value') || h.includes('Price') || h.includes('Spend');
+                      const isCenter = h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status';
+                      let colWidth = 'auto';
+                      let minColWidth = '140px';
+                      if (i === 0) { colWidth = '160px'; minColWidth = '150px'; }
+                      else if (i === 1) { minColWidth = '200px'; }
+                      else if (isCenter) { colWidth = '160px'; minColWidth = '150px'; }
+                      else if (isRight) { colWidth = '150px'; minColWidth = '140px'; }
+                      else if (h.includes('Date') || h.includes('Time')) { colWidth = '145px'; minColWidth = '140px'; }
+                      else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '140px'; }
 
-                if (currentRows.length === 0) {
-                  return (
-                    <tr>
-                      <td colSpan={pageConfig.headers.length + 1} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                        No records found matching your filters.
-                      </td>
-                    </tr>
-                  );
-                }
+                      return (
+                        <th
+                          key={h}
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: isRight ? 'right' : (isCenter ? 'center' : 'left'),
+                            width: colWidth,
+                            minWidth: minColWidth,
+                            boxSizing: 'border-box',
+                            whiteSpace: 'nowrap',
+                            color: '#334155',
+                            fontWeight: '700',
+                            fontSize: '12px',
+                            letterSpacing: '0.01em'
+                          }}
+                        >
+                          {h}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+                    const indexOfLastRow = currentPage * rowsPerPage;
+                    const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+                    const currentRows = filteredRows.slice(indexOfFirstRow, indexOfLastRow);
+
+                    if (currentRows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={visibleHeaders.length + 1} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                            No records found matching your filters.
+                          </td>
+                        </tr>
+                      );
+                    }
 
                 return currentRows.map((row, idx) => {
                   const isChecked = selectedRows.includes(row.code);
@@ -554,6 +557,8 @@ export default function ProductionTableView({
           );
         })()}
       </div>
+    );
+  })()}
 
       {/* 5. FLOATING BOTTOM ACTION BAR (RULE 6: FIXED BOTTOM CENTER, SINGLE LINE, VISIBLE BUTTONS) */}
       {selectedRows.length > 0 && (

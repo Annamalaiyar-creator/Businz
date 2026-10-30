@@ -1642,7 +1642,7 @@ export default function ProductionViewsEngine(props) {
             tabs: [
               { id: 'All', label: 'All Entries', count: (bomStore || []).length, bg: '#e2e8f0', fg: '#475569' }
             ],
-            headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status', 'Action'],
+            headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status'],
             rows: (bomStore || []).map(b => {
               let dispStatus = b.status || 'ACTIVE';
               if (activeTab === 'Dispatch Orders') {

@@ -1,1 +1,1 @@
-[{"code":"TEST-AUDIT-RM","name":"Audit Material","stock":50}]
+[{"code":"TEST-AUDIT-RM","name":"Audit Material","stock":50,"openingStock":50,"physicalStock":50,"availableStock":50,"reserved":0,"blockedForBom":0,"status":"Low Stock"}]

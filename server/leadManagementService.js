@@ -155,27 +155,6 @@ export async function ensureLeadsSchema() {
 
       CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
         ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);
-
-      CREATE TABLE IF NOT EXISTS public.lead_notifications (
-        id TEXT PRIMARY KEY,
-        lead_id TEXT REFERENCES public.leads(id) ON DELETE SET NULL,
-        incident_id TEXT REFERENCES public.lead_inactivity_incidents(id) ON DELETE SET NULL,
-        type TEXT NOT NULL,
-        title TEXT NOT NULL,
-        message TEXT NOT NULL,
-        metadata JSONB,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS public.lead_notification_recipients (
-        id TEXT PRIMARY KEY,
-        notification_id TEXT NOT NULL REFERENCES public.lead_notifications(id) ON DELETE CASCADE,
-        recipient_user_id TEXT NOT NULL,
-        recipient_role TEXT,
-        read BOOLEAN DEFAULT false,
-        read_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
     `);
     schemaEnsured = true;
     console.log('✅ [PostgreSQL] Ensured public.leads columns and CRM tables exist.');
@@ -944,196 +923,36 @@ export function setRealtimeNotificationBroadcaster(fn) {
 }
 
 /**
- * Helper to broadcast lead notifications over SSE gateway
+ * Helper to broadcast lead notifications over SSE gateway (DECOMMISSIONED)
  */
-function broadcastLeadNotification({ notifId, leadId, incidentId, type, title, message, metadata, recipientList, specificRecipientId, specificRecipientRole }) {
-  if (typeof realtimeNotificationBroadcaster !== 'function') return;
-  try {
-    let targetRoles = [];
-    if (type === 'UNATTENDED_2H' || type === 'STATUS_UNCHANGED_2H' || type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
-      targetRoles = ['CEO', 'Managing Director', 'MD', 'Technical Administrator', 'Tech Support', 'Technical Support'];
-    } else {
-      targetRoles = [
-        ...new Set(recipientList.map(r => r.role).filter(Boolean)),
-        specificRecipientId,
-        specificRecipientRole
-      ].filter(Boolean);
-    }
-
-    const notifPayload = {
-      id: notifId,
-      title,
-      message,
-      targetTab: 'CRM Leads',
-      targetRoles,
-      role: specificRecipientRole || (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'Tech Support' : 'Sales Executive'),
-      type: type === 'ASSIGNMENT' ? 'success' : (type.includes('ESCALATION') || type.includes('UNATTENDED') || type.includes('STATUS_UNCHANGED') ? 'alert' : 'info'),
-      soundType: type === 'ASSIGNMENT' ? 'success' : (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'alert' : 'chime'),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      createdAt: new Date().toISOString(),
-      metadata: {
-        ...metadata,
-        leadId,
-        incidentId,
-        specificRecipientId,
-        specificRecipientRole,
-        type,
-        step: type
-      },
-      unread: true
-    };
-
-    realtimeNotificationBroadcaster('workflow_notification', {
-      notification: notifPayload
-    });
-    realtimeNotificationBroadcaster('crm_updated', {
-      type: 'lead_notification',
-      notificationId: notifId,
-      leadId
-    });
-  } catch (bcErr) {
-    console.warn('[Realtime Broadcaster Error]:', bcErr.message);
-  }
+function broadcastLeadNotification() {
+  // No-op: Notifications decommissioned
 }
 
 /**
- * Create Lead Notification with Individual Recipient Tracking (Sales, CEO & Tech Support)
- * Each recipient has their own independent 'read' status and receives sub-second push via SSE!
+ * Create Lead Notification (DECOMMISSIONED)
  */
-export async function createLeadNotification({ leadId = null, incidentId = null, type, title, message, metadata = {}, specificRecipientId = null, specificRecipientRole = null, client = null }) {
-  const notifId = `NOTIF-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-
-  let recipientList = [];
-
-  const executeNotificationWrites = async (activeClient) => {
-    // 1. Verify lead exists to prevent foreign key constraint violation
-    let validLeadId = null;
-    if (leadId) {
-      try {
-        const leadCheck = await activeClient.query('SELECT id FROM public.leads WHERE id = $1 LIMIT 1', [leadId]);
-        if (leadCheck.rows && leadCheck.rows.length > 0) {
-          validLeadId = leadId;
-        }
-      } catch (_) {}
-    }
-
-    // 2. Create main notification
-    await activeClient.query(`
-      INSERT INTO public.lead_notifications (id, lead_id, incident_id, type, title, message, metadata, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-    `, [notifId, validLeadId, incidentId, type, title, message, JSON.stringify(metadata)]);
-
-    // 2. Determine recipients
-    let recipients = [];
-    if (type === 'UNATTENDED_2H' || type === 'STATUS_UNCHANGED_2H' || type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
-      // STRICT REQUIREMENT: Status not changed within 2 hours -> Alert CEO and Tech Support
-      recipients.push({ id: 'CEO-001', role: 'CEO' });
-      recipients.push({ id: 'CEO-1000', role: 'CEO' });
-      recipients.push({ id: 'TA-VRM001', role: 'Technical Administrator' });
-      recipients.push({ id: 'TS-001', role: 'Tech Support' });
-      recipients.push({ id: 'TS-010', role: 'Tech Support' });
-      recipients.push({ id: 'TS-1000', role: 'Tech Support' });
-    } else if (specificRecipientId) {
-      recipients.push({ id: specificRecipientId, role: specificRecipientRole || 'Sales Executive' });
-      // Also notify Sales Head & Leadership of assignment
-      recipients.push({ id: 'SH-VRM001', role: 'Sales Head' });
-      recipients.push({ id: 'SH-1000', role: 'Sales Head' });
-      recipients.push({ id: 'CEO-001', role: 'CEO' });
-      recipients.push({ id: 'TA-VRM001', role: 'Technical Administrator' });
-    } else {
-      // Default: Notify Sales Team (Sales Head, Sales Executives) & Management of New Lead
-      recipients.push({ id: 'SH-VRM001', role: 'Sales Head' });
-      recipients.push({ id: 'SH-1000', role: 'Sales Head' });
-      recipients.push({ id: 'SE-ALL', role: 'Sales Executive' });
-      recipients.push({ id: 'CEO-001', role: 'CEO' });
-      recipients.push({ id: 'CEO-1000', role: 'CEO' });
-      recipients.push({ id: 'TA-VRM001', role: 'Technical Administrator' });
-      recipients.push({ id: 'TS-001', role: 'Tech Support' });
-      recipients.push({ id: 'TS-010', role: 'Tech Support' });
-      recipients.push({ id: 'TS-1000', role: 'Tech Support' });
-    }
-
-    recipientList = recipients;
-
-    // 3. Insert individual recipient records
-    for (const rec of recipients) {
-      const recId = `REC-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-      await activeClient.query(`
-        INSERT INTO public.lead_notification_recipients (id, notification_id, recipient_user_id, recipient_role, read, created_at)
-        VALUES ($1, $2, $3, $4, false, NOW())
-        ON CONFLICT (notification_id, recipient_user_id) DO NOTHING
-      `, [recId, notifId, rec.id, rec.role]);
-    }
+export async function createLeadNotification() {
+  // No-op: Notifications decommissioned
+  return {
+    success: true,
+    notificationId: null,
+    deferredBroadcast: () => {}
   };
-
-  const broadcastData = {
-    notifId,
-    leadId,
-    incidentId,
-    type,
-    title,
-    message,
-    metadata,
-    recipientList,
-    specificRecipientId,
-    specificRecipientRole
-  };
-
-  if (client) {
-    // Within outer transaction: perform writes on the caller's client, defer realtime broadcast
-    await executeNotificationWrites(client);
-    return {
-      success: true,
-      notificationId: notifId,
-      deferredBroadcast: () => broadcastLeadNotification(broadcastData)
-    };
-  } else {
-    // Standalone call: wrap in isolated transaction and broadcast only after successful commit
-    await withTransaction(executeNotificationWrites);
-    broadcastLeadNotification(broadcastData);
-    return { success: true, notificationId: notifId };
-  }
 }
 
 /**
- * Get notifications for a specific logged-in employee with their individual read status
+ * Get notifications for a specific logged-in employee (DECOMMISSIONED)
  */
-export async function getNotificationsForEmployee(employeeCode) {
-  const cleanCode = String(employeeCode || '').trim();
-  const res = await dbQuery(`
-    SELECT 
-      n.id,
-      n.lead_id,
-      n.incident_id,
-      n.type,
-      n.title,
-      n.message,
-      n.metadata,
-      n.created_at,
-      r.read,
-      r.read_at
-    FROM public.lead_notification_recipients r
-    JOIN public.lead_notifications n ON r.notification_id = n.id
-    WHERE r.recipient_user_id = $1
-    ORDER BY n.created_at DESC
-    LIMIT 100
-  `, [cleanCode]);
-
-  return res.rows;
+export async function getNotificationsForEmployee() {
+  return [];
 }
 
 /**
- * Mark a notification as read by a specific recipient
+ * Mark a notification as read by a specific recipient (DECOMMISSIONED)
  */
-export async function markNotificationRead(notificationId, employeeCode) {
-  const res = await dbQuery(`
-    UPDATE public.lead_notification_recipients
-    SET read = true, read_at = NOW()
-    WHERE notification_id = $1 AND recipient_user_id = $2
-    RETURNING *
-  `, [notificationId, employeeCode]);
-
-  return { success: res.rows.length > 0 };
+export async function markNotificationRead() {
+  return { success: true };
 }
 
 // Concurrency mutex, epoch fencing and job duration tracking for Inactivity Engine

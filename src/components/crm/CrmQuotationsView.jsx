@@ -573,14 +573,14 @@ export default function CrmQuotationsView({
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
 
     // 2. Individual items subtotal
     const itemsSub = (quoteItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       return acc + (q * r);
@@ -590,7 +590,7 @@ export default function CrmQuotationsView({
 
     // 3. GST: Custom item GSTs + Preset kits GST (dynamically from preset's selected gstRate)
     const itemsGst = (quoteItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       const rowTot = q * r;
@@ -603,24 +603,12 @@ export default function CrmQuotationsView({
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         const groupTotal = unitPrice * multiplier;
-
-        const groupItems = (quoteItems || []).filter(it => (it.presetGroupId || 'legacy_default') === grpId);
-        const totalQty = groupItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 1), 0);
-
-        if (totalQty > 0) {
-          groupItems.forEach(it => {
-            const itQty = parseFloat(it.qty) || 1;
-            const itemShare = groupTotal * (itQty / totalQty);
-            const itGstRate = parseFloat(String(it.gstRate || grp.gstRate || '18%').replace('%', '')) || 0;
-            kitGst += itemShare * (itGstRate / 100);
-          });
-        } else {
-          const gRateStr = grp?.gstRate || '18%';
-          const gPct = parseFloat(String(gRateStr).replace('%', '')) || 0;
-          kitGst += groupTotal * (gPct / 100);
-        }
+        if (groupTotal <= 0) return;
+        const gRateStr = grp?.gstRate || '18%';
+        const gPct = parseFloat(String(gRateStr).replace('%', '')) || 18;
+        kitGst += groupTotal * (gPct / 100);
       }
     });
 
@@ -670,6 +658,7 @@ export default function CrmQuotationsView({
         presetId,
         presetName,
         setCount: multiplier,
+        unit: targetPreset.unit || 'Sets',
         kitPrice: defaultPrice,
         gstRate: initialGstRate,
         isFixedKit
@@ -683,7 +672,7 @@ export default function CrmQuotationsView({
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+        qty: String(baseQ),
         rate: '0',
         gstRate: is5PctSolarProduct(it.name, it.category || it.specs) ? '5%' : (it.gstRate || initialGstRate),
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it),
@@ -1884,7 +1873,7 @@ export default function CrmQuotationsView({
                   }}
                 >
                   <Layers size={13} style={{ color: '#0E7490' }} />
-                  {grp.presetName} (Total Quantity: {grp.setCount || 1} Set{(grp.setCount || 1) > 1 ? 's' : ''})
+                  {grp.presetName} ({grp.unit === 'kW' ? `Total Capacity: ${grp.setCount || 1} kW` : `Total Quantity: ${grp.setCount || 1} Set${(grp.setCount || 1) > 1 ? 's' : ''}`})
                   <button
                     type="button"
                     onClick={() => handleRemovePresetGroup(grp.groupId)}
@@ -1922,13 +1911,13 @@ export default function CrmQuotationsView({
           {/* Clean Modern Items Table */}
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+              <table style={{ width: '100%', minWidth: quoteItems.some(it => it.isPresetItem) ? '1380px' : '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                    <th style={{ padding: '12px 4px', width: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
+                    <th style={{ padding: '12px 4px', width: '38px', minWidth: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
                       <GripVertical size={14} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
                     </th>
-                    <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
+                    <th style={{ padding: '12px 8px', width: '42px', minWidth: '42px', textAlign: 'center' }}>
                       <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={quoteItems.length > 0 && selectedItemIndexes.length === quoteItems.length}
@@ -1942,20 +1931,20 @@ export default function CrmQuotationsView({
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                        />
                     </th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '24%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 6px', fontWeight: '700', width: '10%', textAlign: 'center' }}>HSN / SAC</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%' }}>UOM</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'center' }}>GST Rate</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
                     {quoteItems.some(it => it.isPresetItem) && (
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '130px', minWidth: '130px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
                         Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                       </th>
                     )}
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Taxable (₹)</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Total (₹)</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px', textAlign: 'right' }}>Taxable (₹)</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'right' }}>Total (₹)</th>
+                    <th style={{ padding: '12px 6px', fontWeight: '700', width: '48px', minWidth: '48px', textAlign: 'center' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2156,6 +2145,7 @@ export default function CrmQuotationsView({
                                value={item.hsn !== undefined && item.hsn !== '' ? item.hsn : (item.name ? getHsnCode(item) : '')}
                                style={{
                                  width: '100%',
+                                 minWidth: '100px',
                                  height: '38px',
                                  borderRadius: '8px',
                                  border: '1px solid #E2E8F0',
@@ -2182,7 +2172,7 @@ export default function CrmQuotationsView({
                                  const val = e.target.value;
                                  setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                }}
-                               style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600', cursor: 'text' }}
+                               style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700', cursor: 'text' }}
                               />
                              <datalist id={`uom-list-${i}`}>
                                <option value="NOS" />
@@ -2205,7 +2195,7 @@ export default function CrmQuotationsView({
                                    const val = e.target.value;
                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                                  }}
-                                 style={{ width: '100%', height: '34px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white', cursor: 'text', fontWeight: '600' }}
+                                 style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white', cursor: 'text', fontWeight: '700' }}
                                 />
                              </div>
                            </td>
@@ -2319,7 +2309,7 @@ export default function CrmQuotationsView({
                                               }
                                               return;
                                             }
-                                            const parsed = parseInt(rawVal);
+                                            const parsed = parseFloat(rawVal);
                                             const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
                                             if (groupId) {
                                               setPresetGroups(prev => ({
@@ -2327,44 +2317,48 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                               }));
                                             }
-                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
-                                            const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                            setQuoteItems(prev => prev.map(mat => {
-                                              if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                              }
-                                              return mat;
-                                            }));
                                           }}
                                           onBlur={() => {
                                             const current = currentGroup.setCount;
-                                            const finalCount = (current === '' || isNaN(parseInt(current)) || parseInt(current) < 0) ? 1 : Math.max(0, parseInt(current));
+                                            const finalCount = (current === '' || isNaN(parseFloat(current)) || parseFloat(current) < 0) ? 1 : Math.max(0, parseFloat(current));
                                             if (groupId) {
                                               setPresetGroups(prev => ({
                                                 ...prev,
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                               }));
                                             }
-                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
-                                            const effectiveMultiplier = isFixedKit ? 1 : finalCount;
-                                            setQuoteItems(prev => prev.map(mat => {
-                                              if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * effectiveMultiplier)) };
-                                              }
-                                              return mat;
-                                            }));
                                           }}
                                           style={{
-                                            width: '42px', height: '26px', borderRadius: '6px',
-                                            border: '1.5px solid #818CF8', fontSize: '13px',
+                                            width: '50px', height: '26px', borderRadius: '6px',
+                                            border: '1.5px solid #818CF8', fontSize: '12px',
                                             fontWeight: '800', color: '#312E81', textAlign: 'center',
                                             padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box', cursor: 'text'
                                           }}
-                                          title="Sets multiplier for this preset"
+                                          title={(currentGroup.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this preset"}
                                          />
-                                        <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
-                                          set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
-                                        </span>
+                                        <select
+                                          value={currentGroup.unit || 'Sets'}
+                                          onChange={(e) => {
+                                            const newUnit = e.target.value;
+                                            if (groupId) {
+                                              setPresetGroups(prev => ({
+                                                ...prev,
+                                                [groupId]: { ...(prev[groupId] || currentGroup), unit: newUnit }
+                                              }));
+                                            }
+                                          }}
+                                          style={{
+                                            height: '26px', borderRadius: '6px',
+                                            border: '1.5px solid #818CF8', padding: '0 2px',
+                                            fontSize: '11px', fontWeight: '800',
+                                            color: '#312E81', backgroundColor: '#FFFFFF',
+                                            outline: 'none', cursor: 'pointer'
+                                          }}
+                                          title="Choose unit: Sets or kW"
+                                        >
+                                          <option value="Sets">Sets</option>
+                                          <option value="kW">kW</option>
+                                        </select>
                                       </div>
 
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
@@ -3794,12 +3788,14 @@ export default function CrmQuotationsView({
                       || (Array.isArray(rawPresetGroups) && rawPresetGroups.find(g => g.groupId === gid))
                       || null;
                     const name = it.presetName || (savedGrp && savedGrp.presetName) || 'Pre-Engineered MMS Kit Package';
-                    const setCount = (savedGrp && parseInt(savedGrp.setCount)) || 1;
+                    const unit = (savedGrp && savedGrp.unit) || 'Sets';
+                    const setCount = (savedGrp && parseFloat(savedGrp.setCount)) || 1;
                     const kitPrice = savedGrp && savedGrp.kitPrice !== undefined ? parseFloat(savedGrp.kitPrice) : (parseFloat(selectedQuote.kitSubtotal) || 0);
                     groupMeta[gid] = {
                       groupId: gid,
                       name,
                       setCount,
+                      unit,
                       kitPrice,
                       totalAmount: kitPrice * setCount,
                       itemsCount: 0,
@@ -3860,10 +3856,10 @@ export default function CrmQuotationsView({
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                   <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 6px', borderRadius: '4px' }}>
-                                    Total Quantity: {gInfo.setCount} Set{gInfo.setCount > 1 ? 's' : ''}
+                                    {gInfo.unit === 'kW' ? `Total Capacity: ${gInfo.setCount} kW` : `Total Quantity: ${gInfo.setCount} Set${gInfo.setCount !== 1 ? 's' : ''}`}
                                   </span>
                                   <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
-                                    ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}{gInfo.unit === 'kW' ? ' / kW' : ''}
                                   </span>
                                 </div>
                               </td>

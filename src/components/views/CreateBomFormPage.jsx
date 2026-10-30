@@ -2,7 +2,7 @@ import React from "react";
 import {
   Plus, Trash2, Eye, FileText, AlertCircle, AlertTriangle, X,
   CheckCircle, Clock, FileCheck, UploadCloud, Truck, Package,
-  ShoppingCart, Upload, Layers, Image, Bell, Save
+  ShoppingCart, Upload, Layers, Image, Bell, Save, Boxes
 } from "lucide-react";
 import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
@@ -17,6 +17,7 @@ import TypeableProductSelect from "../TypeableProductSelect";
 import { getNextSequence } from "../../utils/sequenceGenerator";
 import { isFixedQuantityPreset, VRM_HDG_PRESETS } from "../../vrmHdgProposalPresets";
 import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
+import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from "../PerformaInvoiceView";
 
 export default function CreateBomFormPage(props) {
   const {
@@ -184,10 +185,11 @@ export default function CreateBomFormPage(props) {
 
   const calculateBOMTotals = () => {
     const kitUnitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
-    const kitMultiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1;
+    const kitMultiplier = parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1;
     const kitSubtotal = selectedPreset ? (kitUnitPrice * kitMultiplier) : 0;
 
     const itemsSub = (bomMaterialsList || []).reduce((acc, item) => {
+      if (selectedPreset && (item.isPresetItem || item.presetGroupId)) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       return acc + (q * r);
@@ -197,6 +199,7 @@ export default function CreateBomFormPage(props) {
     const disc = 0;
 
     const itemsGst = (bomMaterialsList || []).reduce((acc, item) => {
+      if (selectedPreset && (item.isPresetItem || item.presetGroupId)) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;
@@ -898,14 +901,12 @@ export default function CreateBomFormPage(props) {
                 setSelectedBomItemIndexes([]);
 
                 if (targetPreset && targetPreset.items) {
-                  const isFixedKit = isFixedQuantityPreset(val, targetPreset.label || val);
-                  const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                   setBomMaterialsList(targetPreset.items.map(it => {
                     const baseQ = parseFloat(it.qty) || 1;
                     return {
                       ...it,
                       baseQty: baseQ,
-                      qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+                      qty: String(baseQ),
                       rate: '0',
                       isPresetItem: true
                     };
@@ -929,14 +930,12 @@ export default function CreateBomFormPage(props) {
                 onClick={() => {
                   const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
                   if (targetPreset && targetPreset.items) {
-                    const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset.label || selectedPreset);
-                    const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                     const additionalItems = targetPreset.items.map(it => {
                       const baseQ = parseFloat(it.qty) || 1;
                       return {
                         ...it,
                         baseQty: baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+                        qty: String(baseQ),
                         rate: '0',
                         isPresetItem: true
                       };
@@ -981,32 +980,6 @@ export default function CreateBomFormPage(props) {
                   const rawVal = e.target.value;
                   const newCount = rawVal === '' ? '' : Math.max(1, parseInt(rawVal) || 1);
                   setPresetSetCount(newCount);
-
-                  const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
-                  const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset?.label || selectedPreset);
-                  const multiplier = isFixedKit ? 1 : (parseInt(rawVal) || 1);
-                  if (targetPreset && targetPreset.items) {
-                    const baseItems = targetPreset.items;
-                    setBomMaterialsList(baseItems.map(it => {
-                      const baseQ = parseFloat(it.qty) || 1;
-                      return {
-                        ...it,
-                        baseQty: baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
-                        rate: '0',
-                        isPresetItem: true
-                      };
-                    }));
-                  } else if (bomMaterialsList.length > 0) {
-                    setBomMaterialsList(prev => prev.map(it => {
-                      const baseQ = parseFloat(it.baseQty || it.qty) || 1;
-                      return {
-                        ...it,
-                        baseQty: it.baseQty || baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier))
-                      };
-                    }));
-                  }
                 }}
                 style={{
                   width: '54px',
@@ -1116,10 +1089,10 @@ export default function CreateBomFormPage(props) {
         )}
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+          <table style={{ width: '100%', minWidth: '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
             <thead>
               <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
+                <th style={{ padding: '12px 8px', width: '42px', minWidth: '42px', textAlign: 'center' }}>
                   <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                     type="checkbox"
                     checked={bomMaterialsList.length > 0 && selectedBomItemIndexes.length === bomMaterialsList.length}
@@ -1133,52 +1106,181 @@ export default function CreateBomFormPage(props) {
                     style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
                    />
                 </th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '25%' }}>
+                <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '240px' }}>
                   Product / Item <span style={{ color: '#EF4444' }}>*</span>
                 </th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '18%' }}>Description</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>
+                <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '160px' }}>Description</th>
+                <th style={{ padding: '12px 8px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
+                <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>
                   Qty <span style={{ color: '#EF4444' }}>*</span>
                 </th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
+                <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
+                <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px', textAlign: 'right' }}>Taxable (₹)</th>
+                <th style={{ padding: '12px 10px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'right' }}>Total (₹)</th>
+                <th style={{ padding: '12px 6px', fontWeight: '700', width: '48px', minWidth: '48px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {bomMaterialsList.map((item, i) => {
-                const q = parseFloat(item.qty) || 0;
-                const r = parseFloat(item.rate) || 0;
-                const taxable = q * r;
-                const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
-                const gstAmt = taxable * (gstPct / 100);
-                const rowTot = taxable + gstAmt;
-                const isChecked = selectedBomItemIndexes.includes(i);
-                return (
-                  <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#EEF2FF' : 'transparent' }}>
-                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                      <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedBomItemIndexes(prev => [...prev, i]);
-                          } else {
-                            setSelectedBomItemIndexes(prev => prev.filter(idx => idx !== i));
-                          }
-                        }}
-                        style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
-                       />
-                    </td>
-                    <td style={{ padding: '12px 10px' }}>
-                      <TypeableProductSelect
-                        value={item.name || ''}
-                        itemsList={itemsList}
-                        placeholder="Type or select product..."
-                        accentColor="#4F46E5"
+              {(() => {
+                const hasAnyPreset = bomMaterialsList.some(it => it.isPresetItem || (selectedPreset && parseFloat(it.rate || 0) === 0));
+                const distinctGroupIds = [];
+                bomMaterialsList.forEach(it => {
+                  const isPreset = Boolean(it.isPresetItem || (selectedPreset && parseFloat(it.rate || 0) === 0));
+                  if (isPreset) {
+                    const gid = it.presetGroupId || it.presetName || (selectedPreset || 'default_preset');
+                    if (!distinctGroupIds.includes(gid)) {
+                      distinctGroupIds.push(gid);
+                    }
+                  }
+                });
+                const customItems = bomMaterialsList.filter(it => !it.isPresetItem && !(selectedPreset && parseFloat(it.rate || 0) === 0));
+
+                return bomMaterialsList.map((item, i) => {
+                  const q = parseFloat(item.qty) || 0;
+                  const r = parseFloat(item.rate) || 0;
+                  const taxable = q * r;
+                  const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+                  const gstAmt = taxable * (gstPct / 100);
+                  const rowTot = taxable + gstAmt;
+                  const isChecked = selectedBomItemIndexes.includes(i);
+
+                  const isPresetItem = Boolean(item.isPresetItem || (selectedPreset && r === 0));
+                  const gid = isPresetItem ? (item.presetGroupId || item.presetName || (selectedPreset || 'default_preset')) : null;
+                  const groupItems = isPresetItem ? bomMaterialsList.filter(it => (it.presetGroupId || it.presetName || (selectedPreset || 'default_preset')) === gid) : [];
+                  const isFirstInGroup = isPresetItem && bomMaterialsList.findIndex(it => (it.presetGroupId || it.presetName || (selectedPreset || 'default_preset')) === gid) === i;
+                  const groupCount = groupItems.length;
+                  const groupIndex = gid ? distinctGroupIds.indexOf(gid) : -1;
+                  const presetNumber = groupIndex >= 0 ? groupIndex + 1 : 1;
+                  const theme = groupIndex >= 0 ? getPresetTheme(groupIndex) : PRESET_THEMES[0];
+                  const itemIndexInGroup = isPresetItem ? groupItems.findIndex(it => it === item) + 1 : 0;
+                  const isFirstCustomItem = !isPresetItem && bomMaterialsList.findIndex(it => !it.isPresetItem && !(selectedPreset && parseFloat(it.rate || 0) === 0)) === i;
+                  const customIndex = !isPresetItem ? customItems.findIndex(it => it === item) + 1 : null;
+                  const displaySNo = isPresetItem && distinctGroupIds.length > 0
+                    ? `${presetNumber}.${itemIndexInGroup}`
+                    : (customIndex !== null ? (distinctGroupIds.length > 0 ? `C.${customIndex}` : `${i + 1}`) : `${i + 1}`);
+                  const presetDisplayName = item.presetName || selectedPreset || `Preset Package ${presetNumber}`;
+
+                  return (
+                    <React.Fragment key={i}>
+                      {isFirstInGroup && (
+                        <tr key={`create-bom-preset-hdr-${gid}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                          <td colSpan={9} style={{ padding: '8px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: theme.primary,
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  <Boxes size={12} />
+                                  {theme.badge}
+                                </span>
+                                <strong style={{ fontSize: '13px', color: theme.primary, letterSpacing: '0.2px' }}>
+                                  {presetDisplayName}
+                                </strong>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  color: theme.tagText,
+                                  backgroundColor: theme.tagBg,
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  border: `1px solid ${theme.border}`
+                                }}>
+                                  {presetSetCount || 1} Sets • {groupCount} Components
+                                </span>
+                              </div>
+                              {presetKitPrice && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '11.5px', color: '#475569' }}>
+                                    Package Price: <strong style={{ color: theme.primary }}>₹ {parseFloat(presetKitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {isFirstCustomItem && distinctGroupIds.length > 0 && (
+                        <tr key="create-bom-custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                          <td colSpan={9} style={{ padding: '8px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: '#475569',
+                                color: '#FFFFFF',
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                letterSpacing: '0.5px'
+                              }}>
+                                CUSTOM ITEMS
+                              </span>
+                              <strong style={{ fontSize: '12px', color: '#334155' }}>
+                                Additional Materials / Standalone Products ({customItems.length} items)
+                              </strong>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#EEF2FF' : (isPresetItem ? theme.bg : 'transparent') }}>
+                        <td style={{
+                          padding: '12px 10px',
+                          textAlign: 'center',
+                          borderLeft: isChecked ? '4px solid #4F46E5' : (isPresetItem ? `4px solid ${theme.primary}` : '4px solid #CBD5E1')
+                        }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedBomItemIndexes(prev => [...prev, i]);
+                                } else {
+                                  setSelectedBomItemIndexes(prev => prev.filter(idx => idx !== i));
+                                }
+                              }}
+                              style={{ accentColor: theme.primary, cursor: 'pointer' }}
+                             />
+                            <span style={{ fontSize: '10px', fontWeight: '800', color: isPresetItem ? theme.primary : '#64748B' }}>
+                              #{displaySNo}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 10px' }}>
+                          {isPresetItem && (
+                            <div style={{ marginBottom: '4px' }}>
+                              <span style={{
+                                backgroundColor: theme.tagBg,
+                                color: theme.tagText,
+                                border: `1px solid ${theme.border}`,
+                                fontSize: '10px',
+                                fontWeight: '800',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                letterSpacing: '0.3px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: theme.primary }} />
+                                {theme.badge} • Component {itemIndexInGroup} of {groupCount}
+                              </span>
+                            </div>
+                          )}
+                          <TypeableProductSelect
+                            value={item.name || ''}
+                            itemsList={itemsList}
+                            placeholder="Type or select product..."
+                            accentColor={theme.primary}
                         onChange={(val, matched) => {
                           if (!matched) {
                             setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
@@ -1224,7 +1326,7 @@ export default function CreateBomFormPage(props) {
                           const val = e.target.value;
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                         }}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
+                        style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700' }}
                        />
                       <datalist id={`uom-list-${i}`}>
                         <option value="NOS" />
@@ -1238,7 +1340,7 @@ export default function CreateBomFormPage(props) {
                         <option value="PAIR" />
                       </datalist>
                     </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                    <td style={{ padding: '12px 6px', textAlign: 'center' }}>
                       <input id={`create-bom-form-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                         type="number"
                         value={item.qty}
@@ -1247,7 +1349,7 @@ export default function CreateBomFormPage(props) {
                           const val = e.target.value;
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                         }}
-                        style={{ width: '100%', height: '34px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box' }}
+                        style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '700', color: '#0F172A' }}
                        />
                       {(() => {
                         const avail = getItemStock(item.name, item.code);
@@ -1333,9 +1435,11 @@ export default function CreateBomFormPage(props) {
                         <Trash2 style={{ width: '15px', height: '15px' }} />
                       </button>
                     </td>
-                  </tr>
-                );
-              })}
+                      </tr>
+                    </React.Fragment>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>

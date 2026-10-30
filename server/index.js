@@ -3264,7 +3264,7 @@ app.post('/api/auth/register-employee', async (req, res) => {
       employee_code: cleanCode,
       employee_name: String(employee_name || '').trim(),
       email: cleanEmail,
-      password: hashPassword(String(password), 'scrypt'),
+      password: String(password).trim(),
       prefix: prefix || cleanCode.split('-')[0] || 'SE',
       role: role || 'Sales Executive',
       dashboard_type: dashboard_type || role || 'Sales Executive',

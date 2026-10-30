@@ -8,7 +8,8 @@ import {
   Search, HelpCircle, MessageSquare, Rocket, Sparkles, ChevronUp,
   CheckCircle, ClipboardList, Truck, Warehouse, ShieldCheck, Activity, FileCheck,
   Calendar, Wrench, Calculator, RefreshCw, Scale, Building2, BarChart3,
-  Zap, CreditCard, Layers, Briefcase, Palette, Factory, Mail, Share2, Globe
+  Zap, CreditCard, Layers, Briefcase, Palette, Factory, Mail, Share2, Globe,
+  Lock, HardDrive, Clock
 } from 'lucide-react';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { fetchCloudStore } from '../utils/supabaseDataSync';
@@ -24,6 +25,56 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const [realAccountsGrnCount, setRealAccountsGrnCount] = useState(0);
   const [realPendingDispatchCount, setRealPendingDispatchCount] = useState(0);
   const [realAccountsVerificationCount, setRealAccountsVerificationCount] = useState(0);
+
+  // Selected Sidebar Item Tracker (Guarantees only ONE unique item is selected at any time)
+  const [activeItemLabel, setActiveItemLabel] = useState(() => {
+    return localStorage.getItem('controlroom_sidebar_active_item') || 'Company Overview';
+  });
+
+  // CEO Accordion Navigation State
+  const [openCategories, setOpenCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_ceo_sidebar_open_cats');
+      return saved ? JSON.parse(saved) : ['1. Executive Dashboard'];
+    } catch {
+      return ['1. Executive Dashboard'];
+    }
+  });
+
+  const toggleCategory = (catName) => {
+    setOpenCategories(prev => {
+      const isAlready = prev.includes(catName);
+      const next = isAlready ? prev.filter(c => c !== catName) : [...prev, catName];
+      try { localStorage.setItem('controlroom_ceo_sidebar_open_cats', JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  };
+
+  // Synchronize activeItemLabel with activeTab when changed externally
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('controlroom_sidebar_active_item');
+      if (stored) {
+        const currentSections = getSectionsForRole(userRole);
+        const allItems = currentSections.flatMap(s => s.items || []);
+        const currentItem = allItems.find(it => it.label === stored);
+        if (currentItem) {
+          const itemTarget = currentItem.targetTab || currentItem.label;
+          if (normalizeTab(itemTarget) === normalizeTab(activeTab)) {
+            setActiveItemLabel(stored);
+            return;
+          }
+        }
+      }
+      const currentSections = getSectionsForRole(userRole);
+      const allItems = currentSections.flatMap(s => s.items || []);
+      const matched = allItems.find(it => normalizeTab(it.targetTab || it.label) === normalizeTab(activeTab));
+      if (matched) {
+        setActiveItemLabel(matched.label);
+        localStorage.setItem('controlroom_sidebar_active_item', matched.label);
+      }
+    } catch (_) {}
+  }, [activeTab, userRole]);
 
   useEffect(() => {
     const unsubscribe = prodModuleEngine.subscribe(() => {
@@ -331,24 +382,148 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     } else if (role === 'CEO' || role === 'MD' || role === 'Managing Director') {
       sections = [
         {
-          category: 'MAIN MENU',
+          category: '1. Executive Dashboard',
+          id: 'executive_dashboard',
           items: [
-            { label: 'Executive Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
-            { 
-              label: 'BOM Orders', 
-              targetTab: 'BOM Orders', 
-              icon: GitBranch, 
-              badge: realBOMCount > 0 ? String(realBOMCount) : undefined 
-            },
-            { 
-              label: 'Purchase Order Approvals', 
-              targetTab: 'Purchase Orders', 
-              icon: ShoppingCart, 
-              badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined 
-            },
-            { label: 'Leads Directory', targetTab: 'Leads', icon: Users }
+            { label: 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard },
+            { label: 'Business Performance', targetTab: 'Dashboard', subTabTarget: 'performance', icon: TrendingUp },
+            { label: 'CEO Action Center', targetTab: 'Dashboard', subTabTarget: 'action-center', icon: ShieldCheck, badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined },
+            { label: 'Critical Alerts', targetTab: 'Dashboard', subTabTarget: 'alerts', icon: AlertTriangle }
           ]
         },
+        {
+          category: '2. CRM & Leads',
+          id: 'crm_leads',
+          items: [
+            { label: 'All Leads', targetTab: 'Leads', icon: Users },
+            { label: 'Lead Assignment', targetTab: 'Leads', icon: UserCheck },
+            { label: 'Follow-up Monitoring', targetTab: 'Follow-ups', icon: MessageSquare },
+            { label: 'Lead SLA Alerts', targetTab: 'Leads', icon: AlertTriangle },
+            { label: 'Customer Management', targetTab: 'Customers', icon: Building2 },
+            { label: 'Sales Team Performance', targetTab: 'Dashboard', subTabTarget: 'personnel', icon: Award }
+          ]
+        },
+        {
+          category: '3. Sales Management',
+          id: 'sales_management',
+          items: [
+            { label: 'Sales Overview', targetTab: 'Sales Dashboard', icon: BarChart3 },
+            { label: 'Quotations', targetTab: 'Quotations', icon: FileText },
+            { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
+            { label: 'Sales Orders', targetTab: 'BOM Orders', icon: GitBranch },
+            { label: 'Sales Targets', targetTab: 'Dashboard', subTabTarget: 'sales-targets', icon: Award },
+            { label: 'Sales Reports', targetTab: 'Sales Reports', icon: FileBarChart }
+          ]
+        },
+        {
+          category: '4. BOM & Production',
+          id: 'bom_production',
+          items: [
+            { label: 'All BOMs', targetTab: 'BOM Orders', icon: GitBranch, badge: realBOMCount > 0 ? String(realBOMCount) : undefined },
+            { label: 'BOM Workflow Tracking', targetTab: 'Dashboard', subTabTarget: 'bom-workflow', icon: Activity },
+            { label: 'Production Overview', targetTab: 'Work Orders', icon: Factory, badge: realWOCount > 0 ? String(realWOCount) : undefined },
+            { label: 'Material Requirements', targetTab: 'Raw Material Directory', icon: Layers },
+            { label: 'Pending Production', targetTab: 'Work Orders', icon: ClipboardList },
+            { label: 'Production Reports', targetTab: 'Production Reports', icon: BarChart3 }
+          ]
+        },
+        {
+          category: '5. Dispatch & Logistics',
+          id: 'dispatch_logistics',
+          items: [
+            { label: 'Packing Status', targetTab: 'Dispatch Orders', icon: PackageCheck },
+            { label: 'Accounts Verification', targetTab: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined },
+            { label: 'Awaiting Loading', targetTab: 'Dispatch Orders', icon: Clock },
+            { label: 'Dispatched Orders', targetTab: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
+            { label: 'Delivery Status', targetTab: 'Dispatch Dashboard', icon: Globe },
+            { label: 'Dispatch Reports', targetTab: 'Production Reports', icon: FileBarChart }
+          ]
+        },
+        {
+          category: '6. Inventory',
+          id: 'inventory',
+          items: [
+            { label: 'Inventory Overview', targetTab: 'Inventory Stores', icon: Warehouse },
+            { label: 'Physical Stock', targetTab: 'Items Directory', icon: Boxes },
+            { label: 'Reserved Stock', targetTab: 'Stock Status', icon: Layers },
+            { label: 'Available Stock', targetTab: 'Raw Material Directory', icon: RefreshCw },
+            { label: 'Low Stock Alerts', targetTab: 'Material Reorder', icon: AlertTriangle, badge: 'Low' },
+            { label: 'Stock Movement History', targetTab: 'Goods Receipt Note', icon: FileCheck }
+          ]
+        },
+        {
+          category: '7. Purchase & Procurement',
+          id: 'purchase_procurement',
+          items: [
+            { label: 'Purchase Requests', targetTab: 'Requests for Purchase', icon: FileText },
+            { label: 'Purchase Orders', targetTab: 'Purchase Orders', icon: ShoppingCart, badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined },
+            { label: 'Vendor Management', targetTab: 'Vendor Management', icon: Building2 },
+            { label: 'Goods Receipt Notes', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined },
+            { label: 'Purchase Analytics', targetTab: 'Spend Analytics', icon: PieChart }
+          ]
+        },
+        {
+          category: '8. Accounts & Finance',
+          id: 'accounts_finance',
+          items: [
+            { label: 'Financial Overview', targetTab: 'Finance Dashboard', icon: Wallet },
+            { label: 'Invoices', targetTab: 'Invoice Management', icon: Receipt },
+            { label: 'Receivables', targetTab: 'Finance Dashboard', icon: TrendingUp },
+            { label: 'Payables', targetTab: 'Purchase Orders', poTabTarget: 'MD_APPROVED', icon: ShoppingCart },
+            { label: 'Collections', targetTab: 'Finance Dashboard', icon: CheckCircle },
+            { label: 'Expenses', targetTab: 'Spend Analytics', icon: Scale },
+            { label: 'Profitability', targetTab: 'Dashboard', subTabTarget: 'finance', icon: BarChart3 },
+            { label: 'Cash Flow', targetTab: 'Finance Dashboard', icon: Zap }
+          ]
+        },
+        {
+          category: '9. Tasks & Approvals',
+          id: 'tasks_approvals',
+          items: [
+            { label: 'All Tasks', targetTab: 'Dashboard', subTabTarget: 'tasks', icon: ClipboardList },
+            { label: 'Pending Approvals', targetTab: 'Purchase Orders', poTabTarget: 'WAITING FOR APPROVAL', icon: CheckCircle, badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined },
+            { label: 'Overdue Tasks', targetTab: 'Dashboard', subTabTarget: 'action-center', icon: Clock },
+            { label: 'Escalations', targetTab: 'Dashboard', subTabTarget: 'alerts', icon: AlertTriangle },
+            { label: 'Approval History', targetTab: 'Purchase Orders', poTabTarget: 'MD_APPROVED', icon: FileCheck }
+          ]
+        },
+        {
+          category: '10. Reports & Analytics',
+          id: 'reports_analytics',
+          items: [
+            { label: 'Executive MIS', targetTab: 'Dashboard', subTabTarget: 'overview', icon: FileBarChart },
+            { label: 'Sales Analytics', targetTab: 'Sales Reports', icon: BarChart3 },
+            { label: 'Operational Reports', targetTab: 'Production Reports', icon: FileText },
+            { label: 'Inventory Analytics', targetTab: 'Stock Status', icon: PieChart },
+            { label: 'Financial Reports', targetTab: 'Procurement Reports', icon: Wallet },
+            { label: 'Custom Reports', targetTab: 'Dashboard', subTabTarget: 'reports', icon: Sparkles }
+          ]
+        },
+        {
+          category: '11. Administration',
+          id: 'administration',
+          items: [
+            { label: 'Users & Roles', targetTab: 'User Management', icon: Users },
+            { label: 'Audit Logs', targetTab: 'System Health', icon: ShieldCheck },
+            { label: 'System Health', targetTab: 'System Health', icon: Activity },
+            { label: 'Integrations', targetTab: 'Integration', icon: Globe },
+            { label: 'Company Settings', targetTab: 'Backup Vault', icon: Settings }
+          ]
+        }
+      ];
+      return sections;
+    } else if (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA')) {
+      sections = [
+        {
+          category: 'SYSTEM ADMINISTRATION',
+          items: [
+            { label: 'Admin Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
+            { label: 'User & Access Control', targetTab: 'User Management', icon: Users },
+            { label: 'Database & DB Health', targetTab: 'System Health', icon: Activity },
+            { label: 'Active Sessions', targetTab: 'Active Sessions', icon: Lock },
+            { label: 'Backup Vault', targetTab: 'Backup Vault', icon: HardDrive }
+          ]
+        }
       ];
       return sections;
     } else {
@@ -649,63 +824,109 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           paddingRight: '2px'
         }}
       >
-        {filteredSections.map((sec, sIdx) => (
-          <div key={sIdx} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            {/* Category Header */}
-            {!collapsed && (
-              <span style={{
-                fontSize: '11px',
-                fontWeight: '800',
-                color: '#64748B',
-                letterSpacing: '0.04em',
-                padding: '4px 8px 2px 8px',
-                textTransform: 'none'
-              }}>
-                {sec.category}
-              </span>
-            )}
+        {filteredSections.map((sec, sIdx) => {
+          const isCategoryOpen = !collapsed && (
+            Boolean(searchQuery) ||
+            openCategories.includes(sec.category) ||
+            (activeItemLabel ? sec.items.some(it => it.label === activeItemLabel) : (sIdx === 0))
+          );
+          const hasBadges = sec.items.some(i => Boolean(i.badge));
 
-            {/* Nav Items */}
-            {sec.items.map((item, iIdx) => {
-              const ItemIcon = item.icon;
-              const actualTarget = item.targetTab || item.label;
-              const isActive = normalizeTab(item.label) === normalizeTab(activeTab) || normalizeTab(actualTarget) === normalizeTab(activeTab);
-
-              return (
-                <div 
-                  key={iIdx}
-                  title={collapsed ? item.label : undefined}
-                  onClick={() => {
-                    const targetTab = actualTarget === 'Proforma Invoice' ? 'Performa Invoice' : actualTarget;
-                    onChangeTab(targetTab, null, item.poTabTarget || null);
-                    if (typeof window !== 'undefined' && window.innerWidth <= 768 && typeof onToggle === 'function' && !collapsed) {
-                      onToggle();
-                    }
-                  }}
-                  onMouseEnter={(e) => {
-                    setHoveredItem(item.label);
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setHoveredItemPos({ label: item.label, top: rect.top + (rect.height / 2) });
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredItem(null);
-                    setHoveredItemPos(null);
-                  }}
+          return (
+            <div key={sIdx} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              {/* Category Header */}
+              {!collapsed && (
+                <div
+                  onClick={() => toggleCategory(sec.category)}
                   style={{
-                    height: '40px',
-                    borderRadius: '20px',
-                    padding: collapsed ? '0' : '0 14px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: collapsed ? 'center' : 'space-between',
+                    justifyContent: 'space-between',
+                    padding: '6px 8px 4px 8px',
                     cursor: 'pointer',
-                    backgroundColor: isActive ? '#FFFFFF' : hoveredItem === item.label ? 'rgba(255, 255, 255, 0.55)' : 'transparent',
-                    border: isActive ? '1px solid rgba(255, 255, 255, 0.9)' : '1px solid transparent',
-                    boxShadow: isActive ? '0 4px 14px rgba(15, 23, 42, 0.06)' : 'none',
-                    transition: 'all 0.15s ease',
-                    position: 'relative'
+                    userSelect: 'none',
+                    borderRadius: '8px',
+                    transition: 'background 0.15s ease'
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.4)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    color: '#475569',
+                    letterSpacing: '0.03em',
+                    textTransform: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    {sec.category}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {hasBadges && !isCategoryOpen && (
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#0E7490' }} />
+                    )}
+                    {isCategoryOpen ? (
+                      <ChevronDown size={13} style={{ color: '#64748B' }} />
+                    ) : (
+                      <ChevronRight size={13} style={{ color: '#94A3B8' }} />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Nav Items (Rendered if category open or collapsed sidebar) */}
+              {(collapsed || isCategoryOpen) && sec.items.map((item, iIdx) => {
+                const ItemIcon = item.icon;
+                const actualTarget = item.targetTab || item.label;
+                const isActive = activeItemLabel 
+                  ? (item.label === activeItemLabel)
+                  : (normalizeTab(item.label) === normalizeTab(activeTab) || normalizeTab(actualTarget) === normalizeTab(activeTab));
+
+                return (
+                  <div 
+                    key={iIdx}
+                    title={collapsed ? item.label : undefined}
+                    onClick={() => {
+                      setActiveItemLabel(item.label);
+                      try { localStorage.setItem('controlroom_sidebar_active_item', item.label); } catch (_) {}
+                      const targetTab = actualTarget === 'Proforma Invoice' ? 'Performa Invoice' : actualTarget;
+                      if (item.subTabTarget) {
+                        try {
+                          localStorage.setItem('controlroom_ceo_sub_tab', item.subTabTarget);
+                          window.dispatchEvent(new CustomEvent('controlroom_ceo_subtab_change', { detail: { subTab: item.subTabTarget } }));
+                        } catch (_) {}
+                      }
+                      onChangeTab(targetTab, null, item.poTabTarget || null);
+                      if (typeof window !== 'undefined' && window.innerWidth <= 768 && typeof onToggle === 'function' && !collapsed) {
+                        onToggle();
+                      }
+                    }}
+                    onMouseEnter={(e) => {
+                      setHoveredItem(item.label);
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setHoveredItemPos({ label: item.label, top: rect.top + (rect.height / 2) });
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredItem(null);
+                      setHoveredItemPos(null);
+                    }}
+                    style={{
+                      height: '38px',
+                      borderRadius: '16px',
+                      padding: collapsed ? '0' : '0 12px 0 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: collapsed ? 'center' : 'space-between',
+                      cursor: 'pointer',
+                      backgroundColor: isActive ? '#FFFFFF' : hoveredItem === item.label ? 'rgba(255, 255, 255, 0.55)' : 'transparent',
+                      border: isActive ? '1px solid rgba(255, 255, 255, 0.9)' : '1px solid transparent',
+                      boxShadow: isActive ? '0 4px 14px rgba(15, 23, 42, 0.06)' : 'none',
+                      transition: 'all 0.15s ease',
+                      position: 'relative'
+                    }}
+                  >
                   <div style={{ display: 'flex', alignItems: 'center', gap: collapsed ? '0' : '10px', minWidth: 0 }}>
                     <ItemIcon style={{ 
                       width: '16px', 
@@ -758,7 +979,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
               <div style={{ height: '1px', backgroundColor: 'rgba(203, 213, 225, 0.4)', margin: '6px 0' }} />
             )}
           </div>
-        ))}
+          );
+        })}
 
 
       </div>

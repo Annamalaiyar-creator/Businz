@@ -1156,7 +1156,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
@@ -1182,7 +1182,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
@@ -1208,7 +1208,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
@@ -1233,7 +1233,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { id: 'Active', label: 'Active Clients', count: (customerList || []).length, bg: '#dcfce7', fg: '#166534' },
                 { id: 'Lead', label: 'New Leads', count: 0, bg: '#dbeafe', fg: '#1e40af' }
               ],
-              headers: ['Customer Name', 'Company Name', 'GSTIN / Tax No.', 'Mobile / Phone', 'Email ID', 'Action'],
+              headers: ['Customer Name', 'Company Name', 'GSTIN / Tax No.', 'Mobile / Phone', 'Email ID'],
               rows: (customerList || []).map(c => ({
                 ...c,
                 code: c.code,
@@ -1254,7 +1254,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',

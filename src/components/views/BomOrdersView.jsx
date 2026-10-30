@@ -19,7 +19,7 @@ import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
 import ModernDateRangePicker from '../ModernDateRangePicker';
 import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../../services/customerService';
-import { is5PctSolarProduct } from '../PerformaInvoiceView';
+import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from '../PerformaInvoiceView';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import LrUploadPopupModal from './LrUploadPopupModal';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch } from '../../services/notificationService';
@@ -805,6 +805,26 @@ export default function BomOrdersView(props) {
         return true;
       }
 
+      // 4. Source PI ownership check: If source PI belongs to this sales user, include this BOM
+      const sPiNo = b.sourcePiNo || b.piNo;
+      if (sPiNo) {
+        try {
+          const piStore = JSON.parse(localStorage.getItem('controlroom_pi_store') || '[]');
+          const targetPi = piStore.find(p => {
+            const pNo = String(p.piNo || p.id || '').trim().toLowerCase();
+            return pNo === String(sPiNo).trim().toLowerCase();
+          });
+          if (targetPi) {
+            const piCodes = [targetPi.salesPersonCode, targetPi.createdById, targetPi.sales_person_code, targetPi.created_by_id].filter(Boolean);
+            if (piCodes.some(isCodeMatch)) return true;
+            const piEmails = [targetPi.salesPersonEmail, targetPi.email].filter(Boolean).map(e => String(e).trim().toLowerCase());
+            if (curEmail && piEmails.some(e => e === curEmail || userAliases.has(e))) return true;
+            const piNames = [targetPi.salesPerson, targetPi.createdBy, targetPi.salesperson].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+            if (piNames.some(n => userAliases.has(n) || (cleanCurNorm && normA(n) === cleanCurNorm))) return true;
+          }
+        } catch (_) {}
+      }
+
       return false;
     });
   }, [bomStore, isRestrictedSalesUser, currentEmpId, currentEmpName, defaultSalesPersonName, currentLoggedEmail, props.targetBomCode, props.targetPiNo]);
@@ -1289,6 +1309,9 @@ export default function BomOrdersView(props) {
           const eCode = existingBom.bomCode || existingBom.code || existingBom.id;
           alert(`ℹ️ Proforma Invoice (${targetPiNo}) is already converted to BOM (${eCode}). Opening existing BOM order.`, 'BOM Already Exists', 'info');
           setShowBOMForm(false);
+          setActiveSubTab('All');
+          setSearchQueryText(eCode);
+          setCurrentPage(1);
           setConfirmingBomModal(existingBom);
           return;
         }
@@ -1548,7 +1571,9 @@ export default function BomOrdersView(props) {
         (b.id && String(b.id).toLowerCase() === codeToFind)
       );
       if (target) {
+        setActiveSubTab('All');
         setSearchQueryText(target.bomCode || target.code || props.targetBomCode);
+        setCurrentPage(1);
         setConfirmingBomModal({ ...target, isEditMode: false });
         if (typeof props.clearTargetBom === 'function') props.clearTargetBom();
       }
@@ -1765,6 +1790,8 @@ export default function BomOrdersView(props) {
   const filteredRows = (pageConfig.rows || []).filter(r => {
     const matchesSearch = !searchQueryText ||
       (r.code && r.code.toLowerCase().includes(searchQueryText.toLowerCase())) ||
+      (r.bomCode && String(r.bomCode).toLowerCase().includes(searchQueryText.toLowerCase())) ||
+      (r.id && String(r.id).toLowerCase().includes(searchQueryText.toLowerCase())) ||
       (r.sourcePiNo && String(r.sourcePiNo).toLowerCase().includes(searchQueryText.toLowerCase())) ||
       (r.c2 && r.c2.toLowerCase().includes(searchQueryText.toLowerCase())) ||
       (r.c3 && r.c3.toLowerCase().includes(searchQueryText.toLowerCase())) ||
@@ -1825,18 +1852,18 @@ export default function BomOrdersView(props) {
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = cleanNum(grp.kitPrice, 0);
-        const multiplier = parseInt(String(grp.setCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(grp.setCount).replace(/[^0-9.]/g, '')) || 1;
         kitSubtotal += (unitPrice * multiplier);
       } else if (grpId === 'legacy_default') {
         const unitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
-        const multiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
 
     // 2. Individual items subtotal (exclude preset items because their cost is in kitSubtotal)
     const itemsSub = (bomMaterialsList || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       return acc + (q * r);
@@ -1847,7 +1874,7 @@ export default function BomOrdersView(props) {
 
     // 3. GST: Custom item GSTs + Preset kits GST (dynamically from each preset's selected gstRate)
     const itemsGst = (bomMaterialsList || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;
@@ -1861,11 +1888,11 @@ export default function BomOrdersView(props) {
       let groupTotal = 0;
       if (grp) {
         const unitPrice = cleanNum(grp.kitPrice, 0);
-        const multiplier = parseInt(String(grp.setCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(grp.setCount).replace(/[^0-9.]/g, '')) || 1;
         groupTotal = unitPrice * multiplier;
       } else if (grpId === 'legacy_default') {
         const unitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
-        const multiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, ''), 10) || 1;
+        const multiplier = parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1;
         groupTotal = unitPrice * multiplier;
       }
 
@@ -3028,7 +3055,7 @@ export default function BomOrdersView(props) {
           presetGroupId: groupId,
           presetName,
           baseQty: baseQ,
-          qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+          qty: String(baseQ),
           rate: '0',
           gstRate: isDcrBosKit ? '5%' : (it.gstRate || initialGstRate),
           isPresetItem: true
@@ -3973,6 +4000,17 @@ export default function BomOrdersView(props) {
                 ) : (
                   (() => {
                     const hasAnyPreset = bomMaterialsList.some(it => it.isPresetItem);
+                    const distinctGroupIds = [];
+                    bomMaterialsList.forEach(it => {
+                      if (it.isPresetItem && it.presetGroupId && !distinctGroupIds.includes(it.presetGroupId)) {
+                        distinctGroupIds.push(it.presetGroupId);
+                      }
+                    });
+                    if (distinctGroupIds.length === 0 && hasAnyPreset) {
+                      distinctGroupIds.push('legacy_default');
+                    }
+                    const customItems = bomMaterialsList.filter(it => !it.isPresetItem);
+
                     return bomMaterialsList.map((item, i) => {
                     const isPiLocked = Boolean(newBomSourcePiNo);
                     const q = parseFloat(item.qty) || 0;
@@ -3988,244 +4026,358 @@ export default function BomOrdersView(props) {
                     const groupItems = isPresetItem ? bomMaterialsList.filter(it => (it.presetGroupId || 'legacy_default') === groupId) : [];
                     const isFirstInGroup = isPresetItem && bomMaterialsList.findIndex(it => (it.presetGroupId || 'legacy_default') === groupId) === i;
                     const groupCount = groupItems.length;
+                    const groupIndex = groupId ? distinctGroupIds.indexOf(groupId) : -1;
+                    const presetNumber = groupIndex >= 0 ? groupIndex + 1 : 1;
+                    const theme = groupIndex >= 0 ? getPresetTheme(groupIndex) : PRESET_THEMES[0];
+                    const itemIndexInGroup = isPresetItem ? groupItems.findIndex(it => it === item) + 1 : 0;
+                    const isFirstCustomItem = !isPresetItem && bomMaterialsList.findIndex(it => !it.isPresetItem) === i;
+                    const customIndex = !isPresetItem ? customItems.findIndex(it => it === item) + 1 : null;
+                    const displaySNo = isPresetItem && distinctGroupIds.length > 0
+                      ? `${presetNumber}.${itemIndexInGroup}`
+                      : (customIndex !== null ? (distinctGroupIds.length > 0 ? `C.${customIndex}` : `${i + 1}`) : `${i + 1}`);
+
                     const currentGroup = (groupId && presetGroups[groupId]) || {
                       groupId: groupId || 'legacy_default',
                       presetName: item.presetName || selectedPreset || 'Preset Kit',
                       setCount: presetSetCount || 1,
+                      unitType: presetUnitType || 'Sets',
                       kitPrice: presetKitPrice || ''
                     };
 
+                    const totalColumnsCount = hasAnyPreset ? 9 : 8;
+
                     return (
-                      <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#ECFEFF' : (i % 2 === 1 ? '#FAFBFC' : 'white') }}>
-                        <td style={{ padding: '12px 10px', textAlign: 'center', borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent' }}>
-                          {isPiLocked ? (
-                            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>{i + 1}</span>
-                          ) : (
-                            <input id="bom-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) setSelectedBomItemIndexes(prev => [...prev, i]);
-                                else setSelectedBomItemIndexes(prev => prev.filter(idx => idx !== i));
-                              }}
-                              style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                             />
-                          )}
-                        </td>
-                        <td style={{ padding: '10px 10px' }}>
-                          {isPiLocked ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>{item.name || '—'}</span>
-                              {item.category && <span style={{ fontSize: '11px', color: '#64748B' }}>{item.category}</span>}
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              {/* Line 1: Product / Item Name (Typeable & Dropdown) */}
-                              <TypeableProductSelect
-                                value={item.name || ''}
-                                itemsList={itemsList}
-                                placeholder="Type or select product / item..."
-                                accentColor="#0E7490"
-                                onChange={(val, matched) => {
-                                  if (!matched) {
-                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
-                                    return;
-                                  }
-                                  const pName = matched.name;
-                                  const pCat = matched.category || matched.description || item.category;
-                                  const isSolar5 = is5PctSolarProduct(pName, pCat);
-                                  setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? {
-                                    ...mat,
-                                    name: pName,
-                                    code: matched.code || mat.code || '',
-                                    rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
-                                    uom: matched.uom || matched.unit || mat.uom,
-                                    category: pCat,
-                                    gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
-                                  } : mat));
-                                }}
-                              />
-                              {/* Line 2: Description */}
-                              <input id={`bom-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
-                                type="text"
-                                placeholder="Description..."
-                                value={item.category || ''}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, category: val } : mat));
-                                }}
-                                style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC' }}
-                               />
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '12px 10px' }}>
-                          {isPiLocked ? (
-                            <div style={{ textAlign: 'center', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
-                              {item.uom || 'NOS'}
-                            </div>
-                          ) : (
-                            <>
-                              <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
-                                type="text"
-                                list={`uom-list-${i}`}
-                                placeholder="UOM"
-                                value={item.uom || 'NOS'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
-                                }}
-                                style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                               />
-                              <datalist id={`uom-list-${i}`}>
-                                <option value="NOS" />
-                                <option value="SET" />
-                                <option value="KW" />
-                                <option value="KG" />
-                                <option value="MTR" />
-                                <option value="PCS" />
-                                <option value="BOX" />
-                                <option value="PKT" />
-                                <option value="PAIR" />
-                              </datalist>
-                            </>
-                          )}
-                        </td>
-                        <td style={{ padding: '12px 10px' }}>
-                          {isPiLocked ? (
-                            <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                              {item.qty || 0}
-                            </div>
-                          ) : (
-                            <input id={`bom-orders-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
-                              type="number"
-                              value={item.qty}
-                              placeholder="0"
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
-                              }}
-                              style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                             />
-                          )}
-                        </td>
-                        <td style={{ padding: '12px 10px' }}>
-                          {isPresetItem ? (
-                            <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>—</span>
-                          ) : isPiLocked ? (
-                            <div style={{ textAlign: 'right', fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
-                              ₹{parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                          ) : (
-                            <input id={`bom-orders-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
-                              type="number"
-                              value={item.rate}
-                              placeholder="0.00"
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
-                              }}
-                              style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                             />
-                          )}
-                        </td>
-                        <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                          {isPiLocked ? (
-                            <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
-                              {item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'} GST
-                            </span>
-                          ) : (
-                            <select id={`bom-orders-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
-                              value={item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, gstRate: val } : mat));
-                              }}
-                              style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
-                            >
-                              <option value="18%">18%</option>
-                              <option value="12%">12%</option>
-                              <option value="5%">5%</option>
-                              <option value="0%">0%</option>
-                            </select>
-                          )}
-                        </td>
-                        {hasAnyPreset && (() => {
-                          if (isPresetItem) {
-                            if (isFirstInGroup) {
-                              return (
-                                <td
-                                  rowSpan={groupCount}
-                                  style={{
-                                    padding: '12px 10px',
-                                    verticalAlign: 'middle',
-                                    backgroundColor: '#EEF2FF',
-                                    borderLeft: '2px solid #C7D2FE',
-                                    borderRight: '2px solid #C7D2FE'
+                      <React.Fragment key={i}>
+                        {isFirstInGroup && (
+                          <tr key={`bom-form-preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                            <td colSpan={totalColumnsCount} style={{ padding: '8px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: theme.primary,
+                                    color: '#FFFFFF',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    letterSpacing: '0.5px'
+                                  }}>
+                                    <Boxes size={12} />
+                                    {theme.badge}
+                                  </span>
+                                  <strong style={{ fontSize: '13px', color: theme.primary, letterSpacing: '0.2px' }}>
+                                    {currentGroup.presetName}
+                                  </strong>
+                                  <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    color: theme.tagText,
+                                    backgroundColor: theme.tagBg,
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    border: `1px solid ${theme.border}`
+                                  }}>
+                                    {currentGroup.setCount || 1} {currentGroup.unitType || 'Sets'} • {groupCount} Components
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <span style={{ fontSize: '11.5px', color: '#475569' }}>
+                                    Package Rate: <strong style={{ color: theme.primary }}>₹ {parseFloat(currentGroup.kitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {currentGroup.unitType === 'kW' ? 'kW' : 'Set'}
+                                  </span>
+                                  <span style={{ fontSize: '12px', fontWeight: '800', color: theme.primary, backgroundColor: '#FFFFFF', padding: '2px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                                    Kit Subtotal: ₹ {(parseFloat(currentGroup.kitPrice || 0) * (parseFloat(currentGroup.setCount || 1) || 1)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {isFirstCustomItem && distinctGroupIds.length > 0 && (
+                          <tr key="bom-form-custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                            <td colSpan={totalColumnsCount} style={{ padding: '8px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#475569',
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  CUSTOM ITEMS
+                                </span>
+                                <strong style={{ fontSize: '12px', color: '#334155' }}>
+                                  Additional Materials / Standalone Products ({customItems.length} items)
+                                </strong>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#ECFEFF' : (isPresetItem ? theme.bg : (i % 2 === 1 ? '#FAFBFC' : 'white')) }}>
+                          <td style={{
+                            padding: '12px 10px',
+                            textAlign: 'center',
+                            borderLeft: isChecked ? '4px solid #0E7490' : (isPresetItem ? `4px solid ${theme.primary}` : '4px solid #CBD5E1')
+                          }}>
+                            {isPiLocked ? (
+                              <span style={{ fontSize: '12px', fontWeight: '800', color: isPresetItem ? theme.primary : '#64748B' }}>
+                                #{displaySNo}
+                              </span>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                <input id="bom-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setSelectedBomItemIndexes(prev => [...prev, i]);
+                                    else setSelectedBomItemIndexes(prev => prev.filter(idx => idx !== i));
                                   }}
-                                >
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                    <span
-                                      style={{
-                                        fontSize: '11px',
-                                        fontWeight: '800',
-                                        color: '#4338CA',
-                                        textAlign: 'center',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                        maxWidth: '120px',
-                                        display: 'block'
-                                      }}
-                                      title={currentGroup.presetName}
-                                    >
-                                      {currentGroup.presetName}
-                                    </span>
+                                  style={{ accentColor: theme.primary, cursor: 'pointer' }}
+                                 />
+                                <span style={{ fontSize: '10px', fontWeight: '800', color: isPresetItem ? theme.primary : '#64748B' }}>
+                                  #{displaySNo}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 10px' }}>
+                            {isPresetItem && (
+                              <div style={{ marginBottom: '4px' }}>
+                                <span style={{
+                                  backgroundColor: theme.tagBg,
+                                  color: theme.tagText,
+                                  border: `1px solid ${theme.border}`,
+                                  fontSize: '10px',
+                                  fontWeight: '800',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  letterSpacing: '0.3px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: theme.primary }} />
+                                  {theme.badge} • Component {itemIndexInGroup} of {groupCount}
+                                </span>
+                              </div>
+                            )}
+                            {isPiLocked ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                <span style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>{item.name || '—'}</span>
+                                {item.category && <span style={{ fontSize: '11px', color: '#64748B' }}>{item.category}</span>}
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {/* Line 1: Product / Item Name (Typeable & Dropdown) */}
+                                <TypeableProductSelect
+                                  value={item.name || ''}
+                                  itemsList={itemsList}
+                                  placeholder="Type or select product / item..."
+                                  accentColor={theme.primary}
+                                  onChange={(val, matched) => {
+                                    if (!matched) {
+                                      setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
+                                      return;
+                                    }
+                                    const pName = matched.name;
+                                    const pCat = matched.category || matched.description || item.category;
+                                    const isSolar5 = is5PctSolarProduct(pName, pCat);
+                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? {
+                                      ...mat,
+                                      name: pName,
+                                      code: matched.code || mat.code || '',
+                                      rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
+                                      uom: matched.uom || matched.unit || mat.uom,
+                                      category: pCat,
+                                      gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
+                                    } : mat));
+                                  }}
+                                />
+                                {/* Line 2: Description */}
+                                <input id={`bom-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
+                                  type="text"
+                                  placeholder="Description..."
+                                  value={item.category || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, category: val } : mat));
+                                  }}
+                                  style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC' }}
+                                 />
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {isPiLocked ? (
+                              <div style={{ textAlign: 'center', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
+                                {item.uom || 'NOS'}
+                              </div>
+                            ) : (
+                              <>
+                                <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
+                                  type="text"
+                                  list={`uom-list-${i}`}
+                                  placeholder="UOM"
+                                  value={item.uom || 'NOS'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
+                                  }}
+                                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
+                                 />
+                                <datalist id={`uom-list-${i}`}>
+                                  <option value="NOS" />
+                                  <option value="SET" />
+                                  <option value="KW" />
+                                  <option value="KG" />
+                                  <option value="MTR" />
+                                  <option value="PCS" />
+                                  <option value="BOX" />
+                                  <option value="PKT" />
+                                  <option value="PAIR" />
+                                </datalist>
+                              </>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {isPiLocked ? (
+                              <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                                {item.qty || 0}
+                              </div>
+                            ) : (
+                              <input id={`bom-orders-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
+                                type="number"
+                                value={item.qty}
+                                placeholder="0"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
+                                }}
+                                style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
+                               />
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {isPresetItem ? (
+                              <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>—</span>
+                            ) : isPiLocked ? (
+                              <div style={{ textAlign: 'right', fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
+                                ₹{parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            ) : (
+                              <input id={`bom-orders-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
+                                type="number"
+                                value={item.rate}
+                                placeholder="0.00"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
+                                }}
+                                style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
+                               />
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                            {isPiLocked ? (
+                              <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', color: theme.primary, backgroundColor: theme.tagBg, border: `1px solid ${theme.border}` }}>
+                                {item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'} GST
+                              </span>
+                            ) : (
+                              <select id={`bom-orders-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
+                                value={item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, gstRate: val } : mat));
+                                }}
+                                style={{ width: '100%', height: '38px', borderRadius: '8px', border: `1px solid ${theme.border}`, padding: '0 6px', fontSize: '12px', fontWeight: '700', color: theme.primary, backgroundColor: theme.tagBg, outline: 'none', cursor: 'pointer', textAlign: 'center' }}
+                              >
+                                <option value="18%">18%</option>
+                                <option value="12%">12%</option>
+                                <option value="5%">5%</option>
+                                <option value="0%">0%</option>
+                              </select>
+                            )}
+                          </td>
+                          {hasAnyPreset && (() => {
+                            if (isPresetItem) {
+                              if (isFirstInGroup) {
+                                return (
+                                  <td
+                                    rowSpan={groupCount}
+                                    style={{
+                                      padding: '12px 10px',
+                                      verticalAlign: 'middle',
+                                      backgroundColor: theme.bg,
+                                      borderLeft: `2px solid ${theme.border}`,
+                                      borderRight: `2px solid ${theme.border}`
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                                      <span
+                                        style={{
+                                          fontSize: '11px',
+                                          fontWeight: '800',
+                                          color: theme.primary,
+                                          textAlign: 'center',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap',
+                                          maxWidth: '120px',
+                                          display: 'block'
+                                        }}
+                                        title={currentGroup.presetName}
+                                      >
+                                        {currentGroup.presetName}
+                                      </span>
 
-                                    {isPiLocked ? (
-                                      <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#312E81' }}>
-                                          ₹{parseFloat(currentGroup.kitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      {isPiLocked ? (
+                                        <div style={{ textAlign: 'center' }}>
+                                          <div style={{ fontSize: '14px', fontWeight: '800', color: theme.primary }}>
+                                            ₹{parseFloat(currentGroup.kitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                          </div>
+                                          <div style={{ fontSize: '11px', color: theme.primary, fontWeight: '600', marginTop: '2px' }}>
+                                            {groupCount} items × Total Quantity: {currentGroup.setCount || 1} {currentGroup.unitType || 'Sets'}
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: theme.primary, fontWeight: '700', marginTop: '3px' }}>
+                                            GST: {currentGroup.gstRate || '18%'}
+                                          </div>
                                         </div>
-                                        <div style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600', marginTop: '2px' }}>
-                                          {groupCount} items × Total Quantity: {currentGroup.setCount || 1} Set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
-                                        </div>
-                                        <div style={{ fontSize: '10px', color: '#6366F1', fontWeight: '700', marginTop: '3px' }}>
-                                          GST: {currentGroup.gstRate || '18%'}
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <>
-                                        <div style={{ position: 'relative', width: '100%' }}>
-                                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: '#6366F1', pointerEvents: 'none' }}>₹</span>
-                                          <input id="bom-orders-0-00" name="000" aria-label="0.00"
-                                            type="number"
-                                            value={currentGroup.kitPrice}
-                                            placeholder="0.00"
-                                            onFocus={(e) => e.target.select()}
-                                            onChange={(e) => {
-                                              const val = e.target.value;
-                                              if (groupId) {
-                                                setPresetGroups(prev => ({
-                                                  ...prev,
-                                                  [groupId]: { ...(prev[groupId] || currentGroup), kitPrice: val }
-                                                }));
-                                              }
-                                              setPresetKitPrice(val);
-                                            }}
-                                            style={{
-                                              width: '100%', height: '42px', borderRadius: '8px',
-                                              border: '2px solid #818CF8', padding: '0 10px 0 26px',
-                                              fontSize: '15px', fontWeight: '800', color: '#312E81',
-                                              textAlign: 'right', outline: 'none', boxSizing: 'border-box',
-                                              backgroundColor: 'white', cursor: 'text'
-                                            }}
-                                           />
-                                        </div>
+                                      ) : (
+                                        <>
+                                          <div style={{ position: 'relative', width: '100%' }}>
+                                            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: theme.primary, pointerEvents: 'none' }}>₹</span>
+                                            <input id="bom-orders-0-00" name="000" aria-label="0.00"
+                                              type="number"
+                                              value={currentGroup.kitPrice}
+                                              placeholder="0.00"
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (groupId) {
+                                                  setPresetGroups(prev => ({
+                                                    ...prev,
+                                                    [groupId]: { ...(prev[groupId] || currentGroup), kitPrice: val }
+                                                  }));
+                                                }
+                                                setPresetKitPrice(val);
+                                              }}
+                                              style={{
+                                                width: '100%', height: '42px', borderRadius: '8px',
+                                                border: `2px solid ${theme.border}`, padding: '0 10px 0 26px',
+                                                fontSize: '15px', fontWeight: '800', color: theme.primary,
+                                                textAlign: 'right', outline: 'none', boxSizing: 'border-box',
+                                                backgroundColor: 'white', cursor: 'text'
+                                              }}
+                                             />
+                                          </div>
 
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                          <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
-                                            {groupCount} items ×
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '600' }}>
+                                              {groupCount} items ×
                                           </span>
                                           <input id="bom-orders-set-count" name="setCount" aria-label="SetCount"
                                             type="number"
@@ -4252,14 +4404,6 @@ export default function BomOrdersView(props) {
                                                   [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                 }));
                                               }
-                                              const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
-                                              const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                              setBomMaterialsList(prev => prev.map(mat => {
-                                                if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                  return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                                }
-                                                return mat;
-                                              }));
                                             }}
                                             onBlur={() => {
                                               const current = currentGroup.setCount;
@@ -4270,14 +4414,6 @@ export default function BomOrdersView(props) {
                                                   [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                                 }));
                                               }
-                                              const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
-                                              const multiplier = isFixedKit ? 1 : finalCount;
-                                              setBomMaterialsList(prev => prev.map(mat => {
-                                                if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                  return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                                }
-                                                return mat;
-                                              }));
                                             }}
                                             style={{
                                               width: '42px', height: '26px', borderRadius: '6px',
@@ -4390,10 +4526,11 @@ export default function BomOrdersView(props) {
                           )}
                         </td>
                       </tr>
-                    );
-                  });
-                  })()
-                )}
+                    </React.Fragment>
+                  );
+                });
+                })()
+              )}
 
               </tbody>
             </table>
@@ -6777,60 +6914,473 @@ export default function BomOrdersView(props) {
                 </tr>
               </thead>
               <tbody>
-                {/* Build mapping for Preset Kit grouping to show consolidated amount in the middle of items (like PI) */}
+                {/* Build mapping for Preset Kit grouping with distinct themes, banners, and badges */}
                 {(() => {
-                  const presetGroupMap = {};
-                  (confirmingBomModal.items || []).forEach((item, idx) => {
-                    const itemRate = cleanNum(item.rate) || 0;
-                    const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                  const items = confirmingBomModal.items || [];
+                  const distinctPresetGroupIds = [];
+                  items.forEach(it => {
+                    const isPartBundle = Boolean(it.isPresetItem || (modalPresetGroups.length > 0 && cleanNum(it.rate) === 0));
                     if (isPartBundle) {
-                      const gid = item.presetGroupId || item.groupId || item.presetId || modalPresetGroups[0]?.groupId || modalPresetGroups[0]?.presetGroupId || 'default_kit';
-                      if (!presetGroupMap[gid]) {
-                        const matchedGrp = modalPresetGroups.find(g => (g.groupId === gid || g.presetGroupId === gid || g.presetId === gid || (g.groupId || 'default_kit') === gid)) || modalPresetGroups[0] || {};
-                        const sets = parseInt(matchedGrp.setCount) || 1;
-                        const price = cleanNum(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
-                        presetGroupMap[gid] = {
-                          firstIdx: idx,
-                          count: 0,
-                          presetName: matchedGrp.presetName || confirmingBomModal.presetName || 'Preset MMS Kit',
-                          setCount: sets,
-                          kitPrice: price,
-                          totalAmount: price * sets
-                        };
+                      const gid = it.presetGroupId || it.groupId || it.presetId || (it.presetName ? (modalPresetGroups.find(g => g.presetName === it.presetName)?.groupId) : null) || (modalPresetGroups.length === 1 ? (modalPresetGroups[0].groupId || modalPresetGroups[0].presetGroupId || 'default_kit') : null);
+                      if (gid && !distinctPresetGroupIds.includes(gid)) {
+                        distinctPresetGroupIds.push(gid);
                       }
-                      presetGroupMap[gid].count += 1;
+                    }
+                  });
+                  modalPresetGroups.forEach((g, gIdx) => {
+                    const gid = g.groupId || g.presetGroupId || `preset_grp_${gIdx}`;
+                    if (!distinctPresetGroupIds.includes(gid)) {
+                      distinctPresetGroupIds.push(gid);
                     }
                   });
 
-                  return (confirmingBomModal.items || []).map((item, idx) => {
+                  const presetGroupMap = {};
+                  distinctPresetGroupIds.forEach((gid, gIdx) => {
+                    const matchedGrp = modalPresetGroups.find(g => g.groupId === gid || g.presetGroupId === gid || g.presetId === gid || (gIdx === 0 && (gid === 'default_kit' || gid === 'preset_grp_0'))) || modalPresetGroups[gIdx] || {};
+                    const sets = parseInt(matchedGrp.setCount || matchedGrp.quantity) || 1;
+                    const unitType = matchedGrp.unitType || (matchedGrp.isKwBased ? 'kW' : 'Sets');
+                    const price = cleanNum(matchedGrp.kitPrice) || (modalPresetGroups.length === 1 ? (presetKitsTotal / sets) : 0);
+                    presetGroupMap[gid] = {
+                      groupId: gid,
+                      groupIndex: gIdx,
+                      presetName: matchedGrp.presetName || (confirmingBomModal.presetName && gIdx === 0 ? confirmingBomModal.presetName : `Preset Package ${gIdx + 1}`),
+                      setCount: sets,
+                      unitType: unitType,
+                      kitPrice: price,
+                      totalAmount: price * sets,
+                      firstIdx: -1,
+                      count: 0
+                    };
+                  });
+
+                  // Precompute item metadata and counts
+                  const itemMeta = items.map((item, idx) => {
+                    const itemRate = cleanNum(item.rate) || 0;
+                    const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                    let gid = null;
+                    let pInfo = null;
+                    let theme = PRESET_THEMES[0];
+                    let itemIndexInGroup = 0;
+                    let presetNumber = 1;
+
+                    if (isPartBundle) {
+                      gid = item.presetGroupId || item.groupId || item.presetId || (item.presetName ? (modalPresetGroups.find(g => g.presetName === item.presetName)?.groupId) : null) || (modalPresetGroups.length === 1 ? (modalPresetGroups[0].groupId || modalPresetGroups[0].presetGroupId || 'default_kit') : (distinctPresetGroupIds[0] || 'default_kit'));
+                      if (!presetGroupMap[gid]) {
+                        presetGroupMap[gid] = {
+                          groupId: gid,
+                          groupIndex: distinctPresetGroupIds.length,
+                          presetName: item.presetName || 'Preset MMS Kit',
+                          setCount: 1,
+                          unitType: 'Sets',
+                          kitPrice: 0,
+                          totalAmount: 0,
+                          firstIdx: idx,
+                          count: 0
+                        };
+                        distinctPresetGroupIds.push(gid);
+                      }
+                      pInfo = presetGroupMap[gid];
+                      if (pInfo.firstIdx === -1) pInfo.firstIdx = idx;
+                      pInfo.count += 1;
+                      itemIndexInGroup = pInfo.count;
+                      theme = getPresetTheme(pInfo.groupIndex);
+                      presetNumber = pInfo.groupIndex + 1;
+                    }
+                    return { isPartBundle, gid, itemIndexInGroup, theme, presetNumber };
+                  });
+
+                  const customItems = items.filter((_, idx) => !itemMeta[idx].isPartBundle);
+                  let customCounter = 0;
+
+                  return items.map((item, idx) => {
                     const itemQty = cleanNum(item.qty) || 0;
                     const itemRate = cleanNum(item.rate) || 0;
                     const itemTotal = itemQty * itemRate;
-                    const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
-                    const gid = isPartBundle ? (item.presetGroupId || item.groupId || item.presetId || modalPresetGroups[0]?.groupId || modalPresetGroups[0]?.presetGroupId || 'default_kit') : null;
+                    const meta = itemMeta[idx];
+                    const isPartBundle = meta.isPartBundle;
+                    const gid = meta.gid;
                     const pInfo = gid ? presetGroupMap[gid] : null;
                     const isFirstInKit = pInfo && pInfo.firstIdx === idx;
+                    const theme = meta.theme;
+                    const isFirstCustomItem = !isPartBundle && idx === items.findIndex((_, i) => !itemMeta[i].isPartBundle);
+                    const displaySNo = isPartBundle && distinctPresetGroupIds.length > 0
+                      ? `${meta.presetNumber}.${meta.itemIndexInGroup}`
+                      : (distinctPresetGroupIds.length > 0 ? `C.${++customCounter}` : `${idx + 1}`);
+
+                    const colCount = isAlreadyForwarded ? 7 : 8;
 
                     if (isAlreadyForwarded) {
                       return (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isPartBundle ? '#FAFEFF' : '#FFFFFF' }}>
-                          <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                          <td style={{ padding: '12px 10px', fontWeight: '700', color: '#0F172A' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              {isPartBundle && (
-                                <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: '10px', fontWeight: '800', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                                  KIT COMPONENT
+                        <React.Fragment key={idx}>
+                          {isFirstInKit && pInfo && (
+                            <tr key={`bom-preset-banner-${gid}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                              <td colSpan={colCount} style={{ padding: '8px 14px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      padding: '3px 8px',
+                                      borderRadius: '6px',
+                                      backgroundColor: theme.primary,
+                                      color: '#FFFFFF',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      letterSpacing: '0.5px'
+                                    }}>
+                                      <Boxes size={12} />
+                                      {theme.badge}
+                                    </span>
+                                    <strong style={{ fontSize: '13px', color: theme.primary, letterSpacing: '0.2px' }}>
+                                      {pInfo.presetName}
+                                    </strong>
+                                    <span style={{
+                                      fontSize: '11px',
+                                      fontWeight: '700',
+                                      color: theme.tagText,
+                                      backgroundColor: theme.tagBg,
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      border: `1px solid ${theme.border}`
+                                    }}>
+                                      {pInfo.setCount} {pInfo.unitType} • {pInfo.count} Components
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <span style={{ fontSize: '11.5px', color: '#475569' }}>
+                                      Package Rate: <strong style={{ color: theme.primary }}>₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {pInfo.unitType === 'kW' ? 'kW' : 'Set'}
+                                    </span>
+                                    <span style={{ fontSize: '12px', fontWeight: '800', color: theme.primary, backgroundColor: '#FFFFFF', padding: '2px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                                      Kit Subtotal: ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
+                            <tr key="bom-custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                              <td colSpan={colCount} style={{ padding: '8px 14px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#475569',
+                                    color: '#FFFFFF',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    letterSpacing: '0.5px'
+                                  }}>
+                                    CUSTOM ITEMS
+                                  </span>
+                                  <strong style={{ fontSize: '12px', color: '#334155' }}>
+                                    Additional Materials / Standalone Products ({customItems.length} items)
+                                  </strong>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isPartBundle ? theme.bg : '#FFFFFF' }}>
+                            <td style={{
+                              padding: '12px 10px',
+                              textAlign: 'center',
+                              fontWeight: '800',
+                              color: isPartBundle ? theme.primary : '#64748B',
+                              borderLeft: isPartBundle ? `4px solid ${theme.primary}` : '4px solid #CBD5E1'
+                            }}>
+                              #{displaySNo}
+                            </td>
+                            <td style={{ padding: '12px 10px', fontWeight: '700', color: '#0F172A' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {isPartBundle && (
+                                  <span style={{
+                                    backgroundColor: theme.tagBg,
+                                    color: theme.tagText,
+                                    border: `1px solid ${theme.border}`,
+                                    fontSize: '10px',
+                                    fontWeight: '800',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    letterSpacing: '0.3px',
+                                    width: 'fit-content',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: theme.primary }} />
+                                    {theme.badge} • Component {meta.itemIndexInGroup} of {pInfo ? pInfo.count : 1}
+                                  </span>
+                                )}
+                                <span>{item.name || '—'}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
+                            
+                            {/* Rate Column: Consolidated & Centered in Middle for Presets (Like PI) */}
+                            {isPartBundle ? (
+                              isFirstInKit ? (
+                                <td
+                                  rowSpan={pInfo.count}
+                                  style={{
+                                    padding: '12px 10px',
+                                    textAlign: 'right',
+                                    verticalAlign: 'middle',
+                                    backgroundColor: theme.bg,
+                                    borderLeft: `1.5px solid ${theme.border}`,
+                                    borderRight: `1px solid ${theme.border}`
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: '800', color: theme.primary, backgroundColor: theme.tagBg, padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                      {pInfo.setCount} {pInfo.unitType} Kit
+                                    </span>
+                                    <span style={{ fontWeight: '800', color: theme.primary, fontSize: '13.5px' }}>
+                                      ₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                </td>
+                              ) : null
+                            ) : (
+                              <td style={{ padding: '12px 10px', textAlign: 'right', color: '#334155' }}>
+                                ₹ {itemRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                            )}
+
+                            {/* Total Column: Consolidated & Centered in Middle for Presets (Like PI) */}
+                            {isPartBundle ? (
+                              isFirstInKit ? (
+                                <td
+                                  rowSpan={pInfo.count}
+                                  style={{
+                                    padding: '12px 10px',
+                                    textAlign: 'right',
+                                    verticalAlign: 'middle',
+                                    fontWeight: '900',
+                                    color: theme.primary,
+                                    fontSize: '14px',
+                                    backgroundColor: theme.bg
+                                  }}
+                                >
+                                  ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </td>
+                              ) : null
+                            ) : (
+                              <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                                ₹ {itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                            )}
+                          </tr>
+                        </React.Fragment>
+                      );
+                    }
+
+                    return (
+                      <React.Fragment key={idx}>
+                        {isFirstInKit && pInfo && (
+                          <tr key={`bom-preset-banner-edit-${gid}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                            <td colSpan={colCount} style={{ padding: '8px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: theme.primary,
+                                    color: '#FFFFFF',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    letterSpacing: '0.5px'
+                                  }}>
+                                    <Boxes size={12} />
+                                    {theme.badge}
+                                  </span>
+                                  <strong style={{ fontSize: '13px', color: theme.primary, letterSpacing: '0.2px' }}>
+                                    {pInfo.presetName}
+                                  </strong>
+                                  <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    color: theme.tagText,
+                                    backgroundColor: theme.tagBg,
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    border: `1px solid ${theme.border}`
+                                  }}>
+                                    {pInfo.setCount} {pInfo.unitType} • {pInfo.count} Components
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <span style={{ fontSize: '11.5px', color: '#475569' }}>
+                                    Package Rate: <strong style={{ color: theme.primary }}>₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {pInfo.unitType === 'kW' ? 'kW' : 'Set'}
+                                  </span>
+                                  <span style={{ fontSize: '12px', fontWeight: '800', color: theme.primary, backgroundColor: '#FFFFFF', padding: '2px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                                    Kit Subtotal: ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
+                          <tr key="bom-custom-items-banner-edit" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                            <td colSpan={colCount} style={{ padding: '8px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#475569',
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  CUSTOM ITEMS
                                 </span>
-                              )}
-                              <span>{item.name || '—'}</span>
-                            </div>
+                                <strong style={{ fontSize: '12px', color: '#334155' }}>
+                                  Additional Materials / Standalone Products ({customItems.length} items)
+                                </strong>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: item.confirmed ? '#F0FDF4' : (isPartBundle ? theme.bg : '#FFFFFF') }}>
+                          <td style={{
+                            padding: '12px 10px',
+                            textAlign: 'center',
+                            borderLeft: isPartBundle ? `4px solid ${theme.primary}` : (item.confirmed ? '4px solid #166534' : '4px solid #CBD5E1')
+                          }}>
+                            <input id={`bom-orders-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                              type="checkbox"
+                              checked={Boolean(item.confirmed)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, confirmed: checked } : it);
+                                setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                              }}
+                              style={{ width: '16px', height: '16px', accentColor: theme.primary, cursor: 'pointer' }}
+                             />
                           </td>
-                          <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
-                          
-                          {/* Rate Column: Consolidated & Centered in Middle for Presets (Like PI) */}
-                          {isPartBundle ? (
+                          <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: isPartBundle ? theme.primary : '#64748B' }}>
+                            #{displaySNo}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {isPartBundle && (
+                              <div style={{ marginBottom: '4px' }}>
+                                <span style={{
+                                  backgroundColor: theme.tagBg,
+                                  color: theme.tagText,
+                                  border: `1px solid ${theme.border}`,
+                                  fontSize: '10px',
+                                  fontWeight: '800',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  letterSpacing: '0.3px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: theme.primary }} />
+                                  {theme.badge} • Component {meta.itemIndexInGroup} of {pInfo ? pInfo.count : 1}
+                                </span>
+                              </div>
+                            )}
+                            {isSourcePiLocked ? (
+                              <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
+                                {item.name || '—'}
+                              </div>
+                            ) : (
+                              <TypeableProductSelect
+                                value={item.name || ''}
+                                itemsList={itemsList}
+                                placeholder="Type or select product / item..."
+                                accentColor={theme.primary}
+                                onChange={(val, matched) => {
+                                  if (!matched) {
+                                    const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, name: val } : it);
+                                    setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                    return;
+                                  }
+                                  const pName = matched.name;
+                                  const pCat = matched.category || matched.description || item.category;
+                                  const isSolar5 = is5PctSolarProduct(pName, pCat);
+                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? {
+                                    ...it,
+                                    name: pName,
+                                    code: matched.code || it.code || '',
+                                    rate: matched.price || matched.rate ? Number(matched.price || matched.rate) : it.rate,
+                                    uom: matched.uom || matched.unit || it.uom,
+                                    category: pCat,
+                                    gstRate: isSolar5 ? '5%' : (it.gstRate || '18%')
+                                  } : it);
+                                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                }}
+                              />
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {isSourcePiLocked ? (
+                              <div style={{ fontSize: '12px', color: '#64748B' }}>
+                                {item.category || item.specs || '—'}
+                              </div>
+                            ) : (
+                              <input id={`bom-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
+                                type="text"
+                                placeholder="Description..."
+                                value={item.category || item.specs || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, category: val, specs: val } : it);
+                                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                }}
+                                style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
+                               />
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {isSourcePiLocked ? (
+                              <div style={{ fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>
+                                {item.uom || item.unit || 'NOS'}
+                              </div>
+                            ) : (
+                              <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
+                                type="text"
+                                placeholder="UOM"
+                                value={item.uom || item.unit || 'NOS'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
+                                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                }}
+                                style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
+                               />
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {isSourcePiLocked ? (
+                              <div style={{ fontSize: '13px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>
+                                {item.qty || 0}
+                              </div>
+                            ) : (
+                              <input id={`bom-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
+                                type="number"
+                                min="1"
+                                value={item.qty}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, qty: val } : it);
+                                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                }}
+                                style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
+                               />
+                            )}
+                          </td>
+                          {/* Rate Column for Editing / Verification */}
+                          {isSourcePiLocked && isPartBundle ? (
                             isFirstInKit ? (
                               <td
                                 rowSpan={pInfo.count}
@@ -6838,29 +7388,46 @@ export default function BomOrdersView(props) {
                                   padding: '12px 10px',
                                   textAlign: 'right',
                                   verticalAlign: 'middle',
-                                  backgroundColor: '#F0FDFA',
-                                  borderLeft: '1.5px solid #CCFBF1',
-                                  borderRight: '1px solid #CCFBF1'
+                                  backgroundColor: theme.bg,
+                                  borderLeft: `1.5px solid ${theme.border}`,
+                                  borderRight: `1px solid ${theme.border}`
                                 }}
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                                    {pInfo.setCount} Set{pInfo.setCount > 1 ? 's' : ''} Kit
+                                  <span style={{ fontSize: '10px', fontWeight: '800', color: theme.primary, backgroundColor: theme.tagBg, padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                    {pInfo.setCount} {pInfo.unitType} Kit
                                   </span>
-                                  <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13.5px' }}>
+                                  <span style={{ fontWeight: '800', color: theme.primary, fontSize: '13px' }}>
                                     ₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                   </span>
                                 </div>
                               </td>
                             ) : null
                           ) : (
-                            <td style={{ padding: '12px 10px', textAlign: 'right', color: '#334155' }}>
-                              ₹ {itemRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            <td style={{ padding: '12px 10px' }}>
+                              {isSourcePiLocked ? (
+                                <div style={{ fontSize: '13px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>
+                                  ₹ {parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </div>
+                              ) : (
+                                <input id={`bom-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate"
+                                  type="number"
+                                  min="0"
+                                  value={item.rate}
+                                  placeholder={isPartBundle ? '0 (Bundled)' : '0'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, rate: val } : it);
+                                    setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                  }}
+                                  style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '12px', textAlign: 'right', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
+                                 />
+                              )}
                             </td>
                           )}
 
-                          {/* Total Column: Consolidated & Centered in Middle for Presets (Like PI) */}
-                          {isPartBundle ? (
+                          {/* Total Column for Editing / Verification */}
+                          {isSourcePiLocked && isPartBundle ? (
                             isFirstInKit ? (
                               <td
                                 rowSpan={pInfo.count}
@@ -6869,9 +7436,9 @@ export default function BomOrdersView(props) {
                                   textAlign: 'right',
                                   verticalAlign: 'middle',
                                   fontWeight: '900',
-                                  color: '#0E7490',
-                                  fontSize: '14px',
-                                  backgroundColor: '#F0FDFA'
+                                  color: theme.primary,
+                                  fontSize: '13.5px',
+                                  backgroundColor: theme.bg
                                 }}
                               >
                                 ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -6882,205 +7449,26 @@ export default function BomOrdersView(props) {
                               ₹ {itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </td>
                           )}
-                        </tr>
-                      );
-                    }
 
-                  return (
-                    <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: item.confirmed ? '#F0FDF4' : 'transparent' }}>
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                        <input id={`bom-orders-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
-                          type="checkbox"
-                          checked={Boolean(item.confirmed)}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, confirmed: checked } : it);
-                            setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                          }}
-                          style={{ width: '16px', height: '16px', accentColor: '#166534', cursor: 'pointer' }}
-                         />
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '12px 10px' }}>
-                        {isSourcePiLocked ? (
-                          <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
-                            {item.name || '—'}
-                          </div>
-                        ) : (
-                          <TypeableProductSelect
-                            value={item.name || ''}
-                            itemsList={itemsList}
-                            placeholder="Type or select product / item..."
-                            accentColor="#0E7490"
-                            onChange={(val, matched) => {
-                              if (!matched) {
-                                const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, name: val } : it);
-                                setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                                return;
-                              }
-                              const pName = matched.name;
-                              const pCat = matched.category || matched.description || item.category;
-                              const isSolar5 = is5PctSolarProduct(pName, pCat);
-                              const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? {
-                                ...it,
-                                name: pName,
-                                code: matched.code || it.code || '',
-                                rate: matched.price || matched.rate ? Number(matched.price || matched.rate) : it.rate,
-                                uom: matched.uom || matched.unit || it.uom,
-                                category: pCat,
-                                gstRate: isSolar5 ? '5%' : (it.gstRate || '18%')
-                              } : it);
-                              setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                            }}
-                          />
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 10px' }}>
-                        {isSourcePiLocked ? (
-                          <div style={{ fontSize: '12px', color: '#64748B' }}>
-                            {item.category || item.specs || '—'}
-                          </div>
-                        ) : (
-                          <input id={`bom-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
-                            type="text"
-                            placeholder="Description..."
-                            value={item.category || item.specs || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, category: val, specs: val } : it);
-                              setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                            }}
-                            style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                           />
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 10px' }}>
-                        {isSourcePiLocked ? (
-                          <div style={{ fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>
-                            {item.uom || item.unit || 'NOS'}
-                          </div>
-                        ) : (
-                          <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
-                            type="text"
-                            placeholder="UOM"
-                            value={item.uom || item.unit || 'NOS'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
-                              setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                            }}
-                            style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                           />
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 10px' }}>
-                        {isSourcePiLocked ? (
-                          <div style={{ fontSize: '13px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>
-                            {item.qty || 0}
-                          </div>
-                        ) : (
-                          <input id={`bom-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
-                            type="number"
-                            min="1"
-                            value={item.qty}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, qty: val } : it);
-                              setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                            }}
-                            style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                           />
-                        )}
-                      </td>
-                        {/* Rate Column for Editing / Verification */}
-                        {isSourcePiLocked && isPartBundle ? (
-                          isFirstInKit ? (
-                            <td
-                              rowSpan={pInfo.count}
-                              style={{
-                                padding: '12px 10px',
-                                textAlign: 'right',
-                                verticalAlign: 'middle',
-                                backgroundColor: '#F0FDFA',
-                                borderLeft: '1.5px solid #CCFBF1',
-                                borderRight: '1px solid #CCFBF1'
-                              }}
-                            >
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                                <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                                  {pInfo.setCount} Set{pInfo.setCount > 1 ? 's' : ''} Kit
-                                </span>
-                                <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
-                                  ₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                            </td>
-                          ) : null
-                        ) : (
-                          <td style={{ padding: '12px 10px' }}>
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                             {isSourcePiLocked ? (
-                              <div style={{ fontSize: '13px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>
-                                ₹ {parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                              </div>
+                              <span title="Locked from Source Proforma Invoice" style={{ color: '#94A3B8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Lock style={{ width: '14px', height: '14px' }} />
+                              </span>
                             ) : (
-                              <input id={`bom-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate"
-                                type="number"
-                                min="0"
-                                value={item.rate}
-                                placeholder={isPartBundle ? '0 (Bundled)' : '0'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, rate: val } : it);
+                              <button
+                                onClick={() => {
+                                  const updatedItems = (confirmingBomModal.items || []).filter((_, i) => i !== idx);
                                   setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                                 }}
-                                style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '12px', textAlign: 'right', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                               />
+                                style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                <Trash2 style={{ width: '14px', height: '14px' }} />
+                              </button>
                             )}
                           </td>
-                        )}
-
-                        {/* Total Column for Editing / Verification */}
-                        {isSourcePiLocked && isPartBundle ? (
-                          isFirstInKit ? (
-                            <td
-                              rowSpan={pInfo.count}
-                              style={{
-                                padding: '12px 10px',
-                                textAlign: 'right',
-                                verticalAlign: 'middle',
-                                fontWeight: '900',
-                                color: '#0E7490',
-                                fontSize: '14px',
-                                backgroundColor: '#F0FDFA'
-                              }}
-                            >
-                              ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </td>
-                          ) : null
-                        ) : (
-                          <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
-                            ₹ {itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </td>
-                        )}
-
-                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                          {isSourcePiLocked ? (
-                            <span title="Locked from Source Proforma Invoice" style={{ color: '#94A3B8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <Lock style={{ width: '14px', height: '14px' }} />
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                const updatedItems = (confirmingBomModal.items || []).filter((_, i) => i !== idx);
-                                setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                              }}
-                              style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            >
-                              <Trash2 style={{ width: '14px', height: '14px' }} />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                        </tr>
+                      </React.Fragment>
                     );
                   });
                 })()}
@@ -8493,24 +8881,26 @@ export default function BomOrdersView(props) {
                         const sCount = parseInt(grp.setCount) || 1;
                         const kPrice = cleanNum(grp.kitPrice) || 0;
                         const kTotal = sCount * kPrice;
+                        const theme = getPresetTheme(gIdx);
+                        const unitType = grp.unitType || (grp.isKwBased ? 'kW' : 'Sets');
                         return (
-                          <tr key={`preset-pkg-${gIdx}`} style={{ backgroundColor: '#F0FDFA', borderBottom: '1.5px solid #CCFBF1' }}>
-                            <td style={{ padding: '8px 10px', color: '#0E7490', fontWeight: '800', textAlign: 'center' }}>★</td>
-                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>
+                          <tr key={`preset-pkg-${gIdx}`} style={{ backgroundColor: theme.bg, borderBottom: `1.5px solid ${theme.border}` }}>
+                            <td style={{ padding: '8px 10px', color: theme.primary, fontWeight: '800', textAlign: 'center' }}>★</td>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: theme.primary }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontSize: '9px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                                  PRESET KIT PACKAGE
+                                <span style={{ backgroundColor: theme.primary, color: '#FFFFFF', fontSize: '9px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                  {theme.badge}
                                 </span>
                                 <span>{grp.presetName || 'Preset Structure Kit'}</span>
                               </div>
                             </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                              {sCount} Set{sCount > 1 ? 's' : ''}
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: theme.primary }}>
+                              {sCount} {unitType}
                             </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: theme.primary }}>
                               ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '900', color: '#0E7490' }}>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '900', color: theme.primary }}>
                               ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
@@ -8519,33 +8909,51 @@ export default function BomOrdersView(props) {
                     })()}
 
                     {/* Component Items */}
-                    {(quickPreviewRecord.items || []).map((it, idx) => {
-                      const q = cleanNum(it.qty, 1);
-                      const r = cleanNum(it.rate, 0);
-                      const lineTotal = q * r;
-                      const hasPresets = (Array.isArray(quickPreviewRecord.presetGroups) && quickPreviewRecord.presetGroups.length > 0) || quickPreviewRecord.presetName || (cleanNum(quickPreviewRecord.presetKitPrice) > 0);
-                      const isKitPart = Boolean(it.isPresetItem || (hasPresets && r === 0));
-                      return (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isKitPart ? '#FAFEFF' : '#FFFFFF' }}>
-                          <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700', textAlign: 'center' }}>{idx + 1}</td>
-                          <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {isKitPart && (
-                                <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: '9px', fontWeight: '800', padding: '1px 5px', borderRadius: '3px' }}>
-                                  KIT COMPONENT
-                                </span>
+                    {(() => {
+                      const pGroups = (Array.isArray(quickPreviewRecord.presetGroups) && quickPreviewRecord.presetGroups.length > 0)
+                        ? quickPreviewRecord.presetGroups
+                        : (quickPreviewRecord.presetName || (cleanNum(quickPreviewRecord.presetKitPrice) > 0))
+                          ? [{
+                              groupId: 'default_kit',
+                              presetName: quickPreviewRecord.presetName || 'Preset Package',
+                              setCount: parseInt(quickPreviewRecord.presetSetCount) || 1
+                            }]
+                          : [];
+
+                      return (quickPreviewRecord.items || []).map((it, idx) => {
+                        const q = cleanNum(it.qty, 1);
+                        const r = cleanNum(it.rate, 0);
+                        const lineTotal = q * r;
+                        const hasPresets = pGroups.length > 0;
+                        const isKitPart = Boolean(it.isPresetItem || (hasPresets && r === 0));
+                        let theme = PRESET_THEMES[0];
+                        if (isKitPart) {
+                          const gid = it.presetGroupId || it.groupId || it.presetId;
+                          const gIdx = gid ? pGroups.findIndex(g => g.groupId === gid || g.presetGroupId === gid) : 0;
+                          theme = getPresetTheme(gIdx >= 0 ? gIdx : 0);
+                        }
+
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isKitPart ? theme.bg : '#FFFFFF' }}>
+                            <td style={{ padding: '8px 10px', color: isKitPart ? theme.primary : '#94A3B8', fontWeight: '700', textAlign: 'center' }}>{idx + 1}</td>
+                            <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {isKitPart && (
+                                  <span style={{ backgroundColor: theme.tagBg, color: theme.tagText, border: `1px solid ${theme.border}`, fontSize: '9px', fontWeight: '800', padding: '1px 6px', borderRadius: '3px' }}>
+                                    {theme.badge} COMPONENT
+                                  </span>
+                                )}
+                                <span>{it.name || '—'}</span>
+                              </div>
+                              {it.category && <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '500' }}>{it.category}</span>}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: isKitPart ? theme.primary : '#0E7490' }}>{q} {it.uom || ''}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: isKitPart ? theme.primary : '#475569' }}>
+                              {isKitPart ? (
+                                <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700', backgroundColor: theme.tagBg, padding: '2px 5px', borderRadius: '3px' }}>Included</span>
+                              ) : (
+                                `₹ ${r.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
                               )}
-                              <span>{it.name || '—'}</span>
-                            </div>
-                            {it.category && <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '500' }}>{it.category}</span>}
-                          </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>{q} {it.uom || ''}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: isKitPart ? '#0E7490' : '#475569' }}>
-                            {isKitPart ? (
-                              <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 5px', borderRadius: '3px' }}>Included</span>
-                            ) : (
-                              `₹ ${r.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                            )}
                           </td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: isKitPart ? '#0E7490' : '#0F172A' }}>
                             {isKitPart ? (
@@ -8556,7 +8964,8 @@ export default function BomOrdersView(props) {
                           </td>
                         </tr>
                       );
-                    })}
+                    });
+                    })()}
                   </tbody>
                   <tfoot>
                     <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #E2E8F0', fontWeight: '700', color: '#475569' }}>

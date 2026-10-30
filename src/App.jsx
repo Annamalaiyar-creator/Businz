@@ -9,7 +9,7 @@ import SidebarRightColumn from './components/SidebarRightColumn';
 import MaterialReorderAlerts from './components/MaterialReorderAlerts';
 import LoginScreen from './components/LoginScreen';
 import NotificationToast from './components/NotificationToast';
-import WorkflowNotificationBanner from './components/WorkflowNotificationBanner';
+
 
 // Route/View-Level Code Splitting via React.lazy() (Preserves all behavior, isolates bundle weight)
 const PerformaInvoiceView = lazy(() => import('./components/PerformaInvoiceView'));
@@ -24,6 +24,7 @@ const AccountsFinanceDashboard = lazy(() => import('./components/views/AccountsF
 const BillingDashboardView = lazy(() => import('./components/views/BillingDashboardView'));
 const CeoExecutiveDashboardView = lazy(() => import('./components/views/CeoExecutiveDashboardView'));
 const TechSupportDashboardView = lazy(() => import('./components/views/TechSupportDashboardView'));
+const TechnicalAdminDashboardView = lazy(() => import('./components/views/TechnicalAdminDashboardView'));
 const DeveloperPortalView = lazy(() => import('./components/DeveloperPortalView'));
 
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
@@ -629,37 +630,6 @@ function App() {
 
 
 
-  // Developer / Technical Admin Portal Dedicated Fullscreen Console
-  const isDevRole = userRole === 'Technical Administrator' || userRole === 'Developer' || (userRole || '').startsWith('TA') || activeTab === 'Developer Console' || activeTab === 'Developer Portal';
-  
-  if (isDevRole && devViewMode === 'console') {
-    return (
-      <>
-        <Suspense fallback={<AppViewLoadingFallback activeTab="Developer Console" />}>
-          <DeveloperPortalView 
-            userRole={userRole} 
-            onSignOut={handleSignOut} 
-            showCustomAlert={showCustomAlert} 
-            onSwitchToErp={() => {
-              setDevViewMode('erp');
-              localStorage.setItem('controlroom_dev_view_mode', 'erp');
-            }}
-          />
-        </Suspense>
-        {toastAlert && (
-          <NotificationToast 
-            alert={toastAlert} 
-            onClose={() => setToastAlert(null)} 
-          />
-        )}
-        <WorkflowNotificationBanner 
-          userRole={userRole} 
-          onNavigate={handleTabChange} 
-        />
-      </>
-    );
-  }
-
   return (
     <div className="app-container">
       {/* Sidebar Navigation */}
@@ -689,48 +659,6 @@ function App() {
 
       {/* Main View Wrapper */}
       <main className="main-wrapper">
-        {/* Technical Administrator ERP Mode Banner */}
-        {isDevRole && (
-          <div style={{
-            backgroundColor: '#0F172A',
-            color: '#38BDF8',
-            padding: '8px 20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '12px',
-            fontWeight: '800',
-            borderBottom: '1px solid #1E293B',
-            zIndex: 999
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#38BDF8', boxShadow: '0 0 8px #38BDF8' }} />
-              <span>Technical Administrator Session — Businz CRM Active (TA Integration Permissions Live)</span>
-            </div>
-            <button
-              onClick={() => {
-                setDevViewMode('console');
-                localStorage.setItem('controlroom_dev_view_mode', 'console');
-              }}
-              style={{
-                backgroundColor: '#0284C7',
-                border: 'none',
-                color: '#FFFFFF',
-                padding: '4px 12px',
-                borderRadius: '6px',
-                fontSize: '11.5px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              « Return to Dev Console
-            </button>
-          </div>
-        )}
-
         {/* Top Header Card */}
         <Header 
           activeTab={activeTab} 
@@ -744,7 +672,9 @@ function App() {
         {/* Scrollable Center Content Pane */}
         <div className={`content-pane ${(!activeTab.includes('Dashboard')) ? 'procurement-layout' : ''} ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''} ${(activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') ? 'dashboard-view-pane' : ''}`}>
           <Suspense fallback={<AppViewLoadingFallback activeTab={activeTab} />}>
-            {(activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
+            {(((userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer') && (activeTab === 'Dashboard' || activeTab === 'Admin Dashboard' || activeTab === 'Developer Console' || activeTab === 'Developer Portal')) || (['User Management', 'System Health', 'Active Sessions', 'Backup Vault', 'Developer Console', 'Developer Portal'].includes(activeTab) && (userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer' || userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Admin' || userRole === 'Super Admin'))) ? (
+              <TechnicalAdminDashboardView userRole={userRole} activeTab={activeTab} onNavigateTab={handleTabChange} />
+            ) : (activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
               <ProductionAdminView activeTab={activeTab} userRole={userRole} />
             ) : (activeTab === 'Performa Invoice' || activeTab === 'Proforma Invoice') ? (
               <PerformaInvoiceView 
@@ -858,11 +788,7 @@ function App() {
         </div>
       )}
 
-      {/* Real-Time Interactive Workflow Notification Banner with Audio Chime & Deep Link */}
-      <WorkflowNotificationBanner 
-        userRole={userRole} 
-        onNavigate={handleTabChange} 
-      />
+      {/* Sidebar Navigation */}
     </div>
   );
 }
