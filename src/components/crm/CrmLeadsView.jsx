@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Lead360PageView, { LEAD_STAGES, getStageRank, canTransitionStage } from './Lead360PageView';
 import { getNextSequence } from '../../utils/sequenceGenerator';
+import NotificationToast from '../NotificationToast';
 
 const STRUCTURE_CATEGORIES = [
   'Aluminium Mounting Structures',
@@ -853,27 +854,12 @@ export default function CrmLeadsView({
   // =========================================================================
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '80px' }}>
-      {/* Toast Notification */}
+      {/* System Standard Toast Notification */}
       {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          backgroundColor: '#0F172A',
-          color: '#FFFFFF',
-          padding: '12px 20px',
-          borderRadius: '8px',
-          fontSize: '13px',
-          fontWeight: 600,
-          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <CheckCircle2 size={16} color="#10B981" />
-          {toastMessage}
-        </div>
+        <NotificationToast
+          alert={toastMessage}
+          onClose={() => setToastMessage(null)}
+        />
       )}
 
       {viewMode === '360' && activeLead ? (

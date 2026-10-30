@@ -6,6 +6,7 @@ import {
   Cpu, Terminal, Zap, ExternalLink, FileText, CheckCircle, Edit3, Phone, Mail, Briefcase
 } from 'lucide-react';
 import { fetchCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
+import NotificationToast from '../NotificationToast';
 
 export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', onNavigateTab, userRole = 'Technical Administrator' }) {
   // Active sub-tab resolution: maps activeTab prop or local selection
@@ -366,28 +367,12 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
     }}>
 
-      {/* ─── ACTION ALERT BANNER ─── */}
+      {/* ─── SYSTEM STANDARD TOAST NOTIFICATION ─── */}
       {actionMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '24px',
-          zIndex: 99999,
-          backgroundColor: actionMessage.type === 'error' ? '#EF4444' : actionMessage.type === 'warning' ? '#F59E0B' : '#0E7490',
-          color: '#FFFFFF',
-          padding: '12px 20px',
-          borderRadius: '8px',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
-          fontSize: '13.5px',
-          fontWeight: '700',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
-          <CheckCircle2 size={18} />
-          <span>{actionMessage.text}</span>
-        </div>
+        <NotificationToast
+          alert={actionMessage}
+          onClose={() => setActionMessage(null)}
+        />
       )}
 
       {/* ─── TOP PAGE HEADER ─── */}

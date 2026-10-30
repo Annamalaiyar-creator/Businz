@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
 
 export default function NotificationToast({ alert, onClose, onRetry, onLearnMore }) {
-  const hasDetails = Boolean(alert && Array.isArray(alert.details) && alert.details.length > 0);
-  const initialDuration = alert?.duration || (hasDetails ? 10 : 4);
+  const alertObj = typeof alert === 'string' ? { message: alert, type: 'success' } : alert;
+  const rawMessage = alertObj?.message || alertObj?.text || '';
+  const rawType = alertObj?.type || 'success';
+  const hasDetails = Boolean(alertObj && Array.isArray(alertObj.details) && alertObj.details.length > 0);
+  const initialDuration = alertObj?.duration || (hasDetails ? 10 : 4);
   const [countdown, setCountdown] = useState(initialDuration);
 
   useEffect(() => {
     setCountdown(initialDuration);
-    if (alert?.persistent) return;
+    if (alertObj?.persistent) return;
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
@@ -21,18 +24,18 @@ export default function NotificationToast({ alert, onClose, onRetry, onLearnMore
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [alert, onClose, initialDuration]);
+  }, [alertObj, onClose, initialDuration]);
 
   if (!alert) return null;
 
-  const isError = alert.type === 'error' || alert.type === 'danger' || (alert.message && (
-    alert.message.toLowerCase().includes('wrong') ||
-    alert.message.toLowerCase().includes('error') ||
-    alert.message.toLowerCase().includes('failed') ||
-    alert.message.toLowerCase().includes('unable')
+  const isError = rawType === 'error' || rawType === 'danger' || (rawMessage && (
+    rawMessage.toLowerCase().includes('wrong') ||
+    rawMessage.toLowerCase().includes('error') ||
+    rawMessage.toLowerCase().includes('failed') ||
+    rawMessage.toLowerCase().includes('unable')
   ));
-  const isWarning = alert.type === 'warning';
-  const isSuccess = alert.type === 'success';
+  const isWarning = rawType === 'warning';
+  const isSuccess = rawType === 'success' || (!isError && !isWarning);
 
   const containerBg = isError
     ? '#FFF0F2'
@@ -58,8 +61,8 @@ export default function NotificationToast({ alert, onClose, onRetry, onLearnMore
         ? '#16A34A'
         : '#2563EB';
 
-  const titleText = alert.title || (isError ? 'Uh oh! Something went wrong' : isSuccess ? 'Action Successful' : isWarning ? 'Attention Required' : 'System Notification');
-  const bodyText = alert.message || (isError ? 'We apologize for the inconvenience you experienced.' : 'Operation completed successfully.');
+  const titleText = alertObj?.title || (isError ? 'Uh oh! Something went wrong' : isSuccess ? 'Action Successful' : isWarning ? 'Attention Required' : 'System Notification');
+  const bodyText = rawMessage || (isError ? 'We apologize for the inconvenience you experienced.' : 'Operation completed successfully.');
 
   return (
     <>

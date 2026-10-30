@@ -4,6 +4,7 @@ import {
   FileText, HardDrive, CheckCircle2, AlertTriangle, 
   Clock, ArrowDownToLine, Trash2, Eye, Server, Sparkles, Check, X
 } from 'lucide-react';
+import NotificationToast from '../NotificationToast';
 
 export default function BackupVaultView({ userRole }) {
   const [backups, setBackups] = useState([]);
@@ -174,27 +175,12 @@ export default function BackupVaultView({ userRole }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '1400px', margin: '0 auto' }}>
       
-      {/* Toast Alert */}
+      {/* System Standard Toast Notification */}
       {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '24px',
-          right: '24px',
-          backgroundColor: toastMessage.type === 'error' ? '#DC2626' : '#0E7490',
-          color: '#FFFFFF',
-          padding: '12px 20px',
-          borderRadius: '10px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          zIndex: 999999,
-          fontWeight: '700',
-          fontSize: '13px'
-        }}>
-          {toastMessage.type === 'error' ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
-          <span>{toastMessage.text}</span>
-        </div>
+        <NotificationToast
+          alert={toastMessage}
+          onClose={() => setToastMessage(null)}
+        />
       )}
 
       {/* Header Banner */}

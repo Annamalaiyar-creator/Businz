@@ -5,6 +5,7 @@ import {
   Clock, User, Check, X, ShieldCheck, Smartphone, Mail,
   Sliders, ArrowRight, Eye, ChevronRight
 } from 'lucide-react';
+import NotificationToast from '../NotificationToast';
 
 const INITIAL_FB_MESSAGES = [
   {
@@ -270,25 +271,12 @@ export default function FacebookMetaIntegrationView({ userRole = 'Tech Support',
         </div>
       </div>
 
-      {/* Toast Alert */}
+      {/* System Standard Toast Notification */}
       {toastMsg && (
-        <div style={{
-          padding: '10px 16px',
-          borderRadius: '10px',
-          backgroundColor: toastMsg.type === 'error' ? '#FEF2F2' : '#F0FDF4',
-          border: `1px solid ${toastMsg.type === 'error' ? '#FECACA' : '#BBF7D0'}`,
-          color: toastMsg.type === 'error' ? '#991B1B' : '#166534',
-          fontSize: '12px',
-          fontWeight: '600',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <span>{toastMsg.text}</span>
-          <button onClick={() => setToastMsg(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit' }}>
-            <X size={14} />
-          </button>
-        </div>
+        <NotificationToast
+          alert={toastMsg}
+          onClose={() => setToastMsg(null)}
+        />
       )}
 
       {/* 2. SUB-NAVIGATION TABS */}
