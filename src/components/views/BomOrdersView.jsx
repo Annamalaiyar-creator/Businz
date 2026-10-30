@@ -1033,12 +1033,18 @@ export default function BomOrdersView(props) {
     }
   };
 
-  // Permission Check for Cancel BOM (Strictly Dispatch, Production, and Billing Logins — Excludes CEO View-Only)
-  const canCancelBom = !isCeo && [
-    'Dispatch Head', 'Dispatch Executive',
-    'Production Head', 'Technical Administrator', 'Floor Supervisor',
-    'Billing', 'Invoice Executive', 'Accounts Head', 'Accounts Executive'
-  ].includes(userRole);
+  // Permission Check for Cancel BOM (Strictly Dispatch, Production, Accounts, and Billing Logins — Excludes CEO View-Only)
+  const roleNormForBomCancel = String(userRole || localStorage.getItem('controlroom_user_role') || '').toLowerCase().trim();
+  const canCancelBom = !isCeo && (
+    roleNormForBomCancel.includes('dispatch') ||
+    roleNormForBomCancel.includes('account') ||
+    roleNormForBomCancel.includes('production') ||
+    roleNormForBomCancel.includes('billing') ||
+    roleNormForBomCancel.includes('invoice') ||
+    roleNormForBomCancel.includes('technical administrator') ||
+    roleNormForBomCancel.includes('floor supervisor') ||
+    roleNormForBomCancel.includes('md')
+  );
 
   // Helper to Block / Deduct Inventory immediately upon BOM Creation or Verification (Deducts ONCE)
   const blockInventoryForBom = (bomItems = [], bomCode = '') => {

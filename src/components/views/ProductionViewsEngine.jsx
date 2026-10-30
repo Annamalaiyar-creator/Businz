@@ -533,12 +533,19 @@ export default function ProductionViewsEngine(props) {
   const [bomFormErrors, setBomFormErrors] = useState({});
 
   // Permission Check for Cancel BOM (Strictly Dispatch, Accounts, Production, Billing, and Admin)
-  const canCancelBom = [
-    'Dispatch Head', 'Dispatch Executive',
-    'Accounts Head', 'Accounts Executive', 'Accounts Lead', 'Finance & Accounts', 'Accounts',
-    'Production Head', 'Technical Administrator', 'CEO', 'MD', 'Managing Director',
-    'Floor Supervisor', 'Billing', 'Invoice Executive', 'Billing & Invoice Executive'
-  ].includes(userRole);
+  const userRoleNormalized = String(userRole || localStorage.getItem('controlroom_user_role') || '').toLowerCase().trim();
+  const canCancelBom = (
+    userRoleNormalized.includes('dispatch') ||
+    userRoleNormalized.includes('account') ||
+    userRoleNormalized.includes('production') ||
+    userRoleNormalized.includes('billing') ||
+    userRoleNormalized.includes('invoice') ||
+    userRoleNormalized.includes('technical administrator') ||
+    userRoleNormalized.includes('administrator') ||
+    userRoleNormalized.includes('floor supervisor') ||
+    userRoleNormalized.includes('md') ||
+    userRoleNormalized.includes('ceo')
+  );
 
   // Helper to Restore / Unblock Inventory when a BOM is Cancelled
   const restoreInventoryForBom = (bomItems = [], bomCode = '') => {
@@ -575,7 +582,6 @@ export default function ProductionViewsEngine(props) {
 
       if (currentItems.length > 0) {
         localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
-        saveCloudStore('item_store', currentItems);
       }
       window.dispatchEvent(new Event('controlroom_items_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
@@ -1365,18 +1371,27 @@ export default function ProductionViewsEngine(props) {
           // Render Dispatch Head Packing Verification Screen (Full Size Page)
           if (dispatchPackingModal) {
             return (
-              <DispatchPackingModal
-                dispatchPackingModal={dispatchPackingModal}
-                setDispatchPackingModal={setDispatchPackingModal}
-                bomStore={bomStore}
-                setBomStore={setBomStore}
-                setInvoiceList={setInvoiceList}
-                canCancelBom={canCancelBom}
-                handleCancelBomOrder={handleCancelBomOrder}
-                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
-                setVehicleLoadingModal={setVehicleLoadingModal}
-                userRole={userRole}
-              />
+              <>
+                <DispatchPackingModal
+                  dispatchPackingModal={dispatchPackingModal}
+                  setDispatchPackingModal={setDispatchPackingModal}
+                  bomStore={bomStore}
+                  setBomStore={setBomStore}
+                  setInvoiceList={setInvoiceList}
+                  canCancelBom={canCancelBom}
+                  handleCancelBomOrder={handleCancelBomOrder}
+                  setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                  setVehicleLoadingModal={setVehicleLoadingModal}
+                  userRole={userRole}
+                />
+                {bomCancelPromptModal && (
+                  <BomCancelPromptModal
+                    bomCancelPromptModal={bomCancelPromptModal}
+                    onClose={() => setBomCancelPromptModal(null)}
+                    onConfirmCancel={(bom, reason) => executeCancelBom(bom, reason)}
+                  />
+                )}
+              </>
             );
           }
 
@@ -1397,21 +1412,30 @@ export default function ProductionViewsEngine(props) {
           // Render Accounts Team Payment & Document Verification Screen (Full Size Page)
           if (accountsVerificationModal) {
             return (
-              <AccountsVerificationModal
-                accountsVerificationModal={accountsVerificationModal}
-                setAccountsVerificationModal={setAccountsVerificationModal}
-                isAccountsViewOnly={isAccountsViewOnly}
-                setIsAccountsViewOnly={setIsAccountsViewOnly}
-                bomStore={bomStore}
-                setBomStore={setBomStore}
-                userRole={userRole}
-                setPreviewDocModal={setPreviewDocModal}
-                canCancelBom={canCancelBom}
-                handleCancelBomOrder={handleCancelBomOrder}
-                invoiceList={invoiceList}
-                setInvoiceList={setInvoiceList}
-                showCustomAlert={showCustomAlert}
-              />
+              <>
+                <AccountsVerificationModal
+                  accountsVerificationModal={accountsVerificationModal}
+                  setAccountsVerificationModal={setAccountsVerificationModal}
+                  isAccountsViewOnly={isAccountsViewOnly}
+                  setIsAccountsViewOnly={setIsAccountsViewOnly}
+                  bomStore={bomStore}
+                  setBomStore={setBomStore}
+                  userRole={userRole}
+                  setPreviewDocModal={setPreviewDocModal}
+                  canCancelBom={canCancelBom}
+                  handleCancelBomOrder={handleCancelBomOrder}
+                  invoiceList={invoiceList}
+                  setInvoiceList={setInvoiceList}
+                  showCustomAlert={showCustomAlert}
+                />
+                {bomCancelPromptModal && (
+                  <BomCancelPromptModal
+                    bomCancelPromptModal={bomCancelPromptModal}
+                    onClose={() => setBomCancelPromptModal(null)}
+                    onConfirmCancel={(bom, reason) => executeCancelBom(bom, reason)}
+                  />
+                )}
+              </>
             );
           }
 

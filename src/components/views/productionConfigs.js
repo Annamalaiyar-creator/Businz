@@ -440,7 +440,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Verified', label: 'Verified', count: allAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Payment Status', 'Status'],
+                headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Credit Amount', 'Payment Status', 'Status'],
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
@@ -478,6 +478,38 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     totalAmtFormatted = orderEst > 0 ? `₹ ${orderEst.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Order)` : '—';
                   }
 
+                  // Calculate and Format Credit Amount for Accounts verification
+                  const payTypeNorm = String(b.paymentType || b.paymentTerms || '').trim().toLowerCase();
+                  const cDays = Number(b.creditDays || 0);
+                  const baseOrderVal = rawAmt > 0 ? rawAmt : Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
+                  let creditAmtFormatted = '—';
+
+                  if (payTypeNorm.includes('credit') || payTypeNorm.includes('net 30')) {
+                    creditAmtFormatted = baseOrderVal > 0
+                      ? `₹ ${baseOrderVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}${cDays > 0 ? ` (${cDays}d)` : ''}`
+                      : (cDays > 0 ? `${cDays} Days Credit` : 'Credit Order');
+                  } else if (payTypeNorm.includes('partial') || payTypeNorm.includes('50%')) {
+                    const pendingCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
+                    creditAmtFormatted = pendingCredit > 0
+                      ? `₹ ${pendingCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (50% Bal)`
+                      : '50% Balance Credit';
+                  } else if (payTypeNorm.includes('while dispatch') || payTypeNorm.includes('before dispatch')) {
+                    const pendingCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
+                    creditAmtFormatted = pendingCredit > 0
+                      ? `₹ ${pendingCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (On Dispatch)`
+                      : 'On Dispatch';
+                  } else if (payTypeNorm.includes('100%') || payTypeNorm.includes('paid')) {
+                    creditAmtFormatted = '₹ 0.00 (Nil)';
+                  } else if (b.creditAmount && Number(b.creditAmount) > 0) {
+                    creditAmtFormatted = `₹ ${Number(b.creditAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                  } else if (cDays > 0) {
+                    creditAmtFormatted = baseOrderVal > 0
+                      ? `₹ ${baseOrderVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (${cDays}d)`
+                      : `${cDays} Days Credit`;
+                  } else {
+                    creditAmtFormatted = '₹ 0.00 (Nil)';
+                  }
+
                   const isWhileDispPendingProof = (b.paymentType === 'Payment While Dispatch' || String(b.paymentType || '').includes('While Dispatch')) && !Boolean(
                     b.paymentProofDoc || b.payments?.proofDocObj || b.payments?.proofDoc || b.balancePaymentProofDoc || b.proofDoc || b.proofDocData
                   );
@@ -498,7 +530,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     c3: b.paymentType,
                     c4: paymentDateFormatted,
                     c5: totalAmtFormatted,
-                    c6: payStatus,
+                    c6: creditAmtFormatted,
+                    c7: payStatus,
                     packingProgressText: null,
                     status: statusText,
                     stBg: stBg,

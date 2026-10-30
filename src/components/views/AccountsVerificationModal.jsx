@@ -858,6 +858,43 @@ export default function AccountsVerificationModal({
             </div>
           </div>
 
+          {/* Customer Credit Terms & Credit Amount Notice for Accounts Verification */}
+          {(() => {
+            const isCredit = currentPayStatus === 'Credit Payment' || 
+              String(accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || '').toLowerCase().includes('credit') ||
+              Number(accountsVerificationModal?.creditDays || 0) > 0;
+            const cDays = Number(accountsVerificationModal?.creditDays || 30);
+            const totalVal = cleanNum(currentTotalAmount, 0) || cleanNum(accountsVerificationModal?.grandTotal, 0);
+            if (!isCredit) return null;
+            return (
+              <div style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '12px',
+                color: '#1E40AF'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Receipt size={16} style={{ color: '#2563EB', flexShrink: 0 }} />
+                  <span>
+                    <strong>Customer Credit Terms:</strong> {cDays} Days Credit Cycle
+                  </span>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748B', marginRight: '6px' }}>Credit Amount:</span>
+                  <strong style={{ fontSize: '13px', color: '#1E3A8A' }}>
+                    {totalVal > 0 ? `₹ ${totalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Order Total'}
+                  </strong>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Payment Proof Document & Remittance Slip Image Inspection */}
           {(() => {
             const rawProof = accountsVerificationModal.paymentProofDoc ||

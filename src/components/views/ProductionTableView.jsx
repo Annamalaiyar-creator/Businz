@@ -412,6 +412,18 @@ export default function ProductionTableView({
                             }}>
                               {row.c6}
                             </span>
+                          ) : activeTab === 'Accounts Verification' ? (
+                            <span style={{
+                              color: row.c6?.includes('Nil') ? '#94A3B8' : '#B45309',
+                              fontWeight: row.c6?.includes('Nil') ? '500' : '700',
+                              backgroundColor: row.c6?.includes('Nil') ? 'transparent' : '#FFFBEB',
+                              padding: row.c6?.includes('Nil') ? '0' : '3px 8px',
+                              borderRadius: '6px',
+                              border: row.c6?.includes('Nil') ? 'none' : '1px solid #FDE68A',
+                              display: 'inline-block'
+                            }}>
+                              {row.c6}
+                            </span>
                           ) : (
                             row.c6
                           )}
@@ -422,10 +434,26 @@ export default function ProductionTableView({
                           padding: '14px 16px',
                           fontWeight: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '700' : '500',
                           color: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '#0F172A' : '#475569',
-                          textAlign: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? 'right' : 'left',
+                          textAlign: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? 'right' : (activeTab === 'Accounts Verification' ? 'center' : 'left'),
                           whiteSpace: 'nowrap'
                         }}>
-                          {row.c7}
+                          {activeTab === 'Accounts Verification' ? (
+                            <span style={{
+                              backgroundColor: row.c7?.includes('Received') ? '#DCFCE7' : (row.c7?.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                              color: row.c7?.includes('Received') ? '#166534' : (row.c7?.includes('Credit') ? '#1D4ED8' : '#B45309'),
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              {row.c7}
+                            </span>
+                          ) : (
+                            row.c7
+                          )}
                         </td>
                       )}
                       {(pageConfig.headers.includes('Status') || pageConfig.headers.includes('Dispatch Packing Status') || pageConfig.headers.includes('Fulfillment Status')) && (
