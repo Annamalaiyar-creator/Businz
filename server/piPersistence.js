@@ -112,16 +112,70 @@ export async function loadDatabaseProformaInvoices(pool = defaultPool) {
 export async function getNextDatabasePiNumber(pool = defaultPool) {
   const fy = getFinancialYear();
   try {
-    const res = await pool.query(`
-      SELECT pi_no FROM public.proforma_invoices
-      WHERE pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
-    `);
+    const candidateStrings = [];
+
+    // 1. From relational public.proforma_invoices
+    try {
+      const res = await pool.query(`
+        SELECT pi_no, id FROM public.proforma_invoices
+        WHERE (pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$' OR id ~ '^VRM-PI-[0-9]{4}-[0-9]+$')
+      `);
+      for (const row of res.rows) {
+        if (row.pi_no) candidateStrings.push(row.pi_no);
+        if (row.id) candidateStrings.push(row.id);
+      }
+    } catch (_) {}
+
+    // 2. From relational public.bom_orders source_pi_no (prevent colliding with existing BOM conversions)
+    try {
+      const bomRes = await pool.query(`
+        SELECT source_pi_no FROM public.bom_orders
+        WHERE source_pi_no IS NOT NULL AND source_pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
+      `);
+      for (const row of bomRes.rows) {
+        if (row.source_pi_no) candidateStrings.push(row.source_pi_no);
+      }
+    } catch (_) {}
+
+    // 3. From public.controlroom_store keys: sales_pi_store, proforma_invoice_store, and bom_orders
+    try {
+      const storeRes = await pool.query(`
+        SELECT key, data FROM public.controlroom_store
+        WHERE key IN ('sales_pi_store', 'proforma_invoice_store', 'bom_orders', 'bom_store')
+      `);
+      for (const row of storeRes.rows) {
+        if (Array.isArray(row.data)) {
+          for (const item of row.data) {
+            if (item?.piNo) candidateStrings.push(item.piNo);
+            if (item?.id) candidateStrings.push(item.id);
+            if (item?.sourcePiNo) candidateStrings.push(item.sourcePiNo);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 4. From local disk JSON files
+    for (const f of ['sales_pi_store.json', 'proforma_invoice_store.json', 'bom_store.json']) {
+      try {
+        const fp = getStoreFilePath(f);
+        if (fs.existsSync(fp)) {
+          const list = JSON.parse(fs.readFileSync(fp, 'utf8'));
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              if (item?.piNo) candidateStrings.push(item.piNo);
+              if (item?.id) candidateStrings.push(item.id);
+              if (item?.sourcePiNo) candidateStrings.push(item.sourcePiNo);
+            }
+          }
+        }
+      } catch (_) {}
+    }
 
     let maxSeq = 0;
     const regex = new RegExp(`^VRM-PI-${fy}-(\\d+)$`, 'i');
 
-    for (const row of res.rows) {
-      const match = (row.pi_no || '').match(regex);
+    for (const str of candidateStrings) {
+      const match = String(str || '').trim().match(regex);
       if (match && match[1]) {
         const val = parseInt(match[1], 10);
         if (Number.isFinite(val) && val > maxSeq) {
@@ -166,6 +220,7 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
 
     // Verify existing record in database
     let existingRow = null;
+    let isCollisionWithExistingPiOrBom = false;
     if (cleanPiNo) {
       const existRes = await client.query(
         'SELECT * FROM public.proforma_invoices WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($1)) OR LOWER(TRIM(id)) = LOWER(TRIM($1))',
@@ -174,25 +229,26 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
       if (existRes.rows.length > 0) {
         existingRow = existRes.rows[0];
       }
+
+      // Check if this PI number is already used as a source_pi_no by an existing active BOM in public.bom_orders
+      if (!isEdit) {
+        try {
+          const bomCheck = await client.query(
+            'SELECT bom_code FROM public.bom_orders WHERE LOWER(TRIM(source_pi_no)) = LOWER(TRIM($1)) AND status NOT ILIKE \'%cancel%\' LIMIT 1',
+            [cleanPiNo]
+          );
+          if (bomCheck.rows.length > 0) {
+            isCollisionWithExistingPiOrBom = true;
+          }
+        } catch (_) {}
+      }
     }
 
-    // Auto-advance sequence if NOT an edit and PI number already taken
-    if (!isEdit && existingRow) {
-      const fy = getFinancialYear();
-      const allRows = await client.query('SELECT pi_no FROM public.proforma_invoices WHERE pi_no ~ $1', [`^VRM-PI-${fy}-[0-9]+$`]);
-      let maxSeq = 0;
-      const regex = new RegExp(`^VRM-PI-${fy}-(\\d+)$`, 'i');
-      for (const r of allRows.rows) {
-        const m = (r.pi_no || '').match(regex);
-        if (m && m[1]) {
-          const v = parseInt(m[1], 10);
-          if (v > maxSeq) maxSeq = v;
-        }
-      }
-      const nextNum = maxSeq + 1;
-      const advancedCode = formatSequenceCode('PI', nextNum);
-      console.warn(`[PI Concurrency Protection] PI number "${cleanPiNo}" is already taken in database. Auto-advancing to "${advancedCode}".`);
-      cleanPiNo = advancedCode;
+    // Auto-advance sequence if NOT an edit and PI number already taken or claimed by existing BOM
+    if (!isEdit && (existingRow || isCollisionWithExistingPiOrBom)) {
+      const seqInfo = await getNextDatabasePiNumber(pool);
+      console.warn(`[PI Concurrency Protection] PI number "${cleanPiNo}" is already taken or claimed by existing BOM. Auto-advancing to "${seqInfo.nextPiNo}".`);
+      cleanPiNo = seqInfo.nextPiNo;
       existingRow = null;
     }
 

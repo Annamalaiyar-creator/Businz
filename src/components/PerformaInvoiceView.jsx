@@ -245,8 +245,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         return true;
       }
 
-      // 2. Strict 1-to-1 match by source PI number on the BOM
+      // 2. Strict 1-to-1 match by source PI number on the BOM:
+      // Must ensure customer matches or neither is specified, so a fresh PI doesn't accidentally bind to a legacy BOM
       if (sPi && sPi === piNum) {
+        const piCust = String(pi.customerName || pi.vendor || pi.companyName || '').trim().toLowerCase();
+        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
+        if (piCust && bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
+          return false;
+        }
         return true;
       }
 
@@ -2484,8 +2490,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         signedPiDoc: signedPiDoc || null,
         piDate: piDate || new Date().toISOString().split('T')[0],
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        status: isDraft ? 'Draft' : (matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
-        statusType: isDraft ? 'draft' : (matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
+        status: isDraft ? 'Draft' : (isEditing && matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
+        statusType: isDraft ? 'draft' : (isEditing && matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
         salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
         salesperson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
         salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || currentEmpId || 'SE-004',
@@ -3080,7 +3086,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             bomCodesStr.includes(searchLower);
 
           const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
-          const isConverted = !isDraft && hasSavedBom;
+          const isExplicitConverted = Boolean(
+            pi.status === 'Converted to BOM' || 
+            pi.statusType === 'converted' || 
+            pi.convertedToBom === true || 
+            pi.convertedBomCode || 
+            pi.convertedBomNo
+          );
+          const isConverted = !isDraft && hasSavedBom && (isExplicitConverted || pi.status === 'Converted to BOM');
           const currentStatus = isDraft
             ? 'Draft'
             : (isConverted
@@ -3249,12 +3262,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   { id: 'Issued', label: 'Issued / Active', count: visiblePIList.filter(pi => {
                     if (pi.status === 'Draft' || pi.statusType === 'draft' || pi.status === 'Cancelled') return false;
                     const matchedBoms = getConvertedBomsForPi(pi);
-                    return matchedBoms.length === 0;
+                    const isExplicitConverted = Boolean(
+                      pi.status === 'Converted to BOM' || 
+                      pi.statusType === 'converted' || 
+                      pi.convertedToBom === true || 
+                      pi.convertedBomCode || 
+                      pi.convertedBomNo
+                    );
+                    const isConverted = matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM');
+                    return !isConverted;
                   }).length },
                   { id: 'Converted to BOM', label: 'Converted to BOM', count: visiblePIList.filter(pi => {
                     if (pi.status === 'Draft' || pi.statusType === 'draft') return false;
                     const matchedBoms = getConvertedBomsForPi(pi);
-                    return matchedBoms.length > 0;
+                    const isExplicitConverted = Boolean(
+                      pi.status === 'Converted to BOM' || 
+                      pi.statusType === 'converted' || 
+                      pi.convertedToBom === true || 
+                      pi.convertedBomCode || 
+                      pi.convertedBomNo
+                    );
+                    return matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM');
                   }).length },
                   { id: 'Cancelled', label: 'Cancelled', count: visiblePIList.filter(pi => pi.status === 'Cancelled').length },
                   { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => pi.status === 'Draft' || pi.statusType === 'draft').length }
@@ -3401,7 +3429,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
                         const matchedBoms = getConvertedBomsForPi(pi);
                         const hasSavedBom = matchedBoms.length > 0;
-                        const isConverted = !isDraft && hasSavedBom;
+                        const isExplicitConverted = Boolean(
+                          pi.status === 'Converted to BOM' || 
+                          pi.statusType === 'converted' || 
+                          pi.convertedToBom === true || 
+                          pi.convertedBomCode || 
+                          pi.convertedBomNo
+                        );
+                        const isConverted = !isDraft && hasSavedBom && (isExplicitConverted || pi.status === 'Converted to BOM');
                         const currentStatus = isDraft
                           ? 'Draft'
                           : (isConverted
@@ -6061,7 +6096,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const isDraft = (selectedPi.status === 'Draft' || selectedPi.statusType === 'draft');
         const matchedBoms = getConvertedBomsForPi(selectedPi);
         const hasSavedBom = matchedBoms.length > 0;
-        const isConverted = !isDraft && hasSavedBom;
+        const isExplicitConverted = Boolean(
+          selectedPi.status === 'Converted to BOM' || 
+          selectedPi.statusType === 'converted' || 
+          selectedPi.convertedToBom === true || 
+          selectedPi.convertedBomCode || 
+          selectedPi.convertedBomNo
+        );
+        const isConverted = !isDraft && hasSavedBom && (isExplicitConverted || selectedPi.status === 'Converted to BOM');
 
         const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
         const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
