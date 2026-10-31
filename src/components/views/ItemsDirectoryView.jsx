@@ -1257,7 +1257,7 @@ export default function ItemsDirectoryView(props) {
 
       fetchItemsFromBackend(true);
       setIsUploadItemModalOpen(false);
-      alert(`✅ Successfully imported ${sanitized.length} items with field mappings!`);
+      alert(`Successfully imported ${sanitized.length} items with field mappings!`);
     } catch (err) {
       console.error('Failed to import items:', err);
       alert(`❌ Failed to import items: ${err.message}`);

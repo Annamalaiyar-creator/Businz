@@ -956,7 +956,7 @@ export default function CrmCustomersView({
       }
       setSyncMessage({
         type: 'success',
-        text: resJson.message || '✅ Customer created and synchronized successfully!'
+        text: resJson.message || 'Customer created and synchronized successfully!'
       });
     } catch (err) {
       console.warn('Customer Sync warning:', err);

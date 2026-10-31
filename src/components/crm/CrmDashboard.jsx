@@ -29,8 +29,8 @@ export default function CrmDashboard({
 
   const isRestrictedSalesUser = Boolean(
     effectiveRole &&
-    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim()) &&
-    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Admin', 'Super Admin'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim())
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim()) &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement', 'Admin', 'Super Admin'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim())
   );
 
   const isCeo = ['ceo', 'md', 'managing director'].some(r => (effectiveRole || '').toLowerCase().includes(r));

@@ -266,7 +266,7 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
                 </div>
               </div>
               {activeWo.status !== 'Material Issued' && !activeWo.status.includes('Closed') && (
-                <button onClick={() => { const r = prodInventoryStore.issueMaterial(activeWo.id); if (r.success) { alert(`✅ Material issued for ${activeWo.id}! Stock deducted.`); forceRefresh(); } else { alert(r.message); } }}
+                <button onClick={() => { const r = prodInventoryStore.issueMaterial(activeWo.id); if (r.success) { alert(`Material issued for ${activeWo.id}! Stock deducted.`); forceRefresh(); } else { alert(r.message); } }}
                   style={{ background: '#2563EB', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 6px rgba(37,99,235,0.25)' }}>
                   <Truck style={{ width: '16px', height: '16px' }} />
                   Execute Material Issue
@@ -316,7 +316,7 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
               <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>Actual Consumption — {activeWo.id}</h3>
               <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0 0' }}>Enter actual shop floor quantities to compute variance against BOM.</p>
             </div>
-            <button onClick={() => { prodInventoryStore.recordActualConsumption(activeWo.id, actualListState); alert(`✅ Consumption recorded for ${activeWo.id}!`); forceRefresh(); }}
+            <button onClick={() => { prodInventoryStore.recordActualConsumption(activeWo.id, actualListState); alert(`Consumption recorded for ${activeWo.id}!`); forceRefresh(); }}
               style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
               Save Consumption
             </button>
@@ -372,7 +372,7 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
               <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', margin: 0 }}>Production Output — {activeWo.id}</h3>
               <p style={{ fontSize: '12px', color: '#94A3B8', margin: '2px 0 0 0' }}>Record finished goods, rejected items, scrap weight, and reusable remnants.</p>
             </div>
-            <button onClick={() => { prodInventoryStore.postProductionOutput(activeWo.id, { acceptedQty: outputAcceptedQty, rejectedQty: outputRejectedQty, scrapWeightKg: outputScrapKg, reusableMaterialQty: outputReusableQty }); alert(`✅ Output posted for ${activeWo.id}!`); forceRefresh(); }}
+            <button onClick={() => { prodInventoryStore.postProductionOutput(activeWo.id, { acceptedQty: outputAcceptedQty, rejectedQty: outputRejectedQty, scrapWeightKg: outputScrapKg, reusableMaterialQty: outputReusableQty }); alert(`Output posted for ${activeWo.id}!`); forceRefresh(); }}
               style={{ background: '#16A34A', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 6px rgba(22,163,74,0.25)' }}>
               <CheckCircle2 style={{ width: '16px', height: '16px' }} />
               Post to Inventory
@@ -542,7 +542,7 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
               <button onClick={() => {
                 const bom = BOM_REGISTRY[selectedBomCode];
                 prodInventoryStore.createWorkOrder({ productName: bom.productName, productCode: bom.productCode, plannedQty: orderQty, bomCode: selectedBomCode });
-                alert(`✅ Order created: ${orderQty} × ${bom.productName}`);
+                alert(`Order created: ${orderQty} × ${bom.productName}`);
                 setShowCreateModal(false); forceRefresh();
               }} style={{ border: 'none', background: '#6366F1', color: '#fff', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(99,102,241,0.3)' }}>
                 Create Order

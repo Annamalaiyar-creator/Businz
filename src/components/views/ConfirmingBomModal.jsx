@@ -301,7 +301,7 @@ export default function ConfirmingBomModal({
                 });
 
                 setConfirmingBomModal(null);
-                alert(`✅ BOM (${confirmingBomModal.bomCode}) successfully verified and sent to Production (Work Orders) & Dispatch Orders!\n\nInventory has been allocated and deducted.`);
+                alert(`BOM (${confirmingBomModal.bomCode}) successfully verified and sent to Production (Work Orders) & Dispatch Orders!\n\nInventory has been allocated and deducted.`);
               }}
               style={{
                 border: 'none',

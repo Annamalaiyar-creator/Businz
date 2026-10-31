@@ -307,7 +307,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                               return updated;
                             });
                             onClose();
-                            alert(`✅ Balance settlement proof for (${bomCode}) uploaded to secure storage!`);
+                            alert(`Balance settlement proof for (${bomCode}) uploaded to secure storage!`);
                           } catch (err) {
                             alert(`❌ Upload failed: ${err.message}`);
                           } finally {
@@ -373,7 +373,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                       return updated;
                     });
                     onClose();
-                    alert(`✅ Payment details for (${paymentStageType}) uploaded to secure storage!`);
+                    alert(`Payment details for (${paymentStageType}) uploaded to secure storage!`);
                   } catch (err) {
                     alert(`❌ Upload failed: ${err.message}`);
                   } finally {
@@ -533,7 +533,7 @@ export function UpdatePaymentModal({
                   return updated;
                 });
                 onClose();
-                alert(`✅ Payment details for (${bomCode}) successfully recorded and locked in secure storage!`);
+                alert(`Payment details for (${bomCode}) successfully recorded and locked in secure storage!`);
               } catch (err) {
                 alert(`❌ Upload failed: ${err.message}`);
               } finally {
@@ -706,7 +706,7 @@ export function ReuploadAddressProofModal({
                 }
 
                 onClose();
-                alert(`✅ Verified address proof attached for BOM (${targetCode}) and synced with Invoice Desk!`);
+                alert(`Verified address proof attached for BOM (${targetCode}) and synced with Invoice Desk!`);
               } catch (err) {
                 alert(`❌ Upload failed: ${err.message}`);
               } finally {

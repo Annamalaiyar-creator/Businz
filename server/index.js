@@ -3301,24 +3301,26 @@ app.post('/api/auth/register-employee', async (req, res) => {
       });
     }
 
-    // Reject self-registration of privileged executive or administrative roles
-    if (isPrivilegedRole(role, cleanCode) || isPrivilegedRole(prefix, cleanCode)) {
+    // Require approval/authorization checks:
+    // Active administrator or HR executive sessions may provision accounts directly (including executive roles).
+    // All public self-registrations are strictly forced to 'Pending Approval'.
+    const session = await getVerifiedUserSession(req);
+    const sessionRole = String(session?.role || '').toLowerCase();
+    const isAdminOrHr = session?.valid && ['ceo', 'md', 'managing director', 'technical administrator', 'admin', 'super admin', 'hr'].some(r => sessionRole.includes(r));
+
+    // Reject self-registration of privileged executive or administrative roles unless provisioned by an authorized administrator
+    if (!isAdminOrHr && (isPrivilegedRole(role, cleanCode) || isPrivilegedRole(prefix, cleanCode))) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden: Self-registration for executive or administrative roles (CEO, MD, Technical Administrator, etc.) is strictly forbidden. These roles must be provisioned directly by an authorized administrator.'
       });
     }
 
-    // Require approval/authorization checks (Phase 9R Issue 4):
-    // Active administrator or HR executive sessions may provision accounts directly (or approve status).
-    // All other registrations are strictly forced to 'Pending Approval'.
-    const session = await getVerifiedUserSession(req);
-    const sessionRole = String(session?.role || '').toLowerCase();
-    const isAdminOrHr = session?.valid && ['ceo', 'md', 'managing director', 'technical administrator', 'admin', 'super admin', 'hr'].some(r => sessionRole.includes(r));
-
     let finalStatus = 'Pending Approval';
     if (isAdminOrHr && req.body.status && ['Active', 'Approved'].includes(req.body.status)) {
       finalStatus = req.body.status;
+    } else if (isAdminOrHr) {
+      finalStatus = 'Active';
     }
 
     const newEmpAccount = {

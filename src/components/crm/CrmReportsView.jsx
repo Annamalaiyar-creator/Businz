@@ -140,15 +140,18 @@ export default function CrmReportsView({
   // Leadership & Management (Sales Head, Technical Admin, CEO, MD, Accounts, Dispatch) see all sales persons.
   const isRestrictedSalesUser = Boolean(
     effectiveRole &&
-    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim()) &&
-    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Admin', 'Super Admin'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim())
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim()) &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement', 'Admin', 'Super Admin'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim())
   );
 
   const effectiveUserDisplayName = currentEmpName || (currentLoggedEmail ? currentLoggedEmail.split('@')[0] : '') || currentEmpId || 'Sales Executive';
 
   const [activeReportTab, setActiveReportTab] = useState('lag_report'); // 'lag_report' | 'leaderboard' | 'pi' | 'bom' | 'invoices' | 'pipeline'
   const [selectedRepFilter, setSelectedRepFilter] = useState('all');
-  const [selectedMonth, setSelectedMonth] = useState('all'); // 'all' or 'YYYY-MM'
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }); // Defaults to current month for monthly-wise reporting
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -1161,152 +1164,6 @@ export default function CrmReportsView({
             {isRefreshing ? 'Syncing...' : 'Sync'}
           </button>
         </div>
-      </div>
-
-      {/* ─── 2. COMPACT 6-METRIC EXECUTIVE KPI GRID (EXACT PROCUREMENT HEAD DESIGN) ─── */}
-      <div className="reports-kpi-grid-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '16px', width: '100%' }}>
-        {[
-          {
-            title: 'PIPELINE DEALS',
-            value: formatINR(totalPipelineValue),
-            trend: '8.4%',
-            trendUp: true,
-            bottomPrefix: 'Active in pipeline, ',
-            bottomHighlight: `${activePipelineDeals.length} deals`
-          },
-          {
-            title: 'WON DEALS (CRM)',
-            value: formatINR(totalWonValue),
-            trend: `${overallWinRate}%`,
-            trendUp: true,
-            bottomPrefix: 'This month, closed ',
-            bottomHighlight: `${wonDeals.length} projects`
-          },
-          {
-            title: 'TOTAL PI VALUE',
-            value: formatINR(totalPiValue),
-            trend: '14.8%',
-            trendUp: true,
-            bottomPrefix: 'This month, generated ',
-            bottomHighlight: `${totalPiCount} PIs`
-          },
-          {
-            title: 'BOM ORDERS',
-            value: `${totalBomCount} Orders`,
-            trend: `${lagDiagnostics.bomDispatchRate}%`,
-            trendUp: true,
-            bottomPrefix: 'Scheduled units, ',
-            bottomHighlight: `${totalBomUnits.toLocaleString()} total`
-          },
-          {
-            title: 'BILLED REVENUE',
-            value: formatINR(totalInvoicedValue),
-            trend: '12.5%',
-            trendUp: true,
-            bottomPrefix: 'This month, billed ',
-            bottomHighlight: `${totalInvoiceCount} invoices`
-          },
-          {
-            title: 'REALIZATION RATE',
-            value: `${lagDiagnostics.piToInvoiceRealizationRate}%`,
-            trend: lagDiagnostics.piToInvoiceRealizationRate >= 50 ? 'Optimal' : 'Lagging',
-            trendUp: lagDiagnostics.piToInvoiceRealizationRate >= 50,
-            bottomPrefix: 'Pending conversion, ',
-            bottomHighlight: formatINR(lagDiagnostics.unbilledPiValue)
-          }
-        ].map((kpi, idx) => (
-          <div
-            key={idx}
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '20px',
-              border: '1px solid #EAEFEF',
-              padding: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '16px',
-              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
-              transition: 'all 0.2s ease',
-              fontFamily: "'DM Sans', sans-serif",
-              minWidth: 0
-            }}
-          >
-            {/* Top Title Section */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
-              <span
-                style={{
-                  fontSize: '11.5px',
-                  fontWeight: '800',
-                  color: '#64748B',
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}
-              >
-                {kpi.title}
-              </span>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '22px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px', lineHeight: '1.1', whiteSpace: 'nowrap' }}>
-                  {kpi.value}
-                </span>
-
-                {/* Trend Pill Badge */}
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '2px',
-                    fontSize: '11.5px',
-                    fontWeight: '800',
-                    color: kpi.trendUp ? '#059669' : '#DC2626',
-                    backgroundColor: kpi.trendUp ? '#ECFDF5' : '#FEF2F2',
-                    border: kpi.trendUp ? '1px solid #A7F3D0' : '1px solid #FECACA',
-                    padding: '2px 7.5px',
-                    borderRadius: '8px',
-                    lineHeight: '1.2',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {kpi.trendUp ? (
-                    <ArrowUpRight style={{ width: '13px', height: '13px' }} />
-                  ) : (
-                    <ArrowDownRight style={{ width: '13px', height: '13px' }} />
-                  )}
-                  {kpi.trend}
-                </span>
-              </div>
-            </div>
-
-            {/* Bottom Sub-Card Box / Footer Section */}
-            <div
-              style={{
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #F1F5F9',
-                borderRadius: '12px',
-                padding: '8px 12px',
-                fontSize: '11.5px',
-                fontWeight: '500',
-                color: '#64748B',
-                lineHeight: '1.4',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }}
-            >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{kpi.bottomPrefix}</span>
-              <span style={{ color: kpi.trendUp ? '#059669' : '#DC2626', fontWeight: '800', flexShrink: 0 }}>
-                {kpi.bottomHighlight}
-              </span>
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* ─── 3. STANDARD FILTERS & SEARCH ROW (EXACT BOM & PO STANDARD) ─── */}

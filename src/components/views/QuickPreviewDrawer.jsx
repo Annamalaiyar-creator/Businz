@@ -279,7 +279,7 @@ export default function QuickPreviewDrawer({
 
         if (isClosed) {
           buttonBg = 'linear-gradient(135deg, #15803D, #16A34A)';
-          buttonContent = <>👁️ View Dispatched Shipment Details</>;
+          buttonContent = <>View Dispatched Shipment Details</>;
         } else if (isAwaitingLr) {
           buttonBg = 'linear-gradient(135deg, #D97706, #F59E0B)';
           buttonContent = <>📄 Upload Transporter LR Copy & Close Order</>;

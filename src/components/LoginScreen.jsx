@@ -32,96 +32,72 @@ import { registerActiveSession, createNewSessionId } from '../services/sessionSe
 
 export const USER_ROLES_CONFIG = [
   {
-    role: 'Technical Administrator',
-    prefix: 'TA',
-    category: 'System Engineering',
-    icon: Asterisk,
-    color: '#0284c7',
-    desc: 'Full system engineering, server infrastructure, API monitoring & database administration.'
-  },
-  {
     role: 'CEO',
     prefix: 'CEO',
+    allowedPrefixes: ['CEO', 'MD'],
     category: 'Executive Leadership',
     icon: Building2,
     color: '#0284c7',
     desc: 'Complete organization oversight, high-level financial & operational metrics.'
   },
   {
-    role: 'Production Head',
+    role: 'Sales',
+    prefix: 'SE',
+    allowedPrefixes: ['SE', 'SH', 'SLS'],
+    category: 'Sales & CRM',
+    icon: TrendingUp,
+    color: '#0E7490',
+    desc: 'Sales orders, quotations, customer CRM, leads & private PI/BOM management.'
+  },
+  {
+    role: 'Production',
     prefix: 'PH',
+    allowedPrefixes: ['PH', 'FS', 'FE', 'PRD'],
     category: 'Production Department',
     icon: Factory,
     color: '#9333ea',
     desc: 'Work Orders, Master Production Schedule & Plant Efficiency.'
   },
   {
-    role: 'Dispatch Head',
+    role: 'Dispatch',
     prefix: 'DH',
-    category: 'Production Department',
+    allowedPrefixes: ['DH', 'DSP'],
+    category: 'Dispatch Department',
     icon: Truck,
     color: '#0891b2',
     desc: 'Finished Goods Dispatch, Logistics & Delivery Tracking.'
   },
   {
-    role: 'Floor Supervisor',
-    prefix: 'FS',
-    category: 'Production Department',
-    icon: Users,
-    color: '#d97706',
-    desc: 'Shift Supervisor, Line Operations & Job Cards Execution.'
-  },
-  {
-    role: 'Floor Employee',
-    prefix: 'FE',
-    category: 'Production Department',
-    icon: User,
-    color: '#64748b',
-    desc: 'Machine Line Output Log & Stoppage / Downtime Incident Reporting.'
-  },
-  {
-    role: 'Procurement Head',
+    role: 'Procurement',
     prefix: 'PR',
+    allowedPrefixes: ['PR', 'PRC'],
     category: 'Procurement Department',
     icon: ShoppingCart,
     color: '#2563eb',
     desc: 'Purchase Orders, Vendor Directory, GRN & Material Requisitions.'
   },
   {
-    role: 'Accounts Head',
+    role: 'Accounts',
     prefix: 'AH',
+    allowedPrefixes: ['AH', 'AE', 'ACC'],
     category: 'Accounts & Finance',
     icon: CreditCard,
     color: '#059669',
     desc: 'Financial Reports, Ledger, Expense Approvals & Payment Terms.'
   },
   {
-    role: 'Accounts Executive',
-    prefix: 'AE',
-    category: 'Accounts & Finance',
-    icon: CreditCard,
-    color: '#10b981',
-    desc: 'Accounts Receivable/Payable, Invoicing Entry & Ledger Journal Entries.'
+    role: 'Billing',
+    prefix: 'BI',
+    allowedPrefixes: ['BI'],
+    category: 'Billing & Invoicing',
+    icon: Receipt,
+    color: '#059669',
+    desc: 'Billing Ledger, Invoices & Payment Processing.'
   },
   {
-    role: 'Sales Head',
-    prefix: 'SH',
-    category: 'Sales & Business',
-    icon: TrendingUp,
-    color: '#e11d48',
-    desc: 'Sales Target, Customer Projects & Revenue Pipeline.'
-  },
-  {
-    role: 'Sales Executive',
-    prefix: 'SE',
-    category: 'Sales & Business',
-    icon: TrendingUp,
-    color: '#f43f5e',
-    desc: 'Sales Orders Creation, Customer CRM & Inquiries.'
-  },
-  {
-    role: 'Design Executive',
+    role: 'Design',
     prefix: 'DE',
+    allowedPrefixes: ['DE', 'DSN'],
     category: 'Design & Engineering',
     icon: Compass,
     color: '#6366f1',
@@ -130,18 +106,20 @@ export const USER_ROLES_CONFIG = [
   {
     role: 'Tech Support',
     prefix: 'TS',
+    allowedPrefixes: ['TS'],
     category: 'Technical Support',
     icon: FileSpreadsheet,
     color: '#8b5cf6',
     desc: 'Technical Support, Engineering Revisions & User Helpdesk.'
   },
   {
-    role: 'Billing',
-    prefix: 'BI',
-    category: 'Billing & Invoicing',
-    icon: Receipt,
-    color: '#059669',
-    desc: 'Billing Ledger, Invoices & Payment Processing.'
+    role: 'Technical Administrator',
+    prefix: 'TA',
+    allowedPrefixes: ['TA'],
+    category: 'System Engineering',
+    icon: Asterisk,
+    color: '#0284c7',
+    desc: 'Full system engineering, server infrastructure, API monitoring & database administration.'
   }
 ];
 
@@ -212,10 +190,10 @@ export default function LoginScreen({ onLoginSuccess }) {
     }
 
     const prefix = parts[0];
-    const matchedRole = USER_ROLES_CONFIG.find(r => r.prefix === prefix);
+    const matchedRole = USER_ROLES_CONFIG.find(r => r.prefix === prefix || (r.allowedPrefixes && r.allowedPrefixes.includes(prefix)));
 
     if (!matchedRole) {
-      setErrorMsg(`Invalid prefix "${prefix}". Code must start with a valid department prefix (TA, CEO, PH, DH, FS, FE, PR, AH, AE, SH, SE, DE, TS, BI).`);
+      setErrorMsg(`Invalid prefix "${prefix}". Code must start with a valid department prefix (TA, CEO, SE, DH, PH, PR, AH, BI, DE, TS).`);
       setIsCodeVerified(false);
       setDetectedRole(null);
       return;
@@ -451,8 +429,9 @@ export default function LoginScreen({ onLoginSuccess }) {
       return;
     }
 
-    if (!empIdInput.trim()) {
-      setErrorMsg('Please enter your Employee Code.');
+    const identifier = (empIdInput || usernameInput || '').trim();
+    if (!identifier) {
+      setErrorMsg('Please enter your EMP ID or Email ID.');
       return;
     }
 
@@ -471,7 +450,7 @@ export default function LoginScreen({ onLoginSuccess }) {
       ]);
     } catch(e) {}
 
-    const result = authenticateUser(empIdInput, usernameInput, passwordInput, selectedRoleObj);
+    const result = authenticateUser(identifier, identifier, passwordInput, selectedRoleObj);
 
     if (!result.success) {
       setErrorMsg(result.error);
@@ -482,8 +461,8 @@ export default function LoginScreen({ onLoginSuccess }) {
     // Direct successful login transition
     await finalizeSuccessfulLogin(
       result.userRole,
-      empIdInput.trim() || result.matchedRole?.empCode || 'EMP-101',
-      result.username,
+      result.empCode || identifier,
+      result.username || identifier,
       result.displayName,
       passwordInput
     );
@@ -618,7 +597,7 @@ export default function LoginScreen({ onLoginSuccess }) {
             <p style={{ fontSize: '12.5px', color: '#64748B', margin: '6px 0 16px 0', lineHeight: '1.4', maxWidth: '380px' }}>
               {isSignUpMode 
                 ? 'Enter your details below to register your employee account & security verification.'
-                : 'Enter your Employee ID, email and password to log into your account portal.'}
+                : 'Enter your EMP ID or Email ID and password to log into your account portal.'}
             </p>
 
             {/* FORM */}
@@ -650,114 +629,150 @@ export default function LoginScreen({ onLoginSuccess }) {
                 </div>
               )}
 
-              {/* Employee Code Input + Verify Button */}
-              <div>
-                <label htmlFor="login-employee-code" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
-                  Employee Code
-                </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input id="login-employee-code" name="employeeCode" aria-label="Employee Code" 
+              {/* CONTAINER 1: IN SIGN IN MODE, ONLY 1 CONTAINER FOR EMP ID / EMAIL ID */}
+              {!isSignUpMode ? (
+                <div>
+                  <label htmlFor="login-identifier" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                    EMP ID / Email ID
+                  </label>
+                  <input 
+                    id="login-identifier" 
+                    name="identifier" 
+                    aria-label="EMP ID / Email ID" 
                     type="text"
                     required
+                    autoComplete="username"
                     value={empIdInput}
                     onChange={(e) => {
                       setEmpIdInput(e.target.value);
-                      setIsCodeVerified(false);
-                      setDetectedRole(null);
+                      setUsernameInput(e.target.value);
                       setErrorMsg('');
                     }}
-                    placeholder="Enter Employee Code"
+                    placeholder="Enter EMP ID or Email ID (e.g. CEO-001 or admin@businz.com)"
                     style={{
-                      flex: 1,
+                      width: '100%',
                       height: '38px',
                       borderRadius: '8px',
                       border: '1px solid #E2E8F0',
                       padding: '0 12px',
                       fontSize: '12.5px',
-                      fontWeight: '700',
+                      fontWeight: '600',
                       color: '#0F172A',
                       backgroundColor: '#FFFFFF',
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
-                   />
-                  {isSignUpMode && (
-                    <button
-                      type="button"
-                      onClick={handleVerifyCode}
-                      style={{
-                        height: '38px',
-                        padding: '0 14px',
-                        borderRadius: '8px',
-                        backgroundColor: isCodeVerified ? '#16A34A' : '#0284C7',
-                        color: '#FFFFFF',
-                        border: 'none',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {isCodeVerified ? '✓ Verified' : 'Verify Code'}
-                    </button>
+                  />
+                </div>
+              ) : (
+                /* IN SIGN UP MODE: SEPARATE EMPLOYEE CODE & VERIFY BUTTON + EMAIL */
+                <>
+                  <div>
+                    <label htmlFor="login-employee-code" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                      Employee Code
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input id="login-employee-code" name="employeeCode" aria-label="Employee Code" 
+                        type="text"
+                        required
+                        value={empIdInput}
+                        onChange={(e) => {
+                          setEmpIdInput(e.target.value);
+                          setIsCodeVerified(false);
+                          setDetectedRole(null);
+                          setErrorMsg('');
+                        }}
+                        placeholder="Enter Employee Code (e.g. CEO-001, SE-001)"
+                        style={{
+                          flex: 1,
+                          height: '38px',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                          padding: '0 12px',
+                          fontSize: '12.5px',
+                          fontWeight: '700',
+                          color: '#0F172A',
+                          backgroundColor: '#FFFFFF',
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyCode}
+                        style={{
+                          height: '38px',
+                          padding: '0 14px',
+                          borderRadius: '8px',
+                          backgroundColor: isCodeVerified ? '#16A34A' : '#0284C7',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {isCodeVerified ? '✓ Verified' : 'Verify Code'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {detectedRole && (
+                    <div>
+                      <label htmlFor="login-employee-type" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                        Employee Type
+                      </label>
+                      <input id="login-employee-type" name="employeeType" aria-label="Employee Type" 
+                        type="text"
+                        readOnly
+                        value={detectedRole.role}
+                        style={{
+                          width: '100%',
+                          height: '38px',
+                          borderRadius: '8px',
+                          border: '1px solid #6366F1',
+                          padding: '0 12px',
+                          fontSize: '12.5px',
+                          fontWeight: '800',
+                          color: '#4F46E5',
+                          backgroundColor: '#EEF2FF',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                          cursor: 'not-allowed'
+                        }}
+                      />
+                    </div>
                   )}
-                </div>
-              </div>
 
-              {/* Read-Only Employee Type Field (shown when code verified in Sign Up Mode) */}
-              {isSignUpMode && detectedRole && (
-                <div>
-                  <label htmlFor="login-employee-type" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
-                    Employee Type
-                  </label>
-                  <input id="login-employee-type" name="employeeType" aria-label="Employee Type" 
-                    type="text"
-                    readOnly
-                    value={detectedRole.role}
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      borderRadius: '8px',
-                      border: '1px solid #6366F1',
-                      padding: '0 12px',
-                      fontSize: '12.5px',
-                      fontWeight: '800',
-                      color: '#4F46E5',
-                      backgroundColor: '#EEF2FF',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      cursor: 'not-allowed'
-                    }}
-                   />
-                </div>
+                  <div>
+                    <label htmlFor="user-email-input" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                      Work Email
+                    </label>
+                    <input aria-label="Email" 
+                      type="email"
+                      name="username"
+                      id="user-email-input"
+                      autoComplete="username"
+                      required
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      placeholder="Enter your email"
+                      style={{
+                        width: '100%',
+                        height: '38px',
+                        borderRadius: '8px',
+                        border: '1px solid #E2E8F0',
+                        padding: '0 12px',
+                        fontSize: '12.5px',
+                        color: '#0F172A',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </>
               )}
-
-              {/* Email */}
-              <div>
-                <label htmlFor="user-email-input" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
-                  Email
-                </label>
-                <input aria-label="Email" 
-                  type="email"
-                  name="username"
-                  id="user-email-input"
-                  autoComplete="username"
-                  value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="Enter your email"
-                  style={{
-                    width: '100%',
-                    height: '38px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    padding: '0 12px',
-                    fontSize: '12.5px',
-                    color: '#0F172A',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                 />
-              </div>
 
               {/* Password */}
               <div>

@@ -744,7 +744,7 @@ export default function WorkOrdersView({
                           try {
                             prodModuleEngine.acceptWorkOrder(selectedWoForAcceptanceModal.id);
                             setEngineTick(t => t + 1);
-                            alert(`✅ Work Order ${selectedWoForAcceptanceModal.id} has been ACCEPTED!`);
+                            alert(`Work Order ${selectedWoForAcceptanceModal.id} has been ACCEPTED!`);
                             setSelectedWoForAcceptanceModal(null);
                             setSelectedRows([]);
                           } catch (err) {
@@ -1041,7 +1041,7 @@ export default function WorkOrdersView({
                       const empName = localStorage.getItem('controlroom_logged_user_name') || userRole || 'Floor Supervisor';
                       prodModuleEngine.acceptWorkOrder(selectedWoForAcceptanceModal.id, empName);
                       setEngineTick(t => t + 1);
-                      alert(`✅ Work Order ${selectedWoForAcceptanceModal.id} has been ACCEPTED by ${empName}! Status is now ACCEPTED.`);
+                      alert(`Work Order ${selectedWoForAcceptanceModal.id} has been ACCEPTED by ${empName}! Status is now ACCEPTED.`);
                       setSelectedWoForAcceptanceModal(null);
                       setSelectedRows([]);
                     } catch (err) {
@@ -1070,7 +1070,7 @@ export default function WorkOrdersView({
                           targetTab: 'Work Orders',
                           badgeColor: '#16A34A'
                         });
-                        showCustomAlert(`✅ Work Order ${selectedWoForAcceptanceModal.id} Verified & Approved! Finished Goods stock (+${selectedWoForAcceptanceModal.actualGoodOutput || selectedWoForAcceptanceModal.targetQty} ${selectedWoForAcceptanceModal.unit || 'pcs'}) has been added to FG Inventory Store.`, 'Production Approved', 'success');
+                        showCustomAlert(`Work Order ${selectedWoForAcceptanceModal.id} Verified & Approved! Finished Goods stock (+${selectedWoForAcceptanceModal.actualGoodOutput || selectedWoForAcceptanceModal.targetQty} ${selectedWoForAcceptanceModal.unit || 'pcs'}) has been added to FG Inventory Store.`, 'Production Approved', 'success');
                         setSelectedWoForAcceptanceModal(null);
                         setSelectedRows([]);
                       } catch (err) {
@@ -1211,7 +1211,7 @@ export default function WorkOrdersView({
                       try {
                         prodModuleEngine.acceptWorkOrder(targetId);
                         setEngineTick(t => t + 1);
-                        showCustomAlert(`✅ Work Order ${targetId} has been ACCEPTED!`, 'Work Order Accepted', 'success');
+                        showCustomAlert(`Work Order ${targetId} has been ACCEPTED!`, 'Work Order Accepted', 'success');
                         setSelectedRows([]);
                       } catch (err) {
                         showCustomAlert(`❌ Error accepting Work Order: ${err.message}`, 'Acceptance Error', 'error');
@@ -1358,7 +1358,7 @@ export default function WorkOrdersView({
                         targetTab: 'Work Orders',
                         badgeColor: '#16A34A'
                       });
-                      showCustomAlert(`✅ ${countApproved} Work Orders Verified & Approved! Finished Goods stock has been added to FG Inventory Store.`, 'Production Approved', 'success');
+                      showCustomAlert(`${countApproved} Work Orders Verified & Approved! Finished Goods stock has been added to FG Inventory Store.`, 'Production Approved', 'success');
                       setSelectedRows([]);
                     }
                   }}

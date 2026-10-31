@@ -1105,7 +1105,7 @@ export default function InvoiceDetailModal({
                 setIsEditingInvoice(false);
                 setViewingInvoiceModal(null);
                 if (typeof showCustomAlert === 'function') {
-                  showCustomAlert(`✅ Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
+                  showCustomAlert(`Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
                 }
               }}
               style={{
@@ -1688,7 +1688,7 @@ export default function InvoiceDetailModal({
                             window.dispatchEvent(new Event('controlroom_storage_update'));
                           } catch (_) {}
 
-                          alert(`✅ Reissue request sent to Sales (${salesPersonName}) for order ${targetCode}!\n\nSales has 1 hour to update this Address proof. If not updated within 1 hour, the invoice will be automatically cancelled with "Invoice Cancelled because of the Address Proof is missing are Mismatch".`);
+                          alert(`Reissue request sent to Sales (${salesPersonName}) for order ${targetCode}!\n\nSales has 1 hour to update this Address proof. If not updated within 1 hour, the invoice will be automatically cancelled with "Invoice Cancelled because of the Address Proof is missing are Mismatch".`);
                         } catch (err) {
                           alert(`Address proof reissue request failed: ${err.message}`);
                         }

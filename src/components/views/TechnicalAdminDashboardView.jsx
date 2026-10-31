@@ -5,7 +5,7 @@ import {
   Clock, Server, Check, X, ShieldAlert, ArrowRight, Download, Plus, Key,
   Cpu, Terminal, Zap, ExternalLink, FileText, CheckCircle, Edit3, Phone, Mail, Briefcase
 } from 'lucide-react';
-import { fetchCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate } from '../../utils/supabaseDataSync';
 import NotificationToast from '../NotificationToast';
 
 export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', onNavigateTab, userRole = 'Technical Administrator' }) {
@@ -41,6 +41,8 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
   // Selected User Modal States
   const [viewingUser, setViewingUser] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [creatingUser, setCreatingUser] = useState(null);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
 
   // Table selection & pagination state
   const [selectedRowCodes, setSelectedRowCodes] = useState(new Set());
@@ -288,6 +290,134 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
       triggerNotice(`Account ${empCode} permanently deleted from database.`);
     } catch (e) {
       triggerNotice('Error deleting employee account', 'error');
+    }
+  };
+
+  const getSuggestedRolePrefix = (role) => {
+    const r = String(role || '').toLowerCase();
+    if (r.includes('managing director') || r === 'md') return 'MD-001';
+    if (r.includes('ceo')) return 'CEO-002';
+    if (r.includes('technical administrator') || r.includes('tech admin')) return 'TA-VRM002';
+    if (r.includes('sales head')) return 'SH-1001';
+    if (r.includes('sales')) return 'SE-1001';
+    if (r.includes('dispatch head')) return 'DH-1001';
+    if (r.includes('dispatch')) return 'DI-1001';
+    if (r.includes('accounts head')) return 'AH-1001';
+    if (r.includes('accounts')) return 'AE-1001';
+    if (r.includes('billing') || r.includes('invoice')) return 'BI-1001';
+    if (r.includes('procurement') || r.includes('purchase')) return 'PE-1001';
+    if (r.includes('production')) return 'PS-1001';
+    return 'EMP-1001';
+  };
+
+  const getSuggestedDepartment = (role) => {
+    const r = String(role || '').toLowerCase();
+    if (r.includes('managing director') || r.includes('ceo') || r === 'md') return 'Executive Leadership';
+    if (r.includes('technical') || r.includes('admin')) return 'IT & Administration';
+    if (r.includes('sales')) return 'Sales & Marketing';
+    if (r.includes('dispatch')) return 'Dispatch & Logistics';
+    if (r.includes('accounts')) return 'Finance & Accounts';
+    if (r.includes('billing') || r.includes('invoice')) return 'Billing & Invoicing';
+    if (r.includes('procurement') || r.includes('purchase')) return 'Procurement';
+    if (r.includes('production')) return 'Production & Manufacturing';
+    return 'Operations';
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!creatingUser) return;
+
+    const rawCode = String(creatingUser.employee_code || '').trim().toUpperCase();
+    const rawEmail = String(creatingUser.email || '').trim().toLowerCase();
+    const rawName = String(creatingUser.employee_name || creatingUser.name || '').trim();
+    const rawPass = String(creatingUser.password || '').trim();
+    const rawRole = String(creatingUser.role || 'Sales Executive').trim();
+    const rawPhone = String(creatingUser.phone || creatingUser.mobile || '').trim();
+    const rawStatus = creatingUser.status || 'Active';
+    const rawDept = creatingUser.department || getSuggestedDepartment(rawRole);
+
+    if (!rawName) {
+      alert('Please enter employee full name.');
+      return;
+    }
+    if (!rawCode) {
+      alert('Please enter a valid employee code (e.g. MD-001, SE-1001).');
+      return;
+    }
+    if (!rawEmail || !rawEmail.includes('@')) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+    if (!rawPass || rawPass.length < 4) {
+      alert('Password must be at least 4 characters.');
+      return;
+    }
+
+    // Check code uniqueness
+    const codeExists = employeesList.some(emp => (emp.employee_code || emp.code || '').toUpperCase() === rawCode);
+    if (codeExists) {
+      alert(`Employee Code "${rawCode}" is already in use by another user. Please choose a different code.`);
+      return;
+    }
+
+    // Check email uniqueness
+    const emailExists = employeesList.some(emp => String(emp.email || '').toLowerCase() === rawEmail);
+    if (emailExists) {
+      alert(`Email "${rawEmail}" is already registered. Please use a different email.`);
+      return;
+    }
+
+    const newRecord = {
+      employee_code: rawCode,
+      code: rawCode,
+      employee_name: rawName,
+      name: rawName,
+      email: rawEmail,
+      phone: rawPhone,
+      mobile: rawPhone,
+      role: rawRole,
+      password: rawPass,
+      status: rawStatus,
+      department: rawDept,
+      prefix: rawCode.split('-')[0] || 'EMP',
+      created_at: new Date().toISOString(),
+      last_login: new Date().toISOString()
+    };
+
+    try {
+      const updated = [newRecord, ...employeesList];
+      setEmployeesList(updated);
+      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+
+      // 1. Save directly to authoritative PostgreSQL database
+      await saveCloudStoreImmediate('employees_store', updated);
+
+      // 2. Register on server session & auth system with admin session token
+      try {
+        const sesId = localStorage.getItem('controlroom_session_id');
+        await fetch('/api/employees/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sesId ? { 'x-session-id': sesId } : {})
+          },
+          body: JSON.stringify({
+            employee_code: rawCode,
+            employee_name: rawName,
+            email: rawEmail,
+            password: rawPass,
+            role: rawRole,
+            status: rawStatus,
+            prefix: rawCode.split('-')[0] || 'EMP'
+          })
+        });
+      } catch (_) {}
+
+      setCreatingUser(null);
+      triggerNotice(`Account created: ${rawName} (${rawCode} - ${rawRole}) is saved in PostgreSQL and can log in immediately!`);
+    } catch (err) {
+      console.error('Error creating user account:', err);
+      alert('Failed to save user account to database: ' + (err?.message || 'Server error'));
     }
   };
 
@@ -653,7 +783,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                   </span>
                 ) : (
                   <span style={{ color: '#059669', fontWeight: '700' }}>
-                    ✅ All registered employee accounts are reviewed and active.
+                    All registered employee accounts are reviewed and active.
                   </span>
                 )}
               </div>
@@ -865,6 +995,42 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button
+                type="button"
+                onClick={() => setCreatingUser({
+                  name: '',
+                  employee_name: '',
+                  email: '',
+                  phone: '',
+                  role: 'MD',
+                  employee_code: 'MD-001',
+                  password: '',
+                  status: 'Active',
+                  department: 'Executive Leadership'
+                })}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#0E7490',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontSize: '12.5px',
+                  fontWeight: '800',
+                  color: '#FFFFFF',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(14, 116, 144, 0.3)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+              >
+                <Plus size={15} strokeWidth={2.6} />
+                Create Account
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setShowAllPasswords(!showAllPasswords)}
                 style={{
                   display: 'inline-flex',
@@ -872,8 +1038,8 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                   gap: '6px',
                   backgroundColor: '#F8FAFC',
                   border: '1px solid #CBD5E1',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
                   fontSize: '12px',
                   fontWeight: '700',
                   color: '#475569',
@@ -1912,19 +2078,23 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                       boxSizing: 'border-box'
                     }}
                   >
-                    <option value="Production Head">Production Head</option>
-                    <option value="Dispatch Head">Dispatch Head</option>
-                    <option value="Floor Supervisor">Floor Supervisor</option>
-                    <option value="Floor Employee">Floor Employee</option>
-                    <option value="Accounts Head">Accounts Head</option>
-                    <option value="Accounts Executive">Accounts Executive</option>
-                    <option value="Sales Head">Sales Head</option>
-                    <option value="Sales Executive">Sales Executive</option>
-                    <option value="Design Engineer">Design Engineer</option>
+                    <option value="CEO">CEO / MD</option>
+                    <option value="Sales">Sales</option>
+                    <option value="Production">Production</option>
+                    <option value="Dispatch">Dispatch</option>
+                    <option value="Procurement">Procurement</option>
+                    <option value="Accounts">Accounts</option>
+                    <option value="Billing">Billing</option>
+                    <option value="Design">Design</option>
                     <option value="Tech Support">Tech Support</option>
-                    <option value="Invoice Executive">Invoice Executive</option>
-                    <option value="CEO">CEO</option>
                     <option value="Technical Administrator">Technical Administrator</option>
+                    {/* Backward-compatible legacy roles */}
+                    <option value="Sales Executive">Sales Executive (Legacy)</option>
+                    <option value="Sales Head">Sales Head (Legacy)</option>
+                    <option value="Production Head">Production Head (Legacy)</option>
+                    <option value="Dispatch Head">Dispatch Head (Legacy)</option>
+                    <option value="Accounts Head">Accounts Head (Legacy)</option>
+                    <option value="Accounts Executive">Accounts Executive (Legacy)</option>
                   </select>
                 </div>
 
@@ -2015,6 +2185,317 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                   }}
                 >
                   <Check size={14} /> Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: CREATE NEW USER ACCOUNT ─── */}
+      {creatingUser && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            width: '100%',
+            maxWidth: '520px',
+            overflow: 'hidden',
+            fontFamily: "'Plus Jakarta Sans', sans-serif"
+          }}>
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#F8FAFC'
+            }}>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                  Create Employee / Executive Account
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0' }}>
+                  Provisioned directly to PostgreSQL database with immediate login access
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreatingUser(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#64748B',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleCreateUser}
+              style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+            >
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Velmurugan Rathinam"
+                  value={creatingUser.employee_name || ''}
+                  onChange={(e) => setCreatingUser({ ...creatingUser, name: e.target.value, employee_name: e.target.value })}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '13px',
+                    color: '#0F172A',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    System Role / Designation *
+                  </label>
+                  <select
+                    value={creatingUser.role || 'MD'}
+                    onChange={(e) => {
+                      const nextRole = e.target.value;
+                      setCreatingUser({
+                        ...creatingUser,
+                        role: nextRole,
+                        employee_code: getSuggestedRolePrefix(nextRole),
+                        department: getSuggestedDepartment(nextRole)
+                      });
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      color: '#0F172A',
+                      backgroundColor: '#FFFFFF',
+                      boxSizing: 'border-box',
+                      fontWeight: '600'
+                    }}
+                  >
+                    <option value="CEO">CEO / MD</option>
+                    <option value="Sales">Sales</option>
+                    <option value="Production">Production</option>
+                    <option value="Dispatch">Dispatch</option>
+                    <option value="Procurement">Procurement</option>
+                    <option value="Accounts">Accounts</option>
+                    <option value="Billing">Billing</option>
+                    <option value="Design">Design</option>
+                    <option value="Tech Support">Tech Support</option>
+                    <option value="Technical Administrator">Technical Administrator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    Employee Code *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. MD-001"
+                    value={creatingUser.employee_code || ''}
+                    onChange={(e) => setCreatingUser({ ...creatingUser, employee_code: e.target.value.toUpperCase() })}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      fontFamily: 'monospace',
+                      fontWeight: '800',
+                      color: '#0E7490',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    Work Email (Login ID) *
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. md@businz.com"
+                    value={creatingUser.email || ''}
+                    onChange={(e) => setCreatingUser({ ...creatingUser, email: e.target.value })}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      color: '#0F172A',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    Login Password *
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showNewUserPassword ? 'text' : 'password'}
+                      placeholder="Enter initial password"
+                      value={creatingUser.password || ''}
+                      onChange={(e) => setCreatingUser({ ...creatingUser, password: e.target.value })}
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '9px 36px 9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        color: '#0F172A',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        background: 'none',
+                        color: '#94A3B8',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: 0
+                      }}
+                    >
+                      {showNewUserPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    Mobile Phone
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 9876543210"
+                    value={creatingUser.phone || ''}
+                    onChange={(e) => setCreatingUser({ ...creatingUser, phone: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      color: '#0F172A',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    Account Status
+                  </label>
+                  <select
+                    value={creatingUser.status || 'Active'}
+                    onChange={(e) => setCreatingUser({ ...creatingUser, status: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      color: '#0F172A',
+                      backgroundColor: '#FFFFFF',
+                      boxSizing: 'border-box',
+                      fontWeight: '700'
+                    }}
+                  >
+                    <option value="Active">Active (Immediate Login)</option>
+                    <option value="Pending Approval">Pending Approval</option>
+                    <option value="Disabled">Disabled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{
+                marginTop: '10px',
+                paddingTop: '16px',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setCreatingUser(null)}
+                  style={{
+                    padding: '9px 16px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    fontSize: '12.5px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '9px 20px',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '12.5px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)'
+                  }}
+                >
+                  <Plus size={15} /> Create Account
                 </button>
               </div>
             </form>

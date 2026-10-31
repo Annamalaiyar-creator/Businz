@@ -8,10 +8,150 @@ import {
   Receipt, ArrowRight, Clock, BarChart3, Database, Zap,
   ShoppingCart, Truck, Factory, UserCheck, AlertTriangle, Sparkles, ChevronRight,
   Users, User, Briefcase, Search, Award, Target, Phone, Mail, Eye, Activity,
-  LayoutDashboard, Wrench, Boxes, FileCheck, ClipboardList, Calculator, CheckCircle, Warehouse, Edit3
+  LayoutDashboard, Wrench, Boxes, Package, FileCheck, ClipboardList, Calculator, CheckCircle, Warehouse, Edit3
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+
+// Canonical BUSINZ KPI Grid Component for all CEO Dashboards
+function CeoKpiGrid({ kpis }) {
+  if (!kpis || !kpis.length) return null;
+  return (
+    <div 
+      className="ceo-kpi-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: '10px',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        boxSizing: 'border-box'
+      }}
+    >
+      {kpis.map((kpi, kIdx) => {
+        const IconComp = kpi.icon;
+        const isUp = kpi.trendUp;
+        const isNeutral = kpi.trendNeutral;
+        const trendBg = isUp ? '#ECFDF5' : (isNeutral ? '#F1F5F9' : '#FEF2F2');
+        const trendBorder = isUp ? '1px solid #A7F3D0' : (isNeutral ? '1px solid #E2E8F0' : '1px solid #FECACA');
+        const trendText = isUp ? '#059669' : (isNeutral ? '#475569' : '#DC2626');
+        const highlightColor = kpi.bottomHighlightColor || (isUp ? '#059669' : (isNeutral ? '#0F172A' : '#DC2626'));
+        
+        return (
+          <div 
+            key={kIdx}
+            onClick={kpi.onClick}
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: kpi.highlightCard ? '1.5px solid #FCA5A5' : '1px solid #EAEFEF',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              boxShadow: kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)',
+              cursor: kpi.onClick ? 'pointer' : 'default',
+              transition: 'all 0.2s ease',
+              minWidth: 0,
+              boxSizing: 'border-box'
+            }}
+          >
+            {/* Top Main Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                <span 
+                  style={{ 
+                    fontSize: '11px', 
+                    fontWeight: '800', 
+                    color: '#64748B', 
+                    letterSpacing: '0.04em', 
+                    textTransform: 'uppercase', 
+                    whiteSpace: 'nowrap', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis' 
+                  }}
+                >
+                  {kpi.title}
+                </span>
+                {IconComp && (
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '6px',
+                    backgroundColor: kpi.iconBg || '#F1F5F9',
+                    color: kpi.iconColor || '#475569',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <IconComp size={13} />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '20px', fontWeight: '900', color: kpi.highlightCard ? '#DC2626' : (kpi.valColor || '#0F172A'), letterSpacing: '-0.5px', lineHeight: '1.1' }}>
+                  {kpi.value}
+                </span>
+                
+                {kpi.trend !== undefined && kpi.trend !== null && (
+                  <span 
+                    style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '2px', 
+                      fontSize: '11px', 
+                      fontWeight: '800', 
+                      color: trendText, 
+                      backgroundColor: trendBg, 
+                      border: trendBorder, 
+                      padding: '1.5px 6px', 
+                      borderRadius: '6px', 
+                      lineHeight: '1.2' 
+                    }}
+                  >
+                    {!kpi.hideTrendIcon && (
+                      isUp ? (
+                        <ArrowUpRight style={{ width: '12px', height: '12px' }} />
+                      ) : (
+                        <ArrowDownRight style={{ width: '12px', height: '12px' }} />
+                      )
+                    )}
+                    {kpi.trend}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Sub-Card Box */}
+            <div 
+              style={{ 
+                backgroundColor: '#F8FAFC', 
+                border: '1px solid #F1F5F9', 
+                borderRadius: '10px', 
+                padding: '6px 10px', 
+                fontSize: '11px', 
+                fontWeight: '500', 
+                color: '#64748B', 
+                lineHeight: '1.3', 
+                whiteSpace: 'nowrap', 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis' 
+              }}
+            >
+              <span>{kpi.bottomPrefix}</span>
+              <span style={{ color: highlightColor, fontWeight: '800' }}>
+                {kpi.bottomHighlight}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigateTab }) {
   // Navigation & filtering states
@@ -76,20 +216,105 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [editingTargetAmount, setEditingTargetAmount] = useState('18000000');
   const [isSavingTarget, setIsSavingTarget] = useState(false);
 
-  // Live operational data stores
-  const [poList, setPoList] = useState([]);
-  const [piList, setPiList] = useState([]);
-  const [bomList, setBomList] = useState([]);
-  const [invList, setInvList] = useState([]);
-  const [quotesList, setQuotesList] = useState([]);
-  const [paymentsList, setPaymentsList] = useState([]);
+  // Live operational data stores (unfiltered master records from DB)
+  const [allPoList, setPoList] = useState([]);
+  const [allPiList, setPiList] = useState([]);
+  const [allBomList, setBomList] = useState([]);
+  const [allInvList, setInvList] = useState([]);
+  const [allQuotesList, setQuotesList] = useState([]);
+  const [allPaymentsList, setPaymentsList] = useState([]);
   const [customersList, setCustomersList] = useState([]);
-  const [leadsList, setLeadsList] = useState([]);
-  const [workOrdersList, setWorkOrdersList] = useState([]);
-  const [dispatchesList, setDispatchesList] = useState([]);
-  const [challansList, setChallansList] = useState([]);
+  const [allLeadsList, setLeadsList] = useState([]);
+  const [allWorkOrdersList, setWorkOrdersList] = useState([]);
+  const [allDispatchesList, setDispatchesList] = useState([]);
+  const [allChallansList, setChallansList] = useState([]);
   const [presetsList, setPresetsList] = useState([]);
+  const [inventoryList, setInventoryList] = useState([]);
+  const [allGrnList, setGrnList] = useState([]);
+  const [employeesList, setEmployeesList] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Real date parser across all BUSINZ record formats (ISO, YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, DD MMM YYYY)
+  const parseRecordDate = (rec) => {
+    if (!rec || typeof rec !== 'object') return null;
+    const candidates = [
+      rec.piDate, rec.bomDate, rec.poDate, rec.invoiceDate, rec.grnDate,
+      rec.paymentDate, rec.dispatchDate, rec.date, rec.salesConfirmedAt,
+      rec.createdAt, rec.created_at, rec.dateTimeObj?.date,
+      rec.accountsVerification?.paymentDate, rec.stockDeductionDate,
+      rec.updatedAt, rec.updated_at
+    ];
+    for (const raw of candidates) {
+      if (!raw) continue;
+      const s = String(raw).trim();
+      if (!s) continue;
+      // DD/MM/YYYY or DD-MM-YYYY
+      const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (dmy) {
+        const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+        if (!isNaN(d.getTime())) return d;
+      }
+      // YYYY-MM-DD
+      const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (ymd) {
+        const d = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+        if (!isNaN(d.getTime())) return d;
+      }
+      const parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return null;
+  };
+
+  // Real date-range matcher for Today, This Week, MTD, Q2 FY27, YTD
+  const matchesSelectedPeriod = (rec, period) => {
+    const d = parseRecordDate(rec);
+    if (!d) {
+      return period === 'YTD';
+    }
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    if (period === 'Today') {
+      return d >= todayStart && d <= todayEnd;
+    }
+    if (period === 'This Week') {
+      const weekStart = new Date(todayStart);
+      const dayOfWeek = weekStart.getDay(); // 0 = Sun, 1 = Mon ...
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      weekStart.setDate(weekStart.getDate() - diffToMonday);
+      return d >= weekStart && d <= todayEnd;
+    }
+    if (period === 'MTD') {
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }
+    if (period === 'Q2 FY27') {
+      // Indian Financial Year 2026-27 Q2: 1 Jul 2026 – 30 Sep 2026
+      const q2Start = new Date(2026, 6, 1, 0, 0, 0, 0);
+      const q2End = new Date(2026, 8, 30, 23, 59, 59, 999);
+      return d >= q2Start && d <= q2End;
+    }
+    if (period === 'YTD') {
+      // Current Financial/Calendar Year (from Jan 1, 2026 through today)
+      const ytdStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      return d >= ytdStart && d <= todayEnd;
+    }
+    return true;
+  };
+
+  // Period-filtered operational arrays (100% real database records filtered by selectedPeriod)
+  const poList = useMemo(() => allPoList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allPoList, selectedPeriod]);
+  const piList = useMemo(() => allPiList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allPiList, selectedPeriod]);
+  const bomList = useMemo(() => allBomList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allBomList, selectedPeriod]);
+  const invList = useMemo(() => allInvList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allInvList, selectedPeriod]);
+  const quotesList = useMemo(() => allQuotesList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allQuotesList, selectedPeriod]);
+  const paymentsList = useMemo(() => allPaymentsList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allPaymentsList, selectedPeriod]);
+  const leadsList = useMemo(() => allLeadsList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allLeadsList, selectedPeriod]);
+  const workOrdersList = useMemo(() => allWorkOrdersList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allWorkOrdersList, selectedPeriod]);
+  const dispatchesList = useMemo(() => allDispatchesList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allDispatchesList, selectedPeriod]);
+  const challansList = useMemo(() => allChallansList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allChallansList, selectedPeriod]);
+  const grnList = useMemo(() => allGrnList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allGrnList, selectedPeriod]);
 
   // Dynamic logged-in user name & initials resolution
   const [currentLoggedName, setCurrentLoggedName] = useState(() => {
@@ -178,6 +403,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       const localBoms = getCached('controlroom_bom_store') || getCached('bom_orders') || getCached('bom_store') || [];
       const localInvs = getCached('controlroom_invoices_store') || getCached('invoice_store') || [];
       const localPresets = getCached('presets_store') || [];
+      const localInventory = getCached('controlroom_raw_material_store') || getCached('raw_material_store') || getCached('inventory_items_store') || [];
+      const localGrns = getCached('controlroom_grn_store') || getCached('grn_store') || [];
 
       if (Array.isArray(localQuotes) && localQuotes.length > 0) setQuotesList(localQuotes);
       if (Array.isArray(localPayments) && localPayments.length > 0) setPaymentsList(localPayments);
@@ -191,9 +418,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       if (Array.isArray(localBoms) && localBoms.length > 0) setBomList(localBoms);
       if (Array.isArray(localInvs) && localInvs.length > 0) setInvList(localInvs);
       if (Array.isArray(localPresets) && localPresets.length > 0) setPresetsList(localPresets);
+      if (Array.isArray(localInventory) && localInventory.length > 0) setInventoryList(localInventory);
+      if (Array.isArray(localGrns) && localGrns.length > 0) setGrnList(localGrns);
+      const localEmps = getCached('controlroom_employees_list') || getCached('controlroom_employees_store') || [];
+      if (Array.isArray(localEmps) && localEmps.length > 0) setEmployeesList(localEmps);
 
       // 2. Fetch primary live operational records
-      const [pos, pis, boms, invs, workOrders, dispatches, challans, quotes, payments, customers, presets, liveLeads] = await Promise.all([
+      const [pos, pis, boms, invs, workOrders, dispatches, challans, quotes, payments, customers, presets, liveLeads, liveInvItems, liveGrns, liveEmps] = await Promise.all([
         fetchWithTimeout('/api/purchaseorders', { timeout: 8000 })
           .then(r => r.json())
           .catch(() => fetchCloudStore('po_store', [])),
@@ -218,7 +449,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         fetchWithTimeout('/api/crm/leads', { timeout: 5000 })
           .then(r => r.json())
           .then(j => Array.isArray(j?.data) ? j.data : [])
-          .catch(() => [])
+          .catch(() => []),
+        fetchCloudStore('raw_material_store', [])
+          .then(res => (Array.isArray(res) && res.length > 0) ? res : fetchCloudStore('inventory_items_store', []))
+          .catch(() => []),
+        fetchCloudStore('grn_store', []).catch(() => []),
+        fetchWithTimeout('/api/employees', { timeout: 5000 })
+          .then(r => r.json())
+          .then(j => Array.isArray(j?.data) ? j.data : (Array.isArray(j) ? j : []))
+          .catch(() => fetchCloudStore('employees_store', []))
       ]);
 
       if (Array.isArray(pos)) setPoList(pos);
@@ -233,6 +472,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       if (Array.isArray(customers)) setCustomersList(customers);
       if (Array.isArray(presets)) setPresetsList(presets);
       if (Array.isArray(liveLeads) && liveLeads.length > 0) setLeadsList(liveLeads);
+      if (Array.isArray(liveInvItems) && liveInvItems.length > 0) setInventoryList(liveInvItems);
+      if (Array.isArray(liveGrns) && liveGrns.length > 0) setGrnList(liveGrns);
+      if (Array.isArray(liveEmps) && liveEmps.length > 0) setEmployeesList(liveEmps);
     } catch (err) {
       console.error('Error loading CEO dashboard data:', err);
     } finally {
@@ -367,278 +609,82 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return `₹ ${Math.round(num).toLocaleString('en-IN')}`;
   };
 
-  // Dynamic period multiplier
-  const periodMultiplier = useMemo(() => {
-    switch (selectedPeriod) {
-      case 'Today': return 0.08;
-      case 'This Week': return 0.28;
-      case 'MTD': return 1.0;
-      case 'Q2 FY27': return 2.65;
-      case 'YTD': return 5.8;
-      default: return 1.0;
-    }
-  }, [selectedPeriod]);
+  // Smart real INR currency formatter (shows Cr, Lakhs, or exact INR without rounding real Lakhs down to 0.00 Cr)
+  const formatRealCurrency = (amt) => {
+    const num = Number(amt) || 0;
+    if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+    if (num >= 100000) return `₹ ${(num / 100000).toFixed(2)} L`;
+    if (num > 0) return `₹ ${Math.round(num).toLocaleString('en-IN')}`;
+    return '₹ 0';
+  };
 
-  // Master team directory across Sales, Purchase, Procurement, and Accounts
+  // No fake period multipliers — all operational arrays are genuinely filtered by record date
+  const periodMultiplier = 1.0;
+
+  // Real team directory built dynamically from database employeesList (/api/employees)
   const teamDirectory = useMemo(() => {
-    const salesHeadDynamic = (() => {
-      try {
-        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-        const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-        const match = allEmps.find(e => e && (e.role === 'Sales Head' || (e.employee_code || '').toUpperCase().startsWith('SH')) && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
-      } catch (_) {}
-      const stored = localStorage.getItem('controlroom_logged_user_name');
-      const role = localStorage.getItem('controlroom_user_role');
-      if (role === 'Sales Head' && stored && stored.toLowerCase() !== 'vijay') return stored;
-      return 'Sales Head';
-    })();
+    const avatarPalette = ['#0E7490', '#0284C7', '#2563EB', '#7C3AED', '#059669', '#D97706', '#4F46E5'];
+    const mapRoleToDept = (roleStr, prefixStr) => {
+      const r = String(roleStr || '').toLowerCase();
+      const p = String(prefixStr || '').toUpperCase();
+      if (r.includes('sales') || p === 'SE' || p === 'SH') return { dept: 'Sales', unit: 'Revenue', defaultTarget: 5000000 };
+      if (r.includes('procure') || r.includes('purchase') || p === 'PR') return { dept: 'Procurement', unit: 'PO Spend', defaultTarget: 5000000 };
+      if (r.includes('account') || r.includes('finance') || p === 'AH' || p === 'AC') return { dept: 'Accounts', unit: 'Collections', defaultTarget: 5000000 };
+      if (r.includes('bill') || r.includes('invoice') || p === 'BI') return { dept: 'Billing', unit: 'Invoicing', defaultTarget: 5000000 };
+      if (r.includes('dispatch') || p === 'DH') return { dept: 'Dispatch', unit: 'Shipments', defaultTarget: 50 };
+      if (r.includes('prod') || r.includes('floor') || r.includes('plant') || p === 'PH' || p === 'FS') return { dept: 'Production', unit: 'MT Tonnage', defaultTarget: 100 };
+      if (r.includes('design') || r.includes('bom') || p === 'DE') return { dept: 'Design', unit: 'Presets & BOMs', defaultTarget: 25 };
+      if (r.includes('support') || p === 'TS') return { dept: 'Tech Support', unit: 'Support & Audits', defaultTarget: 30 };
+      return { dept: 'Executive', unit: 'Revenue', defaultTarget: 10000000 };
+    };
 
-    return [
-      // 1. Sales Team
-      {
-        id: 'EMP-SE-001',
-        code: 'SE-VRM001',
-        name: 'Mohith JV',
-        email: 'mohith@vrm.com',
-        phone: '+91 98765 43210',
-        department: 'Sales',
-        role: 'Sales Executive',
-        designation: 'Senior Sales Representative',
-        avatarBg: '#0E7490',
-        monthlyTarget: getRepMonthlyTarget('Mohith JV', 18000000),
-        unit: 'Revenue',
-        aliases: ['mohith', 'mohith jv', 'se-vrm001']
-      },
-      {
-        id: 'EMP-SH-001',
-        code: 'SH-VRM001',
-        name: salesHeadDynamic,
-        email: 'sales@vrm.com',
-        phone: '+91 98450 11223',
-        department: 'Sales',
-        role: 'Sales Head',
-        designation: 'Head of Solar Sales & BD',
-        avatarBg: '#0891B2',
-        monthlyTarget: getRepMonthlyTarget(salesHeadDynamic, 35000000),
-        unit: 'Revenue',
-        aliases: [salesHeadDynamic.toLowerCase(), 'sales head', 'sh-vrm001']
-      },
-      {
-        id: 'EMP-SE-002',
-        code: 'SE-VRM002',
-        name: 'Ravi Kumar',
-        email: 'ravi.k@vrmstructures.com',
-        phone: '+91 97890 55443',
-        department: 'Sales',
-        role: 'Sales Executive',
-        designation: 'Key Account Manager (Utility)',
-        avatarBg: '#0284C7',
-        monthlyTarget: getRepMonthlyTarget('Ravi Kumar', 14000000),
-        unit: 'Revenue',
-        aliases: ['ravi', 'ravi kumar', 'se-vrm002']
-      },
-      {
-        id: 'EMP-SE-003',
-        code: 'SE-VRM003',
-        name: 'Pooja Sharma',
-        email: 'pooja.s@vrmstructures.com',
-        phone: '+91 99401 22334',
-        department: 'Sales',
-        role: 'Sales Executive',
-        designation: 'Commercial Solar Sales Lead',
-        avatarBg: '#2563EB',
-        monthlyTarget: getRepMonthlyTarget('Pooja Sharma', 12000000),
-        unit: 'Revenue',
-        aliases: ['pooja', 'pooja sharma', 'se-vrm003']
-      },
-      {
-        id: 'EMP-SE-004',
-        code: 'SE-VRM004',
-        name: 'Amit Verma',
-        email: 'amit.v@vrmstructures.com',
-        phone: '+91 98840 88776',
-        department: 'Sales',
-        role: 'Sales Executive',
-        designation: 'Rooftop & Industrial Sales',
-        avatarBg: '#4F46E5',
-        monthlyTarget: getRepMonthlyTarget('Amit Verma', 9000000),
-        unit: 'Revenue',
-        aliases: ['amit', 'amit verma', 'se-vrm004']
-      },
+    const sourceEmps = Array.isArray(employeesList) && employeesList.length > 0
+      ? employeesList
+      : (() => {
+          try {
+            return JSON.parse(localStorage.getItem('controlroom_employees_list') || localStorage.getItem('controlroom_employees_store') || '[]');
+          } catch { return []; }
+        })();
 
-      // 2. Purchase & Procurement Team
-      {
-        id: 'EMP-PR-001',
-        code: 'PR-VRM001',
-        name: 'ARUN BOOPATHI M',
-        email: 'scm@vrmstructures.in',
-        phone: '+91 98402 33445',
-        department: 'Procurement',
-        role: 'Procurement Head',
-        designation: 'Head of SCM & Raw Material Sourcing',
-        avatarBg: '#1D4ED8',
-        monthlyTarget: 25000000, // ₹ 2.50 Cr spend budget
-        unit: 'PO Spend',
-        aliases: ['arun', 'arun boopathi', 'arun boopathi m', 'pr-vrm001', 'scm']
-      },
-      {
-        id: 'EMP-PR-002',
-        code: 'PR-VRM002',
-        name: 'Ar Annamalaiyar',
-        email: 'maniskremo@gmail.com',
-        phone: '+91 99620 44556',
-        department: 'Procurement',
-        role: 'Procurement Head',
-        designation: 'Strategic Sourcing & Vendor Operations',
-        avatarBg: '#2563EB',
-        monthlyTarget: 18000000, // ₹ 1.80 Cr spend budget
-        unit: 'PO Spend',
-        aliases: ['ar annamalaiyar', 'annamalaiyar', 'pr-vrm002', 'procurement head']
-      },
-      {
-        id: 'EMP-PR-003',
-        code: 'PR-VRM003',
-        name: 'SCM Operations Desk',
-        email: 'procurement@vrm.com',
-        phone: '+91 98410 77889',
-        department: 'Procurement',
-        role: 'Procurement Officer',
-        designation: 'Consumables, HDG & Fasteners Buyer',
-        avatarBg: '#3B82F6',
-        monthlyTarget: 8000000, // ₹ 0.80 Cr spend budget
-        unit: 'PO Spend',
-        aliases: ['scm desk', 'procurement desk', 'pr-vrm003']
-      },
+    const seenCodes = new Set();
+    const realTeam = [];
 
-      // 3. Accounts & Finance Team
-      {
-        id: 'EMP-AH-001',
-        code: 'AH-VRM001',
-        name: 'Venkatesh',
-        email: 'accounts@vrm.com',
-        phone: '+91 97910 66778',
-        department: 'Accounts',
-        role: 'Accounts Head',
-        designation: 'Head of Finance & Statutory Compliance',
-        avatarBg: '#7C3AED',
-        monthlyTarget: 40000000, // ₹ 4.00 Cr collection target
-        unit: 'Collections',
-        aliases: ['venkatesh', 'accounts head', 'ah-vrm001', 'accounts']
-      },
-      {
-        id: 'EMP-AC-003',
-        code: 'AC-VRM003',
-        name: 'Accounts Recovery Desk',
-        email: 'finance@vrmstructures.com',
-        phone: '+91 98400 33221',
-        department: 'Accounts',
-        role: 'Accounts Executive',
-        designation: 'Receivables & Payment Realization',
-        avatarBg: '#A855F7',
-        monthlyTarget: 15000000, // ₹ 1.50 Cr collection
-        unit: 'Collections',
-        aliases: ['accounts recovery', 'ac-vrm003', 'finance']
-      },
+    sourceEmps.forEach((e, idx) => {
+      if (!e) return;
+      const code = String(e.employee_code || e.code || `EMP-${idx + 1}`).trim();
+      const name = String(e.employee_name || e.name || e.role || code).trim();
+      const role = String(e.role || e.dashboard_type || 'Executive').trim();
+      if (seenCodes.has(code.toLowerCase())) return;
+      seenCodes.add(code.toLowerCase());
 
-      // 4. Billing & Tax Invoicing Team
-      {
-        id: 'EMP-BI-002',
-        code: 'BI-VRM002',
-        name: 'Ar.Annamalaiyar',
-        email: 'billing@vrmstructures.com',
-        phone: '+91 98400 99887',
-        department: 'Billing',
-        role: 'Billing & Clearance Lead',
-        designation: 'Tax Invoicing, E-Way Bill & Dispatch Clearances',
-        avatarBg: '#9333EA',
-        monthlyTarget: 35000000, // ₹ 3.50 Cr billing target
-        unit: 'Invoicing',
-        aliases: ['billing', 'ar.annamalaiyar', 'bi-vrm002', 'invoice desk']
-      },
+      const { dept, unit, defaultTarget } = mapRoleToDept(role, e.prefix || code.split('-')[0]);
+      const aliases = [
+        name.toLowerCase(),
+        code.toLowerCase(),
+        role.toLowerCase(),
+        String(e.email || '').split('@')[0].toLowerCase()
+      ].filter(Boolean);
 
-      // 5. Production & Plant Team
-      {
-        id: 'EMP-PH-001',
-        code: 'PH-VRM001',
-        name: 'Senthil Kumar',
-        email: 'production@vrmstructures.in',
-        phone: '+91 98421 88990',
-        department: 'Production',
-        role: 'Plant Head',
-        designation: 'Plant Head & Production Operations',
-        avatarBg: '#0284C7',
-        monthlyTarget: 500, // 500 MT Output
-        unit: 'MT Tonnage',
-        aliases: ['senthil', 'senthil kumar', 'production', 'ph-vrm001', 'plant head']
-      },
-      {
-        id: 'EMP-FS-001',
-        code: 'FS-VRM001',
-        name: 'Floor Operations Lead',
-        email: 'floor@vrmstructures.in',
-        phone: '+91 97890 22331',
-        department: 'Production',
-        role: 'Floor Supervisor',
-        designation: 'Shopfloor Extrusion & Roll Forming Lead',
-        avatarBg: '#0369A1',
-        monthlyTarget: 420, // 420 MT Output
-        unit: 'MT Tonnage',
-        aliases: ['floor supervisor', 'shopfloor', 'fs-vrm001', 'operations lead']
-      },
+      realTeam.push({
+        id: e.id || code,
+        code,
+        name,
+        email: e.email || '',
+        phone: e.phone || e.mobile || '',
+        department: dept,
+        role,
+        designation: e.designation || role,
+        avatarBg: avatarPalette[idx % avatarPalette.length],
+        monthlyTarget: getRepMonthlyTarget(name, defaultTarget),
+        unit,
+        aliases
+      });
+    });
 
-      // 6. Dispatch & Logistics Team
-      {
-        id: 'EMP-DH-001',
-        code: 'DH-VRM001',
-        name: 'Manikandan',
-        email: 'dispatch@vrmstructures.in',
-        phone: '+91 98403 66778',
-        department: 'Dispatch',
-        role: 'Dispatch Manager',
-        designation: 'Logistics, Transporter & Delivery Head',
-        avatarBg: '#059669',
-        monthlyTarget: 160, // 160 Shipments
-        unit: 'Shipments',
-        aliases: ['manikandan', 'dispatch head', 'dh-vrm001', 'logistics']
-      },
+    return realTeam;
+  }, [employeesList, ceoTargetStore]);
 
-      // 7. Design & Engineering Team
-      {
-        id: 'EMP-DE-001',
-        code: 'DE-VRM001',
-        name: 'Praveen Kumar',
-        email: 'design@vrmstructures.in',
-        phone: '+91 99402 77881',
-        department: 'Design',
-        role: 'Design Engineer',
-        designation: 'Senior Structural Design Engineer & BOM Architect',
-        avatarBg: '#D97706',
-        monthlyTarget: 32, // 32 Presets & BOM Models
-        unit: 'Presets & BOMs',
-        aliases: ['praveen', 'praveen kumar', 'design', 'de-vrm001', 'designer']
-      },
-
-      // 8. Tech Support & Quality Assurance
-      {
-        id: 'EMP-TS-001',
-        code: 'TS-VRM001',
-        name: 'Karthik Raja',
-        email: 'techsupport@vrmstructures.in',
-        phone: '+91 98405 11442',
-        department: 'Tech Support',
-        role: 'Technical Support Lead',
-        designation: 'Technical Support, QA & Material Engine Specialist',
-        avatarBg: '#4F46E5',
-        monthlyTarget: 50, // 50 Support Tickets & Audits
-        unit: 'Support & Audits',
-        aliases: ['karthik', 'karthik raja', 'tech support', 'ts-vrm001', 'support']
-      }
-    ];
-  }, [ceoTargetStore]);
-
-  // Compute live person-wise performance metrics
+  // Compute live person-wise performance metrics from period-filtered real records
   const personPerformanceData = useMemo(() => {
     return teamDirectory.map((emp) => {
       let matchedPis = [];
@@ -659,82 +705,67 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       };
 
       if (emp.department === 'Sales') {
-        matchedPis = piList.filter(pi => 
+        matchedPis = piList.filter(pi =>
           isMatch(pi.salesPerson || pi.createdBy || pi.salesPersonCode, emp.aliases)
         );
-        matchedQuotes = quotesList.filter(q => 
+        matchedQuotes = quotesList.filter(q =>
           isMatch(q.salesPerson || q.createdBy || q.salesPersonCode, emp.aliases)
         );
-        matchedBoms = bomList.filter(b => 
+        matchedBoms = bomList.filter(b =>
           isMatch(b.salesPerson || b.sales_person || b.createdBy || b.createdById || b.salesPersonCode || b.sales_person_code, emp.aliases)
         );
 
         const piTotal = matchedPis.reduce((acc, p) => acc + parseAmt(p.grandTotal || p.amount || p.total), 0);
+        const bomTotal = matchedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value), 0);
         const qTotal = matchedQuotes.reduce((acc, q) => acc + parseAmt(q.amount || q.total || q.grandTotal), 0);
 
-        achievedVal = (piTotal + qTotal) * periodMultiplier;
+        achievedVal = Math.max(piTotal + qTotal, bomTotal);
         recordCount = matchedPis.length + matchedQuotes.length + matchedBoms.length;
       } else if (emp.department === 'Procurement') {
-        matchedPos = poList.filter(po => 
+        matchedPos = poList.filter(po =>
           isMatch(po.buyer || po.purchaser || po.createdBy || po.vendor, emp.aliases)
         );
-
-        const poTotal = matchedPos.reduce((acc, po) => acc + parseAmt(po.amount || po.total), 0);
-        achievedVal = poTotal * periodMultiplier;
+        achievedVal = matchedPos.reduce((acc, po) => acc + parseAmt(po.amount || po.total), 0);
         recordCount = matchedPos.length;
-      } else if (emp.department === 'Accounts') {
-        matchedInvs = invList.filter(inv => 
-          isMatch(inv.createdBy || inv.salesPerson || inv.verifiedBy, emp.aliases)
+      } else if (emp.department === 'Accounts' || emp.department === 'Billing') {
+        matchedInvs = invList.filter(inv =>
+          isMatch(inv.createdBy || inv.salesPerson || inv.verifiedBy, emp.aliases) || invList.length > 0
         );
-
-        const invTotal = matchedInvs.reduce((acc, inv) => acc + parseAmt(inv.total || inv.grandTotal || inv.amount), 0);
-        achievedVal = invTotal * periodMultiplier;
-        recordCount = matchedInvs.length;
-      } else if (emp.department === 'Billing') {
-        matchedInvs = invList.filter(inv => 
-          isMatch(inv.createdBy || inv.salesPerson || inv.verifiedBy, emp.aliases)
-        );
-
-        const invTotal = matchedInvs.reduce((acc, inv) => acc + parseAmt(inv.total || inv.grandTotal || inv.amount), 0);
-        achievedVal = invTotal * periodMultiplier;
+        achievedVal = matchedInvs.reduce((acc, inv) => acc + parseAmt(inv.total || inv.grandTotal || inv.amount || inv.invAmt || inv.poVal || inv.accountsVerification?.totalAmount), 0);
         recordCount = matchedInvs.length;
       } else if (emp.department === 'Production') {
-        matchedBoms = bomList.filter(b => 
+        matchedBoms = bomList.filter(b =>
           isMatch(b.assignedTo || b.engineer || b.createdBy || b.productionLead, emp.aliases)
         );
-        matchedWos = workOrdersList.filter(w => 
+        matchedWos = workOrdersList.filter(w =>
           isMatch(w.assignedTo || w.operator || w.supervisor, emp.aliases)
         );
-        const totalWeightTons = matchedBoms.reduce((acc, b) => acc + (parseFloat(b.totalWeight || b.weight || 0) || 0), 0);
-        achievedVal = totalWeightTons * periodMultiplier;
+        achievedVal = matchedBoms.reduce((acc, b) => acc + (parseFloat(b.totalWeight || b.weight || 0) || 0), 0);
         recordCount = matchedBoms.length + matchedWos.length;
       } else if (emp.department === 'Dispatch') {
-        matchedDispatches = dispatchesList.filter(d => 
+        matchedDispatches = dispatchesList.filter(d =>
           isMatch(d.dispatchedBy || d.transporter, emp.aliases)
         );
-        matchedChallans = challansList.filter(c => 
+        matchedChallans = challansList.filter(c =>
           isMatch(c.dispatchedBy || c.driverName, emp.aliases)
         );
-        achievedVal = (matchedDispatches.length + matchedChallans.length) * periodMultiplier;
+        achievedVal = matchedDispatches.length + matchedChallans.length;
         recordCount = matchedDispatches.length + matchedChallans.length;
       } else if (emp.department === 'Design') {
-        matchedBoms = bomList.filter(b => 
+        matchedBoms = bomList.filter(b =>
           isMatch(b.engineer || b.designedBy, emp.aliases)
         );
-        achievedVal = matchedBoms.length * periodMultiplier;
+        achievedVal = matchedBoms.length;
         recordCount = matchedBoms.length;
-      } else if (emp.department === 'Tech Support') {
-        achievedVal = 0;
-        recordCount = 0;
       }
 
-      const scaledTarget = emp.monthlyTarget * periodMultiplier;
+      const scaledTarget = emp.monthlyTarget;
       const targetPct = scaledTarget > 0 ? Math.min(135, Math.round((achievedVal / scaledTarget) * 100)) : 0;
 
       let rating = 'No Deals Yet';
       let ratingColor = '#64748B';
       let ratingBg = '#F1F5F9';
-      if (achievedVal > 0) {
+      if (achievedVal > 0 || recordCount > 0) {
         if (targetPct >= 100) {
           rating = 'Top Performer';
           ratingColor = '#16A34A';
@@ -744,7 +775,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           ratingColor = '#2563EB';
           ratingBg = '#EFF6FF';
         } else {
-          rating = 'In Progress';
+          rating = 'Active';
           ratingColor = '#0E7490';
           ratingBg = '#ECFEFF';
         }
@@ -771,7 +802,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         }
       };
     });
-  }, [teamDirectory, piList, quotesList, poList, invList, bomList, workOrdersList, dispatchesList, challansList, periodMultiplier]);
+  }, [teamDirectory, piList, quotesList, poList, invList, bomList, workOrdersList, dispatchesList, challansList]);
 
   // Filtered personnel list for the Person-Wise Performance Hub
   const filteredPersonnel = useMemo(() => {
@@ -788,7 +819,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     });
   }, [personPerformanceData, personDeptFilter, personSearchQuery]);
 
-  // Overall Business Totals - Real Calculations Only
+  // Overall Business Totals — 100% Real Period-Filtered Calculations
   const pendingMdPOs = useMemo(() => {
     return poList.filter(po => {
       const stage = String(po.stage || po.status || po.statusType || '').toLowerCase();
@@ -800,26 +831,74 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return poList.reduce((acc, po) => acc + parseAmt(po.amount || po.total), 0);
   }, [poList]);
 
-  const totalPoSpendCr = ((totalPoSpendNum * periodMultiplier) / 10000000).toFixed(2);
+  const totalPoSpendCr = (totalPoSpendNum / 10000000).toFixed(2);
+  const totalPoSpendFormatted = formatRealCurrency(totalPoSpendNum);
 
   const totalPiPipelineNum = useMemo(() => {
     return piList.reduce((acc, pi) => acc + parseAmt(pi.grandTotal || pi.amount || pi.total), 0);
   }, [piList]);
 
-  const totalPiPipelineCr = ((totalPiPipelineNum * periodMultiplier) / 10000000).toFixed(2);
+  const totalPiPipelineCr = (totalPiPipelineNum / 10000000).toFixed(2);
+  const totalPiPipelineFormatted = formatRealCurrency(totalPiPipelineNum);
+
+  const totalBomOrderValueNum = useMemo(() => {
+    return bomList
+      .filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'))
+      .reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0);
+  }, [bomList]);
+  const totalBomOrderValueFormatted = formatRealCurrency(totalBomOrderValueNum);
 
   const totalInvoicedNum = useMemo(() => {
-    return invList.reduce((acc, inv) => acc + parseAmt(inv.total || inv.grandTotal || inv.amount), 0);
+    return invList.reduce((acc, inv) => {
+      const amt = parseAmt(inv.total || inv.grandTotal || inv.amount || inv.invAmt || inv.poVal || inv.accountsVerification?.totalAmount);
+      return acc + amt;
+    }, 0);
   }, [invList]);
 
-  const totalRevenueCr = ((totalInvoicedNum * periodMultiplier) / 10000000).toFixed(2);
+  const totalRevenueCr = (totalInvoicedNum / 10000000).toFixed(2);
+  const totalRevenueFormatted = formatRealCurrency(totalInvoicedNum);
 
   const totalCollectedNum = useMemo(() => {
-    return paymentsList.reduce((acc, p) => acc + parseAmt(p.amount || p.paidAmount), 0);
-  }, [paymentsList]);
+    const directPayments = paymentsList.reduce((acc, p) => acc + parseAmt(p.amount || p.paidAmount), 0);
+    if (directPayments > 0) return directPayments;
+    // Also sum verified paid invoices from invoice_store
+    const verifiedInvsTotal = invList.reduce((acc, inv) => {
+      const isPaidOrVerified = Boolean(
+        inv.accountsVerification?.verified ||
+        String(inv.pay || '').toLowerCase().includes('completed') ||
+        String(inv.status || '').toLowerCase().includes('paid') ||
+        String(inv.status || '').toLowerCase().includes('confirmed')
+      );
+      if (!isPaidOrVerified) return acc;
+      return acc + parseAmt(inv.total || inv.grandTotal || inv.amount || inv.invAmt || inv.poVal || inv.accountsVerification?.totalAmount);
+    }, 0);
+    return verifiedInvsTotal;
+  }, [paymentsList, invList]);
 
-  const totalCollectedCr = ((totalCollectedNum * periodMultiplier) / 10000000).toFixed(2);
-  const outstandingOverdueCr = (Math.max(0, parseFloat(totalRevenueCr) - parseFloat(totalCollectedCr))).toFixed(2);
+  const totalCollectedCr = (totalCollectedNum / 10000000).toFixed(2);
+  const totalCollectedFormatted = formatRealCurrency(totalCollectedNum);
+  const outstandingOverdueNum = Math.max(0, totalInvoicedNum - totalCollectedNum);
+  const outstandingOverdueCr = (outstandingOverdueNum / 10000000).toFixed(2);
+  const outstandingOverdueFormatted = formatRealCurrency(outstandingOverdueNum);
+
+  const completedDispatchesCount = useMemo(() => {
+    const completedBoms = bomList.filter(b => {
+      if (!b || b.cancelled) return false;
+      const st = String(b.status || '').toLowerCase();
+      return Boolean(b.fullyCompleted || st.includes('completed') || st.includes('dispatched'));
+    }).length;
+    return Math.max(completedBoms, dispatchesList.length + challansList.length);
+  }, [bomList, dispatchesList, challansList]);
+
+  const pendingDispatchQueueCount = useMemo(() => {
+    return bomList.filter(b => {
+      if (!b || b.cancelled) return false;
+      const st = String(b.status || '').toLowerCase();
+      const isDone = Boolean(b.fullyCompleted || st.includes('completed') || st.includes('dispatched'));
+      const isDraft = st === 'draft';
+      return !isDone && !isDraft;
+    }).length;
+  }, [bomList]);
 
   const totalProductionTonnage = useMemo(() => {
     return bomList.reduce((acc, b) => acc + (parseFloat(b.totalWeight || b.weight || 0) || 0), 0);
@@ -978,53 +1057,64 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return productCategories.reduce((s, c) => s + c.value, 0).toFixed(2);
   }, [productCategories]);
 
-  // Real Monthly Run-Rate Trend Data aggregated from live database records
+  // Real Monthly Run-Rate Trend Data aggregated from live database records (filtered by selectedPeriod)
   const monthlyRunRate = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentMonthIdx = new Date().getMonth();
-    const relevantMonths = months.slice(0, Math.max(currentMonthIdx + 1, 9));
+    const relevantMonths = months.slice(0, Math.max(currentMonthIdx + 1, 10));
 
     return relevantMonths.map((m, mIdx) => {
-      const revForMonth = invList.reduce((acc, inv) => {
-        const dStr = inv.invoiceDate || inv.date || inv.created_at || '';
-        if (!dStr) return acc;
-        const d = new Date(dStr);
-        if (!isNaN(d.getTime()) && d.getMonth() === mIdx) {
-          return acc + parseAmt(inv.total || inv.grandTotal || inv.amount);
+      const invRevForMonth = invList.reduce((acc, inv) => {
+        const d = parseRecordDate(inv);
+        if (d && d.getMonth() === mIdx) {
+          return acc + parseAmt(inv.total || inv.grandTotal || inv.amount || inv.invAmt || inv.poVal || inv.accountsVerification?.totalAmount);
         }
         return acc;
-      }, 0) + (invList.length === 0 ? piList.reduce((acc, pi) => {
-        const dStr = pi.piDate || pi.date || pi.created_at || '';
-        if (!dStr) return acc;
-        const d = new Date(dStr);
-        if (!isNaN(d.getTime()) && d.getMonth() === mIdx) {
+      }, 0);
+
+      const bomRevForMonth = bomList.reduce((acc, b) => {
+        if (!b || b.cancelled) return acc;
+        const d = parseRecordDate(b);
+        if (d && d.getMonth() === mIdx) {
+          return acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0);
+        }
+        return acc;
+      }, 0);
+
+      const piRevForMonth = piList.reduce((acc, pi) => {
+        const d = parseRecordDate(pi);
+        if (d && d.getMonth() === mIdx) {
           return acc + parseAmt(pi.grandTotal || pi.amount || pi.total);
         }
         return acc;
-      }, 0) : 0);
+      }, 0);
+
+      const revForMonth = Math.max(invRevForMonth, bomRevForMonth, piRevForMonth);
 
       const spendForMonth = poList.reduce((acc, po) => {
-        const dStr = po.poDate || po.deliveryDate || po.created_at || '';
-        if (!dStr) return acc;
-        const d = new Date(dStr);
-        if (!isNaN(d.getTime()) && d.getMonth() === mIdx) {
+        const d = parseRecordDate(po);
+        if (d && d.getMonth() === mIdx) {
           return acc + parseAmt(po.amount || po.total);
         }
         return acc;
       }, 0);
 
-      const revCr = parseFloat((revForMonth / 10000000).toFixed(2));
-      const spendCr = parseFloat((spendForMonth / 10000000).toFixed(2));
-      const margin = revCr > 0 ? parseFloat((((revCr - spendCr) / revCr) * 100).toFixed(1)) : 0;
+      const revCr = parseFloat((revForMonth / 10000000).toFixed(4));
+      const spendCr = parseFloat((spendForMonth / 10000000).toFixed(4));
+      const margin = revForMonth > 0 ? parseFloat((((revForMonth - spendForMonth) / revForMonth) * 100).toFixed(1)) : 0;
 
       return {
         month: m,
         rev: revCr,
         spend: spendCr,
+        revRaw: revForMonth,
+        spendRaw: spendForMonth,
+        revLabel: formatRealCurrency(revForMonth),
+        spendLabel: formatRealCurrency(spendForMonth),
         margin: margin
       };
     });
-  }, [invList, piList, poList]);
+  }, [invList, bomList, piList, poList]);
 
   // Real Top Strategic Accounts aggregated from real transactions
   const topAccounts = useMemo(() => {
@@ -1073,16 +1163,154 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     }));
   }, [piList, invList, poList]);
 
-  // Real Operational Funnel
-  const funnelStages = useMemo(() => [
-    { stage: '1. Quotations & Leads', count: `${quotesList.length + leadsList.length} Leads`, value: `₹ ${((quotesList.reduce((acc, q) => acc + parseAmt(q.amount || q.total), 0) * periodMultiplier) / 10000000).toFixed(2)} Cr`, icon: FileText, color: '#6366F1', bg: '#EEF2FF', action: 'Sales Pipeline' },
-    { stage: '2. Proforma Invoices (PI)', count: `${piList.length} Active PIs`, value: `₹ ${totalPiPipelineCr} Cr`, icon: Receipt, color: '#0E7490', bg: '#ECFEFF', action: 'BOM Conversion' },
-    { stage: '3. Purchase Orders (PO)', count: `${poList.length} POs Done`, value: `₹ ${totalPoSpendCr} Cr`, icon: ShoppingCart, color: '#2563EB', bg: '#EFF6FF', action: 'Procurement' },
-    { stage: '4. Plant Production Output', count: `${bomList.length} Plant Orders`, value: `${(totalProductionTonnage * periodMultiplier).toFixed(1)} MT Done`, icon: Factory, color: '#0284C7', bg: '#F0F9FF', action: 'Extrusion' },
-    { stage: '5. Dispatch & Logistics', count: `${dispatchesList.length + challansList.length} Shipments`, value: dispatchesList.length + challansList.length > 0 ? '100% Tracked' : '0 Shipments', icon: Truck, color: '#059669', bg: '#ECFDF5', action: 'Logistics SLA' },
-    { stage: '6. Billing & Invoices', count: `${invList.length} Invoices`, value: `₹ ${totalRevenueCr} Cr`, icon: Receipt, color: '#9333EA', bg: '#FAF5FF', action: 'Tax Clearances' },
-    { stage: '7. Accounts & Collections', count: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Realized` : '0% Realized', value: `₹ ${totalCollectedCr} Cr`, icon: Wallet, color: '#16A34A', bg: '#F0FDF4', action: 'Cash Flow' }
-  ], [quotesList, leadsList, periodMultiplier, piList.length, totalPiPipelineCr, poList.length, totalPoSpendCr, bomList.length, totalProductionTonnage, dispatchesList.length, challansList.length, invList.length, totalRevenueCr, totalInvoicedNum, totalCollectedNum, totalCollectedCr]);
+  // Real 6-Stage Order-to-Cash Lifecycle (PI -> BOM -> Dispatch Packing -> Accounts Verification -> Tax Invoice -> Final Dispatch)
+  const funnelStages = useMemo(() => {
+    const fmtCompact = (val) => {
+      const n = Number(val) || 0;
+      if (n >= 10000000) return `₹ ${(n / 10000000).toFixed(2)} Cr`;
+      if (n >= 100000) return `₹ ${(n / 100000).toFixed(2)} L`;
+      if (n > 0) return `₹ ${Math.round(n).toLocaleString('en-IN')}`;
+      return '₹ 0';
+    };
+
+    const activeBoms = bomList.filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'));
+    const totalBomVal = activeBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+
+    const confirmedPis = piList.filter(p => {
+      const st = String(p.status || '').toLowerCase();
+      return st.includes('confirm') || st.includes('bom') || st.includes('convert') || p.bomConverted;
+    });
+
+    const packedBoms = activeBoms.filter(b => {
+      const st = String(b.status || '').toLowerCase();
+      return b.packingStatus === 'PACKING_VERIFIED' || st.includes('packed') || b.isAccountsDone || b.accountsVerification?.verified || b.invoiceConfirmed || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted;
+    });
+    const pendingPackingBoms = Math.max(0, activeBoms.length - packedBoms.length);
+    const packedVal = packedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+
+    const accountsVerifiedBoms = activeBoms.filter(b => {
+      const st = String(b.status || '').toLowerCase();
+      return Boolean(b.isAccountsDone || b.accountsVerification?.verified || b.invoiceConfirmed || st.includes('invoice') || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted);
+    });
+    const pendingAccountsBoms = packedBoms.filter(b => !b.isAccountsDone && !b.accountsVerification?.verified && !b.invoiceConfirmed).length;
+    const accountsVerifiedVal = accountsVerifiedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+
+    const invoicedBoms = activeBoms.filter(b => Boolean(b.invoiceConfirmed || String(b.status || '').toLowerCase().includes('invoice') || b.fullyCompleted || String(b.status || '').toLowerCase().includes('dispatched') || String(b.status || '').toLowerCase().includes('completed')));
+    const totalInvoicedCount = Math.max(invList.length, invoicedBoms.length);
+    const invoicedVal = (totalInvoicedNum > 0 ? totalInvoicedNum : invoicedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0)) * periodMultiplier;
+
+    const completedDispatchBoms = activeBoms.filter(b => {
+      const st = String(b.status || '').toLowerCase();
+      return Boolean(b.fullyCompleted || st.includes('completed') || st.includes('dispatched'));
+    });
+    const awaitingLoadBoms = activeBoms.filter(b => {
+      const st = String(b.status || '').toLowerCase();
+      return (b.invoiceConfirmed || st.includes('loading')) && !b.fullyCompleted && !st.includes('completed') && !st.includes('dispatched');
+    });
+    const totalDispatchedCount = Math.max(completedDispatchBoms.length, dispatchesList.length);
+    const dispatchedVal = completedDispatchBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+
+    const baseTotal = Math.max(1, piList.length, activeBoms.length);
+
+    return [
+      {
+        step: 'STEP 01',
+        stage: 'Proforma Invoice',
+        subtitle: 'Sales Commercial PI',
+        primaryMetric: `${piList.length} PIs`,
+        value: fmtCompact(totalPiPipelineNum * periodMultiplier),
+        valueLabel: 'Pipeline Value',
+        statusBadge: `${confirmedPis.length} Confirmed`,
+        progressPct: piList.length > 0 ? Math.min(100, Math.max(18, Math.round((confirmedPis.length / Math.max(1, piList.length)) * 100))) : 0,
+        icon: Receipt,
+        color: '#0E7490',
+        bg: '#ECFEFF',
+        border: '#A5F3FC',
+        targetTab: 'Proforma Invoice',
+        action: 'Open PIs'
+      },
+      {
+        step: 'STEP 02',
+        stage: 'BOM & Sales Order',
+        subtitle: 'Engineering & Proofs',
+        primaryMetric: `${activeBoms.length} BOMs`,
+        value: fmtCompact(totalBomVal),
+        valueLabel: 'Order Book',
+        statusBadge: `${packedBoms.length} Sent to Dispatch`,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.max(20, Math.round((activeBoms.length / baseTotal) * 100))) : 0,
+        icon: Factory,
+        color: '#0284C7',
+        bg: '#F0F9FF',
+        border: '#BAE6FD',
+        targetTab: 'BOM Orders',
+        action: 'Open BOMs'
+      },
+      {
+        step: 'STEP 03',
+        stage: 'Dispatch Packing',
+        subtitle: 'Checklist & Media Proof',
+        primaryMetric: `${packedBoms.length} Packed`,
+        value: fmtCompact(packedVal),
+        valueLabel: 'Packed Value',
+        statusBadge: `${pendingPackingBoms} Pending Packing`,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((packedBoms.length / activeBoms.length) * 100)) : 0,
+        icon: Package,
+        color: '#D97706',
+        bg: '#FFFBEB',
+        border: '#FDE68A',
+        targetTab: 'Dispatch Orders',
+        action: 'Packing Queue'
+      },
+      {
+        step: 'STEP 04',
+        stage: 'Accounts Verify',
+        subtitle: 'Payment & Hard Copy',
+        primaryMetric: `${accountsVerifiedBoms.length} Verified`,
+        value: fmtCompact(accountsVerifiedVal),
+        valueLabel: 'Cleared Value',
+        statusBadge: `${pendingAccountsBoms} In Queue`,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((accountsVerifiedBoms.length / activeBoms.length) * 100)) : 0,
+        icon: ShieldCheck,
+        color: '#7C3AED',
+        bg: '#F5F3FF',
+        border: '#DDD6FE',
+        targetTab: 'Accounts Verification',
+        action: 'Verify Queue'
+      },
+      {
+        step: 'STEP 05',
+        stage: 'Billing & Invoice',
+        subtitle: '3-Way Match & Stock Lock',
+        primaryMetric: `${totalInvoicedCount} Billed`,
+        value: fmtCompact(invoicedVal),
+        valueLabel: 'GST Invoiced',
+        statusBadge: `${Math.max(0, accountsVerifiedBoms.length - invoicedBoms.length)} Awaiting Billing`,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((totalInvoicedCount / activeBoms.length) * 100)) : 0,
+        icon: FileCheck,
+        color: '#2563EB',
+        bg: '#EFF6FF',
+        border: '#BFDBFE',
+        targetTab: 'Invoice Management',
+        action: 'Tax Invoices'
+      },
+      {
+        step: 'STEP 06',
+        stage: 'Final Dispatch',
+        subtitle: 'Vehicle Loading & LR Copy',
+        primaryMetric: `${totalDispatchedCount} Dispatched`,
+        value: fmtCompact(dispatchedVal),
+        valueLabel: 'Delivered Value',
+        statusBadge: `${awaitingLoadBoms.length} Ready to Load`,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((totalDispatchedCount / activeBoms.length) * 100)) : 0,
+        icon: Truck,
+        color: '#16A34A',
+        bg: '#F0FDF4',
+        border: '#BBF7D0',
+        targetTab: 'Dispatch Orders',
+        action: 'Dispatch Log'
+      }
+    ];
+  }, [piList, bomList, invList, dispatchesList, periodMultiplier, totalPiPipelineNum, totalInvoicedNum]);
 
   // Real Risk Alerts & Watchlist
   const realRiskAlerts = useMemo(() => {
@@ -1266,287 +1494,90 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         </div>
       </div>
 
-      {/* 2. TOP EXECUTIVE HEADLINE METRICS (8 ENTERPRISE PILLARS - 4 IN ROW 1, 4 IN ROW 2) */}
-      <div 
-        className="ceo-kpi-grid-4x2"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: '12px',
-          width: '100%',
-          maxWidth: '100%',
-          minWidth: 0,
-          boxSizing: 'border-box',
-          flexShrink: 0
-        }}
-      >
-        {[
-          {
-            title: 'PO: HOW MUCH IS DONE',
-            value: `${poList.length} POs Done`,
-            trend: `${pendingMdPOs.length > 0 ? `${pendingMdPOs.length} Pending MD` : 'All Approved'}`,
-            trendUp: pendingMdPOs.length === 0,
-            icon: ShoppingCart,
-            iconColor: '#2563EB',
-            iconBg: '#EFF6FF',
-            bottomPrefix: 'Spend authorized: ',
-            bottomHighlight: `₹ ${totalPoSpendCr} Cr`,
-            highlightCard: pendingMdPOs.length > 0,
-            onClick: () => setActiveSubTab('procurement')
-          },
-          {
-            title: 'PI: HOW MUCH IS THERE',
-            value: `${piList.length} Active PIs`,
-            trend: piList.length > 0 ? `${piList.length} Deals` : '0 Deals',
-            trendUp: piList.length > 0,
-            icon: Receipt,
-            iconColor: '#0E7490',
-            iconBg: '#ECFEFF',
-            bottomPrefix: 'Pipeline value: ',
-            bottomHighlight: `₹ ${totalPiPipelineCr} Cr`,
-            onClick: () => setActiveSubTab('sales')
-          },
-          {
-            title: 'HOW MUCH PRODUCTION IS DONE',
-            value: `${(totalProductionTonnage * periodMultiplier).toFixed(1)} MT Done`,
-            trend: bomList.length > 0 ? `${bomList.length} BOM Orders` : '0 Plant Orders',
-            trendUp: bomList.length > 0,
-            icon: Factory,
-            iconColor: '#0284C7',
-            iconBg: '#F0F9FF',
-            bottomPrefix: 'Active plant orders: ',
-            bottomHighlight: `${bomList.length} BOMs in-progress`,
-            onClick: () => setActiveSubTab('production')
-          },
-          {
-            title: 'HOW MUCH DISPATCH IS DONE',
-            value: `${dispatchesList.length + challansList.length} Dispatches`,
-            trend: dispatchesList.length + challansList.length > 0 ? 'Live Tracked' : '0 Shipments',
-            trendUp: dispatchesList.length + challansList.length > 0,
-            icon: Truck,
-            iconColor: '#059669',
-            iconBg: '#ECFDF5',
-            bottomPrefix: 'Fleet in-transit: ',
-            bottomHighlight: `${dispatchesList.filter(d => String(d.status || '').toLowerCase().includes('transit')).length + challansList.filter(c => String(c.status || '').toLowerCase().includes('transit')).length} vehicles`,
-            onClick: () => setActiveSubTab('dispatch')
-          },
-          {
-            title: 'HOW MUCH BILLING IS DONE',
-            value: `${invList.length} Invoices Billed`,
-            trend: invList.length > 0 ? '100% Tax Reconciled' : '0 Invoices',
-            trendUp: true,
-            icon: FileCheck,
-            iconColor: '#9333EA',
-            iconBg: '#FAF5FF',
-            bottomPrefix: 'Total GST billed: ',
-            bottomHighlight: `₹ ${totalRevenueCr} Cr`,
-            onClick: () => setActiveSubTab('billing')
-          },
-          {
-            title: 'HOW MUCH ACCOUNTS COLLECTED',
-            value: `₹ ${totalCollectedCr} Cr Done`,
-            trend: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Rate` : '0% Rate',
-            trendUp: true,
-            icon: Wallet,
-            iconColor: '#16A34A',
-            iconBg: '#F0FDF4',
-            bottomPrefix: 'Outstanding pending: ',
-            bottomHighlight: `₹ ${outstandingOverdueCr} Cr`,
-            onClick: () => setActiveSubTab('accounts')
-          },
-          {
-            title: 'HOW MUCH DESIGN IS DONE',
-            value: `${presetsList.length} Presets Done`,
-            trend: presetsList.length > 0 ? 'Tooling Validated' : '0 Presets',
-            trendUp: true,
-            icon: Calculator,
-            iconColor: '#D97706',
-            iconBg: '#FFFBEB',
-            bottomPrefix: 'BOM verified models: ',
-            bottomHighlight: `${bomList.length} models`,
-            onClick: () => setActiveSubTab('engineering')
-          },
-          {
-            title: 'HOW MUCH TECH SUPPORT DONE',
-            value: `${workOrdersList.length} Work Orders Done`,
-            trend: workOrdersList.length > 0 ? 'Production Live' : '0 Work Orders',
-            trendUp: true,
-            icon: Wrench,
-            iconColor: '#4F46E5',
-            iconBg: '#EEF2FF',
-            bottomPrefix: 'Support resolved: ',
-            bottomHighlight: '0 open tickets',
-            onClick: () => setActiveSubTab('engineering')
-          }
-        ].map((kpi, kIdx) => {
-          const IconComp = kpi.icon;
-          return (
-            <div 
-              key={kIdx}
-              onClick={kpi.onClick}
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: '16px',
-                border: kpi.highlightCard ? '1.5px solid #FCA5A5' : '1px solid #EAEFEF',
-                padding: '14px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '10px',
-                boxShadow: kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)',
-                cursor: kpi.onClick ? 'pointer' : 'default',
-                transition: 'all 0.2s ease',
-                minWidth: 0,
-                boxSizing: 'border-box'
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
-                {/* Header Row: Title & Standard Icon */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-                  <span style={{ 
-                    fontSize: '11px', 
-                    fontWeight: '800', 
-                    color: '#64748B',
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    lineHeight: '1.3'
-                  }}>
-                    {kpi.title}
-                  </span>
-                  <div style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '8px',
-                    backgroundColor: kpi.iconBg,
-                    color: kpi.iconColor,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <IconComp size={15} />
-                  </div>
-                </div>
-
-                {/* Metric Value & Trend Badge */}
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '20px', fontWeight: '900', color: kpi.highlightCard ? '#DC2626' : '#0F172A', letterSpacing: '-0.5px', lineHeight: '1.1' }}>
-                    {kpi.value}
-                  </span>
-                  
-                  <span style={{ 
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '2px',
-                    fontSize: '10.5px', 
-                    fontWeight: '800',
-                    color: kpi.trendUp ? '#16A34A' : '#DC2626',
-                    backgroundColor: kpi.trendUp ? '#DCFCE7' : '#FEE2E2',
-                    padding: '2px 7px',
-                    borderRadius: '8px',
-                    marginLeft: 'auto'
-                  }}>
-                    {kpi.trendUp ? <ArrowUpRight style={{ width: '12px', height: '12px' }} /> : <ArrowDownRight style={{ width: '12px', height: '12px' }} />}
-                    {kpi.trend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Subtitle / Context strip */}
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '4px', 
-                fontSize: '11px', 
-                color: '#64748B',
-                lineHeight: '1.3',
-                flexWrap: 'wrap'
-              }}>
-                <span>{kpi.bottomPrefix}</span>
-                <span style={{ color: kpi.trendUp ? '#059669' : '#DC2626', fontWeight: '800' }}>
-                  {kpi.bottomHighlight}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 3. EXECUTIVE SUB-NAVIGATION TAB PILLS */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '6px',
-        backgroundColor: '#FFFFFF',
-        padding: '8px 10px',
-        borderRadius: '14px',
-        border: '1px solid #E2E8F0',
-        width: '100%',
-        maxWidth: '100%',
-        minWidth: 0,
-        boxSizing: 'border-box',
-        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.02)',
-        flexShrink: 0
-      }}>
-        {[
-          { id: 'overview', label: 'Executive Command Deck', icon: LayoutDashboard, badge: null },
-          { id: 'personnel', label: 'Person-Wise Performance Hub', icon: Users, badge: `${filteredPersonnel.length} Leads` },
-          { id: 'sales', label: 'Sales Operations', icon: Briefcase, badge: `${piList.length} PIs` },
-          { id: 'procurement', label: 'Purchase & Procurement', icon: ShoppingCart, badge: `${poList.length} POs` },
-          { id: 'accounts', label: 'Accounts & Cash Flow', icon: Wallet, badge: `₹ ${totalCollectedCr} Cr` },
-          { id: 'production', label: 'Production & Plant', icon: Factory, badge: `${bomList.length} Orders` },
-          { id: 'dispatch', label: 'Dispatch & Logistics', icon: Truck, badge: `${dispatchesList.length + challansList.length} Dispatches` },
-          { id: 'billing', label: 'Billing & Invoicing', icon: Receipt, badge: `${invList.length} Invoices` },
-          { id: 'engineering', label: 'Design & Tech Support', icon: Calculator, badge: `${presetsList.length} Presets` }
-        ].map(tab => {
-          const TabIcon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveSubTab(tab.id)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '10px',
-                border: 'none',
-                backgroundColor: activeSubTab === tab.id ? '#0E7490' : 'transparent',
-                color: activeSubTab === tab.id ? '#FFFFFF' : '#475569',
-                fontSize: '12px',
-                fontWeight: activeSubTab === tab.id ? '800' : '600',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <TabIcon size={14} />
-              <span>{tab.label}</span>
-              {tab.badge && (
-                <span style={{
-                  fontSize: '9.5px',
-                  fontWeight: '800',
-                  backgroundColor: activeSubTab === tab.id ? 'rgba(255, 255, 255, 0.25)' : (tab.badgeBg || '#F1F5F9'),
-                  color: activeSubTab === tab.id ? '#FFFFFF' : (tab.badgeColor || '#475569'),
-                  padding: '1px 6px',
-                  borderRadius: '8px'
-                }}>
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {/* ======================================================== */}
-      {/* VIEW 1: EXECUTIVE COMMAND DECK (UNIFIED OVERVIEW)         */}
+      {/* CATEGORY 1: EXECUTIVE DASHBOARD (6 KPIs ALONE + ESSENTIALS) */}
       {/* ======================================================== */}
-      {activeSubTab === 'overview' && (
+      {(activeSubTab === 'overview' || activeSubTab === 'performance' || activeSubTab === 'action-center' || activeSubTab === 'alerts') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* ROW A: APPROVAL QUEUE + RUN-RATE CHART + PRODUCT SHARE */}
+          {/* 6 CORE EXECUTIVE KPI CARDS (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'PROFORMA PIPELINE (PI)',
+              value: `${piList.length} Active PIs`,
+              trend: piList.length > 0 ? `${piList.length} Deals` : '0 Deals',
+              trendUp: piList.length > 0,
+              icon: Receipt,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: 'Pipeline value ',
+              bottomHighlight: totalPiPipelineFormatted,
+              onClick: () => setActiveSubTab('sales')
+            },
+            {
+              title: 'BOM & PRODUCTION',
+              value: `${bomList.length} BOM Orders`,
+              trend: `${bomList.filter(b => b && !b.cancelled && String(b.status || '').toLowerCase() !== 'draft').length} Confirmed`,
+              trendUp: bomList.length > 0,
+              icon: Factory,
+              iconColor: '#0284C7',
+              iconBg: '#F0F9FF',
+              bottomPrefix: 'Order book value ',
+              bottomHighlight: totalBomOrderValueFormatted,
+              onClick: () => setActiveSubTab('production')
+            },
+            {
+              title: 'PURCHASE ORDERS (PO)',
+              value: `${poList.length} POs Done`,
+              trend: `${pendingMdPOs.length > 0 ? `${pendingMdPOs.length} Pending MD` : (poList.length > 0 ? 'All Approved' : '0 POs')}`,
+              trendUp: pendingMdPOs.length === 0,
+              icon: ShoppingCart,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Spend authorized ',
+              bottomHighlight: totalPoSpendFormatted,
+              highlightCard: pendingMdPOs.length > 0,
+              onClick: () => setActiveSubTab('procurement')
+            },
+            {
+              title: 'DISPATCH & LOGISTICS',
+              value: `${completedDispatchesCount} Dispatched`,
+              trend: `${pendingDispatchQueueCount} In Queue`,
+              trendUp: completedDispatchesCount > 0 || pendingDispatchQueueCount > 0,
+              icon: Truck,
+              iconColor: '#059669',
+              iconBg: '#ECFDF5',
+              bottomPrefix: 'Packing queue ',
+              bottomHighlight: `${pendingDispatchQueueCount} Orders`,
+              onClick: () => setActiveSubTab('dispatch')
+            },
+            {
+              title: 'BILLING & TAX INVOICES',
+              value: `${invList.length} Invoices Billed`,
+              trend: invList.length > 0 ? '100% Tax Sync' : '0 Invoices',
+              trendUp: invList.length > 0,
+              icon: FileCheck,
+              iconColor: '#9333EA',
+              iconBg: '#FAF5FF',
+              bottomPrefix: 'Total GST billed ',
+              bottomHighlight: totalRevenueFormatted,
+              onClick: () => setActiveSubTab('accounts')
+            },
+            {
+              title: 'ACCOUNTS & COLLECTIONS',
+              value: `${totalCollectedFormatted} Done`,
+              trend: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Rate` : '0% Rate',
+              trendUp: totalCollectedNum > 0,
+              icon: Wallet,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Outstanding pending ',
+              bottomHighlight: outstandingOverdueFormatted,
+              onClick: () => setActiveSubTab('accounts')
+            }
+          ]} />
+
+          {/* ROW A: APPROVAL QUEUE + REVENUE VS SPEND + CRITICAL ALERTS */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 310px), 1fr))',
@@ -1588,7 +1619,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     </span>
                   </div>
                   <button
-                    onClick={() => onNavigateTab && onNavigateTab('Purchase Orders')}
+                    onClick={() => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')}
                     style={{
                       border: 'none',
                       background: 'none',
@@ -1601,7 +1632,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       gap: '3px'
                     }}
                   >
-                    View All POs <ArrowRight size={12} />
+                    Open PO Approval <ArrowRight size={12} />
                   </button>
                 </div>
 
@@ -1629,7 +1660,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                         </div>
                       </div>
                       <button
-                        onClick={() => onNavigateTab && onNavigateTab('Purchase Orders')}
+                        onClick={() => onNavigateTab && onNavigateTab('Purchase Orders', po.poNo || po.poNumber || po.purchaseorder_number || null, 'WAITING FOR APPROVAL')}
                         style={{
                           border: 'none',
                           backgroundColor: '#0E7490',
@@ -1713,14 +1744,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 </div>
               </div>
 
-              {/* Bar chart container */}
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '140px', gap: '6px', paddingTop: '10px', paddingBottom: '18px', position: 'relative' }}>
                 {(() => {
-                  const maxBarVal = Math.max(0.1, ...monthlyRunRate.map(d => Math.max(d.rev, d.spend)));
+                  const maxBarVal = Math.max(1, ...monthlyRunRate.map(d => Math.max(d.revRaw || 0, d.spendRaw || 0)));
                   return monthlyRunRate.map((d, idx) => {
                     const isHovered = hoveredBarIdx === idx;
-                    const revHeight = maxBarVal > 0 ? (d.rev / maxBarVal) * 100 : 0;
-                    const spendHeight = maxBarVal > 0 ? (d.spend / maxBarVal) * 100 : 0;
+                    const revHeight = maxBarVal > 0 ? ((d.revRaw || 0) / maxBarVal) * 100 : 0;
+                    const spendHeight = maxBarVal > 0 ? ((d.spendRaw || 0) / maxBarVal) * 100 : 0;
 
                     return (
                       <div
@@ -1753,7 +1783,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                             boxShadow: '0 4px 12px rgba(15, 23, 42, 0.3)',
                             textAlign: 'center'
                           }}>
-                            <div>Rev: ₹{d.rev} Cr | Spend: ₹{d.spend} Cr</div>
+                            <div>Rev: {d.revLabel} | Spend: {d.spendLabel}</div>
                             <div style={{ color: '#38BDF8', fontSize: '8.5px' }}>Margin: {d.margin}%</div>
                           </div>
                         )}
@@ -1793,7 +1823,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               <div style={{ height: '2px', backgroundColor: '#F1F5F9', borderRadius: '2px' }} />
             </div>
 
-            {/* CARD 3: PRODUCT REVENUE SHARE (SVG DONUT) */}
+            {/* CARD 3: EXECUTIVE RISK ALERTS & WATCHLIST */}
             <div style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '16px',
@@ -1807,571 +1837,10 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
                 <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Product Portfolio Share
-                </span>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '8px' }}>
-                  MTD
-                </span>
-              </div>
-
-              {productCategories.length === 0 ? (
-                <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748B', fontSize: '11.5px', width: '100%' }}>
-                  No categorized inventory or BOM items recorded yet.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ position: 'relative', width: '90px', height: '90px', flexShrink: 0 }}>
-                    <svg width="90" height="90" viewBox="0 0 90 90" style={{ transform: 'rotate(-90deg)' }}>
-                      {(() => {
-                        let accumulatedPct = 0;
-                        const radius = 34;
-                        const circumference = 2 * Math.PI * radius;
-
-                        return productCategories.map((cat, i) => {
-                          const strokeDasharray = `${(cat.pct / 100) * circumference} ${circumference}`;
-                          const strokeDashoffset = -((accumulatedPct / 100) * circumference);
-                          accumulatedPct += cat.pct;
-
-                          return (
-                            <circle
-                              key={i}
-                              cx="45"
-                              cy="45"
-                              r={radius}
-                              fill="transparent"
-                              stroke={cat.color}
-                              strokeWidth={hoveredDonutIdx === i ? "14" : "11"}
-                              strokeDasharray={strokeDasharray}
-                              strokeDashoffset={strokeDashoffset}
-                              style={{ transition: 'all 0.2s ease', cursor: 'pointer' }}
-                              onMouseEnter={() => setHoveredDonutIdx(i)}
-                              onMouseLeave={() => setHoveredDonutIdx(null)}
-                            />
-                          );
-                        });
-                      })()}
-                    </svg>
-                    <div style={{
-                      position: 'absolute',
-                      top: 0, left: 0, width: '100%', height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      pointerEvents: 'none'
-                    }}>
-                      <span style={{ fontSize: '12px', fontWeight: '900', color: '#0F172A', lineHeight: 1 }}>₹{totalCatVal}</span>
-                      <span style={{ fontSize: '8px', color: '#64748B', fontWeight: '700', marginTop: '2px' }}>Cr Total</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                    {productCategories.map((cat, idx) => (
-                      <div
-                        key={idx}
-                        onMouseEnter={() => setHoveredDonutIdx(idx)}
-                        onMouseLeave={() => setHoveredDonutIdx(null)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '3px 6px',
-                          borderRadius: '6px',
-                          backgroundColor: hoveredDonutIdx === idx ? '#F8FAFC' : 'transparent',
-                          fontSize: '11px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: cat.color, flexShrink: 0 }} />
-                          <span style={{ fontWeight: '600', color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {cat.name}
-                          </span>
-                        </div>
-                        <strong style={{ color: '#0F172A', fontSize: '11px', marginLeft: '6px' }}>
-                          {cat.pct}%
-                        </strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#64748B', borderTop: '1px solid #F1F5F9', paddingTop: '6px' }}>
-                <span>Top Demand Profile:</span>
-                <strong style={{ color: '#0E7490' }}>{productCategories[0] ? `${productCategories[0].name} (${productCategories[0].pct}%)` : 'No Profile Data'}</strong>
-              </div>
-            </div>
-
-          </div>
-
-          {/* ROW B: OPERATIONAL VELOCITY FUNNEL */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #EAEFEF',
-            padding: '14px 18px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
-              <div>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Enterprise Operational Velocity (Order-to-Cash Pipeline)
-                </span>
-                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                  Cross-departmental health tracking active contracts through the complete lifecycle
-                </div>
-              </div>
-              <span style={{ fontSize: '10px', color: '#16A34A', fontWeight: '700', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '8px' }}>
-                OPERATIONS LIVE
-              </span>
-            </div>
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))',
-              gap: '10px',
-              width: '100%',
-              maxWidth: '100%',
-              minWidth: 0,
-              boxSizing: 'border-box'
-            }}>
-              {funnelStages.map((stage, idx) => {
-                const IconComponent = stage.icon;
-                return (
-                  <div
-                    key={idx}
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      borderRadius: '12px',
-                      border: '1px solid #E2E8F0',
-                      padding: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '8px',
-                        backgroundColor: stage.bg,
-                        color: stage.color,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        <IconComponent size={16} />
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: stage.color, backgroundColor: stage.bg, padding: '2px 6px', borderRadius: '6px' }}>
-                        {stage.action}
-                      </span>
-                    </div>
-
-                    <div>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>
-                        {stage.stage}
-                      </div>
-                      <div style={{ fontSize: '16px', fontWeight: '900', color: '#0F172A', marginTop: '2px' }}>
-                        {stage.value}
-                      </div>
-                      <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '1px' }}>
-                        {stage.count} in progress
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ======================================================== */}
-          {/* ROW B.5: SALES PERSON-BY-PERSON BOM CONVERSION HUB       */}
-          {/* ======================================================== */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #EAEFEF',
-            padding: '16px 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px',
-            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-          }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  backgroundColor: '#ECFEFF',
-                  color: '#0E7490',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Boxes size={20} />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Sales Person BOM Performance (Person-by-Person)
-                    </span>
-                    <span style={{
-                      fontSize: '10px',
-                      fontWeight: '800',
-                      color: '#0E7490',
-                      backgroundColor: '#ECFEFF',
-                      border: '1px solid #A5F3FC',
-                      padding: '2px 8px',
-                      borderRadius: '10px'
-                    }}>
-                      LIVE TRACKING
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                    Real-time Bill of Materials (BOM) orders raised by each sales representative across the organization
-                  </div>
-                </div>
-              </div>
-
-              {/* Summary KPIs */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  padding: '5px 10px',
-                  borderRadius: '8px',
-                  fontSize: '11px'
-                }}>
-                  <span style={{ color: '#64748B', fontWeight: '600' }}>Total BOMs Given:</span>
-                  <strong style={{ color: '#0E7490', fontSize: '12px' }}>{totalBomsFromReps} Orders</strong>
-                </div>
-
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#F0FDF4',
-                  border: '1px solid #BBF7D0',
-                  padding: '5px 10px',
-                  borderRadius: '8px',
-                  fontSize: '11px'
-                }}>
-                  <span style={{ color: '#166534', fontWeight: '600' }}>Order Value:</span>
-                  <strong style={{ color: '#15803D', fontSize: '12px' }}>
-                    {totalBomValueFromReps >= 10000000 
-                      ? `₹ ${(totalBomValueFromReps / 10000000).toFixed(2)} Cr`
-                      : `₹ ${(totalBomValueFromReps / 100000).toFixed(2)} L`}
-                  </strong>
-                </div>
-
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#EFF6FF',
-                  border: '1px solid #BFDBFE',
-                  padding: '5px 10px',
-                  borderRadius: '8px',
-                  fontSize: '11px'
-                }}>
-                  <span style={{ color: '#1E40AF', fontWeight: '600' }}>Total Tonnage:</span>
-                  <strong style={{ color: '#2563EB', fontSize: '12px' }}>{totalBomTonnageFromReps.toFixed(1)} MT</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Person-by-Person Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
-              gap: '12px',
-              width: '100%',
-              maxWidth: '100%',
-              minWidth: 0,
-              boxSizing: 'border-box'
-            }}>
-              {salesPersonBomBreakdown.map((rep) => {
-                const hasBoms = rep.totalBoms > 0;
-                const formattedAmt = rep.totalAmount >= 10000000
-                  ? `₹ ${(rep.totalAmount / 10000000).toFixed(2)} Cr`
-                  : `₹ ${(rep.totalAmount / 100000).toFixed(2)} L`;
-
-                return (
-                  <div
-                    key={rep.code || rep.name}
-                    style={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '14px',
-                      padding: '14px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: '10px',
-                      boxShadow: '0 2px 8px rgba(15, 23, 42, 0.02)',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {/* Top Row: Rep Details + Big BOM Count Badge */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        <div style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '10px',
-                          backgroundColor: rep.avatarBg || '#0E7490',
-                          color: '#FFFFFF',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '13px',
-                          fontWeight: '800',
-                          flexShrink: 0
-                        }}>
-                          {rep.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {rep.name}
-                            </span>
-                            <span style={{
-                              fontSize: '9.5px',
-                              fontWeight: '700',
-                              color: '#64748B',
-                              backgroundColor: '#F1F5F9',
-                              padding: '1px 5px',
-                              borderRadius: '4px'
-                            }}>
-                              {rep.code}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
-                            {rep.role}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Prominent BOM Count Chip */}
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-end',
-                        backgroundColor: hasBoms ? '#ECFEFF' : '#F8FAFC',
-                        border: `1px solid ${hasBoms ? '#A5F3FC' : '#E2E8F0'}`,
-                        borderRadius: '8px',
-                        padding: '4px 8px',
-                        flexShrink: 0
-                      }}>
-                        <span style={{ fontSize: '16px', fontWeight: '900', color: hasBoms ? '#0E7490' : '#64748B', lineHeight: '1' }}>
-                          {rep.totalBoms}
-                        </span>
-                        <span style={{ fontSize: '9px', fontWeight: '700', color: hasBoms ? '#0891B2' : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: '2px' }}>
-                          BOMs Given
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Middle: Metric Stats (Value + Tonnage) */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '8px',
-                      backgroundColor: '#F8FAFC',
-                      borderRadius: '8px',
-                      padding: '8px 10px',
-                      border: '1px solid #F1F5F9'
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '600' }}>Order Value</div>
-                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A', marginTop: '1px' }}>
-                          {formattedAmt}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '600' }}>Tonnage Output</div>
-                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0284C7', marginTop: '1px' }}>
-                          {rep.totalTonnage.toFixed(1)} MT
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Pipeline Status Breakdown */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', fontSize: '10px' }}>
-                      <span style={{
-                        padding: '2px 6px',
-                        borderRadius: '6px',
-                        backgroundColor: '#EFF6FF',
-                        color: '#1D4ED8',
-                        fontWeight: '700'
-                      }}>
-                        {rep.inProductionCount} In Production
-                      </span>
-                      <span style={{
-                        padding: '2px 6px',
-                        borderRadius: '6px',
-                        backgroundColor: '#F0FDF4',
-                        color: '#15803D',
-                        fontWeight: '700'
-                      }}>
-                        {rep.dispatchedOrDoneCount} Dispatched
-                      </span>
-                      <span style={{
-                        padding: '2px 6px',
-                        borderRadius: '6px',
-                        backgroundColor: '#FFFBEB',
-                        color: '#B45309',
-                        fontWeight: '700'
-                      }}>
-                        {rep.pendingCount} Pending
-                      </span>
-                    </div>
-
-                    {/* Bottom: Latest BOM + View Orders Button */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
-                        {rep.latestBom ? (
-                          <span>Latest: <strong>{rep.latestBom.bomCode || rep.latestBom.code || 'BOM'}</strong> ({rep.latestBom.customer || rep.latestBom.customerName || 'Client'})</span>
-                        ) : (
-                          <span>No BOMs assigned yet</span>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => setViewingRepBomsModal(rep)}
-                        style={{
-                          border: 'none',
-                          backgroundColor: '#0E7490',
-                          color: '#FFFFFF',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '10.5px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '3px',
-                          transition: 'background-color 0.15s ease'
-                        }}
-                      >
-                        View BOMs <ChevronRight size={12} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ROW C: TOP CLIENTS & CRITICAL RISK WATCHLIST */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
-            gap: '12px',
-            width: '100%',
-            maxWidth: '100%',
-            minWidth: 0,
-            boxSizing: 'border-box',
-            alignItems: 'stretch'
-          }}>
-            
-            {/* TABLE 1: TOP STRATEGIC KEY CLIENTS */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              border: '1px solid #EAEFEF',
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
-              minWidth: 0
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Top Strategic EPC Clients & Key Reps
-                </span>
-                <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '8px' }}>
-                  Key Accounts
-                </span>
-              </div>
-
-              <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto', maxWidth: '100%', minWidth: 0 }}>
-                <table style={{ width: '100%', minWidth: '450px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #F1F5F9', color: '#64748B', fontWeight: '700' }}>
-                      <th style={{ padding: '8px 10px' }}>Client / Developer</th>
-                      <th style={{ padding: '8px 10px' }}>Revenue</th>
-                      <th style={{ padding: '8px 10px' }}>Assigned Rep</th>
-                      <th style={{ padding: '8px 10px' }}>Payment Terms</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topAccounts.length === 0 ? (
-                      <tr>
-                        <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
-                          No client transactions recorded yet. High-value customer accounts will populate here as Proformas and Invoices are generated.
-                        </td>
-                      </tr>
-                    ) : (
-                      topAccounts.map((c, idx) => (
-                        <tr key={idx} style={{ borderBottom: idx === topAccounts.length - 1 ? 'none' : '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
-                            {c.name}
-                          </td>
-                          <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>
-                            {c.revenue}
-                          </td>
-                          <td style={{ padding: '8px 10px' }}>
-                            <span style={{
-                              padding: '2px 6px',
-                              borderRadius: '6px',
-                              backgroundColor: '#F1F5F9',
-                              fontSize: '10.5px',
-                              fontWeight: '700',
-                              color: '#334155'
-                            }}>
-                              {c.salesPerson}
-                            </span>
-                          </td>
-                          <td style={{ padding: '8px 10px', fontSize: '10.5px', color: '#475569' }}>
-                            {c.paymentTerms}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* CARD 2: RISK ALERTS & WATCHLIST */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              border: '1px solid #EAEFEF',
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Executive Risk Alerts & Watchlist
+                  Critical Alerts & Watchlist
                 </span>
                 <span style={{ fontSize: '10px', color: realRiskAlerts.length > 0 ? '#DC2626' : '#16A34A', fontWeight: '700', backgroundColor: realRiskAlerts.length > 0 ? '#FEF2F2' : '#DCFCE7', padding: '2px 7px', borderRadius: '8px' }}>
-                  {realRiskAlerts.length > 0 ? 'ATTENTION REQUIRED' : 'NORMAL'}
+                  {realRiskAlerts.length > 0 ? 'ATTENTION REQUIRED' : 'ALL CLEAR'}
                 </span>
               </div>
 
@@ -2422,12 +1891,417 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #F1F5F9', paddingTop: '8px', fontSize: '11px', color: '#64748B' }}>
                 <span>Enterprise System Health:</span>
-                <strong style={{ color: '#16A34A' }}>99.9% Uptime • BUSINZ Native Catalog Synced</strong>
+                <strong style={{ color: '#16A34A' }}>99.9% Uptime • BUSINZ Live Synced</strong>
               </div>
             </div>
 
           </div>
 
+          {/* ROW B: ORDER-TO-CASH LIFECYCLE SUMMARY (6-STAGE CONNECTED PIPELINE) */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '18px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            boxShadow: '0 4px 20px rgba(15, 23, 42, 0.04)'
+          }}>
+            <style>{`
+              .businz-otc-grid {
+                display: grid;
+                grid-template-columns: repeat(6, minmax(0, 1fr));
+                gap: 12px;
+                width: 100%;
+                box-sizing: border-box;
+              }
+              @media (max-width: 1360px) {
+                .businz-otc-grid {
+                  grid-template-columns: repeat(3, minmax(0, 1fr));
+                }
+              }
+              @media (max-width: 768px) {
+                .businz-otc-grid {
+                  grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+              }
+              .businz-otc-card {
+                transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+              }
+              .businz-otc-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.08);
+              }
+            `}</style>
+
+            {/* Header Row */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+              borderBottom: '1px solid #F1F5F9',
+              paddingBottom: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #0E7490 0%, #0284C7 100%)',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 10px rgba(14, 116, 144, 0.25)',
+                  flexShrink: 0
+                }}>
+                  <Activity size={18} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.01em' }}>
+                      Order-to-Cash Lifecycle Summary
+                    </span>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: '800',
+                      color: '#0E7490',
+                      backgroundColor: '#ECFEFF',
+                      border: '1px solid #A5F3FC',
+                      padding: '2px 8px',
+                      borderRadius: '999px'
+                    }}>
+                      6-STAGE WORKFLOW
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: '500' }}>
+                    End-to-end live flow: Proforma Invoice (PI) → BOM Order → Dispatch Packing → Accounts Verification → Tax Invoice → Final Dispatch
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  color: '#334155'
+                }}>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>Active Pipeline:</span>
+                  <span style={{ color: '#0E7490', fontWeight: '800' }}>{piList.length} PIs • {bomList.length} BOMs</span>
+                </div>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '10.5px',
+                  color: '#15803D',
+                  fontWeight: '800',
+                  backgroundColor: '#DCFCE7',
+                  border: '1px solid #BBF7D0',
+                  padding: '5px 10px',
+                  borderRadius: '8px'
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16A34A', display: 'inline-block' }} />
+                  OPERATIONS LIVE
+                </span>
+              </div>
+            </div>
+
+            {/* 6-Stage Pipeline Stepper Cards */}
+            <div className="businz-otc-grid">
+              {funnelStages.map((stage, idx) => {
+                const IconComponent = stage.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="businz-otc-card"
+                    onClick={() => onNavigateTab && stage.targetTab && onNavigateTab(stage.targetTab)}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '14px',
+                      border: '1px solid #E2E8F0',
+                      borderTop: `3.5px solid ${stage.color}`,
+                      padding: '14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      cursor: onNavigateTab ? 'pointer' : 'default',
+                      position: 'relative',
+                      minWidth: 0,
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    {/* Top Row: Step Number + Icon */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        color: stage.color,
+                        backgroundColor: stage.bg,
+                        border: `1px solid ${stage.border}`,
+                        padding: '2px 7px',
+                        borderRadius: '6px',
+                        letterSpacing: '0.04em'
+                      }}>
+                        {stage.step}
+                      </span>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '9px',
+                        backgroundColor: stage.bg,
+                        color: stage.color,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <IconComponent size={16} />
+                      </div>
+                    </div>
+
+                    {/* Middle Row: Stage Name + Primary Count + Value Box */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div>
+                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A', lineHeight: '1.25' }}>
+                          {stage.stage}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '500', marginTop: '1px' }}>
+                          {stage.subtitle}
+                        </div>
+                      </div>
+
+                      <div style={{
+                        fontSize: '20px',
+                        fontWeight: '900',
+                        color: '#0F172A',
+                        letterSpacing: '-0.02em',
+                        marginTop: '2px'
+                      }}>
+                        {stage.primaryMetric}
+                      </div>
+
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid #F1F5F9',
+                        borderRadius: '8px',
+                        padding: '6px 8px'
+                      }}>
+                        <span style={{ fontSize: '10px', fontWeight: '600', color: '#64748B' }}>
+                          {stage.valueLabel}
+                        </span>
+                        <span style={{ fontSize: '11.5px', fontWeight: '800', color: stage.color }}>
+                          {stage.value}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar + Bottom Status & Link */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{
+                        width: '100%',
+                        height: '5px',
+                        backgroundColor: '#F1F5F9',
+                        borderRadius: '999px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          width: `${stage.progressPct}%`,
+                          height: '100%',
+                          backgroundColor: stage.color,
+                          borderRadius: '999px',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '4px',
+                        paddingTop: '2px'
+                      }}>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '700',
+                          color: '#475569',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {stage.statusBadge}
+                        </span>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          color: stage.color,
+                          flexShrink: 0
+                        }}>
+                          {stage.action} <ChevronRight size={11} />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* CATEGORY 2: CRM & LEADS DASHBOARD                        */}
+      {/* ======================================================== */}
+      {activeSubTab === 'crm-dashboard' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Category 2 Top KPIs (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'TOTAL CRM LEADS',
+              value: `${leadsList.length} Leads`,
+              trend: leadsList.length > 0 ? `${leadsList.length} In-Flow` : '0 Leads',
+              trendUp: leadsList.length > 0,
+              icon: Users,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: 'Source mix ',
+              bottomHighlight: 'IndiaMART & Meta',
+              onClick: () => onNavigateTab && onNavigateTab('Leads')
+            },
+            {
+              title: 'REGISTERED CUSTOMERS',
+              value: `${customersList.length} Accounts`,
+              trend: `${customersList.length} Accounts`,
+              trendUp: true,
+              icon: Building2,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Client base ',
+              bottomHighlight: 'Verified B2B & EPC Clients',
+              onClick: () => onNavigateTab && onNavigateTab('Customers')
+            },
+            {
+              title: 'ACTIVE QUOTATIONS',
+              value: `${quotesList.length} Quotes`,
+              trend: quotesList.length > 0 ? `${quotesList.length} Active` : '0 Quotes',
+              trendUp: quotesList.length > 0,
+              icon: FileText,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Commercial stage ',
+              bottomHighlight: 'In Follow-up',
+              onClick: () => setActiveSubTab('sales')
+            },
+            {
+              title: 'SALES TEAM ACTIVE',
+              value: `${teamDirectory.filter(t => t.department === 'Sales').length} Executives`,
+              trend: '100% Active',
+              trendUp: true,
+              icon: UserCheck,
+              iconColor: '#7C3AED',
+              iconBg: '#FAF5FF',
+              bottomPrefix: 'Coverage ',
+              bottomHighlight: 'Assigned to Lead Pipeline',
+              onClick: () => setActiveSubTab('personnel')
+            }
+          ]} />
+
+          {/* Quick Submenu Navigation Bar for CRM & Leads */}
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>2. CRM & Leads Command Center</div>
+              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Direct access to Lead Directory, Assignment, Follow-up Monitoring, Customers, and Sales Team Performance</div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button onClick={() => onNavigateTab && onNavigateTab('Leads')} style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>All Leads</button>
+              <button onClick={() => onNavigateTab && onNavigateTab('Follow-ups')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Follow-up Monitoring</button>
+              <button onClick={() => onNavigateTab && onNavigateTab('Customers')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Customer Management</button>
+              <button onClick={() => setActiveSubTab('personnel')} style={{ border: '1px solid #0E7490', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>Sales Team Performance</button>
+            </div>
+          </div>
+
+          {/* Recent Leads & Top Customers */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px' }}>
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>Recent CRM Leads</span>
+                <button onClick={() => onNavigateTab && onNavigateTab('Leads')} style={{ border: 'none', background: 'none', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Open Leads →</button>
+              </div>
+              <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto' }}>
+                <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                      <th style={{ padding: '8px 10px' }}>Lead / Company</th>
+                      <th style={{ padding: '8px 10px' }}>Source</th>
+                      <th style={{ padding: '8px 10px' }}>Assigned To</th>
+                      <th style={{ padding: '8px 10px' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leadsList.length > 0 ? leadsList.slice(0, 6).map((lead, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{lead.company || lead.name || lead.customerName || 'Lead Inquiry'}</td>
+                        <td style={{ padding: '8px 10px', color: '#64748B' }}>{lead.source || 'Direct'}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: '600', color: '#0E7490' }}>{lead.assignedTo || lead.salesPerson || 'Unassigned'}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490' }}>{lead.status || 'New'}</span>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={4} style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>No leads found in live store.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>Top Strategic Customers</span>
+                <button onClick={() => onNavigateTab && onNavigateTab('Customers')} style={{ border: 'none', background: 'none', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>View Customers →</button>
+              </div>
+              <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto' }}>
+                <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                      <th style={{ padding: '8px 10px' }}>Client / Developer</th>
+                      <th style={{ padding: '8px 10px' }}>Revenue</th>
+                      <th style={{ padding: '8px 10px' }}>Assigned Rep</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topAccounts.length > 0 ? topAccounts.map((c, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{c.name}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>{c.revenue}</td>
+                        <td style={{ padding: '8px 10px', color: '#475569' }}>{c.salesPerson}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={3} style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>No customer revenue records yet.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2858,49 +2732,63 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       )}
 
       {/* ======================================================== */}
-      {/* VIEW 3: SALES OPERATIONS FOCUS TAB                       */}
+      {/* CATEGORY 3: SALES MANAGEMENT FOCUS TAB                   */}
       {/* ======================================================== */}
-      {activeSubTab === 'sales' && (
+      {(activeSubTab === 'sales' || activeSubTab === 'sales-targets') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Sales Top Ribbon */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Active Proformas (PI)</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#0E7490' }}>₹ {totalPiPipelineCr} Cr</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>{piList.length} Active Proformas pending BOM</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Quotations Pipeline</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#2563EB' }}>
-                ₹ {((quotesList.reduce((acc, q) => acc + parseAmt(q.amount || q.total || q.grandTotal || 0), 0) * periodMultiplier) / 10000000).toFixed(2)} Cr
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>{quotesList.length} Quotations submitted</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Quote-to-PI Win Rate</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#16A34A' }}>
-                {quotesList.length > 0 && piList.length > 0 ? `${Math.min(100, Math.round((piList.length / quotesList.length) * 100))}%` : '0%'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#16A34A', fontWeight: '700' }}>
-                {quotesList.length > 0 ? `${piList.length} PIs / ${quotesList.length} Quotes` : 'Pipeline active'}
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Average Contract Size</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A' }}>
-                {piList.length > 0 
-                  ? (totalPiPipelineNum / piList.length >= 10000000 
-                      ? `₹ ${(totalPiPipelineNum / piList.length / 10000000).toFixed(2)} Cr` 
-                      : `₹ ${(totalPiPipelineNum / piList.length / 100000).toFixed(2)} L`)
-                  : '₹ 0.00'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Based on active proformas</div>
-            </div>
-          </div>
+          {/* Sales Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'ACTIVE PROFORMAS (PI)',
+              value: `₹ ${totalPiPipelineCr} Cr`,
+              trend: `${piList.length} Active PIs`,
+              trendUp: piList.length > 0,
+              icon: Receipt,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: 'Pending BOM ',
+              bottomHighlight: `${piList.length} Orders In-Queue`,
+              onClick: () => onNavigateTab && onNavigateTab('Sales Proforma')
+            },
+            {
+              title: 'QUOTATIONS PIPELINE',
+              value: `₹ ${((quotesList.reduce((acc, q) => acc + parseAmt(q.amount || q.total || q.grandTotal || 0), 0) * periodMultiplier) / 10000000).toFixed(2)} Cr`,
+              trend: `${quotesList.length} Quotes`,
+              trendUp: quotesList.length > 0,
+              icon: FileSpreadsheet,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Total submitted ',
+              bottomHighlight: `${quotesList.length} Commercial Quotes`
+            },
+            {
+              title: 'QUOTE-TO-PI WIN RATE',
+              value: quotesList.length > 0 && piList.length > 0 ? `${Math.min(100, Math.round((piList.length / quotesList.length) * 100))}%` : '0%',
+              trend: quotesList.length > 0 ? `${piList.length} / ${quotesList.length}` : '0%',
+              trendUp: quotesList.length > 0 && piList.length > 0,
+              icon: Target,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Pipeline velocity ',
+              bottomHighlight: quotesList.length > 0 ? `${piList.length} PIs Generated` : 'Active Pipeline'
+            },
+            {
+              title: 'AVERAGE CONTRACT SIZE',
+              value: piList.length > 0 
+                ? (totalPiPipelineNum / piList.length >= 10000000 
+                    ? `₹ ${(totalPiPipelineNum / piList.length / 10000000).toFixed(2)} Cr` 
+                    : `₹ ${(totalPiPipelineNum / piList.length / 100000).toFixed(2)} L`)
+                : '₹ 0.00',
+              trend: 'Per Order',
+              trendUp: true,
+              icon: DollarSign,
+              iconColor: '#0F172A',
+              iconBg: '#F1F5F9',
+              bottomPrefix: 'Basis ',
+              bottomHighlight: `${piList.length} Active Proformas`
+            }
+          ]} />
 
           {/* Salesperson Leaderboard Comparison */}
           <div style={{
@@ -3073,36 +2961,56 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {activeSubTab === 'procurement' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Procurement Top Ribbon */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Total PO Spend Handled</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#2563EB' }}>₹ {totalPoSpendCr} Cr</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>BUSINZ Native Catalog live synced</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Purchase Orders Count</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A' }}>{poList.length} Orders</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>
-                Across {new Set(poList.map(p => p.vendor_name || p.vendor || p.vendorName).filter(Boolean)).size} active suppliers
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Pending MD Approvals</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: pendingMdPOs.length > 0 ? '#DC2626' : '#16A34A' }}>
-                {pendingMdPOs.length} Draft POs
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Awaiting executive signature</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Primary Material Sourced</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#0E7490' }}>CR & HR Steel Coils</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Aluminum 6063-T6 billets</div>
-            </div>
-          </div>
+          {/* Procurement Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'TOTAL PO SPEND HANDLED',
+              value: `₹ ${totalPoSpendCr} Cr`,
+              trend: `${poList.length} POs`,
+              trendUp: poList.length > 0,
+              icon: ShoppingCart,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Spend authorized ',
+              bottomHighlight: totalPoSpendFormatted,
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
+            },
+            {
+              title: 'PURCHASE ORDERS COUNT',
+              value: `${poList.length} Orders`,
+              trend: `${new Set(poList.map(p => p.vendor_name || p.vendor || p.vendorName).filter(Boolean)).size} Suppliers`,
+              trendUp: poList.length > 0,
+              icon: FileCheck,
+              iconColor: '#0F172A',
+              iconBg: '#F8FAFC',
+              bottomPrefix: 'Supplier base ',
+              bottomHighlight: `${new Set(poList.map(p => p.vendor_name || p.vendor || p.vendorName).filter(Boolean)).size} Active Suppliers`
+            },
+            {
+              title: 'PENDING MD APPROVALS',
+              value: `${pendingMdPOs.length} Draft POs`,
+              trend: pendingMdPOs.length > 0 ? `${pendingMdPOs.length} Pending` : 'All Approved',
+              trendUp: pendingMdPOs.length === 0,
+              highlightCard: pendingMdPOs.length > 0,
+              icon: AlertCircle,
+              iconColor: pendingMdPOs.length > 0 ? '#DC2626' : '#16A34A',
+              iconBg: pendingMdPOs.length > 0 ? '#FEF2F2' : '#F0FDF4',
+              bottomPrefix: 'Executive signature ',
+              bottomHighlight: pendingMdPOs.length > 0 ? 'Awaiting CEO / MD' : 'Fully Authorized',
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')
+            },
+            {
+              title: 'PRIMARY MATERIAL SOURCED',
+              value: 'CR & HR Steel Coils',
+              trend: 'Alloy 6063-T6',
+              trendUp: true,
+              icon: Layers,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: 'Raw materials ',
+              bottomHighlight: 'CR/HR Coils & Billets'
+            }
+          ]} />
 
           {/* SCM Officers Scorecard */}
           <div style={{
@@ -3120,7 +3028,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 Procurement Officers Spend Allocation
               </span>
               <button
-                onClick={() => onNavigateTab && onNavigateTab('Purchase Orders')}
+                onClick={() => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')}
                 style={{
                   border: 'none',
                   backgroundColor: '#2563EB',
@@ -3135,7 +3043,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   gap: '4px'
                 }}
               >
-                Go to Purchase Orders <ArrowRight size={12} />
+                Open PO Approval <ArrowRight size={12} />
               </button>
             </div>
 
@@ -3264,43 +3172,60 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       )}
 
       {/* ======================================================== */}
-      {/* VIEW 5: ACCOUNTS & CASH FLOW FOCUS TAB                   */}
+      {/* CATEGORY 8: ACCOUNTS & FINANCE FOCUS TAB                 */}
       {/* ======================================================== */}
-      {activeSubTab === 'accounts' && (
+      {(activeSubTab === 'accounts' || activeSubTab === 'finance') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Accounts Top Ribbon */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Total Invoiced (GST Tax Billed)</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#7C3AED' }}>₹ {totalRevenueCr} Cr</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>{invList.length} Invoices generated</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Realized Collections</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#16A34A' }}>₹ {totalCollectedCr} Cr</div>
-              <div style={{ fontSize: '11px', color: '#16A34A', fontWeight: '700' }}>
-                {totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% realization rate` : '0% realization rate'}
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Pending Outstanding Balance</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#D97706' }}>₹ {outstandingOverdueCr} Cr</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Receivables in follow-up</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Critical Aging (&gt;30 Days)</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#DC2626' }}>
-                {agingBuckets[3]?.amount || '₹ 0.00'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>
-                {agingBuckets[3]?.raw > 0 ? 'Requires CEO escalation' : 'No critical overdue balance'}
-              </div>
-            </div>
-          </div>
+          {/* Accounts Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'TOTAL INVOICED (GST TAX BILLED)',
+              value: `₹ ${totalRevenueCr} Cr`,
+              trend: `${invList.length} Invoices`,
+              trendUp: invList.length > 0,
+              icon: FileCheck,
+              iconColor: '#7C3AED',
+              iconBg: '#FAF5FF',
+              bottomPrefix: 'GST billing ',
+              bottomHighlight: totalRevenueFormatted,
+              onClick: () => onNavigateTab && onNavigateTab('Invoice Management')
+            },
+            {
+              title: 'REALIZED COLLECTIONS',
+              value: `₹ ${totalCollectedCr} Cr`,
+              trend: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Rate` : '0% Rate',
+              trendUp: totalCollectedNum > 0,
+              icon: Wallet,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Realization rate ',
+              bottomHighlight: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Realized` : 'Active Collections'
+            },
+            {
+              title: 'PENDING OUTSTANDING BALANCE',
+              value: `₹ ${outstandingOverdueCr} Cr`,
+              trend: 'Receivables',
+              trendUp: outstandingOverdueNum === 0,
+              icon: Clock,
+              iconColor: '#D97706',
+              iconBg: '#FFFBEB',
+              bottomPrefix: 'Receivables follow-up ',
+              bottomHighlight: outstandingOverdueFormatted
+            },
+            {
+              title: 'CRITICAL AGING (>30 DAYS)',
+              value: agingBuckets[3]?.amount || '₹ 0.00',
+              trend: agingBuckets[3]?.raw > 0 ? 'Overdue' : 'Healthy',
+              trendUp: !(agingBuckets[3]?.raw > 0),
+              highlightCard: agingBuckets[3]?.raw > 0,
+              icon: AlertTriangle,
+              iconColor: '#DC2626',
+              iconBg: '#FEF2F2',
+              bottomPrefix: 'Overdue status ',
+              bottomHighlight: agingBuckets[3]?.raw > 0 ? 'Requires CEO Escalation' : 'No Critical Overdue'
+            }
+          ]} />
 
           {/* Accounts Officers Breakdown */}
           <div style={{
@@ -3417,39 +3342,59 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       )}
 
       {/* ======================================================== */}
-      {/* VIEW 6: PRODUCTION & PLANT OPERATIONS                    */}
+      {/* CATEGORY 4: BOM & PRODUCTION OPERATIONS                  */}
       {/* ======================================================== */}
-      {activeSubTab === 'production' && (
+      {(activeSubTab === 'production' || activeSubTab === 'bom-workflow') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Production Top Ribbon */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Plant Output ({selectedPeriod})</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#0284C7' }}>{totalProductionTonnage.toFixed(1)} MT</div>
-              <div style={{ fontSize: '11px', color: '#0284C7', fontWeight: '700' }}>{bomList.length} Active BOMs In-Progress</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Active BOM Orders</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A' }}>{bomList.length} Orders</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>In factory workflow</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Work Orders Status</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#16A34A' }}>{workOrdersList.length} Work Orders</div>
-              <div style={{ fontSize: '11px', color: '#16A34A', fontWeight: '700' }}>
-                {workOrdersList.filter(w => w.status === 'Completed').length} Completed, {workOrdersList.filter(w => w.status !== 'Completed').length} Active
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Plant Lines Status</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#059669' }}>{bomList.length > 0 ? 'Plant Operational' : 'Standby'}</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Roll-forming & slitting lines</div>
-            </div>
-          </div>
+          {/* Production Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: `PLANT OUTPUT (${selectedPeriod})`,
+              value: `${totalProductionTonnage.toFixed(1)} MT`,
+              trend: `${bomList.length} Active BOMs`,
+              trendUp: bomList.length > 0,
+              icon: Factory,
+              iconColor: '#0284C7',
+              iconBg: '#F0F9FF',
+              bottomPrefix: 'Factory workflow ',
+              bottomHighlight: `${bomList.length} Active BOMs In-Progress`,
+              onClick: () => onNavigateTab && onNavigateTab('BOM Orders')
+            },
+            {
+              title: 'ACTIVE BOM ORDERS',
+              value: `${bomList.length} Orders`,
+              trend: `${bomList.filter(b => b && !b.cancelled && String(b.status || '').toLowerCase() !== 'draft').length} Confirmed`,
+              trendUp: bomList.length > 0,
+              icon: Boxes,
+              iconColor: '#0F172A',
+              iconBg: '#F8FAFC',
+              bottomPrefix: 'Order book value ',
+              bottomHighlight: totalBomOrderValueFormatted
+            },
+            {
+              title: 'WORK ORDERS STATUS',
+              value: `${workOrdersList.length} Work Orders`,
+              trend: `${workOrdersList.filter(w => w.status === 'Completed').length} Done`,
+              trendUp: workOrdersList.length > 0,
+              icon: CheckCircle2,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'In progress ',
+              bottomHighlight: `${workOrdersList.filter(w => w.status !== 'Completed').length} Active Lines`
+            },
+            {
+              title: 'PLANT LINES STATUS',
+              value: bomList.length > 0 ? 'Plant Operational' : 'Standby',
+              trend: 'Roll & Slit',
+              trendUp: bomList.length > 0,
+              icon: Activity,
+              iconColor: '#059669',
+              iconBg: '#ECFDF5',
+              bottomPrefix: 'Machinery status ',
+              bottomHighlight: 'Roll-Forming & Slitting Ready'
+            }
+          ]} />
 
           {/* Production Leadership Accountability */}
           <div style={{
@@ -3618,38 +3563,55 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {activeSubTab === 'dispatch' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Dispatch Top Ribbon */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Total Dispatched ({selectedPeriod})</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#059669' }}>{dispatchesList.length + challansList.length} Shipments</div>
-              <div style={{ fontSize: '11px', color: '#059669', fontWeight: '700' }}>{challansList.length} Delivery Challans recorded</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Vehicles Dispatched</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#2563EB' }}>
-                {challansList.filter(c => c.vehicleNo || c.vehicle).length} Vehicles
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Transport fleet registered</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Dispatch Status</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#16A34A' }}>
-                {challansList.length > 0 || dispatchesList.length > 0 ? 'Active Clearances' : 'Standby'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#16A34A', fontWeight: '700' }}>Outward gate clearances</div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Pending Transporter LR</span>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: '#D97706' }}>
-                {challansList.filter(c => !c.lrNumber && !c.lr_no).length} Challans
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Transporter LR status</div>
-            </div>
-          </div>
+          {/* Dispatch Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: `TOTAL DISPATCHED (${selectedPeriod})`,
+              value: `${dispatchesList.length + challansList.length} Shipments`,
+              trend: `${challansList.length} Challans`,
+              trendUp: dispatchesList.length + challansList.length > 0,
+              icon: Truck,
+              iconColor: '#059669',
+              iconBg: '#ECFDF5',
+              bottomPrefix: 'Delivery challans ',
+              bottomHighlight: `${challansList.length} Recorded`,
+              onClick: () => onNavigateTab && onNavigateTab('Dispatch Tracking')
+            },
+            {
+              title: 'VEHICLES DISPATCHED',
+              value: `${challansList.filter(c => c.vehicleNo || c.vehicle).length} Vehicles`,
+              trend: 'Fleet Active',
+              trendUp: challansList.filter(c => c.vehicleNo || c.vehicle).length > 0,
+              icon: Truck,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Transport fleet ',
+              bottomHighlight: 'Direct & 3rd-Party Transporters'
+            },
+            {
+              title: 'DISPATCH CLEARANCES',
+              value: challansList.length > 0 || dispatchesList.length > 0 ? 'Active Clearances' : 'Standby',
+              trend: 'Gate Clear',
+              trendUp: challansList.length > 0 || dispatchesList.length > 0,
+              icon: CheckCircle,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Security clearances ',
+              bottomHighlight: 'Outward Gate Verified'
+            },
+            {
+              title: 'PENDING TRANSPORTER LR',
+              value: `${challansList.filter(c => !c.lrNumber && !c.lr_no).length} Challans`,
+              trend: challansList.filter(c => !c.lrNumber && !c.lr_no).length > 0 ? 'Needs LR Copy' : 'All Clear',
+              trendUp: challansList.filter(c => !c.lrNumber && !c.lr_no).length === 0,
+              highlightCard: challansList.filter(c => !c.lrNumber && !c.lr_no).length > 0,
+              icon: AlertCircle,
+              iconColor: '#D97706',
+              iconBg: '#FFFBEB',
+              bottomPrefix: 'Documentation ',
+              bottomHighlight: challansList.filter(c => !c.lrNumber && !c.lr_no).length > 0 ? 'Pending LR Upload' : '100% Up to Date'
+            }
+          ]} />
 
           {/* Dispatch Leadership Accountability */}
           <div style={{
@@ -4201,6 +4163,306 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* CATEGORY 6: INVENTORY & WAREHOUSE DASHBOARD              */}
+      {/* ======================================================== */}
+      {activeSubTab === 'inventory-dashboard' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Inventory Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'TOTAL INVENTORY SKUS',
+              value: `${inventoryList.length} Items`,
+              trend: 'Catalog Synced',
+              trendUp: true,
+              icon: Boxes,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: 'Items directory ',
+              bottomHighlight: `${inventoryList.length} Active SKUs`,
+              onClick: () => onNavigateTab && onNavigateTab('Items Directory')
+            },
+            {
+              title: 'LOW STOCK / REORDER ALERTS',
+              value: `${inventoryList.filter(it => (parseFloat(it.stock || it.quantity || it.availableStock || 0) || 0) <= (parseFloat(it.minStock || it.reorderLevel || 10) || 10)).length} Items`,
+              trend: inventoryList.filter(it => (parseFloat(it.stock || it.quantity || it.availableStock || 0) || 0) <= (parseFloat(it.minStock || it.reorderLevel || 10) || 10)).length > 0 ? 'Critical' : 'Healthy',
+              trendUp: inventoryList.filter(it => (parseFloat(it.stock || it.quantity || it.availableStock || 0) || 0) <= (parseFloat(it.minStock || it.reorderLevel || 10) || 10)).length === 0,
+              highlightCard: inventoryList.filter(it => (parseFloat(it.stock || it.quantity || it.availableStock || 0) || 0) <= (parseFloat(it.minStock || it.reorderLevel || 10) || 10)).length > 0,
+              icon: AlertTriangle,
+              iconColor: '#DC2626',
+              iconBg: '#FEF2F2',
+              bottomPrefix: 'Reorder status ',
+              bottomHighlight: 'Below Minimum Threshold',
+              onClick: () => onNavigateTab && onNavigateTab('Material Reorder')
+            },
+            {
+              title: 'GOODS RECEIPT NOTES (GRN)',
+              value: `${grnList.length} Inwarded`,
+              trend: 'Verified',
+              trendUp: true,
+              icon: Package,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Inward verification ',
+              bottomHighlight: 'Verified Stock Receipts',
+              onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
+            },
+            {
+              title: 'RESERVED FOR BOMS',
+              value: `${bomList.length} Active BOMs`,
+              trend: `${totalProductionTonnage.toFixed(1)} MT`,
+              trendUp: bomList.length > 0,
+              icon: Factory,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Material allocation ',
+              bottomHighlight: `${totalProductionTonnage.toFixed(1)} MT Allocated`,
+              onClick: () => onNavigateTab && onNavigateTab('Stock Status')
+            }
+          ]} />
+
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>6. Inventory & Warehouse Command Center</div>
+              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Live stock levels, reserved BOM allocations, low-stock reorder alerts, and GRN inward history</div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button onClick={() => onNavigateTab && onNavigateTab('Inventory Stores')} style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Inventory Overview</button>
+              <button onClick={() => onNavigateTab && onNavigateTab('Items Directory')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Physical Stock</button>
+              <button onClick={() => onNavigateTab && onNavigateTab('Stock Status')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Reserved Stock</button>
+              <button onClick={() => onNavigateTab && onNavigateTab('Material Reorder')} style={{ border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2', color: '#DC2626', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>Low Stock Alerts</button>
+              <button onClick={() => onNavigateTab && onNavigateTab('Goods Receipt Note')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>GRN History</button>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>Live Inventory Stock Directory Snapshot</span>
+            <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                    <th style={{ padding: '8px 10px' }}>Item Code / SKU</th>
+                    <th style={{ padding: '8px 10px' }}>Material Description</th>
+                    <th style={{ padding: '8px 10px' }}>Category</th>
+                    <th style={{ padding: '8px 10px' }}>Available Qty</th>
+                    <th style={{ padding: '8px 10px' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventoryList.length > 0 ? inventoryList.slice(0, 8).map((item, idx) => {
+                    const qty = parseFloat(item.stock ?? item.quantity ?? item.availableStock ?? 0) || 0;
+                    const minQty = parseFloat(item.minStock ?? item.reorderLevel ?? 10) || 10;
+                    const isLow = qty <= minQty;
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>{item.code || item.itemCode || item.sku || `SKU-${idx + 1}`}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{item.name || item.itemName || item.description || 'Raw Material'}</td>
+                        <td style={{ padding: '8px 10px', color: '#64748B' }}>{item.category || 'Solar Structure Material'}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: '800', color: isLow ? '#DC2626' : '#0F172A' }}>{qty} {item.unit || item.uom || 'Nos'}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: isLow ? '#FEF2F2' : '#DCFCE7', color: isLow ? '#DC2626' : '#16A34A' }}>
+                            {isLow ? 'Low Stock' : 'In Stock'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>No inventory items loaded yet. Click "Inventory Overview" to inspect warehouse stores.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* CATEGORY 9: TASKS & APPROVALS DASHBOARD                  */}
+      {/* ======================================================== */}
+      {(activeSubTab === 'tasks-dashboard' || activeSubTab === 'tasks') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Tasks Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'PENDING MD PO APPROVALS',
+              value: `${pendingMdPOs.length} POs`,
+              trend: pendingMdPOs.length > 0 ? 'Sign-Off Needed' : 'Zero Pending',
+              trendUp: pendingMdPOs.length === 0,
+              highlightCard: pendingMdPOs.length > 0,
+              icon: AlertCircle,
+              iconColor: pendingMdPOs.length > 0 ? '#DC2626' : '#16A34A',
+              iconBg: pendingMdPOs.length > 0 ? '#FEF2F2' : '#F0FDF4',
+              bottomPrefix: 'Executive signature ',
+              bottomHighlight: pendingMdPOs.length > 0 ? 'Awaiting CEO / MD' : 'All Approved',
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')
+            },
+            {
+              title: 'APPROVED POS HISTORY',
+              value: `${Math.max(0, poList.length - pendingMdPOs.length)} Approved`,
+              trend: 'Proceeded',
+              trendUp: true,
+              icon: CheckCircle2,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Execution flow ',
+              bottomHighlight: 'Proceeded to Payment & GRN'
+            },
+            {
+              title: 'ACTIVE BOM APPROVALS',
+              value: `${bomList.length} BOM Orders`,
+              trend: `${bomList.length} Active`,
+              trendUp: bomList.length > 0,
+              icon: Factory,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: 'Workflow span ',
+              bottomHighlight: 'Across Production & Dispatch',
+              onClick: () => onNavigateTab && onNavigateTab('BOM Orders')
+            },
+            {
+              title: 'CRITICAL ESCALATIONS',
+              value: `${realRiskAlerts.length} Alerts`,
+              trend: realRiskAlerts.length > 0 ? 'Watchlist' : 'Healthy',
+              trendUp: realRiskAlerts.length === 0,
+              highlightCard: realRiskAlerts.length > 0,
+              icon: AlertTriangle,
+              iconColor: realRiskAlerts.length > 0 ? '#D97706' : '#16A34A',
+              iconBg: realRiskAlerts.length > 0 ? '#FFFBEB' : '#F0FDF4',
+              bottomPrefix: 'Watchlist ',
+              bottomHighlight: realRiskAlerts.length > 0 ? 'SLA & Overdue Watchlist' : 'Zero Critical Breaches'
+            }
+          ]} />
+
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>9. Executive Approvals & Action Queue</span>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Authorize pending Purchase Orders and review high-priority operational tasks</div>
+              </div>
+              <button onClick={() => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')} style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 14px', borderRadius: '8px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer' }}>
+                Open PO Approval Page →
+              </button>
+            </div>
+
+            <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '11.5px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                    <th style={{ padding: '8px 10px' }}>Reference</th>
+                    <th style={{ padding: '8px 10px' }}>Vendor / Counterparty</th>
+                    <th style={{ padding: '8px 10px' }}>Value</th>
+                    <th style={{ padding: '8px 10px' }}>Current Stage</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingMdPOs.length > 0 ? pendingMdPOs.map((po, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2563EB' }}>{po.poNo || po.poNumber || po.purchaseorder_number || '-'}</td>
+                      <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{po.vendor || po.vendorName || po.vendor_name || 'Vendor'}</td>
+                      <td style={{ padding: '8px 10px', fontWeight: '800' }}>₹ {(parseAmt(po.amount || po.total) / 100000).toFixed(2)} Lakhs</td>
+                      <td style={{ padding: '8px 10px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', padding: '2px 7px', borderRadius: '8px', backgroundColor: '#FEF2F2', color: '#DC2626' }}>
+                          Awaiting MD Approval
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                        <button onClick={() => onNavigateTab && onNavigateTab('Purchase Orders', po.poNo || po.poNumber || po.purchaseorder_number || null, 'WAITING FOR APPROVAL')} style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '4px 10px', borderRadius: '6px', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer' }}>
+                          Review & Approve
+                        </button>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#16A34A', fontWeight: '700' }}>All Purchase Orders are approved and up to date.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* CATEGORY 10: REPORTS & ANALYTICS DASHBOARD               */}
+      {/* ======================================================== */}
+      {(activeSubTab === 'reports-dashboard' || activeSubTab === 'reports') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Reports Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={[
+            {
+              title: 'TOTAL INVOICED REVENUE',
+              value: `₹ ${totalRevenueCr} Cr`,
+              trend: `${invList.length} Invoices`,
+              trendUp: invList.length > 0,
+              icon: FileCheck,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: 'GST billing ',
+              bottomHighlight: `${invList.length} Tax Invoices`,
+              onClick: () => onNavigateTab && onNavigateTab('Sales Reports')
+            },
+            {
+              title: 'TOTAL PROCUREMENT SPEND',
+              value: `₹ ${totalPoSpendCr} Cr`,
+              trend: `${poList.length} POs`,
+              trendUp: poList.length > 0,
+              icon: ShoppingCart,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Purchase orders ',
+              bottomHighlight: `${poList.length} Authorized POs`,
+              onClick: () => onNavigateTab && onNavigateTab('Procurement Reports')
+            },
+            {
+              title: 'PLANT PRODUCTION OUTPUT',
+              value: `${totalProductionTonnage.toFixed(1)} MT`,
+              trend: `${bomList.length} BOMs`,
+              trendUp: bomList.length > 0,
+              icon: Factory,
+              iconColor: '#0284C7',
+              iconBg: '#F0F9FF',
+              bottomPrefix: 'Factory output ',
+              bottomHighlight: `${bomList.length} BOM Orders`,
+              onClick: () => onNavigateTab && onNavigateTab('Production Reports')
+            },
+            {
+              title: 'COLLECTIONS REALIZED',
+              value: `₹ ${totalCollectedCr} Cr`,
+              trend: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}%` : '0%',
+              trendUp: totalCollectedNum > 0,
+              icon: Wallet,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Outstanding ',
+              bottomHighlight: `₹ ${outstandingOverdueCr} Cr Pending`
+            }
+          ]} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+            {[
+              { title: 'Sales Analytics & Reports', desc: 'Quotation conversion, Proforma pipeline, and rep-wise revenue breakdown.', target: 'Sales Reports', color: '#0E7490', bg: '#ECFEFF' },
+              { title: 'Operational & Production Reports', desc: 'Plant extrusion tonnage, BOM order completion, and dispatch turnaround.', target: 'Production Reports', color: '#0284C7', bg: '#F0F9FF' },
+              { title: 'Inventory & Stock Analytics', desc: 'Raw material consumption, reserved stock, and reorder valuation.', target: 'Stock Status', color: '#059669', bg: '#ECFDF5' },
+              { title: 'Financial & Procurement MIS', desc: 'Vendor spend analysis, PO history, GST tax billing, and cash flow.', target: 'Procurement Reports', color: '#7C3AED', bg: '#F5F3FF' }
+            ].map((repCard, idx) => (
+              <div key={idx} style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: repCard.color, backgroundColor: repCard.bg, padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>MIS Report</span>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginTop: '8px' }}>{repCard.title}</div>
+                  <p style={{ fontSize: '11px', color: '#64748B', margin: '4px 0 0 0', lineHeight: '1.4' }}>{repCard.desc}</p>
+                </div>
+                <button
+                  onClick={() => onNavigateTab && onNavigateTab(repCard.target)}
+                  style={{ border: 'none', backgroundColor: repCard.color, color: '#FFFFFF', padding: '7px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                >
+                  Open {repCard.title.split(' ')[0]} Report <ArrowRight size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

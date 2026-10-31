@@ -1685,9 +1685,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
       setShowUploadModal(false);
       if (typeof showCustomAlert === 'function') {
-        showCustomAlert(`✅ Successfully imported and mapped ${imported.length} items!`, 'Import Completed', 'success');
+        showCustomAlert(`Successfully imported and mapped ${imported.length} items!`, 'Import Completed', 'success');
       } else {
-        alert(`✅ Successfully imported and mapped ${imported.length} items!`);
+        alert(`Successfully imported and mapped ${imported.length} items!`);
       }
     } catch (err) {
       console.error('Import error:', err);
@@ -1972,7 +1972,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           });
           prodModuleEngine.saveToStorage();
 
-          showCustomAlert(`✅ Successfully imported ${importedMaterials.length} items from ${file.name}!`, 'Import Complete', 'success');
+          showCustomAlert(`Successfully imported ${importedMaterials.length} items from ${file.name}!`, 'Import Complete', 'success');
         }
       } catch (err) {
         console.error('File parsing error:', err);
@@ -2203,7 +2203,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       console.error('Engine sync error:', e);
     }
 
-    showCustomAlert(`✅ Stock Intake Completed! ${qtyVal} ${unitVal} of "${enteredMatName}" (${targetMatCode}) added to inventory stock balance.`, 'Stock Updated', 'success');
+    showCustomAlert(`Stock Intake Completed! ${qtyVal} ${unitVal} of "${enteredMatName}" (${targetMatCode}) added to inventory stock balance.`, 'Stock Updated', 'success');
     setSearchQuery('');
     setSelectedTab('All');
     setSelectedCat('All Categories');

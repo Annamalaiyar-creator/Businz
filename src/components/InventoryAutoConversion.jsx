@@ -70,7 +70,7 @@ export default function InventoryAutoConversion() {
   };
 
   const handleSave = () => {
-    alert(`✅ Entry saved successfully!\nInventory Stock Added: ${(activeWeightKg || 0).toLocaleString('en-IN')} KG (${activeTon.toFixed(3)} Ton)`);
+    alert(`Entry saved successfully!\nInventory Stock Added: ${(activeWeightKg || 0).toLocaleString('en-IN')} KG (${activeTon.toFixed(3)} Ton)`);
   };
 
   return (

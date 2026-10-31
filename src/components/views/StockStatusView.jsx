@@ -8,7 +8,7 @@ import {
   Truck, Shield, Package, Star, Download, HelpCircle, Info, ShoppingCart, Upload, Printer, Maximize2,
   ShieldCheck, Layers, Factory, Cpu, Receipt, IndianRupee, Smartphone, Camera, Image, RefreshCw,
   CreditCard, Bell, Video, Play, Pause, Film, Sparkles, MoreHorizontal, Copy, Hourglass, Boxes, Send,
-  Wrench
+  Wrench, Warehouse
 } from 'lucide-react';
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
@@ -17,6 +17,7 @@ import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../ut
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from '../../utils/vrmProductsData';
+import { centralInventoryStore } from '../../utils/centralInventoryStore';
 
 
 export default function StockStatusView(props) {
@@ -1262,11 +1263,41 @@ export default function StockStatusView(props) {
   const [viewingRfp, setViewingRfp] = useState(null);
   const [editingRfp, setEditingRfp] = useState(null);
 
-  // Items Action States
+  // Items Action States - Unified across Catalog, Central Inventory Store & Raw Materials
   const [itemsList, setItemsList] = useState(() => {
     try {
       const full = getFullProductsCatalogWithStock();
-      if (Array.isArray(full) && full.length > 0) return full;
+      let rawLocal = [];
+      try {
+        const rawStr = localStorage.getItem('controlroom_raw_materials_store');
+        if (rawStr) {
+          const parsed = JSON.parse(rawStr);
+          if (Array.isArray(parsed)) rawLocal = parsed;
+        }
+      } catch (_) {}
+
+      let centralItems = [];
+      try {
+        if (centralInventoryStore && typeof centralInventoryStore.getInventoryItems === 'function') {
+          centralItems = centralInventoryStore.getInventoryItems() || [];
+        }
+      } catch (_) {}
+
+      const mergedMap = new Map();
+      (full || []).forEach(it => {
+        const k = String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase().trim();
+        if (k) mergedMap.set(k, it);
+      });
+      rawLocal.forEach(it => {
+        const k = String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase().trim();
+        if (k && !mergedMap.has(k)) mergedMap.set(k, it);
+      });
+      centralItems.forEach(it => {
+        const k = String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase().trim();
+        if (k && !mergedMap.has(k)) mergedMap.set(k, it);
+      });
+
+      if (mergedMap.size > 0) return Array.from(mergedMap.values());
     } catch (_) {}
     return [];
   });
@@ -1432,37 +1463,59 @@ export default function StockStatusView(props) {
     const fetchItemsFromBackend = async () => {
       try {
         setItemsLoading(true);
-        const backendItems = await getItems();
-        if (isMounted && Array.isArray(backendItems) && backendItems.length > 0) {
+        const [backendItems, rawRes] = await Promise.all([
+          getItems().catch(() => []),
+          fetch('/api/raw-materials').then(r => r.ok ? r.json() : []).catch(() => [])
+        ]);
+
+        const rawList = Array.isArray(rawRes) ? rawRes : (rawRes?.data || []);
+        let centralItems = [];
+        try {
+          if (centralInventoryStore && typeof centralInventoryStore.getInventoryItems === 'function') {
+            centralItems = centralInventoryStore.getInventoryItems() || [];
+          }
+        } catch (_) {}
+
+        let localRaw = [];
+        try {
+          const s = localStorage.getItem('controlroom_raw_materials_store');
+          if (s) {
+            const p = JSON.parse(s);
+            if (Array.isArray(p)) localRaw = p;
+          }
+        } catch (_) {}
+
+        let localItems = [];
+        try {
+          const s = localStorage.getItem('controlroom_item_store') || localStorage.getItem('controlroom_items_list');
+          if (s) {
+            const p = JSON.parse(s);
+            if (Array.isArray(p)) localItems = p;
+          }
+        } catch (_) {}
+
+        const allCandidates = [
+          ...(Array.isArray(backendItems) ? backendItems : []),
+          ...rawList,
+          ...localRaw,
+          ...localItems,
+          ...centralItems
+        ];
+
+        if (isMounted && allCandidates.length > 0) {
           const seen = new Set();
           const clean = [];
-          backendItems.forEach(it => {
+          allCandidates.forEach(it => {
+            if (!it) return;
             const c = String(it.code || it.sku || it.itemId || it.id || '').toLowerCase().trim();
             const n = String(it.name || '').toLowerCase().trim();
+            if (!c && !n) return;
             const k = c ? `c:${c}` : `n:${n}`;
             if (seen.has(k)) return;
             seen.add(k);
             clean.push(it);
           });
           setItemsList(clean);
-        } else {
-          const response = await fetch('/api/items').catch(() => null);
-          if (response && response.ok) {
-            const zItems = await response.json().catch(() => []);
-            if (isMounted && Array.isArray(zItems) && zItems.length > 0) {
-              const seen = new Set();
-              const clean = [];
-              zItems.forEach(it => {
-                const c = String(it.code || it.sku || it.itemId || it.id || '').toLowerCase().trim();
-                const n = String(it.name || '').toLowerCase().trim();
-                const k = c ? `c:${c}` : `n:${n}`;
-                if (seen.has(k)) return;
-                seen.add(k);
-                clean.push(it);
-              });
-              setItemsList(clean);
-            }
-          }
         }
       } catch (err) {
         console.error("Error fetching Catalog Items:", err);
@@ -1479,22 +1532,44 @@ export default function StockStatusView(props) {
     const handleStorageUpdate = () => {
       setStockStatusStorageTrigger(prev => prev + 1);
       try {
+        const itemMap = new Map();
         const rawStoreStr = localStorage.getItem('controlroom_items_list') || localStorage.getItem('controlroom_item_store');
         if (rawStoreStr) {
           const parsed = JSON.parse(rawStoreStr);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setItemsList(prev => {
-              const itemMap = new Map();
-              (prev || []).forEach(it => itemMap.set(String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase(), it));
-              parsed.forEach(it => {
-                const key = String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase();
-                if (key) {
-                  itemMap.set(key, { ...itemMap.get(key), ...it });
-                }
-              });
-              return Array.from(itemMap.values());
+          if (Array.isArray(parsed)) {
+            parsed.forEach(it => {
+              const k = String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase().trim();
+              if (k) itemMap.set(k, it);
             });
           }
+        }
+        const rawMatsStr = localStorage.getItem('controlroom_raw_materials_store');
+        if (rawMatsStr) {
+          const parsed = JSON.parse(rawMatsStr);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(it => {
+              const k = String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase().trim();
+              if (k && !itemMap.has(k)) itemMap.set(k, it);
+            });
+          }
+        }
+        try {
+          if (centralInventoryStore && typeof centralInventoryStore.getInventoryItems === 'function') {
+            const cItems = centralInventoryStore.getInventoryItems() || [];
+            cItems.forEach(it => {
+              const k = String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase().trim();
+              if (k && !itemMap.has(k)) itemMap.set(k, it);
+            });
+          }
+        } catch (_) {}
+
+        if (itemMap.size > 0) {
+          setItemsList(prev => {
+            const merged = new Map();
+            (prev || []).forEach(it => merged.set(String(it.code || it.sku || it.itemId || it.id || it.name).toLowerCase().trim(), it));
+            itemMap.forEach((v, k) => merged.set(k, { ...merged.get(k), ...v }));
+            return Array.from(merged.values());
+          });
         }
       } catch (_) {}
     };
@@ -1502,11 +1577,15 @@ export default function StockStatusView(props) {
     window.addEventListener('storage', handleStorageUpdate);
     window.addEventListener('controlroom_storage_update', handleStorageUpdate);
     window.addEventListener('controlroom_raw_materials_update', handleStorageUpdate);
+    window.addEventListener('controlroom_items_update', handleStorageUpdate);
+    window.addEventListener('central_inventory_updated', handleStorageUpdate);
 
     return () => {
       window.removeEventListener('storage', handleStorageUpdate);
       window.removeEventListener('controlroom_storage_update', handleStorageUpdate);
       window.removeEventListener('controlroom_raw_materials_update', handleStorageUpdate);
+      window.removeEventListener('controlroom_items_update', handleStorageUpdate);
+      window.removeEventListener('central_inventory_updated', handleStorageUpdate);
     };
   }, []);
 
@@ -2293,226 +2372,7 @@ export default function StockStatusView(props) {
             </div>
           </div>
 
-          {/* Top Widget Row (Stock Health, Top Low Stock Items) */}
-          {(() => {
-            // Calculate dynamic health metrics from computed stock items
-            let inStockCount = 0;
-            let lowStockCount = 0;
-            let outOfStockCount = 0;
-
-            // 1. Calculate reserved quantities ONLY from completed BOMs sent to dispatch (PIs never reserve stock)
-            const bomReservedMap = new Map();
-            if (Array.isArray(bomStore)) {
-              bomStore.forEach(b => {
-                const bStatus = String(b.status || '').toLowerCase();
-                const isCompletedOrDeducted = Boolean(b.stockDeducted) ||
-                  Boolean(b.fullyCompleted) ||
-                  Boolean(b.lifecycleCompleted) ||
-                  Boolean(b.vehicleLoading?.completed) ||
-                  Boolean(b.vehicleLoading?.loaded) ||
-                  Boolean(b.vehicleLoading?.fullyCompleted) ||
-                  ['completed', 'delivered', 'closed', 'shipped', 'dispatched'].some(s => bStatus.includes(s));
-                const isSentToDispatch = !isCompletedOrDeducted && (Boolean(b.salesConfirmed) || [
-                  'sales confirmed - sent to dispatch',
-                  'sent to production',
-                  'confirmed',
-                  'packed & ready for dispatch',
-                  'partially packed'
-                ].some(s => bStatus.includes(s)));
-                if (isSentToDispatch && !bStatus.includes('cancelled') && !bStatus.includes('stock restored')) {
-                  (b.items || []).forEach(pItem => {
-                    const qty = parseFloat(pItem.qty || pItem.bomQty || 0) || 0;
-                    if (qty > 0) {
-                      const resCode = resolveProductCode(pItem).toLowerCase().trim();
-                      const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
-                      const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
-                      const norm = normalizeProductName(pName);
-                      const pFp = wordFingerprint(pName);
-                      if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
-                      if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
-                      if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
-                      if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
-                    }
-                  });
-                }
-              });
-            }
-
-            let localRawMats = [];
-            try {
-              const rawStr = localStorage.getItem('controlroom_raw_materials_store');
-              if (rawStr) {
-                const parsed = JSON.parse(rawStr);
-                if (Array.isArray(parsed)) localRawMats = parsed;
-              }
-            } catch (_) {}
-
-            const rawMatMap = new Map();
-            localRawMats.forEach(m => {
-              const mRes = resolveProductCode(m).toLowerCase().trim();
-              const mCode = String(mRes || m.code || '').toLowerCase().trim();
-              const mName = String(m.name || '').toLowerCase().trim();
-              const mNorm = normalizeProductName(m.name);
-              const mFp = wordFingerprint(mName);
-              if (mCode) rawMatMap.set(mCode, m);
-              if (mName) rawMatMap.set(mName, m);
-              if (mNorm) rawMatMap.set(mNorm, m);
-              if (mFp) rawMatMap.set(mFp, m);
-            });
-
-            const stockDataset = (itemsList && itemsList.length > 0) ? itemsList.map(it => {
-              const itRes = resolveProductCode(it).toLowerCase().trim();
-              const codeKey = String(itRes || it.code || it.sku || it.itemId || '').toLowerCase().trim();
-              const nameKey = String(it.name || '').toLowerCase().trim();
-              const itNorm = normalizeProductName(it.name);
-              const itFp = wordFingerprint(nameKey);
-              const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (itNorm && rawMatMap.get(itNorm)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
-
-              const physicalBase = Math.max(0, Number(matchedMat?.physicalStock ?? matchedMat?.openingStock ?? it.physicalStock ?? it.openingStock ?? 0));
-              const activeBlocked = Math.max(
-                (codeKey && bomReservedMap.get(codeKey)) || 0,
-                (itNorm && bomReservedMap.get(itNorm)) || 0,
-                (nameKey && bomReservedMap.get(nameKey)) || 0,
-                (itFp && bomReservedMap.get(itFp)) || 0
-              );
-              let availableQty = Math.max(0, physicalBase - activeBlocked);
-              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
-                availableQty = Math.max(availableQty, Number(matchedMat.stock));
-              } else if (it.stock !== undefined && !isNaN(it.stock) && Number(it.stock) > 0) {
-                availableQty = Math.max(availableQty, Number(it.stock));
-              }
-              const minLvl = Number(it.reorderLevel || it.minLevel || 50);
-
-              let statusText = 'In Stock';
-              if (availableQty === 0) statusText = 'Out of Stock';
-              else if (availableQty <= minLvl) statusText = 'Low Stock';
-
-              return {
-                name: it.name,
-                stock: availableQty,
-                minLevel: minLvl,
-                status: statusText
-              };
-            }) : stockRegistry.map(it => {
-              const rawNum = Math.max(0, parseFloat(String(it.stock).replace(/,/g, '')) || 0);
-              const allocNum = parseFloat(String(it.allocated).replace(/,/g, '')) || 0;
-              const avail = Math.max(0, rawNum - allocNum);
-              return {
-                name: it.item,
-                stock: avail,
-                minLevel: Number(it.minLevel || 50),
-                status: it.status
-              };
-            });
-
-            stockDataset.forEach(s => {
-              if (s.status === 'Out of Stock' || s.stock === 0) outOfStockCount++;
-              else if (s.status === 'Low Stock' || s.stock <= s.minLevel) lowStockCount++;
-              else inStockCount++;
-            });
-
-            const total = stockDataset.length || 1;
-            const inStockPct = ((inStockCount / total) * 100).toFixed(1);
-            const lowStockPct = ((lowStockCount / total) * 100).toFixed(1);
-            const outOfStockPct = ((outOfStockCount / total) * 100).toFixed(1);
-
-            // Sort ascending to get lowest stock items
-            const lowestItems = [...stockDataset].sort((a, b) => a.stock - b.stock).slice(0, 8);
-
-            return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
-                {/* Stock Health Card */}
-                <div className="section-card" style={{ padding: 0, overflow: 'hidden', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ padding: '16px 24px 0 24px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0F172A' }}>Stock Health</span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 24px', position: 'relative' }}>
-                    {/* SVG Donut */}
-                    <div style={{ position: 'relative', width: '150px', height: '150px' }}>
-                      <svg viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#F1F5F9" strokeWidth="4"></circle>
-                        {/* In Stock segment */}
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#10B981" strokeWidth="4" strokeDasharray={`${inStockPct} ${100 - inStockPct}`} strokeDashoffset="0"></circle>
-                        {/* Low Stock segment */}
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#F59E0B" strokeWidth="4" strokeDasharray={`${lowStockPct} ${100 - lowStockPct}`} strokeDashoffset={`-${inStockPct}`}></circle>
-                        {/* Out of Stock segment */}
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#EF4444" strokeWidth="4" strokeDasharray={`${outOfStockPct} ${100 - outOfStockPct}`} strokeDashoffset={`-${parseFloat(inStockPct) + parseFloat(lowStockPct)}`}></circle>
-                      </svg>
-                      <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        pointerEvents: 'none'
-                      }}>
-                        <span style={{ fontSize: '26px', fontWeight: 'bold', color: '#0F172A', fontFamily: 'Inter, system-ui' }}>{inStockPct}%</span>
-                        <span style={{ fontSize: '13px', color: '#10B981', fontWeight: '500', marginTop: '2px' }}>Healthy</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Divided Bottom section: Stock Health Breakdown */}
-                  <div style={{ borderTop: '1px solid #E2E8F0', padding: '16px 24px', backgroundColor: '#fafbfc' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1E293B', display: 'block', marginBottom: '12px' }}>
-                      Stock Health Breakdown
-                    </span>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {[
-                        { name: 'In Stock', count: `${inStockCount.toLocaleString('en-IN')} Items`, percentage: `${inStockPct}%`, color: '#10B981' },
-                        { name: 'Low Stock', count: `${lowStockCount.toLocaleString('en-IN')} Items`, percentage: `${lowStockPct}%`, color: '#F59E0B' },
-                        { name: 'Out of Stock', count: `${outOfStockCount.toLocaleString('en-IN')} Items`, percentage: `${outOfStockPct}%`, color: '#EF4444' }
-                      ].map((legend, idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px', color: '#334155' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: legend.color, borderRadius: '50%', flexShrink: 0 }}></span>
-                            <span style={{ fontWeight: '500' }}>{legend.name}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                            <span style={{ color: '#64748b' }}>{legend.count}</span>
-                            <strong style={{ color: '#1e293b', minWidth: '40px', textAlign: 'right' }}>{legend.percentage}</strong>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Top Low Stock Items Card */}
-                <div className="section-card" style={{ padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                      <strong style={{ fontSize: '14px', color: '#0F172A' }}>Top Low Stock Items</strong>
-                      <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 'bold' }}>Live Data</span>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {lowestItems.map((item, idx) => {
-                        let color = '#10B981';
-                        if (item.stock === 0) color = '#EF4444';
-                        else if (item.stock <= item.minLevel) color = '#F59E0B';
-
-                        return (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: idx === lowestItems.length - 1 ? 'none' : '1px solid #F8FAFC', paddingBottom: idx === lowestItems.length - 1 ? 0 : '8px' }}>
-                            <span style={{ fontSize: '12px', fontWeight: '500', color: '#475569' }}>{item.name}</span>
-                            <strong style={{ fontSize: '12px', color }}>{item.stock.toLocaleString('en-IN')}</strong>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Bottom Row: Stock Status List Table (Full Width) */}
+          {/* Unified Real Inventory Ledger (Stock Health & Authoritative Stock Status Table) */}
           {(() => {
             const isSalesUser = effectiveRole === 'Sales Executive' || effectiveRole === 'Sales Head' || String(effectiveRole || '').toLowerCase().includes('sales');
             const isDispatchUser = effectiveRole === 'Dispatch Head' || effectiveRole === 'Dispatch' || effectiveRole === 'Dispatch Executive' || String(effectiveRole || '').toLowerCase().includes('dispatch');
@@ -2543,9 +2403,11 @@ export default function StockStatusView(props) {
                       const resCode = resolveProductCode(pItem).toLowerCase().trim();
                       const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
                       const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+                      const norm = normalizeProductName(pName);
                       const pFp = wordFingerprint(pName);
                       if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
                       if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
+                      if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
                       if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
                     }
                   });
@@ -2553,7 +2415,7 @@ export default function StockStatusView(props) {
               });
             }
 
-            // 2. Read latest raw materials store for overrides
+            // 2. Read latest raw materials store for overrides and inventory mapping
             let localRawMats = [];
             try {
               const rawStr = localStorage.getItem('controlroom_raw_materials_store');
@@ -2576,18 +2438,41 @@ export default function StockStatusView(props) {
               if (mFp) rawMatMap.set(mFp, m);
             });
 
-            // 3. Helper to classify inventory items and filter out pure raw materials
+            // 3. Central inventory items
+            let centralItems = [];
+            try {
+              if (centralInventoryStore && typeof centralInventoryStore.getInventoryItems === 'function') {
+                centralItems = centralInventoryStore.getInventoryItems() || [];
+              }
+            } catch (_) {}
+            const centralMap = new Map();
+            centralItems.forEach(ci => {
+              const cRes = resolveProductCode(ci).toLowerCase().trim();
+              const cCode = String(cRes || ci.code || ci.sku || '').toLowerCase().trim();
+              const cName = String(ci.name || '').toLowerCase().trim();
+              if (cCode) centralMap.set(cCode, ci);
+              if (cName) centralMap.set(cName, ci);
+            });
+
+            // 4. Helper to classify inventory items accurately (Finished Goods, Accessories, Raw Materials)
             const classifyStockItem = (nameStr = '', catStr = '', matStr = '') => {
               const n = String(nameStr || '').toLowerCase().trim();
               const c = String(catStr || '').toLowerCase().trim();
               const m = String(matStr || '').toLowerCase().trim();
 
               const isPureRaw = (
-                c.includes('raw') || n.includes('raw coil') || n.includes('steel coil') ||
-                n.includes('zinc ingot') || n.includes('billet') || n.includes('sheet metal coil')
+                c.includes('raw') || c.includes('alu') || c.includes('steel') || c.includes('coil') ||
+                n.includes('raw coil') || n.includes('steel coil') || n.includes('mother length') ||
+                n.includes('zinc ingot') || n.includes('billet') || n.includes('sheet metal coil') ||
+                n.includes('extrusion bar') || n.includes('aluminium mother')
               ) && !n.includes('clamp') && !n.includes('leg') && !n.includes('rafter') && !n.includes('purlin') && !n.includes('rail');
 
-              if (isPureRaw) return { isRaw: true, productType: 'Raw Material', category: 'Raw Material' };
+              if (isPureRaw || c === 'raw material') {
+                let cleanCat = 'Raw Material';
+                if (n.includes('aluminium') || c.includes('aluminium') || c.includes('alu')) cleanCat = 'Aluminium Raw Materials';
+                else if (n.includes('steel') || c.includes('steel')) cleanCat = 'Steel Raw Materials';
+                return { isRaw: true, productType: 'Raw Material', category: cleanCat };
+              }
 
               const accKeywords = [
                 'clamp', 'fastener', 'nut', 'bolt', 'washer', 'clip', 'screw', 't nut',
@@ -2614,40 +2499,51 @@ export default function StockStatusView(props) {
               return { isRaw: false, productType: 'Finished Goods', category: cleanCat };
             };
 
-            // Build comprehensive item list - strictly excluding pure raw materials
-            const rawCombinedList = (itemsList && itemsList.length > 0) ? itemsList.map(it => {
+            const seenItemKeys = new Set();
+            const createRowFromItem = (it) => {
               const itRes = resolveProductCode(it).toLowerCase().trim();
               const codeKey = String(itRes || it.code || it.sku || it.itemId || '').toLowerCase().trim();
               const nameKey = String(it.name || '').toLowerCase().trim();
               const itNorm = normalizeProductName(it.name);
               const itFp = wordFingerprint(nameKey);
               const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (itNorm && rawMatMap.get(itNorm)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
+              const matchedCentral = (codeKey && centralMap.get(codeKey)) || (nameKey && centralMap.get(nameKey));
 
-              const physicalBase = Math.max(0, Number(matchedMat?.physicalStock ?? matchedMat?.openingStock ?? it.physicalStock ?? it.openingStock ?? 0));
+              const physicalBase = Math.max(0, Number(
+                matchedMat?.physicalStock ?? matchedMat?.stockOnHand ?? 
+                matchedCentral?.physicalStock ?? matchedCentral?.onHand ?? 
+                it.physicalStock ?? it.stockOnHand ?? it.stock ?? it.openingStock ?? 0
+              ));
+
               const activeBlocked = Math.max(
                 (codeKey && bomReservedMap.get(codeKey)) || 0,
                 (itNorm && bomReservedMap.get(itNorm)) || 0,
                 (nameKey && bomReservedMap.get(nameKey)) || 0,
-                (itFp && bomReservedMap.get(itFp)) || 0
+                (itFp && bomReservedMap.get(itFp)) || 0,
+                Number(matchedMat?.reserved || 0),
+                Number(matchedCentral?.reserved || 0),
+                Number(it.reserved || 0)
               );
+
               let availableQty = Math.max(0, physicalBase - activeBlocked);
-              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
-                availableQty = Math.max(availableQty, Number(matchedMat.stock));
-              } else if (it.stock !== undefined && !isNaN(it.stock) && Number(it.stock) > 0) {
-                availableQty = Math.max(availableQty, Number(it.stock));
+              if (matchedMat?.availableStock !== undefined && !isNaN(matchedMat.availableStock)) {
+                availableQty = Number(matchedMat.availableStock);
+              } else if (matchedCentral?.availableStock !== undefined && !isNaN(matchedCentral.availableStock)) {
+                availableQty = Number(matchedCentral.availableStock);
+              } else if (it.availableStock !== undefined && !isNaN(it.availableStock)) {
+                availableQty = Number(it.availableStock);
               }
 
-              const rateVal = Number(it.rate || it.price || 250);
+              const rateVal = Number(it.rate || it.price || matchedMat?.unitRate || matchedCentral?.unitRate || 250);
               const totalVal = availableQty * rateVal;
-              const minLvl = Number(it.reorderLevel || it.minLevel || 50);
+              const minLvl = Number(it.reorderLevel || it.minLevel || matchedMat?.minLevel || matchedCentral?.minLevel || 50);
 
               let statusText = 'In Stock';
               if (availableQty === 0) statusText = 'Out of Stock';
               else if (availableQty <= minLvl) statusText = 'Low Stock';
 
-              const classification = classifyStockItem(it.name, it.category, it.material);
+              const classification = classifyStockItem(it.name || matchedMat?.name, it.category || matchedMat?.category || it.cat, it.material || matchedMat?.material);
 
-              // Warehouse rule: Solar panels are stored strictly in Stock Area; all other items in Main Warehouse
               const isSolarPanelItem = (
                 classification.category === 'Solar Panels' ||
                 classification.category === 'Solar Modules' ||
@@ -2656,7 +2552,7 @@ export default function StockStatusView(props) {
                 String(it.category || '').toLowerCase().includes('panel') ||
                 String(it.category || '').toLowerCase().includes('module')
               );
-              const assignedLocation = isSolarPanelItem ? 'Stock Area' : 'Main Warehouse';
+              const assignedLocation = isSolarPanelItem ? 'Stock Area' : (it.location || matchedMat?.store || matchedCentral?.location || 'Main Warehouse');
 
               return {
                 code: it.code || it.sku || it.itemId || (itRes ? itRes.toUpperCase() : 'VRM-ITEM'),
@@ -2673,46 +2569,55 @@ export default function StockStatusView(props) {
                 status: statusText,
                 rawStockNum: availableQty
               };
-            }) : stockRegistry.map(it => {
-              const rawNum = Math.max(0, parseFloat(String(it.stock).replace(/,/g, '')) || 0);
-              const allocNum = parseFloat(String(it.allocated).replace(/,/g, '')) || 0;
-              const avail = Math.max(0, rawNum - allocNum);
-              const classification = classifyStockItem(it.item, it.category, '');
-              const isSolarPanelItem = (
-                classification.category === 'Solar Panels' ||
-                classification.category === 'Solar Modules' ||
-                String(it.item || '').toLowerCase().includes('panel') ||
-                String(it.item || '').toLowerCase().includes('module') ||
-                String(it.category || '').toLowerCase().includes('panel') ||
-                String(it.category || '').toLowerCase().includes('module')
-              );
-              const assignedLocation = isSolarPanelItem ? 'Stock Area' : 'Main Warehouse';
-              return {
-                ...it,
-                location: assignedLocation,
-                productType: classification.productType,
-                isRaw: classification.isRaw,
-                category: classification.category,
-                stock: avail.toLocaleString('en-IN'),
-                rawStockNum: avail
-              };
+            };
+
+            const combinedList = [];
+            (itemsList || []).forEach(it => {
+              if (!it) return;
+              const itRes = resolveProductCode(it).toLowerCase().trim();
+              const codeKey = String(itRes || it.code || it.sku || it.itemId || '').toLowerCase().trim();
+              const nameKey = String(it.name || '').toLowerCase().trim();
+              const uniqueKey = codeKey || nameKey;
+              if (!uniqueKey || seenItemKeys.has(uniqueKey)) return;
+              seenItemKeys.add(uniqueKey);
+              combinedList.push(createRowFromItem(it));
             });
 
-            // Exclude pure raw materials so only Finished Goods and Accessories are shown
-            const combinedList = rawCombinedList.filter(row => !row.isRaw);
+            localRawMats.forEach(rm => {
+              if (!rm) return;
+              const rRes = resolveProductCode(rm).toLowerCase().trim();
+              const codeKey = String(rRes || rm.code || rm.sku || '').toLowerCase().trim();
+              const nameKey = String(rm.name || '').toLowerCase().trim();
+              const uniqueKey = codeKey || nameKey;
+              if (!uniqueKey || seenItemKeys.has(uniqueKey)) return;
+              seenItemKeys.add(uniqueKey);
+              combinedList.push(createRowFromItem(rm));
+            });
 
-            // 4. Calculate primary Product Type counts
+            centralItems.forEach(ci => {
+              if (!ci) return;
+              const cRes = resolveProductCode(ci).toLowerCase().trim();
+              const codeKey = String(cRes || ci.code || ci.sku || '').toLowerCase().trim();
+              const nameKey = String(ci.name || '').toLowerCase().trim();
+              const uniqueKey = codeKey || nameKey;
+              if (!uniqueKey || seenItemKeys.has(uniqueKey)) return;
+              seenItemKeys.add(uniqueKey);
+              combinedList.push(createRowFromItem(ci));
+            });
+
+            // Calculate primary Product Type counts including Raw Materials
             const totalAllProducts = combinedList.length;
             const totalFinishedGoods = combinedList.filter(r => r.productType === 'Finished Goods').length;
             const totalAccessories = combinedList.filter(r => r.productType === 'Accessories').length;
+            const totalRawMaterials = combinedList.filter(r => r.productType === 'Raw Material').length;
 
             const productTypeTabs = [
               { id: 'All', label: 'All Products', count: totalAllProducts, icon: Package },
               { id: 'Finished Goods', label: 'Finished Goods / Structures', count: totalFinishedGoods, icon: Layers },
-              { id: 'Accessories', label: 'Accessories & Fasteners', count: totalAccessories, icon: Boxes }
+              { id: 'Accessories', label: 'Accessories & Fasteners', count: totalAccessories, icon: Boxes },
+              { id: 'Raw Material', label: 'Raw Materials', count: totalRawMaterials, icon: Warehouse }
             ];
 
-            // Dynamic categories for selected product type (never showing Raw Material)
             const dynamicCategories = Array.from(new Set(
               combinedList
                 .filter(r => stockProductTypeTab === 'All' || r.productType === stockProductTypeTab)
@@ -2720,7 +2625,6 @@ export default function StockStatusView(props) {
                 .filter(Boolean)
             )).sort();
 
-            // Calculate status sub-tab counts based on active product type
             const activeTypePool = stockProductTypeTab === 'All'
               ? combinedList
               : combinedList.filter(r => r.productType === stockProductTypeTab);
@@ -2736,7 +2640,19 @@ export default function StockStatusView(props) {
               { id: 'Out of Stock', label: 'Out of Stock', count: totalOutOfStock, bg: '#FEE2E2', fg: '#DC2626' }
             ];
 
-            // 5. Apply product type, status sub-tab, search & dropdown filters
+            // Calculate dynamic health metrics from computed stock items
+            let inStockCount = combinedList.filter(r => r.status === 'In Stock').length;
+            let lowStockCount = combinedList.filter(r => r.status === 'Low Stock').length;
+            let outOfStockCount = combinedList.filter(r => r.status === 'Out of Stock').length;
+
+            const total = combinedList.length || 1;
+            const inStockPct = ((inStockCount / total) * 100).toFixed(1);
+            const lowStockPct = ((lowStockCount / total) * 100).toFixed(1);
+            const outOfStockPct = ((outOfStockCount / total) * 100).toFixed(1);
+
+            const lowestItems = [...combinedList].sort((a, b) => a.rawStockNum - b.rawStockNum).slice(0, 8);
+
+            // Filter for Table
             const filteredList = combinedList.filter(row => {
               if (stockProductTypeTab !== 'All' && row.productType !== stockProductTypeTab) {
                 return false;
@@ -2765,17 +2681,109 @@ export default function StockStatusView(props) {
               return true;
             });
 
-            // 6. Paginate
+            // Paginate
             const totalItems = filteredList.length;
             const totalPages = Math.ceil(totalItems / stockStatusRowsPerPage) || 1;
             const safePage = Math.min(stockStatusPage, totalPages);
             const startIndex = (safePage - 1) * stockStatusRowsPerPage;
             const displayedRows = filteredList.slice(startIndex, startIndex + stockStatusRowsPerPage);
-
             const isAllDisplayedSelected = displayedRows.length > 0 && displayedRows.every(r => selectedStockRows.includes(r.code || r.item));
 
             return (
-              <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+              <>
+                {/* Top Widget Row (Stock Health, Top Low Stock Items) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
+                  {/* Stock Health Card */}
+                  <div className="section-card" style={{ padding: 0, overflow: 'hidden', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ padding: '16px 24px 0 24px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0F172A' }}>Stock Health</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 24px', position: 'relative' }}>
+                      {/* SVG Donut */}
+                      <div style={{ position: 'relative', width: '150px', height: '150px' }}>
+                        <svg viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
+                          <circle cx="18" cy="18" r="15.915" fill="none" stroke="#F1F5F9" strokeWidth="4"></circle>
+                          {/* In Stock segment */}
+                          <circle cx="18" cy="18" r="15.915" fill="none" stroke="#10B981" strokeWidth="4" strokeDasharray={`${inStockPct} ${100 - inStockPct}`} strokeDashoffset="0"></circle>
+                          {/* Low Stock segment */}
+                          <circle cx="18" cy="18" r="15.915" fill="none" stroke="#F59E0B" strokeWidth="4" strokeDasharray={`${lowStockPct} ${100 - lowStockPct}`} strokeDashoffset={`-${inStockPct}`}></circle>
+                          {/* Out of Stock segment */}
+                          <circle cx="18" cy="18" r="15.915" fill="none" stroke="#EF4444" strokeWidth="4" strokeDasharray={`${outOfStockPct} ${100 - outOfStockPct}`} strokeDashoffset={`-${parseFloat(inStockPct) + parseFloat(lowStockPct)}`}></circle>
+                        </svg>
+                        <div style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          pointerEvents: 'none'
+                        }}>
+                          <span style={{ fontSize: '26px', fontWeight: 'bold', color: '#0F172A', fontFamily: 'Inter, system-ui' }}>{inStockPct}%</span>
+                          <span style={{ fontSize: '13px', color: '#10B981', fontWeight: '500', marginTop: '2px' }}>Healthy</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Divided Bottom section: Stock Health Breakdown */}
+                    <div style={{ borderTop: '1px solid #E2E8F0', padding: '16px 24px', backgroundColor: '#fafbfc' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1E293B', display: 'block', marginBottom: '12px' }}>
+                        Stock Health Breakdown
+                      </span>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {[
+                          { name: 'In Stock', count: `${inStockCount.toLocaleString('en-IN')} Items`, percentage: `${inStockPct}%`, color: '#10B981' },
+                          { name: 'Low Stock', count: `${lowStockCount.toLocaleString('en-IN')} Items`, percentage: `${lowStockPct}%`, color: '#F59E0B' },
+                          { name: 'Out of Stock', count: `${outOfStockCount.toLocaleString('en-IN')} Items`, percentage: `${outOfStockPct}%`, color: '#EF4444' }
+                        ].map((legend, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px', color: '#334155' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: legend.color, borderRadius: '50%', flexShrink: 0 }}></span>
+                              <span style={{ fontWeight: '500' }}>{legend.name}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                              <span style={{ color: '#64748b' }}>{legend.count}</span>
+                              <strong style={{ color: '#1e293b', minWidth: '40px', textAlign: 'right' }}>{legend.percentage}</strong>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Top Low Stock Items Card */}
+                  <div className="section-card" style={{ padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <strong style={{ fontSize: '14px', color: '#0F172A' }}>Top Low Stock Items</strong>
+                        <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 'bold' }}>Live Data</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {lowestItems.map((item, idx) => {
+                          let color = '#10B981';
+                          if (item.stock === 0) color = '#EF4444';
+                          else if (item.stock <= item.minLevel) color = '#F59E0B';
+
+                          return (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: idx === lowestItems.length - 1 ? 'none' : '1px solid #F8FAFC', paddingBottom: idx === lowestItems.length - 1 ? 0 : '8px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '500', color: '#475569' }}>{item.name}</span>
+                              <strong style={{ fontSize: '12px', color }}>{item.stock.toLocaleString('en-IN')}</strong>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Row: Stock Status List Table (Full Width) */}
+                <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
                 {/* Header & Quick Action Row */}
                 <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -3113,6 +3121,22 @@ export default function StockStatusView(props) {
                                   }}>
                                     <Layers size={11} style={{ color: '#2563EB' }} />
                                     Finished Good
+                                  </span>
+                                ) : row.productType === 'Raw Material' ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    backgroundColor: '#FEF3C7',
+                                    color: '#B45309',
+                                    border: '1px solid #FDE68A'
+                                  }}>
+                                    <Warehouse size={11} style={{ color: '#D97706' }} />
+                                    Raw Material
                                   </span>
                                 ) : (
                                   <span style={{
@@ -3475,11 +3499,11 @@ export default function StockStatusView(props) {
                               padding: '2px 8px',
                               borderRadius: '6px',
                               fontWeight: '700',
-                              backgroundColor: viewingStockItem.productType === 'Finished Goods' ? '#EFF6FF' : '#FAF5FF',
-                              color: viewingStockItem.productType === 'Finished Goods' ? '#1D4ED8' : '#7E22CE',
-                              border: `1px solid ${viewingStockItem.productType === 'Finished Goods' ? '#BFDBFE' : '#E9D5FF'}`
+                              backgroundColor: viewingStockItem.productType === 'Finished Goods' ? '#EFF6FF' : (viewingStockItem.productType === 'Raw Material' ? '#FEF3C7' : '#FAF5FF'),
+                              color: viewingStockItem.productType === 'Finished Goods' ? '#1D4ED8' : (viewingStockItem.productType === 'Raw Material' ? '#B45309' : '#7E22CE'),
+                              border: `1px solid ${viewingStockItem.productType === 'Finished Goods' ? '#BFDBFE' : (viewingStockItem.productType === 'Raw Material' ? '#FDE68A' : '#E9D5FF')}`
                             }}>
-                              {viewingStockItem.productType === 'Finished Goods' ? 'Finished Good' : 'Accessory'}
+                              {viewingStockItem.productType === 'Finished Goods' ? 'Finished Good' : (viewingStockItem.productType === 'Raw Material' ? 'Raw Material' : 'Accessory')}
                             </span>
                             <span style={{ fontSize: '12px', color: '#64748B' }}>
                               Category: <strong style={{ color: '#334155' }}>{viewingStockItem.category}</strong> &bull; Warehouse: <strong style={{ color: '#334155' }}>{viewingStockItem.location}</strong>
@@ -3591,6 +3615,7 @@ export default function StockStatusView(props) {
                   </div>
                 )}
               </div>
+              </>
             );
           })()}
 

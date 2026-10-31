@@ -368,9 +368,9 @@ function App() {
     } else if (norm.includes('tech support') || norm.includes('technical support')) {
       localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
       localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');
-    } else if (norm.includes('sales head')) {
-      localStorage.setItem('controlroom_logged_emp_id', 'SH-001');
-      localStorage.setItem('controlroom_logged_user_name', 'Sales Head');
+    } else if (norm.includes('sales')) {
+      localStorage.setItem('controlroom_logged_emp_id', 'SE-001');
+      localStorage.setItem('controlroom_logged_user_name', 'Sales Executive');
     } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
       localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
       localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
@@ -690,7 +690,7 @@ function App() {
           <Suspense fallback={<AppViewLoadingFallback activeTab={activeTab} />}>
             {(((userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer') && (activeTab === 'Dashboard' || activeTab === 'Admin Dashboard' || activeTab === 'Developer Console' || activeTab === 'Developer Portal')) || (['User Management', 'System Health', 'Active Sessions', 'Backup Vault', 'Developer Console', 'Developer Portal'].includes(activeTab) && (userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer' || userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Admin' || userRole === 'Super Admin'))) ? (
               <TechnicalAdminDashboardView userRole={userRole} activeTab={activeTab} onNavigateTab={handleTabChange} />
-            ) : (activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
+            ) : (activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch' || userRole === 'Dispatch Head' || userRole.includes('Dispatch') || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
               <ProductionAdminView activeTab={activeTab} userRole={userRole} />
             ) : (activeTab === 'Performa Invoice' || activeTab === 'Proforma Invoice') ? (
               <PerformaInvoiceView 
@@ -722,7 +722,7 @@ function App() {
               />
             ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
               <InventoryAutoConversion />
-            ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
+            ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales' || userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
               <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard' && activeTab !== 'Billing Dashboard' && activeTab !== 'Tech Support Dashboard') ? (
               ((userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) && (activeTab === 'BOM Orders' || activeTab === 'BOM' || activeTab === 'Sales BOM' || activeTab === 'BOM / Routing')) ? (
@@ -745,7 +745,7 @@ function App() {
               )
             ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
               <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-            ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts'))) ? (
+            ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts' || userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts' || (userRole || '').toLowerCase().includes('account')))) ? (
               <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
             ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
               <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />

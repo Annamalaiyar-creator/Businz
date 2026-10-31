@@ -782,7 +782,7 @@ export default function ProductionViewsEngine(props) {
     setBomCancelPromptModal(null);
     setCancellationReasonInput('');
 
-    alert(`✅ BOM (${bCode}) has been CANCELLED.\nReason: "${cleanReason}"\nSales person (${salesPerson.replace(/\\s*\\([^)]*\\)/g, '').trim()}) has been notified and all items have been restored to live inventory.`);
+    alert(`BOM (${bCode}) has been CANCELLED.\nReason: "${cleanReason}"\nSales person (${salesPerson.replace(/\\s*\\([^)]*\\)/g, '').trim()}) has been notified and all items have been restored to live inventory.`);
   };
 
   // Validation for Production BOM creation

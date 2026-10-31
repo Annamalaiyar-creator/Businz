@@ -3,7 +3,8 @@ import {
   Plus, Check, Trash2, Eye, FileText, Search, AlertCircle, AlertTriangle, X, XCircle,
   CheckCircle, Clock, Calendar, Edit3, RotateCcw, UploadCloud, ChevronDown, ChevronUp,
   Truck, ShoppingCart, Upload, Printer, Download, Layers, CreditCard, Bell, MoreHorizontal, FileCheck, CheckSquare,
-  Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save, Boxes, User
+  Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save, Boxes, User,
+  ArrowUpRight, ArrowDownRight, Receipt, TrendingUp, Factory
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -21,6 +22,7 @@ import ModernDateRangePicker from '../ModernDateRangePicker';
 import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../../services/customerService';
 import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from '../PerformaInvoiceView';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
+import ExecutiveOrderDossierModal from './ExecutiveOrderDossierModal';
 import LrUploadPopupModal from './LrUploadPopupModal';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch } from '../../services/notificationService';
 import { getNextSequence } from '../../utils/sequenceGenerator';
@@ -338,7 +340,68 @@ export default function BomOrdersView(props) {
   }, []);
 
   // Executive Role Check (CEO / MD is View-Only for BOM Orders)
-  const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director';
+  const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || (typeof window !== 'undefined' && localStorage.getItem('controlroom_user_role') === 'CEO');
+  const [executiveDossierOrder, setExecutiveDossierOrder] = useState(null);
+
+  const ceoMetrics = useMemo(() => {
+    if (!isCeo || !Array.isArray(bomStore)) return null;
+
+    const validBoms = bomStore.filter(b => b && !b.cancelled && b.status !== 'Cancelled' && b.status !== 'CANCELLED');
+    const totalOrderBookVal = validBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const utcToday = now.toISOString().split('T')[0];
+    const isToday = (dStr) => {
+      if (!dStr) return false;
+      const s = String(dStr);
+      return s.startsWith(localToday) || s.startsWith(utcToday);
+    };
+
+    const isDispatched = (b) => {
+      const s = String(b.status || '').toLowerCase();
+      return Boolean(b.dispatchedAt) || s.includes('dispatched') || s === 'completed';
+    };
+
+    const formatCurrencyShort = (num) => {
+      if (!num || isNaN(num)) return '₹ 0.00 L';
+      if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+      return `₹ ${(num / 100000).toFixed(2)} L`;
+    };
+
+    // 1. Total Order Book
+    const totalOrderBookFormatted = formatCurrencyShort(totalOrderBookVal);
+
+    // 2. Today ALL BOM
+    const todayAllBoms = validBoms.filter(b => isToday(b.date) || isToday(b.createdAt));
+    const todayAllVal = todayAllBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    // 3. Dispatched BOM today
+    const todayDispatchedBoms = validBoms.filter(b => {
+      if (!isDispatched(b)) return false;
+      return isToday(b.dispatchedAt) || isToday(b.updatedAt) || isToday(b.date) || isToday(b.createdAt);
+    });
+    const todayDispatchedVal = todayDispatchedBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    // 4. Pending BOMs
+    const pendingBoms = validBoms.filter(b => !isDispatched(b));
+    const pendingVal = pendingBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    return {
+      totalOrderBookVal,
+      totalOrderBookFormatted,
+      validBomsCount: validBoms.length,
+
+      todayAllCount: todayAllBoms.length,
+      todayAllValFormatted: formatCurrencyShort(todayAllVal),
+
+      todayDispatchedCount: todayDispatchedBoms.length,
+      todayDispatchedValFormatted: formatCurrencyShort(todayDispatchedVal),
+
+      pendingCount: pendingBoms.length,
+      pendingValFormatted: formatCurrencyShort(pendingVal)
+    };
+  }, [isCeo, bomStore]);
 
   // Form & Modals State
   const [showBOMForm, setShowBOMForm] = useState(false);
@@ -681,8 +744,8 @@ export default function BomOrdersView(props) {
   // Management & Fulfillment roles (Dispatch Head, Dispatch, Production Head, Floor Supervisor, Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Procurement Head, Billing) see all BOMs.
   const isRestrictedSalesUser = Boolean(
     userRole &&
-    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
-    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
   );
 
   const visibleBomStore = React.useMemo(() => {
@@ -5424,8 +5487,8 @@ export default function BomOrdersView(props) {
                             salesPerson: sanitizedNewBom.salesPerson
                           });
                           alert(sanitizedNewBom.sourcePiNo
-                            ? `✅ BOM (${finalAssignedCode}) successfully created from Proforma Invoice (${sanitizedNewBom.sourcePiNo}) and sent to Dispatch for packing!`
-                            : `✅ BOM (${finalAssignedCode}) successfully created and sent to Dispatch for packing!`);
+                            ? `BOM (${finalAssignedCode}) successfully created from Proforma Invoice (${sanitizedNewBom.sourcePiNo}) and sent to Dispatch for packing!`
+                            : `BOM (${finalAssignedCode}) successfully created and sent to Dispatch for packing!`);
                         } else {
                           alert(sanitizedNewBom.sourcePiNo
                             ? `📝 BOM (${finalAssignedCode}) saved as Draft from Proforma Invoice (${sanitizedNewBom.sourcePiNo}).`
@@ -5683,7 +5746,7 @@ export default function BomOrdersView(props) {
                   borderRadius: '12px', border: '1px solid #A5F3FC',
                   display: 'inline-flex', alignItems: 'center', gap: '4px'
                 }}>
-                  👁️ EXECUTIVE VIEW ONLY
+                  EXECUTIVE VIEW ONLY
                 </span>
               )}
             </div>
@@ -5935,7 +5998,7 @@ export default function BomOrdersView(props) {
                   });
 
                   setConfirmingBomModal(null);
-                  alert(`✅ BOM (${confirmingBomModal.bomCode}) successfully verified by Sales and forwarded to Dispatch!`);
+                  alert(`BOM (${confirmingBomModal.bomCode}) successfully verified by Sales and forwarded to Dispatch!`);
                 } finally {
                   setIsConfirmingForward(false);
                 }
@@ -7596,6 +7659,150 @@ export default function BomOrdersView(props) {
         </div>
       </div>
 
+      {/* CEO EXECUTIVE FINANCIAL RIBBON (BUSINZ CANONICAL DESIGN SYSTEM) */}
+      {isCeo && ceoMetrics && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '10px',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}>
+          {/* Tile 1: Total Order Book */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #EAEFEF',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Total Order Book Value
+              </span>
+              <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Receipt size={13} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px' }}>
+                {ceoMetrics.totalOrderBookFormatted}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '11px', fontWeight: '800', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1.5px 6px', borderRadius: '6px' }}>
+                <ArrowUpRight style={{ width: '12px', height: '12px' }} />
+                {ceoMetrics.validBomsCount} Orders
+              </span>
+            </div>
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+              <span>Confirmed orders </span>
+              <span style={{ color: '#059669', fontWeight: '800' }}>Active Order Book</span>
+            </div>
+          </div>
+
+          {/* Tile 2: Today ALL BOM */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #EAEFEF',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Today ALL BOM
+              </span>
+              <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Calendar size={13} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '20px', fontWeight: '900', color: '#4F46E5', letterSpacing: '-0.5px' }}>
+                {ceoMetrics.todayAllCount} Orders
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '11px', fontWeight: '800', color: '#4F46E5', backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', padding: '1.5px 6px', borderRadius: '6px' }}>
+                {ceoMetrics.todayAllValFormatted}
+              </span>
+            </div>
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+              <span>Registered today </span>
+              <span style={{ color: '#4F46E5', fontWeight: '800' }}>Daily Bookings</span>
+            </div>
+          </div>
+
+          {/* Tile 3: Dispatched BOM today */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #EAEFEF',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Dispatched BOM today
+              </span>
+              <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Truck size={13} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '20px', fontWeight: '900', color: '#059669', letterSpacing: '-0.5px' }}>
+                {ceoMetrics.todayDispatchedCount} Orders
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '11px', fontWeight: '800', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1.5px 6px', borderRadius: '6px' }}>
+                {ceoMetrics.todayDispatchedValFormatted}
+              </span>
+            </div>
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+              <span>Outward fulfillment </span>
+              <span style={{ color: '#059669', fontWeight: '800' }}>Cleared & Dispatched</span>
+            </div>
+          </div>
+
+          {/* Tile 4: Pending BOMs */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #EAEFEF',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Pending BOMs
+              </span>
+              <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#FFFBEB', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={13} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '20px', fontWeight: '900', color: '#D97706', letterSpacing: '-0.5px' }}>
+                {ceoMetrics.pendingCount} Orders
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '11px', fontWeight: '800', color: '#D97706', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '1.5px 6px', borderRadius: '6px' }}>
+                {ceoMetrics.pendingValFormatted}
+              </span>
+            </div>
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+              <span>In-progress pipeline </span>
+              <span style={{ color: '#D97706', fontWeight: '800' }}>Awaiting Dispatch</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ADDRESS PROOF RE-UPLOAD REQUEST NOTIFICATION BANNER */}
       {(bomStore || []).some(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && (() => {
         const pendingBoms = (bomStore || []).filter(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales');
@@ -7910,37 +8117,34 @@ export default function BomOrdersView(props) {
                         style={{ padding: '12px 14px', fontWeight: 'bold', color: '#2563EB', cursor: 'pointer' }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <span>{row.code}</span>
-                          {row.sourcePiNo && (
-                            <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
-                                  detail: { tab: 'Proforma Invoice', targetPi: row.sourcePiNo } 
-                                }));
-                                if (typeof props.onChangeTab === 'function') {
-                                  props.onChangeTab('Proforma Invoice');
-                                }
-                              }}
-                              title={`Converted from Proforma Invoice ${row.sourcePiNo} - Click to view PI`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                fontSize: '11px',
-                                color: '#0E7490',
-                                backgroundColor: '#ECFEFF',
-                                border: '1px solid #A5F3FC',
-                                borderRadius: '4px',
-                                padding: '1px 6px',
-                                width: 'fit-content',
-                                cursor: 'pointer',
-                                fontWeight: '700'
-                              }}
-                            >
-                              🔗 PI: {row.sourcePiNo} ↗
-                            </span>
-                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{row.code}</span>
+                            {isCeo && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExecutiveDossierOrder(row);
+                                }}
+                                title="Open Executive 360° Order Dossier"
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#0F172A',
+                                  color: '#38BDF8',
+                                  border: '1px solid #1E293B',
+                                  fontSize: '10px',
+                                  fontWeight: '800',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}
+                              >
+                                360° Dossier
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td
@@ -8214,6 +8418,40 @@ export default function BomOrdersView(props) {
           <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px', paddingRight: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
             <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedRows.length}</strong> Selected
           </span>
+
+          {isCeo && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+                const targetRow = codeVal
+                  ? ((filteredRows || []).find(r => r.code === codeVal || r.bomCode === codeVal || r.id === codeVal) || (bomStore || []).find(r => r.code === codeVal || r.bomCode === codeVal || r.id === codeVal))
+                  : null;
+                if (targetRow) {
+                  setExecutiveDossierOrder(targetRow);
+                }
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '50px',
+                backgroundColor: '#0F172A',
+                color: '#38BDF8',
+                border: '1px solid #1E293B',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.2)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
+              }}
+            >
+              <span>360° Dossier</span>
+            </button>
+          )}
 
           {/* View Details - Always accessible across all logins (Sales, Admin, etc.) and statuses */}
           <button
@@ -9409,7 +9647,7 @@ export default function BomOrdersView(props) {
                       setUploadPaymentModal(null);
                       setPaymentProofFile(null);
                       setModalBalanceAmount('');
-                      alert('✅ Payment proof uploaded and saved successfully!');
+                      alert('Payment proof uploaded and saved successfully!');
                     } catch (err) {
                       alert(`Payment upload failed: ${err.message}`);
                     } finally {
@@ -9741,7 +9979,15 @@ export default function BomOrdersView(props) {
           setBomStore={setBomStore}
         />
       )}
+
+
+      {/* EXECUTIVE 360° ORDER DOSSIER MODAL */}
+      {executiveDossierOrder && (
+        <ExecutiveOrderDossierModal
+          order={executiveDossierOrder}
+          onClose={() => setExecutiveDossierOrder(null)}
+        />
+      )}
     </div>
   );
 }
-

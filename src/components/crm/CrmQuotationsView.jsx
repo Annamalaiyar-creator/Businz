@@ -472,8 +472,8 @@ export default function CrmQuotationsView({
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
   const isRestrictedSalesUser = Boolean(
     userRole &&
-    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
-    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
   );
 
   const visibleQuotes = useMemo(() => {

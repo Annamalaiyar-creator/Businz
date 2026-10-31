@@ -2362,7 +2362,7 @@ export default function CreateBomFormPage(props) {
                         salesPerson: sanitizedNewBom.salesPerson,
                         salesPersonCode: sanitizedNewBom.salesPersonCode || sanitizedNewBom.createdById
                       });
-                      alert(`✅ BOM (${finalAssignedCode}) created successfully and sent to Dispatch for packing!`);
+                      alert(`BOM (${finalAssignedCode}) created successfully and sent to Dispatch for packing!`);
                     } else {
                       alert(`📝 BOM (${finalAssignedCode}) saved as Draft.`);
                     }

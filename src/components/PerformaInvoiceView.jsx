@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock, GitBranch } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
@@ -95,7 +95,8 @@ export const GST_STATE_MAP = {
 };
 
 export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procurement Head', onNavigateTab, targetPiNo, clearTargetPi }) {
-  const isSalesRole = userRole === 'Sales Head' || userRole === 'Sales Executive';
+  const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || (typeof window !== 'undefined' && localStorage.getItem('controlroom_user_role') === 'CEO');
+  const isSalesRole = userRole === 'Sales' || userRole === 'Sales Head' || userRole === 'Sales Executive';
   const storageKey = isSalesRole ? 'controlroom_sales_pi_store' : 'controlroom_procurement_pi_store';
 
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'create' | 'edit'
@@ -355,8 +356,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
   const isRestrictedSalesUser = Boolean(
     userRole &&
-    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
-    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
   );
 
   const getEffectiveSalesPerson = () => {
@@ -420,6 +421,63 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       return false;
     });
   }, [piList, isRestrictedSalesUser, currentEmpId, currentEmpName, currentLoggedEmail]);
+
+  const piMetrics = useMemo(() => {
+    const list = Array.isArray(visiblePIList) ? visiblePIList : [];
+    
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const utcToday = now.toISOString().split('T')[0];
+    const isToday = (dStr) => {
+      if (!dStr) return false;
+      const s = String(dStr);
+      return s.startsWith(localToday) || s.startsWith(utcToday);
+    };
+
+    const cleanNum = (val) => {
+      if (typeof val === 'number') return isNaN(val) ? 0 : val;
+      if (!val) return 0;
+      const n = parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+      return isNaN(n) ? 0 : n;
+    };
+
+    const formatCurrencyShort = (num) => {
+      if (!num || isNaN(num)) return '₹ 0.00 L';
+      if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+      return `₹ ${(num / 100000).toFixed(2)} L`;
+    };
+
+    // 1. Total PIs today
+    const todayPis = list.filter(pi => {
+      if (!pi) return false;
+      return isToday(pi.piDate) || isToday(pi.date) || isToday(pi.createdAt);
+    });
+    const todayPiVal = todayPis.reduce((acc, pi) => acc + cleanNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+    // 2. Converted to BOM today
+    const todayConvertedPis = list.filter(pi => {
+      if (!pi) return false;
+      const matchedBoms = getConvertedBomsForPi(pi);
+      if (matchedBoms.length > 0) {
+        return matchedBoms.some(b => isToday(b.date) || isToday(b.createdAt)) || isToday(pi.convertedAt) || isToday(pi.updatedAt);
+      }
+      if (pi.status === 'Converted to BOM' || pi.statusType === 'converted') {
+        return isToday(pi.convertedAt) || isToday(pi.updatedAt) || isToday(pi.date);
+      }
+      return false;
+    });
+    const todayConvertedVal = todayConvertedPis.reduce((acc, pi) => acc + cleanNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+    return {
+      todayPiCount: todayPis.length,
+      todayPiValFormatted: formatCurrencyShort(todayPiVal),
+      todayConvertedCount: todayConvertedPis.length,
+      todayConvertedValFormatted: formatCurrencyShort(todayConvertedVal),
+      conversionRate: todayPis.length > 0 
+        ? `${((todayConvertedPis.length / todayPis.length) * 100).toFixed(0)}% Converted`
+        : '0% Converted'
+    };
+  }, [visiblePIList, bomList]);
 
   useEffect(() => {
     const loadPiData = async () => {
@@ -668,7 +726,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         });
       }
 
-      showTopToast(`✅ Proforma Invoice ${cleanNo} successfully pushed to Zoho Books as Quote #${estNo}!`, 'success', 6000);
+      showTopToast(`Proforma Invoice ${cleanNo} successfully pushed to Zoho Books as Quote #${estNo}!`, 'success', 6000);
     } catch (err) {
       console.error('[Zoho Push Error]:', err);
       showTopToast(`❌ Zoho Push Failed: ${err.message}`, 'error', 7000);
@@ -2590,7 +2648,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         if (isDraft) {
           showTopToast(`📝 Proforma Invoice (${finalEstNo}) for ${safeCustomer} has been saved as Draft in BUSINZ database.`, 'info', 5000);
         } else {
-          showTopToast(`✅ Proforma Invoice (${finalEstNo}) for ${safeCustomer} stored permanently in BUSINZ database!`, 'success', 5000);
+          showTopToast(`Proforma Invoice (${finalEstNo}) for ${safeCustomer} stored permanently in BUSINZ database!`, 'success', 5000);
         }
       } catch (saveErr) {
         console.error('[ESTIMATE DB SAVE ERROR]', saveErr);
@@ -3107,51 +3165,128 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button
-                  onClick={() => {
-                    resetForm();
-                    setEditIdx(null);
-                    setViewMode('create');
-                    setPiNumber('');
-                  }}
-                  style={{
-                    backgroundColor: '#0E7490',
-                    border: 'none',
-                    color: 'white',
-                    height: '40px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '0 6px 0 20px',
-                    borderRadius: '50px',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
-                    transition: 'all 0.2s ease-in-out',
-                    flexShrink: 0
-                  }}
-                >
-                  <span>Create PI</span>
-                  <div style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    backgroundColor: '#FFFFFF',
-                    color: '#0E7490',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-                  }}>
-                    <ArrowRight style={{ width: '16px', height: '16px', color: '#0E7490' }} />
-                  </div>
-                </button>
-              </div>
+              {!isCeo && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={() => {
+                      resetForm();
+                      setEditIdx(null);
+                      setViewMode('create');
+                      setPiNumber('');
+                    }}
+                    style={{
+                      backgroundColor: '#0E7490',
+                      border: 'none',
+                      color: 'white',
+                      height: '40px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '0 6px 0 20px',
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
+                      transition: 'all 0.2s ease-in-out',
+                      flexShrink: 0
+                    }}
+                  >
+                    <span>Create PI</span>
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: '#FFFFFF',
+                      color: '#0E7490',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      <ArrowRight style={{ width: '16px', height: '16px', color: '#0E7490' }} />
+                    </div>
+                  </button>
+                </div>
+              )}
             </div>
 
+            {/* PI OPERATIONS & CONVERSION KPI RIBBON (BUSINZ DESIGN SYSTEM) */}
+            {piMetrics && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: '12px',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}>
+                {/* Tile 1: Total PIs Today */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #EAEFEF',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Total PIs Today
+                    </span>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileText size={14} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '22px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px' }}>
+                      {piMetrics.todayPiCount} Orders
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '6px' }}>
+                      {piMetrics.todayPiValFormatted}
+                    </span>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+                    <span>Commercial pipeline </span>
+                    <span style={{ color: '#0E7490', fontWeight: '800' }}>New PIs Authored Today</span>
+                  </div>
+                </div>
 
+                {/* Tile 2: Converted to BOM Today */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #EAEFEF',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Converted to BOM Today
+                    </span>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <GitBranch size={14} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '22px', fontWeight: '900', color: '#059669', letterSpacing: '-0.5px' }}>
+                      {piMetrics.todayConvertedCount} Orders
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '6px' }}>
+                      {piMetrics.todayConvertedValFormatted}
+                    </span>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+                    <span>Production handoff </span>
+                    <span style={{ color: '#059669', fontWeight: '800' }}>{piMetrics.conversionRate}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 1. FILTERS & SEARCH ROW CARD */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -3278,7 +3413,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             {/* 3. MAIN DATA TABLE MATCHING EXACT REFERENCE DESIGN */}
             <div className="section-card" style={{ padding: 0, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
               <div style={{ overflowX: 'auto', width: '100%' }}>
-                <table className="custom-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                       <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
@@ -3289,11 +3424,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                          />
                       </th>
-                      <th style={{ width: '150px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
-                      <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
-                      <th style={{ width: '160px', minWidth: '150px', padding: '12px 14px', boxSizing: 'border-box' }}>GST No.</th>
-                      <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
-                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
+                      <th style={{ width: '140px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
+                      <th style={{ minWidth: '200px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
+                      <th style={{ width: '160px', minWidth: '150px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
+                      <th style={{ width: '150px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>GST No.</th>
+                      <th style={{ width: '120px', minWidth: '110px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
+                      <th style={{ width: '140px', minWidth: '120px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
                       <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                     </tr>
                   </thead>
@@ -3301,7 +3437,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     {tableLoading ? (
                       <>
                         <tr style={{ backgroundColor: '#F0FDFA' }}>
-                          <td colSpan={7} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
+                          <td colSpan={8} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <div className="businz-spin-ring" />
@@ -3334,6 +3470,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
                             </td>
                             <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '100px', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '110px', height: '14px' }} />
                             </td>
                             <td style={{ padding: '12px 14px' }}>
@@ -3350,11 +3489,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </>
                     ) : filteredPIList.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                        <td colSpan={8} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <FileText size={32} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Proforma Invoices found</span>
-                            <span style={{ fontSize: '12px', color: '#94A3B8' }}>No records match your active filter or search query. Click "+ Create Proforma Invoice" above to author a new quotation.</span>
+                            <span style={{ fontSize: '12px', color: '#94A3B8' }}>
+                              {isCeo
+                                ? 'No records match your active filter or search query.'
+                                : 'No records match your active filter or search query. Click "+ Create Proforma Invoice" above to author a new quotation.'}
+                            </span>
                             {(searchQuery || statusFilter !== 'All' || piTab !== 'All') && (
                               <button
                                 type="button"
@@ -3462,6 +3605,36 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-block' }}>
                                   {normalizePaymentTerm(pi.paymentTerms || pi.paymentType)}
                                 </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 14px', color: '#1E293B' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{
+                                  width: '26px',
+                                  height: '26px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#ECFEFF',
+                                  color: '#0E7490',
+                                  border: '1px solid #A5F3FC',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  flexShrink: 0
+                                }}>
+                                  {(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'S')[0]?.toUpperCase()}
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Direct / Admin'}
+                                  </div>
+                                  {pi.salesPersonCode && (
+                                    <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                      {pi.salesPersonCode}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td style={{ padding: '12px 14px', fontFamily: 'monospace', color: '#475569' }}>{pi.gstNo || '—'}</td>
@@ -6358,23 +6531,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           </>
                         )}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRevertPiToIssued(selectedPi)}
-                        title="Disconnect BOM and revert this PI back to Issued status"
-                        style={{
-                          padding: '8px 14px',
-                          backgroundColor: '#FFF1F2',
-                          color: '#E11D48',
-                          border: '1px solid #FECDD3',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✕ Revert to Issued
-                      </button>
                     </div>
                   </div>
                 )}
@@ -6951,22 +7107,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                   {isConverted ? (
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleRevertPiToIssued(selectedPi)}
-                        style={{
-                          padding: '10px 16px',
-                          borderRadius: '10px',
-                          border: '1.5px solid #CBD5E1',
-                          backgroundColor: '#FFFFFF',
-                          color: '#64748B',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Revert to Issued (Unlink BOM)
-                      </button>
                       <button
                         type="button"
                         onClick={() => {
