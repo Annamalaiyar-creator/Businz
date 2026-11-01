@@ -81,6 +81,21 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
   }
 
   if (
+    raw === 'packed — awaiting sales payment proof' ||
+    raw === 'packed - awaiting sales payment proof' ||
+    raw === 'partially packed — awaiting sales payment proof' ||
+    raw.includes('awaiting sales payment proof')
+  ) {
+    return {
+      label: customLabel || 'Packed — Awaiting Sales Payment Proof',
+      bg: '#fef3c7',
+      color: '#b45309',
+      border: '1.5px solid #f59e0b',
+      Icon: IconAlert
+    };
+  }
+
+  if (
     raw === 'packed & ready for dispatch' ||
     raw === 'packed' ||
     raw === 'packing verified' ||

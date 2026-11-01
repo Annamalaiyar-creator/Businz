@@ -901,7 +901,7 @@ export function toConsumerBom(row) {
     cgstAmount: Number(row.cgst_amount || 0),
     sgstAmount: Number(row.sgst_amount || 0),
     grandTotal: Number(row.grand_total || 0),
-    cancelled: Boolean(row.cancelled || extraData.cancelled),
+    cancelled: Boolean(row.cancelled || extraData.cancelled || String(row.status || '').toLowerCase().includes('cancel')),
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancelledByRole: extraData.cancelledByRole || null,
@@ -1003,6 +1003,15 @@ export function toDatabaseBomRow(item) {
   if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
   if (item.invoiceNo) mergedExtra.invoiceNo = item.invoiceNo;
   if (item.destination) mergedExtra.destination = item.destination;
+  if (item.cancelled !== undefined || String(item.status || '').toLowerCase().includes('cancel')) {
+    mergedExtra.cancelled = Boolean(item.cancelled || String(item.status || '').toLowerCase().includes('cancel'));
+  }
+  if (item.cancelledAt) mergedExtra.cancelledAt = item.cancelledAt;
+  if (item.cancelledBy) mergedExtra.cancelledBy = item.cancelledBy;
+  if (item.cancelledByRole) mergedExtra.cancelledByRole = item.cancelledByRole;
+  if (item.cancelledByTeam) mergedExtra.cancelledByTeam = item.cancelledByTeam;
+  if (item.cancelledByNameAndRole) mergedExtra.cancelledByNameAndRole = item.cancelledByNameAndRole;
+  if (item.cancellationReason) mergedExtra.cancellationReason = item.cancellationReason;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
@@ -1768,7 +1777,7 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
 
     const piNo = String(b.sourcePiNo || b.source_pi_no || b.piNo || '').trim().toLowerCase();
 
-    // 1. If code was already seen, merge in place (preferring higher workflow progression)
+    // 1. If code was already seen, merge in place (preferring higher workflow progression, honoring legitimate cancellations)
     if (seenCodes.has(code)) {
       const idx = seenCodes.get(code);
       const existing = resolvedList[idx];
@@ -1788,6 +1797,31 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
         : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
           ? 'PARTIALLY_PACKED'
           : (b.packingStatus || existing.packingStatus || null);
+
+      // Check if either record is cancelled (Cancellations MUST be honored and never regressed)
+      const isBCancelled = Boolean(b.cancelled || String(b.status || '').toLowerCase().includes('cancel'));
+      const isExistingCancelled = Boolean(existing.cancelled || String(existing.status || '').toLowerCase().includes('cancel'));
+      const isCancelledMerge = isBCancelled || isExistingCancelled;
+      const cancelledObj = isBCancelled ? b : existing;
+
+      if (isCancelledMerge) {
+        resolvedList[idx] = {
+          ...existing,
+          ...b,
+          status: 'Cancelled & Stock Restored',
+          cancelled: true,
+          stockBlocked: false,
+          cancellationReason: cancelledObj.cancellationReason || b.cancellationReason || existing.cancellationReason || '',
+          cancelledBy: cancelledObj.cancelledBy || b.cancelledBy || existing.cancelledBy || null,
+          cancelledByRole: cancelledObj.cancelledByRole || b.cancelledByRole || existing.cancelledByRole || null,
+          cancelledByTeam: cancelledObj.cancelledByTeam || b.cancelledByTeam || existing.cancelledByTeam || null,
+          cancelledByNameAndRole: cancelledObj.cancelledByNameAndRole || b.cancelledByNameAndRole || existing.cancelledByNameAndRole || null,
+          cancelledAt: cancelledObj.cancelledAt || b.cancelledAt || existing.cancelledAt || null,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus
+        };
+        continue;
+      }
 
       resolvedList[idx] = newRank >= existingRank ? {
         ...existing,
@@ -1851,6 +1885,31 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
         : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
           ? 'PARTIALLY_PACKED'
           : (b.packingStatus || existing.packingStatus || null);
+
+      // Check if either record is cancelled (Cancellations MUST be honored and never regressed)
+      const isBCancelled = Boolean(b.cancelled || String(b.status || '').toLowerCase().includes('cancel'));
+      const isExistingCancelled = Boolean(existing.cancelled || String(existing.status || '').toLowerCase().includes('cancel'));
+      const isCancelledMerge = isBCancelled || isExistingCancelled;
+      const cancelledObj = isBCancelled ? b : existing;
+
+      if (isCancelledMerge) {
+        resolvedList[idx] = {
+          ...existing,
+          ...b,
+          status: 'Cancelled & Stock Restored',
+          cancelled: true,
+          stockBlocked: false,
+          cancellationReason: cancelledObj.cancellationReason || b.cancellationReason || existing.cancellationReason || '',
+          cancelledBy: cancelledObj.cancelledBy || b.cancelledBy || existing.cancelledBy || null,
+          cancelledByRole: cancelledObj.cancelledByRole || b.cancelledByRole || existing.cancelledByRole || null,
+          cancelledByTeam: cancelledObj.cancelledByTeam || b.cancelledByTeam || existing.cancelledByTeam || null,
+          cancelledByNameAndRole: cancelledObj.cancelledByNameAndRole || b.cancelledByNameAndRole || existing.cancelledByNameAndRole || null,
+          cancelledAt: cancelledObj.cancelledAt || b.cancelledAt || existing.cancelledAt || null,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus
+        };
+        continue;
+      }
 
       if (newRank >= existingRank) {
         seenCodes.delete(String(existing.bomCode || existing.code || existing.id || '').trim());

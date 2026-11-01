@@ -33,13 +33,44 @@ class RealtimeNotificationService {
   }
 
   /**
-   * Start the real-time notification listener
+   * Start the real-time notification listener (Auto-reconnects, survives sleep/network changes)
    */
-  start() {
+  start(forceReconnect = false) {
     if (typeof window === 'undefined') return;
-    if (this.eventSource && (this.eventSource.readyState === EventSource.OPEN || this.eventSource.readyState === EventSource.CONNECTING)) {
-      return;
+
+    if (!this._listenersAttached) {
+      this._listenersAttached = true;
+      window.addEventListener('online', () => {
+        console.log('[RealtimeNotifs] ⚡ Network online detected. Reconnecting notification stream...');
+        this.start(true);
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          if (!this.eventSource || this.eventSource.readyState === EventSource.CLOSED) {
+            this.start(true);
+          } else {
+            this.fetchInitialNotifications();
+          }
+        }
+      });
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'controlroom_user_role' || e.key === 'controlroom_logged_emp_id') {
+          this.start(true);
+        }
+      });
     }
+
+    const currentEmp = this.getEmpCode();
+    const currentRole = this.getUserRole();
+
+    if (!forceReconnect && this.eventSource && (this.eventSource.readyState === EventSource.OPEN || this.eventSource.readyState === EventSource.CONNECTING)) {
+      if (this._connectedEmp === currentEmp && this._connectedRole === currentRole) {
+        return;
+      }
+    }
+
+    this._connectedEmp = currentEmp;
+    this._connectedRole = currentRole;
     this.connect();
     this.fetchInitialNotifications();
   }
@@ -215,10 +246,30 @@ class RealtimeNotificationService {
       this.emitChange();
 
       const empCode = this.getEmpCode();
+      const role = this.getRole();
       await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId, empCode, all })
+        body: JSON.stringify({ notificationId, empCode, role, all })
+      });
+    } catch (_) {}
+  }
+
+  /**
+   * Permanently clear all notifications for current user
+   */
+  async clearNotifications() {
+    try {
+      this.notifications = [];
+      this.unreadCount = 0;
+      this.emitChange();
+
+      const empCode = this.getEmpCode();
+      const role = this.getUserRole();
+      await fetch('/api/notifications/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empCode, role, all: true })
       });
     } catch (_) {}
   }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Bell, Check, CheckCheck, X, GitBranch, UserCheck, CreditCard,
   FileText, Truck, ShoppingCart, Clock, ArrowRight, ExternalLink,
-  Volume2, VolumeX
+  Volume2, VolumeX, Trash2
 } from 'lucide-react';
 import realtimeNotificationService from '../services/realtimeNotificationService';
 import { isVoiceNotificationEnabled, setVoiceNotificationEnabled } from '../services/notificationService';
@@ -53,7 +53,7 @@ function getNotificationIcon(docType, eventType) {
 
 export default function NotificationCenter({ onNavigateTab }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'unread'
+  const [activeFilter, setActiveFilter] = useState('unread'); // default to 'unread' so read notifications disappear
   const [voiceEnabled, setVoiceEnabled] = useState(isVoiceNotificationEnabled);
   const [state, setState] = useState({
     notifications: [],
@@ -69,39 +69,13 @@ export default function NotificationCenter({ onNavigateTab }) {
     setVoiceNotificationEnabled(nextVal);
   };
 
-  const triggerTestAlert = (type) => {
-    let payload;
-    if (type === 'bom') {
-      payload = {
-        title: 'New BOM Order Submitted',
-        message: 'VRM-BOM-2026-05 submitted by Sales for dispatch packing verification.',
-        document_type: 'BOM',
-        event_type: 'BOM_SUBMITTED',
-        target_tab: 'BOM Orders',
-        actor_name: 'Sales Dept'
-      };
-    } else if (type === 'lead') {
-      payload = {
-        title: 'New Lead Assigned to You',
-        message: 'Karthik Raman (SunPower Systems - 100kW Rooftop Solar) assigned to you.',
-        document_type: 'LEAD',
-        event_type: 'LEAD_ASSIGNED',
-        target_tab: 'CRM Leads',
-        actor_name: 'Lead Manager'
-      };
-    } else if (type === 'po') {
-      payload = {
-        title: 'Purchase Order Approved',
-        message: 'PO-00042 approved by MD. Proceed with payment details and inwarding.',
-        document_type: 'PO',
-        event_type: 'PO_APPROVED',
-        target_tab: 'Purchase Orders',
-        actor_name: 'MD Office'
-      };
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('businz_show_toast', { detail: payload }));
-    }
+  const handleClearAll = (e) => {
+    e.stopPropagation();
+    setState({
+      notifications: [],
+      unreadCount: 0
+    });
+    realtimeNotificationService.clearNotifications();
   };
 
   useEffect(() => {
@@ -132,8 +106,12 @@ export default function NotificationCenter({ onNavigateTab }) {
   });
 
   const handleNotificationClick = (item) => {
-    // 1. Mark as read
+    // 1. Mark as read optimistically and on server
     if (!item.is_read) {
+      setState(prev => ({
+        notifications: prev.notifications.map(n => n.id === item.id ? { ...n, is_read: true } : n),
+        unreadCount: Math.max(0, prev.unreadCount - 1)
+      }));
       realtimeNotificationService.markAsRead(item.id);
     }
     setIsOpen(false);
@@ -148,8 +126,21 @@ export default function NotificationCenter({ onNavigateTab }) {
     }
   };
 
+  const handleMarkSingleRead = (e, item) => {
+    e.stopPropagation();
+    setState(prev => ({
+      notifications: prev.notifications.map(n => n.id === item.id ? { ...n, is_read: true } : n),
+      unreadCount: Math.max(0, prev.unreadCount - 1)
+    }));
+    realtimeNotificationService.markAsRead(item.id);
+  };
+
   const handleMarkAllRead = (e) => {
     e.stopPropagation();
+    setState(prev => ({
+      notifications: prev.notifications.map(n => ({ ...n, is_read: true })),
+      unreadCount: 0
+    }));
     realtimeNotificationService.markAsRead(null, true);
   };
 
@@ -263,30 +254,6 @@ export default function NotificationCenter({ onNavigateTab }) {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Voice Alert Toggle */}
-              <button
-                type="button"
-                onClick={toggleVoice}
-                title={voiceEnabled ? 'Voice Announcements: ON (click to mute)' : 'Voice Announcements: OFF (click to enable)'}
-                style={{
-                  border: 'none',
-                  background: voiceEnabled ? '#ECFEFF' : '#F1F5F9',
-                  color: voiceEnabled ? '#0E7490' : '#94A3B8',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {voiceEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-                <span>{voiceEnabled ? 'Voice ON' : 'Muted'}</span>
-              </button>
-
               {state.unreadCount > 0 && (
                 <button
                   type="button"
@@ -311,6 +278,7 @@ export default function NotificationCenter({ onNavigateTab }) {
                   Mark all read
                 </button>
               )}
+
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
@@ -331,77 +299,6 @@ export default function NotificationCenter({ onNavigateTab }) {
             </div>
           </div>
 
-          {/* Quick Voice & Notification Test Shortcuts */}
-          <div
-            style={{
-              padding: '6px 14px',
-              backgroundColor: '#F8FAFC',
-              borderBottom: '1px solid #F1F5F9',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '6px'
-            }}
-          >
-            <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Volume2 size={12} color="#0E7490" />
-              Test Voice:
-            </span>
-            <div style={{ display: 'flex', gap: '5px' }}>
-              <button
-                type="button"
-                onClick={() => triggerTestAlert('bom')}
-                title="Test BOM Notification & Voice"
-                style={{
-                  border: '1px solid #CFFAFE',
-                  backgroundColor: '#ECFEFF',
-                  color: '#0E7490',
-                  fontSize: '10px',
-                  fontWeight: '800',
-                  padding: '2px 8px',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                BOM
-              </button>
-              <button
-                type="button"
-                onClick={() => triggerTestAlert('lead')}
-                title="Test Lead Notification & Voice"
-                style={{
-                  border: '1px solid #DBEAFE',
-                  backgroundColor: '#EFF6FF',
-                  color: '#2563EB',
-                  fontSize: '10px',
-                  fontWeight: '800',
-                  padding: '2px 8px',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                Lead
-              </button>
-              <button
-                type="button"
-                onClick={() => triggerTestAlert('po')}
-                title="Test Purchase Order Notification & Voice"
-                style={{
-                  border: '1px solid #F3E8FF',
-                  backgroundColor: '#FAF5FF',
-                  color: '#9333EA',
-                  fontSize: '10px',
-                  fontWeight: '800',
-                  padding: '2px 8px',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                PO
-              </button>
-            </div>
-          </div>
-
           {/* Filter Sub-Tabs */}
           <div
             style={{
@@ -412,23 +309,6 @@ export default function NotificationCenter({ onNavigateTab }) {
               backgroundColor: '#FFFFFF'
             }}
           >
-            <button
-              type="button"
-              onClick={() => setActiveFilter('all')}
-              style={{
-                border: 'none',
-                backgroundColor: activeFilter === 'all' ? '#0E7490' : '#F1F5F9',
-                color: activeFilter === 'all' ? '#FFFFFF' : '#64748B',
-                fontSize: '11px',
-                fontWeight: '700',
-                padding: '4px 12px',
-                borderRadius: '20px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              All ({state.notifications.length})
-            </button>
             <button
               type="button"
               onClick={() => setActiveFilter('unread')}
@@ -445,6 +325,23 @@ export default function NotificationCenter({ onNavigateTab }) {
               }}
             >
               Unread ({state.unreadCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveFilter('all')}
+              style={{
+                border: 'none',
+                backgroundColor: activeFilter === 'all' ? '#0E7490' : '#F1F5F9',
+                color: activeFilter === 'all' ? '#FFFFFF' : '#64748B',
+                fontSize: '11px',
+                fontWeight: '700',
+                padding: '4px 12px',
+                borderRadius: '20px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              All / History ({state.notifications.length})
             </button>
           </div>
 
@@ -539,32 +436,80 @@ export default function NotificationCenter({ onNavigateTab }) {
                         {item.message}
                       </div>
 
-                      {/* Document Pill & Action Link */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            fontWeight: '700',
-                            backgroundColor: '#F1F5F9',
-                            color: '#475569',
-                            padding: '1px 6px',
-                            borderRadius: '4px'
-                          }}
-                        >
-                          {item.document_id}
-                        </span>
-                        {item.target_tab && (
+                      {/* Document Pill, Action Link & Mark as Read Button */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span
                             style={{
-                              fontSize: '10.5px',
+                              fontSize: '10px',
                               fontWeight: '700',
-                              color: '#0E7490',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '2px'
+                              backgroundColor: '#F1F5F9',
+                              color: '#475569',
+                              padding: '1px 6px',
+                              borderRadius: '4px'
                             }}
                           >
-                            Open in {item.target_tab} →
+                            {item.document_id}
+                          </span>
+                          {item.target_tab && (
+                            <span
+                              style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: '#0E7490',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '2px'
+                              }}
+                            >
+                              Open in {item.target_tab} →
+                            </span>
+                          )}
+                        </div>
+
+                        {isUnread ? (
+                          <button
+                            type="button"
+                            onClick={(e) => handleMarkSingleRead(e, item)}
+                            title="Mark as read & remove from notifications"
+                            style={{
+                              border: '1px solid #CFFAFE',
+                              backgroundColor: '#ECFEFF',
+                              color: '#0E7490',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '10.5px',
+                              fontWeight: '800',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#0E7490';
+                              e.currentTarget.style.color = '#FFFFFF';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#ECFEFF';
+                              e.currentTarget.style.color = '#0E7490';
+                            }}
+                          >
+                            <Check size={12} strokeWidth={2.5} />
+                            Mark as read
+                          </button>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: '700',
+                              color: '#94A3B8',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                          >
+                            <Check size={11} /> Read
                           </span>
                         )}
                       </div>

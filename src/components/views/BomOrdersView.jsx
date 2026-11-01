@@ -24,7 +24,7 @@ import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from '../PerformaIn
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import ExecutiveOrderDossierModal from './ExecutiveOrderDossierModal';
 import LrUploadPopupModal from './LrUploadPopupModal';
-import { notifyBomSentToDispatch, notifyBomCancelledByDispatch } from '../../services/notificationService';
+import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts } from '../../services/notificationService';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 
 export default function BomOrdersView(props) {
@@ -52,6 +52,58 @@ export default function BomOrdersView(props) {
   const [cancellationReasonInput, setCancellationReasonInput] = useState('');
   const [uploadingPayment, setUploadingPayment] = useState(false);
   const [lrUploadModal, setLrUploadModal] = useState(null);
+
+  // Helper to determine BOM Order lifecycle stages matching the reference stepper design in BUSINZ brand colors
+  const getOrderLifecycle = (row) => {
+    if (!row) return { isCancelled: false, steps: [] };
+    const statusStr = String(row.status || '').toLowerCase();
+    const isCancelled = statusStr.includes('cancel');
+    const isDispatched = row.status === 'Dispatched' || row.status === 'Closed' || row.status === 'CLOSED';
+    const isInvoiceGenerated = isDispatched || Boolean(row.invoiceGenerated || row.invoiceNo || row.taxInvoiceNo) || ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
+    const isAccountsVerified = isInvoiceGenerated || Boolean(row.accountsVerified) || ['Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified - Proceed Billing'].includes(row.status);
+    const isPackingVerified = isAccountsVerified || Boolean(row.dispatchPackingVerified) || ['Packed & Ready for Dispatch', 'Partially Packed', 'Packed — Awaiting Sales Payment Proof', 'Packed - Awaiting Sales Payment Proof'].includes(row.status) || Boolean(row.awaitingSalesPaymentProof);
+    const isSalesConfirmed = isPackingVerified || Boolean(row.salesConfirmed) || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed'].includes(row.status);
+
+    return {
+      isCancelled,
+      steps: [
+        { id: 1, label: 'PI Converted', isDone: true, isActive: false, icon: FileCheck },
+        { id: 2, label: 'Sales Reconfirm', isDone: isSalesConfirmed, isActive: !isSalesConfirmed && !isCancelled, icon: CheckSquare },
+        { id: 3, label: 'Dispatch Packing', isDone: isPackingVerified, isActive: isSalesConfirmed && !isPackingVerified && !isCancelled, icon: PackageCheck },
+        { id: 4, label: 'Accounts Verify', isDone: isAccountsVerified, isActive: isPackingVerified && !isAccountsVerified && !isCancelled, icon: CreditCard },
+        { id: 5, label: 'Invoice', isDone: isInvoiceGenerated, isActive: isAccountsVerified && !isInvoiceGenerated && !isCancelled, icon: Receipt },
+        { id: 6, label: 'Final Dispatch', isDone: isDispatched, isActive: isInvoiceGenerated && !isDispatched && !isCancelled, icon: Truck }
+      ]
+    };
+  };
+
+  // Helper to resolve salesperson actual human name rather than role title
+  const getCleanSalesPersonName = (rawName, code) => {
+    let name = String(rawName || '').replace(/\s*\([^)]*\)/g, '').trim();
+    const genericTerms = ['sales executive', 'sales', 'sales department', 'salesperson', 'sales rep', 'se', 'sls', 'admin', 'user', 'undefined', 'null'];
+
+    if (!name || genericTerms.includes(name.toLowerCase())) {
+      try {
+        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        if (code) {
+          const found = emps.find(e => {
+            const c = String(e.employee_code || e.code || e.id || '').trim().toUpperCase();
+            return c === String(code).trim().toUpperCase();
+          });
+          if (found && (found.employee_name || found.name)) return found.employee_name || found.name;
+        }
+        const salesEmp = emps.find(e => (e.role || '').toLowerCase().includes('sale'));
+        if (salesEmp && (salesEmp.employee_name || salesEmp.name)) return salesEmp.employee_name || salesEmp.name;
+      } catch (_) {}
+
+      const storedName = (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_logged_emp_name') || '').trim();
+      if (storedName && !genericTerms.includes(storedName.toLowerCase())) {
+        return storedName;
+      }
+      return 'Annamalaiyar';
+    }
+    return name;
+  };
 
   // Safe localStorage saver that catches QuotaExceededError and trims cache to top 50 recent records per Rule 5
   const safeSaveBomStoreToLocal = (list) => {
@@ -343,66 +395,6 @@ export default function BomOrdersView(props) {
   const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || (typeof window !== 'undefined' && localStorage.getItem('controlroom_user_role') === 'CEO');
   const [executiveDossierOrder, setExecutiveDossierOrder] = useState(null);
 
-  const ceoMetrics = useMemo(() => {
-    if (!isCeo || !Array.isArray(bomStore)) return null;
-
-    const validBoms = bomStore.filter(b => b && !b.cancelled && b.status !== 'Cancelled' && b.status !== 'CANCELLED');
-    const totalOrderBookVal = validBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
-
-    const now = new Date();
-    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const utcToday = now.toISOString().split('T')[0];
-    const isToday = (dStr) => {
-      if (!dStr) return false;
-      const s = String(dStr);
-      return s.startsWith(localToday) || s.startsWith(utcToday);
-    };
-
-    const isDispatched = (b) => {
-      const s = String(b.status || '').toLowerCase();
-      return Boolean(b.dispatchedAt) || s.includes('dispatched') || s === 'completed';
-    };
-
-    const formatCurrencyShort = (num) => {
-      if (!num || isNaN(num)) return '₹ 0.00 L';
-      if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
-      return `₹ ${(num / 100000).toFixed(2)} L`;
-    };
-
-    // 1. Total Order Book
-    const totalOrderBookFormatted = formatCurrencyShort(totalOrderBookVal);
-
-    // 2. Today ALL BOM
-    const todayAllBoms = validBoms.filter(b => isToday(b.date) || isToday(b.createdAt));
-    const todayAllVal = todayAllBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
-
-    // 3. Dispatched BOM today
-    const todayDispatchedBoms = validBoms.filter(b => {
-      if (!isDispatched(b)) return false;
-      return isToday(b.dispatchedAt) || isToday(b.updatedAt) || isToday(b.date) || isToday(b.createdAt);
-    });
-    const todayDispatchedVal = todayDispatchedBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
-
-    // 4. Pending BOMs
-    const pendingBoms = validBoms.filter(b => !isDispatched(b));
-    const pendingVal = pendingBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
-
-    return {
-      totalOrderBookVal,
-      totalOrderBookFormatted,
-      validBomsCount: validBoms.length,
-
-      todayAllCount: todayAllBoms.length,
-      todayAllValFormatted: formatCurrencyShort(todayAllVal),
-
-      todayDispatchedCount: todayDispatchedBoms.length,
-      todayDispatchedValFormatted: formatCurrencyShort(todayDispatchedVal),
-
-      pendingCount: pendingBoms.length,
-      pendingValFormatted: formatCurrencyShort(pendingVal)
-    };
-  }, [isCeo, bomStore]);
-
   // Form & Modals State
   const [showBOMForm, setShowBOMForm] = useState(false);
   const bomCustSearchTimerRef = useRef(null);
@@ -434,6 +426,7 @@ export default function BomOrdersView(props) {
   const [newBomPhone, setNewBomPhone] = useState('');
   const [newBomEmail, setNewBomEmail] = useState('');
   const [newBomGstNo, setNewBomGstNo] = useState('');
+  const [newBomDocType, setNewBomDocType] = useState('Invoice');
   const [newBomDeliveryAddress, setNewBomDeliveryAddress] = useState('');
   const [newBomBillingStreet, setNewBomBillingStreet] = useState('');
   const [newBomBillingCity, setNewBomBillingCity] = useState('');
@@ -892,6 +885,69 @@ export default function BomOrdersView(props) {
     });
   }, [bomStore, isRestrictedSalesUser, currentEmpId, currentEmpName, defaultSalesPersonName, currentLoggedEmail, props.targetBomCode, props.targetPiNo]);
 
+  // Operational Financial & KPI Ribbon (Visible for CEO, MD, and Sales Logins)
+  const ceoMetrics = useMemo(() => {
+    const isAllowedRole = isCeo || isRestrictedSalesUser || Boolean(userRole && String(userRole).toLowerCase().includes('sales'));
+    if (!isAllowedRole || !Array.isArray(bomStore)) return null;
+
+    const sourceList = isRestrictedSalesUser ? visibleBomStore : bomStore;
+    const validBoms = (sourceList || []).filter(b => b && !b.cancelled && b.status !== 'Cancelled' && b.status !== 'CANCELLED');
+    const totalOrderBookVal = validBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const utcToday = now.toISOString().split('T')[0];
+    const isToday = (dStr) => {
+      if (!dStr) return false;
+      const s = String(dStr);
+      return s.startsWith(localToday) || s.startsWith(utcToday);
+    };
+
+    const isDispatched = (b) => {
+      const s = String(b.status || '').toLowerCase();
+      return Boolean(b.dispatchedAt) || s.includes('dispatched') || s === 'completed';
+    };
+
+    const formatCurrencyShort = (num) => {
+      if (!num || isNaN(num)) return '₹ 0.00 L';
+      if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+      return `₹ ${(num / 100000).toFixed(2)} L`;
+    };
+
+    // 1. Total Order Book
+    const totalOrderBookFormatted = formatCurrencyShort(totalOrderBookVal);
+
+    // 2. Today ALL BOM
+    const todayAllBoms = validBoms.filter(b => isToday(b.date) || isToday(b.createdAt));
+    const todayAllVal = todayAllBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    // 3. Dispatched BOM today
+    const todayDispatchedBoms = validBoms.filter(b => {
+      if (!isDispatched(b)) return false;
+      return isToday(b.dispatchedAt) || isToday(b.updatedAt) || isToday(b.date) || isToday(b.createdAt);
+    });
+    const todayDispatchedVal = todayDispatchedBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    // 4. Pending BOMs
+    const pendingBoms = validBoms.filter(b => !isDispatched(b));
+    const pendingVal = pendingBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
+
+    return {
+      totalOrderBookVal,
+      totalOrderBookFormatted,
+      validBomsCount: validBoms.length,
+
+      todayAllCount: todayAllBoms.length,
+      todayAllValFormatted: formatCurrencyShort(todayAllVal),
+
+      todayDispatchedCount: todayDispatchedBoms.length,
+      todayDispatchedValFormatted: formatCurrencyShort(todayDispatchedVal),
+
+      pendingCount: pendingBoms.length,
+      pendingValFormatted: formatCurrencyShort(pendingVal)
+    };
+  }, [isCeo, isRestrictedSalesUser, userRole, bomStore, visibleBomStore]);
+
   const [selectedPreset, setSelectedPreset] = useState('');
   const [presetSetCount, setPresetSetCount] = useState(1);
   const [presetKitPrice, setPresetKitPrice] = useState('');
@@ -1096,18 +1152,55 @@ export default function BomOrdersView(props) {
     }
   };
 
-  // Permission Check for Cancel BOM (Strictly Dispatch, Production, Accounts, and Billing Logins — Excludes CEO View-Only)
+  // Helper to check if printout has been taken for a BOM order
+  const isPrintoutTaken = (bom) => {
+    if (!bom) return false;
+    return Boolean(
+      bom.dispatchPrinted ||
+      bom.isPrinted ||
+      (Number(bom.dispatchPrintCount) || 0) > 0 ||
+      bom.firstPrintTimeStr ||
+      bom.dispatchPrintedAt
+    );
+  };
+
+  // Permission Check for Cancel BOM:
+  // 1. Dispatch, Production, Accounts, Billing, MD can cancel uncompleted BOMs.
+  // 2. Sales Person can cancel BOM ONLY IF printout has NOT been taken (!isPrintoutTaken).
+  //    If printout IS taken, the Cancel option will NOT show to the sales person.
+  // 3. CEO is view-only.
+  const canUserCancelBom = (bom) => {
+    if (!bom || isCeo) return false;
+    if (bom.status === 'Cancelled & Stock Restored' || bom.cancelled) return false;
+    if (bom.status === 'Completed' || bom.status === 'Closed' || bom.fullyCompleted) return false;
+
+    const roleNorm = String(userRole || localStorage.getItem('controlroom_user_role') || '').toLowerCase().trim();
+    const isDispatchOrOps = (
+      roleNorm.includes('dispatch') ||
+      roleNorm.includes('account') ||
+      roleNorm.includes('production') ||
+      roleNorm.includes('billing') ||
+      roleNorm.includes('invoice') ||
+      roleNorm.includes('technical administrator') ||
+      roleNorm.includes('floor supervisor') ||
+      roleNorm.includes('md')
+    );
+
+    if (isDispatchOrOps) return true;
+
+    // Sales Person rule:
+    // When printout is NOT taken -> Sales person CAN cancel.
+    // When printout IS taken -> Cancel option will NOT show to the sales person.
+    const isSales = roleNorm.includes('sales') || roleNorm.includes('executive') || roleNorm === 'sales';
+    if (isSales) {
+      return !isPrintoutTaken(bom);
+    }
+
+    return false;
+  };
+
   const roleNormForBomCancel = String(userRole || localStorage.getItem('controlroom_user_role') || '').toLowerCase().trim();
-  const canCancelBom = !isCeo && (
-    roleNormForBomCancel.includes('dispatch') ||
-    roleNormForBomCancel.includes('account') ||
-    roleNormForBomCancel.includes('production') ||
-    roleNormForBomCancel.includes('billing') ||
-    roleNormForBomCancel.includes('invoice') ||
-    roleNormForBomCancel.includes('technical administrator') ||
-    roleNormForBomCancel.includes('floor supervisor') ||
-    roleNormForBomCancel.includes('md')
-  );
+  const canCancelBom = (bom) => canUserCancelBom(bom);
 
   // Helper to Block / Deduct Inventory immediately upon BOM Creation or Verification (Deducts ONCE)
   const blockInventoryForBom = (bomItems = [], bomCode = '') => {
@@ -1188,8 +1281,12 @@ export default function BomOrdersView(props) {
   // Execution function for Cancel BOM
   const handleCancelBomOrder = (bomToCancel) => {
     if (!bomToCancel) return;
-    if (!canCancelBom) {
-      alert('⛔ Access Restricted!\nOnly Dispatch, Production, or Billing logins are authorized to cancel a BOM and release reserved inventory.');
+    if (!canUserCancelBom(bomToCancel)) {
+      if (isPrintoutTaken(bomToCancel)) {
+        alert('⛔ Cannot Cancel BOM!\nThe printout has already been taken by Dispatch/Production. Once printed, a BOM cannot be cancelled by Sales.');
+      } else {
+        alert('⛔ Access Restricted!\nYou do not have permission to cancel this BOM.');
+      }
       return;
     }
     setCancellationReasonInput('');
@@ -1199,7 +1296,7 @@ export default function BomOrdersView(props) {
   const executeCancelBom = (bomToCancel, reason) => {
     if (!bomToCancel) return;
     const bCode = bomToCancel.bomCode || bomToCancel.code;
-    const reasonText = reason || 'Order cancelled by Dispatch';
+    const reasonText = reason || 'Order cancelled';
 
     const resolveCancellerIdentity = () => {
       const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').replace(/\s*\([^)]*\)/g, '').trim();
@@ -1208,7 +1305,10 @@ export default function BomOrdersView(props) {
       let team = 'Dispatch Team';
       let position = storedRole || 'Dispatch Head';
 
-      if (storedRole.toLowerCase().includes('account')) {
+      if (storedRole.toLowerCase().includes('sales')) {
+        team = 'Sales Department';
+        position = storedRole || 'Sales Executive';
+      } else if (storedRole.toLowerCase().includes('account')) {
         team = 'Accounts Team';
         if (!storedRole || storedRole === 'Sales Executive' || storedRole === 'Dispatch Head') {
           position = 'Accounts Executive';
@@ -1268,50 +1368,83 @@ export default function BomOrdersView(props) {
     // 1. Restore Inventory
     restoreInventoryForBom(bomToCancel.items || bomToCancel.dispatchPacking, bCode);
 
-    // 2. Update BOM status with cancellation details
+    // 2. Prepare canonical cancelled BOM record
+    const updatedBomRecord = {
+      ...bomToCancel,
+      bomCode: bCode,
+      code: bCode,
+      status: 'Cancelled & Stock Restored',
+      cancelled: true,
+      stockBlocked: false,
+      cancellationReason: reasonText,
+      cancelledBy: personName,
+      cancelledByRole: position,
+      cancelledByTeam: team,
+      cancelledByNameAndRole: fullAttribution,
+      cancelledAt: new Date().toISOString()
+    };
+    const sanitizedRecord = stripDataUrlsFromRecord(updatedBomRecord);
+
+    // 3. Update React state and localStorage cache
     setBomStore(prev => {
-      const updated = prev.map(b => (b.bomCode === bCode || b.code === bCode) ? {
-        ...b,
-        status: 'Cancelled & Stock Restored',
-        cancelled: true,
-        stockBlocked: false,
-        cancellationReason: reasonText,
-        cancelledBy: personName,
-        cancelledByRole: position,
-        cancelledByTeam: team,
-        cancelledByNameAndRole: fullAttribution,
-        cancelledAt: new Date().toISOString()
-      } : b);
-      const sanitized = updated.map(stripDataUrlsFromRecord);
-      return sanitized;
+      const updated = (prev || []).map(b => (b.bomCode === bCode || b.code === bCode || b.id === bCode) ? sanitizedRecord : b);
+      safeSaveBomStoreToLocal(updated);
+      return updated;
     });
 
-    if (confirmingBomModal && (confirmingBomModal.bomCode === bCode || confirmingBomModal.code === bCode)) {
-      setConfirmingBomModal(prev => prev ? {
-        ...prev,
-        status: 'Cancelled & Stock Restored',
-        cancelled: true,
-        stockBlocked: false,
-        cancellationReason: reasonText,
-        cancelledBy: personName,
-        cancelledByRole: position,
-        cancelledByTeam: team,
-        cancelledByNameAndRole: fullAttribution,
-        cancelledAt: new Date().toISOString(),
+    if (confirmingBomModal && (confirmingBomModal.bomCode === bCode || confirmingBomModal.code === bCode || confirmingBomModal.id === bCode)) {
+      setConfirmingBomModal({
+        ...confirmingBomModal,
+        ...sanitizedRecord,
         isEditMode: false
-      } : null);
+      });
     }
 
-    // 3. Notify Sales Person immediately
-    notifyBomCancelledByDispatch({
-      bomCode: bCode,
-      customerName: bomToCancel.customerName || bomToCancel.clientName || 'Customer',
-      salesPerson: bomToCancel.salesPerson || bomToCancel.createdBy || 'Sales Executive',
-      reason: reasonText,
-      cancelledBy: fullAttribution,
-      cancelledByRole: position,
-      cancelledByTeam: team
-    });
+    // 4. Persist to Supabase atomic single-row store
+    try {
+      saveCloudBomRow(sanitizedRecord);
+    } catch (sbErr) {
+      console.warn('saveCloudBomRow non-fatal error:', sbErr);
+    }
+
+    // 5. Persist to backend server / PostgreSQL database (/api/boms)
+    try {
+      const sesId = typeof window !== 'undefined' && window.localStorage
+        ? localStorage.getItem('controlroom_device_session_id')
+        : null;
+      fetch('/api/boms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sesId ? { 'x-session-id': sesId } : {})
+        },
+        body: JSON.stringify({ bom: sanitizedRecord, isUpdate: true })
+      }).catch(err => console.error('Error persisting cancelled BOM to /api/boms:', err));
+    } catch (_) {}
+
+    // 6. Broadcast cross-window and cross-tab update events
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: sanitizedRecord } }));
+      window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: { bom: sanitizedRecord, action: 'upsert' } }));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (_) {}
+
+    // 7. Notify Sales Person immediately
+    try {
+      if (typeof notifyBomCancelledByDispatch === 'function') {
+        notifyBomCancelledByDispatch({
+          bomCode: bCode,
+          customerName: bomToCancel.customerName || bomToCancel.clientName || 'Customer',
+          salesPerson: bomToCancel.salesPerson || bomToCancel.createdBy || 'Sales Executive',
+          reason: reasonText,
+          cancelledBy: fullAttribution,
+          cancelledByRole: position,
+          cancelledByTeam: team
+        });
+      }
+    } catch (nErr) {
+      console.warn('notifyBomCancelledByDispatch non-fatal:', nErr);
+    }
 
     setBomCancelPromptModal(null);
     setCancellationReasonInput('');
@@ -1695,20 +1828,20 @@ export default function BomOrdersView(props) {
     actionText: 'Create BOM',
     searchPlaceholder: `Search ${activeTab} (BOM Code, Customer Name, Product)...`,
     tabs: [
-      { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-      { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-      { id: 'Pending', label: 'Pending Sales Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
-      { id: 'AddressAction', label: 'Address Proof Requested', count: (visibleBomStore || []).filter(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales').length, bg: '#fee2e2', fg: '#b91c1c' },
-      { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: (visibleBomStore || []).filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed').length, bg: '#dcfce7', fg: '#166534' },
+      { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
+      { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft' && !b.cancelled).length, bg: '#fff7ed', fg: '#c2410c' },
+      { id: 'Pending', label: 'Pending Sales Confirmation', count: (visibleBomStore || []).filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
+      { id: 'AddressAction', label: 'Address Proof Requested', count: (visibleBomStore || []).filter(b => (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && !b.cancelled).length, bg: '#fee2e2', fg: '#b91c1c' },
+      { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: (visibleBomStore || []).filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed' && !b.cancelled).length, bg: '#dcfce7', fg: '#166534' },
       { id: 'PendingPrint', label: 'Pending Print', count: (visibleBomStore || []).filter(b => (!b.dispatchPrinted && !b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#fef3c7', fg: '#b45309' },
       { id: 'Printed', label: 'Print Taken', count: (visibleBomStore || []).filter(b => (b.dispatchPrinted || b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#dcfce7', fg: '#166534' },
-      { id: 'Closed', label: 'Closed / Completed', count: (visibleBomStore || []).filter(b => b && (b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed'))).length, bg: '#ecfdf5', fg: '#047857' },
-      { id: 'Cancelled', label: 'Cancelled & Restored', count: (visibleBomStore || []).filter(b => b.status === 'Cancelled & Stock Restored' || b.cancelled).length, bg: '#f1f5f9', fg: '#64748b' }
+      { id: 'Closed', label: 'Closed / Completed', count: (visibleBomStore || []).filter(b => b && (b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !b.cancelled).length, bg: '#ecfdf5', fg: '#047857' },
+      { id: 'Cancelled', label: 'Cancelled & Restored', count: (visibleBomStore || []).filter(b => b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel')).length, bg: '#fee2e2', fg: '#dc2626' }
     ],
     headers: ['BOM Code', 'Date & Time', 'Customer Name', 'Sales Person', 'Payment Type', 'Total (₹)', 'Printout Status', 'Status'],
     rows: (visibleBomStore || []).filter(Boolean).map(b => {
       const isDraft = b.status === 'Draft';
-      const isCancelled = b.status === 'Cancelled & Stock Restored' || b.cancelled;
+      const isCancelled = b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel');
       const isAddressRequested = b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales';
       const isClosedOrCompleted = b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed');
       const isPending = !b.status || b.status === 'Pending Sales Confirmation' || b.status === 'Pending Confirmation' || b.status === 'Pending';
@@ -1721,9 +1854,9 @@ export default function BomOrdersView(props) {
       let tabGroup = 'Sent';
 
       if (isCancelled) {
-        stBg = '#f1f5f9';
-        stFg = '#64748b';
-        stBorder = '1px solid #cbd5e1';
+        stBg = '#fef2f2';
+        stFg = '#dc2626';
+        stBorder = '1px solid #fecaca';
         tabGroup = 'Cancelled';
       } else if (isClosedOrCompleted) {
         stBg = '#ecfdf5';
@@ -1837,8 +1970,7 @@ export default function BomOrdersView(props) {
         c3: displayName,
         salesPerson: (() => {
           const sp = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-          if (!sp || sp === 'Sales Department') return (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : (sp || 'Sales Department'));
-          return sp;
+          return getCleanSalesPersonName(sp, b.salesPersonCode || b.createdById);
         })(),
         sourcePiNo: b.sourcePiNo || b.piNo || null,
         dispatchPrinted: isPrinted,
@@ -1871,28 +2003,29 @@ export default function BomOrdersView(props) {
     const rTabGroup = (r.tabGroup || '').toLowerCase();
     const isPrinted = Boolean(r.dispatchPrinted || r.isPrinted);
     const isClosedOrDone = rTabGroup === 'closed' || rStatus.includes('closed') || rStatus.includes('complete') || r.fullyCompleted || (r.status || '').toLowerCase().includes('completed') || (r.status || '').toLowerCase().includes('closed');
+    const isCancelled = Boolean(r.cancelled || r.status === 'Cancelled & Stock Restored' || rStatus.includes('cancel') || rTabGroup === 'cancelled');
 
     let matchesTab = false;
     if (subTab === 'all' || subTab === 'all boms') {
-      matchesTab = true;
+      matchesTab = !isCancelled;
     } else if (subTab === 'pendingprint') {
-      matchesTab = !isPrinted && !r.cancelled && !isClosedOrDone;
+      matchesTab = !isPrinted && !isCancelled && !isClosedOrDone;
     } else if (subTab === 'printed') {
-      matchesTab = isPrinted && !r.cancelled && !isClosedOrDone;
+      matchesTab = isPrinted && !isCancelled && !isClosedOrDone;
     } else if (subTab === 'addressaction') {
-      matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof'));
+      matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof')) && !isCancelled;
     } else if (subTab.includes('closed') || subTab.includes('complete')) {
-      matchesTab = Boolean(isClosedOrDone);
+      matchesTab = Boolean(isClosedOrDone) && !isCancelled;
     } else if (subTab.includes('cancel')) {
-      matchesTab = Boolean(rStatus.includes('cancel') || r.cancelled);
+      matchesTab = isCancelled;
     } else if (subTab === 'draft' || (subTab.includes('draft') && !subTab.includes('pending'))) {
-      matchesTab = Boolean(rStatus.includes('draft') && !r.cancelled);
+      matchesTab = Boolean(rStatus.includes('draft') && !isCancelled);
     } else if (subTab.includes('pending')) {
-      matchesTab = Boolean((rStatus.includes('pending') || rStatus.includes('draft')) && !r.cancelled);
+      matchesTab = Boolean((rStatus.includes('pending') || rStatus.includes('draft')) && !isCancelled);
     } else if (subTab.includes('sent')) {
-      matchesTab = Boolean((rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !r.cancelled);
+      matchesTab = Boolean((rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !isCancelled);
     } else {
-      matchesTab = rTabGroup === subTab;
+      matchesTab = (rTabGroup === subTab) && !isCancelled;
     }
 
     // Date range filter matching
@@ -5155,6 +5288,7 @@ export default function BomOrdersView(props) {
                           id: finalCode,
                           bomCode: finalCode,
                           code: finalCode,
+                          docType: newBomDocType || 'Invoice',
                           sourcePiNo: newBomSourcePiNo || null,
                           date: new Date().toISOString().split('T')[0],
                           createdAt: new Date().toISOString(),
@@ -5186,9 +5320,9 @@ export default function BomOrdersView(props) {
                           paymentProofDocs: paymentDocs,
                           paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && paymentDocs.length > 0,
                           remarks: newBomRemarks || '',
-                          status: isDraft ? 'Draft' : 'Sales Confirmed - Sent to Dispatch',
-                          salesConfirmed: !isDraft,
-                          salesConfirmedAt: !isDraft ? new Date().toISOString() : null,
+                          status: isDraft ? 'Draft' : 'Pending Confirmation',
+                          salesConfirmed: false,
+                          salesConfirmedAt: null,
                           salesPerson: effectiveSalesPersonName,
                           salesPersonCode: effectiveSalesPersonCode,
                           createdBy: effectiveCreatorName,
@@ -5203,7 +5337,7 @@ export default function BomOrdersView(props) {
                             qty: cleanNum(item.qty, 1),
                             rate: item.isPresetItem ? 0 : cleanNum(item.rate, 0),
                             gstRate: item.gstRate || '18%',
-                            confirmed: !isDraft,
+                            confirmed: false,
                             isPresetItem: Boolean(item.isPresetItem),
                             presetGroupId: item.presetGroupId || null,
                             presetName: item.presetName || null,
@@ -5374,14 +5508,10 @@ export default function BomOrdersView(props) {
                           }
                         }
 
-                        // Stage: Reserving inventory & stock allocation
+                        // Stage: Stock reservation is performed upon Sales Reconfirmation
                         setBomSubmitStage('reserving');
-                        if (!isDraft && Array.isArray(sanitizedNewBom.items) && sanitizedNewBom.items.length > 0) {
-                          blockInventoryForBom(sanitizedNewBom.items, finalAssignedCode);
-                          sanitizedNewBom.stockBlocked = true;
-                          sanitizedNewBom.stockBlockedAt = new Date().toISOString();
-                          sanitizedNewBom.stockDeducted = true;
-                        }
+                        sanitizedNewBom.stockBlocked = false;
+                        sanitizedNewBom.stockDeducted = false;
 
                         // Stage: Saving to cloud & local storage
                         setBomSubmitStage('saving');
@@ -5479,16 +5609,23 @@ export default function BomOrdersView(props) {
                         setBomConfirmModal(null);
                         setCurrentPage(1);
 
-                        // 3. If sent to dispatch, trigger live notifications and synthesized sound
+                        // 3. Notification to sales upon initial BOM creation (sent to dispatch only upon reconfirmation)
                         if (!isDraft) {
-                          notifyBomSentToDispatch({
-                            bomCode: finalAssignedCode,
-                            customerName: sanitizedNewBom.companyName || sanitizedNewBom.customerName,
-                            salesPerson: sanitizedNewBom.salesPerson
-                          });
+                          try {
+                            if (typeof notifyBomCreatedToSales === 'function') {
+                              notifyBomCreatedToSales({
+                                bomCode: finalAssignedCode,
+                                customerName: sanitizedNewBom.companyName || sanitizedNewBom.customerName,
+                                salesPerson: sanitizedNewBom.salesPerson,
+                                salesPersonCode: sanitizedNewBom.salesPersonCode || sanitizedNewBom.createdById
+                              });
+                            }
+                          } catch (nErr) {
+                            console.warn('Notification failed non-fatally:', nErr);
+                          }
                           alert(sanitizedNewBom.sourcePiNo
-                            ? `BOM (${finalAssignedCode}) successfully created from Proforma Invoice (${sanitizedNewBom.sourcePiNo}) and sent to Dispatch for packing!`
-                            : `BOM (${finalAssignedCode}) successfully created and sent to Dispatch for packing!`);
+                            ? `✅ BOM (${finalAssignedCode}) saved from Proforma Invoice (${sanitizedNewBom.sourcePiNo}) as Pending Confirmation!\n\nPlease select this order in the table and click 'Reconfirm BOM' in the floating bottom action bar to verify materials & quantities before sending to Dispatch.`
+                            : `✅ BOM (${finalAssignedCode}) saved as Pending Confirmation!\n\nPlease select this order in the table and click 'Reconfirm BOM' in the floating bottom action bar to verify materials & quantities before sending to Dispatch.`);
                         } else {
                           alert(sanitizedNewBom.sourcePiNo
                             ? `📝 BOM (${finalAssignedCode}) saved as Draft from Proforma Invoice (${sanitizedNewBom.sourcePiNo}).`
@@ -5832,7 +5969,7 @@ export default function BomOrdersView(props) {
               Back to BOM Dashboard
             </button>
 
-            {canCancelBom && !isCancelled && confirmingBomModal.status !== 'Cancelled & Stock Restored' && (
+            {canUserCancelBom(confirmingBomModal) && !isCancelled && confirmingBomModal.status !== 'Cancelled & Stock Restored' && (
               <button
                 onClick={() => handleCancelBomOrder(confirmingBomModal)}
                 style={{
@@ -5991,11 +6128,17 @@ export default function BomOrdersView(props) {
                   } catch (_) {}
 
                   // Trigger Real-time Workflow Notification with synthesized sound & deep-link to Dispatch Orders
-                  notifyBomSentToDispatch({
-                    bomCode: confirmingBomModal.bomCode,
-                    customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
-                    salesPerson: confirmingBomModal.salesPerson
-                  });
+                  try {
+                    if (typeof notifyBomSentToDispatch === 'function') {
+                      notifyBomSentToDispatch({
+                        bomCode: confirmingBomModal.bomCode,
+                        customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
+                        salesPerson: confirmingBomModal.salesPerson
+                      });
+                    }
+                  } catch (nErr) {
+                    console.warn('notifyBomSentToDispatch non-fatal:', nErr);
+                  }
 
                   setConfirmingBomModal(null);
                   alert(`BOM (${confirmingBomModal.bomCode}) successfully verified by Sales and forwarded to Dispatch!`);
@@ -7659,8 +7802,8 @@ export default function BomOrdersView(props) {
         </div>
       </div>
 
-      {/* CEO EXECUTIVE FINANCIAL RIBBON (BUSINZ CANONICAL DESIGN SYSTEM) */}
-      {isCeo && ceoMetrics && (
+      {/* BOM OPERATIONAL & EXECUTIVE FINANCIAL RIBBON (BUSINZ CANONICAL DESIGN SYSTEM) */}
+      {ceoMetrics && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -7950,342 +8093,457 @@ export default function BomOrdersView(props) {
         ))}
       </div>
 
-      {/* 4. MAIN DATA TABLE WITH INTERACTIVE ROW SELECTION */}
+      {/* 4. MAIN DATA DISPLAY (PIPELINE CARDS / CLASSIC TABLE) WITH INTERACTIVE ROW SELECTION */}
       <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
-        <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table className="custom-table" style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
-                <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input id="bom-orders-select-all" name="selectAll" aria-label="SelectAll"
-                    type="checkbox"
-                    style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    checked={filteredRows.length > 0 && filteredRows.every(r => selectedRows.includes(r.code))}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedRows(filteredRows.map(r => r.code));
-                      } else {
-                        setSelectedRows([]);
-                      }
-                    }}
-                   />
-                </th>
-                {pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions').map((h, i) => {
-                  const isRight = h.includes('Total') || h.includes('Value') || h.includes('Rate');
-                  let colWidth = 'auto';
-                  let minColWidth = '140px';
-                  if (i === 0) { colWidth = '150px'; minColWidth = '150px'; }
-                  else if (h.includes('Customer')) { minColWidth = '220px'; }
-                  else if (h === 'Status') { colWidth = '160px'; minColWidth = '160px'; }
-                  else if (h === 'Printout Status' || h === 'Print Status') { colWidth = '160px'; minColWidth = '160px'; }
-                  else if (isRight) { colWidth = '150px'; minColWidth = '150px'; }
-                  else if (h.includes('Date')) { colWidth = '130px'; minColWidth = '130px'; }
-                  else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '150px'; }
+        {/* VIEW MODE & BULK SELECTION TOOLBAR */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 18px',
+          borderBottom: '1px solid #E2E8F0',
+          backgroundColor: '#F8FAFC',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <input
+              id="bom-orders-select-all"
+              name="selectAll"
+              aria-label="SelectAll"
+              type="checkbox"
+              style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '16px', height: '16px' }}
+              checked={filteredRows.length > 0 && filteredRows.every(r => selectedRows.includes(r.code))}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedRows(filteredRows.map(r => r.code));
+                } else {
+                  setSelectedRows([]);
+                }
+              }}
+            />
+            <label htmlFor="bom-orders-select-all" style={{ fontSize: '12.5px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}>
+              Select All Orders ({filteredRows.length})
+            </label>
+          </div>
+        </div>
 
-                  return (
-                    <th key={i} style={{
-                      width: colWidth,
-                      minWidth: minColWidth,
-                      padding: '12px 14px',
-                      fontWeight: 'bold',
-                      textAlign: isRight ? 'right' : 'left',
-                      boxSizing: 'border-box',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {h}
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {tableLoading ? (
-                <>
-                  <tr style={{ backgroundColor: '#F0FDFA' }}>
-                    <td
-                      colSpan={pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions').length + 1}
-                      style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div className="businz-spin-ring" />
-                          <div style={{ textAlign: 'left' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490' }}>
-                                Loading BOM Orders...
-                              </span>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
-                                <span className="businz-pulse-dot" /> Live Central Database Sync
-                              </span>
-                            </div>
-                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                              Retrieving Bill of Materials & verifying live inventory from Businz Cloud...
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                  {Array.from({ length: 6 }).map((_, sIdx) => {
-                    const totalHeaders = pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions');
-                    return (
-                      <tr key={`bom-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                          <input id="bom-orders-input-5" name="input5" aria-label="Input 5" type="checkbox" defaultChecked={false} disabled style={{ opacity: 0.3 }}  />
-                        </td>
-                        {totalHeaders.map((_, hIdx) => (
-                          <td key={`bom-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
-                            <div
-                              className="skeleton-shimmer skeleton-text"
-                              style={{
-                                width: hIdx === 0 ? '90px' : (hIdx === 1 ? '65%' : (hIdx === totalHeaders.length - 1 ? '85px' : '95px')),
-                                height: '14px',
-                                marginLeft: hIdx >= totalHeaders.length - 2 ? 'auto' : '0'
-                              }}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </>
-              ) : currentRows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions').length + 1}
-                    style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}
+        {/* PIPELINE CARDS FEED */}
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#F8FAFC' }}>
+            {tableLoading ? (
+              Array.from({ length: 4 }).map((_, sIdx) => (
+                <div key={`bom-skel-card-${sIdx}`} style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="skeleton-shimmer" style={{ width: '220px', height: '18px', borderRadius: '4px' }} />
+                    <div className="skeleton-shimmer" style={{ width: '130px', height: '14px', borderRadius: '4px' }} />
+                  </div>
+                  <div className="skeleton-shimmer" style={{ width: '55%', height: '14px', borderRadius: '4px' }} />
+                  <div className="skeleton-shimmer" style={{ width: '100%', height: '52px', borderRadius: '10px' }} />
+                </div>
+              ))
+            ) : currentRows.length === 0 ? (
+              <div style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+                <Boxes size={36} style={{ color: '#CBD5E1', marginBottom: '8px' }} />
+                <div style={{ fontSize: '15px', fontWeight: '700', color: '#475569' }}>No BOM orders found</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
+                  No records match your active search or filter criteria. Try adjusting your query or clear filters.
+                </div>
+              </div>
+            ) : (
+              currentRows.map((row, idx) => {
+                const isChecked = selectedRows.includes(row.code);
+                const lifecycle = getOrderLifecycle(row);
+                const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || (row.status || '').toLowerCase().includes('cancel') || row.tabGroup === 'Cancelled');
+                const isAwaitingSalesPayment = Boolean(
+                  row.awaitingSalesPaymentProof ||
+                  (typeof row.status === 'string' && row.status.toLowerCase().includes('awaiting sales payment proof'))
+                );
+                const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
+                const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
+
+                return (
+                  <div
+                    key={row.code || idx}
+                    style={{
+                      backgroundColor: isCancelled ? (isChecked ? '#FEF2F2' : '#FFFDFD') : (isChecked ? '#ECFEFF' : '#FFFFFF'),
+                      border: isCancelled ? (isChecked ? '1.5px solid #EF4444' : '1px solid #FECACA') : (isChecked ? '1.5px solid #0E7490' : '1px solid #E2E8F0'),
+                      borderLeft: isCancelled ? '4px solid #DC2626' : (isAwaitingSalesPayment ? '4px solid #F59E0B' : (isChecked ? '4px solid #0E7490' : '4px solid transparent')),
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      boxShadow: isCancelled ? '0 1px 4px rgba(220, 38, 38, 0.06)' : '0 1px 4px rgba(15, 23, 42, 0.03)',
+                      transition: 'all 0.15s ease'
+                    }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <Boxes size={32} style={{ color: '#CBD5E1' }} />
-                      <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No BOM orders found</span>
-                      <span style={{ fontSize: '12px', color: '#94A3B8' }}>
-                        No records match your active search or filter criteria. Try adjusting your query or clear filters.
-                      </span>
-                      {(searchQueryText || filterDateVal || filterEndDateVal || filterStatusSelect !== 'All' || activeSubTab !== 'All') && (
-                        <button
-                          type="button"
-                          onClick={() => { setSearchQueryText(''); setFilterDateVal(''); setFilterEndDateVal(''); setFilterStatusSelect('All'); setActiveSubTab('All'); }}
-                          style={{
-                            marginTop: '6px',
-                            padding: '6px 14px',
-                            backgroundColor: '#F1F5F9',
-                            color: '#0E7490',
-                            border: '1px solid #CBD5E1',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            fontWeight: '700',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Clear All Filters
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                currentRows.map((row, idx) => {
-                  const isChecked = selectedRows.includes(row.code);
-                  return (
-                    <tr key={idx} style={{
-                      borderBottom: '1px solid #F1F5F9',
-                      transition: 'all 0.15s ease',
-                      backgroundColor: isChecked ? '#ECFEFF' : 'transparent'
-                    }} className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}>
-                      <td style={{
-                        width: '48px',
-                        minWidth: '48px',
-                        padding: '12px 0',
-                        textAlign: 'center',
-                        verticalAlign: 'middle',
-                        boxSizing: 'border-box',
-                        borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
-                      }}>
-                        <input id="bom-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                    {/* Line 1: Header (Customer Name · Status · Assigned · Applied at Date •••) */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <input
+                          id={`bom-pipeline-chk-${idx}`}
+                          name={`bom_pipeline_chk_${idx}`}
+                          aria-label={`Select BOM ${row.code}`}
                           type="checkbox"
-                          style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
+                          style={{ accentColor: isCancelled ? '#DC2626' : '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '15px', height: '15px' }}
                           checked={isChecked}
                           onChange={() => handleSelectRowGeneric(row.code)}
-                         />
-                      </td>
-                      <td
-                        onClick={() => {
-                          const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
-                          const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
-                          setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
-                        }}
-                        style={{ padding: '12px 14px', fontWeight: 'bold', color: '#2563EB', cursor: 'pointer' }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>{row.code}</span>
-                            {isCeo && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExecutiveDossierOrder(row);
-                                }}
-                                title="Open Executive 360° Order Dossier"
-                                style={{
-                                  padding: '2px 8px',
-                                  borderRadius: '6px',
-                                  backgroundColor: '#0F172A',
-                                  color: '#38BDF8',
-                                  border: '1px solid #1E293B',
-                                  fontSize: '10px',
-                                  fontWeight: '800',
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '3px'
-                                }}
-                              >
-                                360° Dossier
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td
-                        onClick={() => {
-                          const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
-                          const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
-                          setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
-                        }}
-                        style={{ padding: '12px 14px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap', cursor: 'pointer' }}
-                      >
-                        {row.dateTimeObj ? (
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
-                            <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
-                            {row.dateTimeObj.time && (
-                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
-                            )}
-                          </div>
-                        ) : (
-                          row.c2
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>{row.c3}</td>
-                      <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
-                        <span style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <User size={13} style={{ color: '#0E7490', flexShrink: 0 }} /> {(row.salesPerson || row.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
+                        />
+                        <span
+                          onClick={() => setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending && !isCancelled })}
+                          style={{ fontSize: '13.5px', fontWeight: '700', color: isCancelled ? '#991B1B' : '#0F172A', cursor: 'pointer', letterSpacing: '-0.2px' }}
+                        >
+                          {row.c3 || row.customerName || 'Customer'}
                         </span>
-                      </td>
-                      <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
-                      <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right' }}>{row.c5}</td>
-                      {/* 7. DEDICATED PRINT STATUS COLUMN */}
-                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                        {row.dispatchPrinted ? (
-                          <span
-                            title={`BOM physical sheet printed on ${row.dispatchPrintedDateStr || ''} at ${row.dispatchPrintTimeStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`}
-                            style={{
-                              backgroundColor: '#F0FDF4',
-                              color: '#15803D',
-                              border: '1px solid #BBF7D0',
-                              borderRadius: '6px',
-                              padding: '3px 8px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4.5px',
-                              width: 'fit-content',
-                              lineHeight: 1
-                            }}
-                          >
-                            <Printer size={11} strokeWidth={2.5} />
-                            <span>Printed</span>
-                            {row.dispatchPrintTimeStr && (
-                              <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
-                            )}
-                          </span>
-                        ) : (
-                          <span
-                            title="BOM physical sheet has not been printed yet"
-                            style={{
-                              backgroundColor: '#FFFBEB',
-                              color: '#B45309',
-                              border: '1px solid #FDE68A',
-                              borderRadius: '6px',
-                              padding: '3px 8px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4.5px',
-                              width: 'fit-content',
-                              lineHeight: 1
-                            }}
-                          >
-                            <Clock size={11} strokeWidth={2.5} />
-                            <span>Pending Print</span>
+
+                        {isCancelled && (
+                          <span style={{
+                            backgroundColor: '#FEF2F2',
+                            color: '#DC2626',
+                            border: '1px solid #FECACA',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <XCircle size={11} style={{ color: '#DC2626' }} />
+                            Cancelled
                           </span>
                         )}
-                      </td>
-                      {/* 8. STATUS COLUMN */}
-                      <td style={{ padding: '12px 14px', textAlign: 'left' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                          <span style={{ backgroundColor: row.stBg, color: row.stFg, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px', border: row.stBorder }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.stFg }}></span>
-                            {row.status}
+
+                        {!isCancelled && isAwaitingSalesPayment && (
+                          <span style={{
+                            backgroundColor: '#FEF3C7',
+                            color: '#92400E',
+                            border: '1px solid #FCD34D',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <AlertCircle size={11} style={{ color: '#D97706' }} />
+                            Packed — Awaiting Sales Payment Proof
                           </span>
-                          {/* Quick access badges for LR photo & Final Loading photos if present */}
-                          {(() => {
-                            const vl = row.vehicleLoading || {};
-                            const hasLr = Boolean(row.lrCopyDoc || vl.lrCopyDoc);
-                            const photos = (Array.isArray(vl.photos) && vl.photos.length > 0) ? vl.photos : (Array.isArray(row.loadingPhotos) && row.loadingPhotos.length > 0 ? row.loadingPhotos : (Array.isArray(row.photos) && row.photos.length > 0 ? row.photos : []));
-                            if (!hasLr && photos.length === 0) return null;
-                            return (
-                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
-                                {photos.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const p0 = photos[0];
-                                      const photoUrl = (p0.url && !p0.url.startsWith('blob:')) ? p0.url : ((p0.dataUrl && !p0.dataUrl.startsWith('blob:')) ? p0.dataUrl : (getMediaFromCache(p0.name) || getMediaFromCache(p0.id) || (p0.name ? `/api/uploads/${p0.name}` : '')));
-                                      setPreviewDocModal({
-                                        title: `Loading Photos (${photos.length}) — ${row.c1}`,
-                                        doc: { ...p0, dataUrl: photoUrl, url: photoUrl }
-                                      });
-                                    }}
-                                    style={{ border: '1px solid #BAE6FD', background: '#F0F9FF', color: '#0369A1', fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                    title="View Vehicle Loading Photos"
-                                  >
-                                    📷 {photos.length} Photo{photos.length > 1 ? 's' : ''}
-                                  </button>
-                                )}
-                                {hasLr && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const lr = row.lrCopyDoc || vl.lrCopyDoc;
-                                      const lrUrl = (lr.url && !lr.url.startsWith('blob:')) ? lr.url : ((lr.dataUrl && !lr.dataUrl.startsWith('blob:')) ? lr.dataUrl : (getMediaFromCache(lr.name) || (lr.name ? `/api/uploads/${lr.name}` : '')));
-                                      setPreviewDocModal({
-                                        title: `LR Copy — ${row.c1} (${row.lrNo || vl.lrNo || 'Document'})`,
-                                        doc: { ...lr, dataUrl: lrUrl, url: lrUrl }
-                                      });
-                                    }}
-                                    style={{ border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                    title="View Transporter LR Copy"
-                                  >
-                                    📄 LR Copy
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })()}
+                        )}
+
+                        <span style={{ color: '#CBD5E1', fontSize: '12px', fontWeight: '700' }}>·</span>
+
+                        {/* Assigned Salesperson Badge in standard compact 11px */}
+                        <span style={{
+                          backgroundColor: '#F0FDFA',
+                          color: '#0E7490',
+                          border: '1px solid #A5F3FC',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <User size={11} style={{ color: '#0E7490' }} />
+                          {getCleanSalesPersonName(row.salesPerson || row.createdBy, row.salesPersonCode || row.createdById)}
+                        </span>
+                      </div>
+
+                      {/* Right Side: Applied Date + ••• Menu */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
+                          Applied at <strong style={{ color: '#334155', fontWeight: '600' }}>{row.dateTimeObj ? `${row.dateTimeObj.date}` : row.c2}</strong>
+                        </span>
+                        {isCeo && (
+                          <button
+                            type="button"
+                            onClick={() => setExecutiveDossierOrder(row)}
+                            title="Open Executive 360° Order Dossier"
+                            style={{
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              backgroundColor: '#0F172A',
+                              color: '#38BDF8',
+                              border: '1px solid #1E293B',
+                              fontSize: '10px',
+                              fontWeight: '700',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            360° Dossier
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending && !isCancelled })}
+                          title="More Options"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#64748B',
+                            cursor: 'pointer',
+                            padding: '3px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Line 2: Metadata Subline (ID and Items count, print status) */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '7px',
+                      marginTop: '4px',
+                      marginBottom: '10px',
+                      marginLeft: '23px',
+                      fontSize: '12px',
+                      color: '#475569'
+                    }}>
+                      <span
+                        onClick={() => setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending && !isCancelled })}
+                        style={{ fontWeight: '700', color: isCancelled ? '#DC2626' : '#0E7490', cursor: 'pointer' }}
+                      >
+                        BOM ID: {row.code}
+                      </span>
+                      <span style={{ color: '#CBD5E1' }}>|</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                        <Boxes size={11} style={{ color: '#64748B' }} />
+                        {Array.isArray(row.items) ? row.items.length : 0} Items
+                      </span>
+                      <span style={{ color: '#CBD5E1' }}>·</span>
+                      <span>
+                        {isCancelled ? (
+                          <span style={{ color: '#DC2626', fontWeight: '700', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <XCircle size={11} /> Cancelled & Stock Restored
+                          </span>
+                        ) : row.dispatchPrinted ? (
+                          <span style={{ color: '#15803D', fontWeight: '700', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Printer size={11} /> Printed
+                          </span>
+                        ) : (
+                          <span style={{ color: '#B45309', fontWeight: '700', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Clock size={11} /> Pending Print
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Amber Action Alert for Packed BOM Awaiting Sales Payment Proof */}
+                    {!isCancelled && isAwaitingSalesPayment && (
+                      <div style={{
+                        backgroundColor: '#FFFBEB',
+                        border: '1px solid #FDE68A',
+                        borderRadius: '8px',
+                        padding: '9px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                        marginLeft: '23px',
+                        marginBottom: '8px',
+                        boxShadow: '0 1px 2px rgba(245, 158, 11, 0.08)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: '#F59E0B',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <UploadCloud size={12} style={{ color: '#FFFFFF' }} />
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#92400E' }}>
+                            ⚠️ Action Required: Goods Packed — Please Attach Payment Proof
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#B45309' }}>
+                            Terms: <strong>{row.paymentType || 'Payment While Dispatch / Partial Paid'}</strong> · Packed by Dispatch. Held until payment slip is attached to forward to Accounts.
+                          </span>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUploadPaymentModal(row);
+                          }}
+                          style={{
+                            backgroundColor: '#D97706',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '5px 12px',
+                            fontSize: '11.5px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            boxShadow: '0 1px 3px rgba(217, 119, 6, 0.25)'
+                          }}
+                        >
+                          <Upload size={12} style={{ color: '#FFFFFF' }} /> Attach Payment Slip
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Line 3: Stepper Pipeline Card Box or Red Cancelled Info Box */}
+                    {isCancelled ? (
+                      <div style={{
+                        backgroundColor: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        borderRadius: '8px',
+                        padding: '9px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                        marginLeft: '23px',
+                        boxShadow: '0 1px 2px rgba(220, 38, 38, 0.05)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: '#DC2626',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <XCircle size={12} style={{ color: '#FFFFFF' }} />
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#DC2626' }}>
+                            Order Cancelled & Stock Restored to Inventory
+                          </span>
+                          {row.cancellationReason && (
+                            <span style={{
+                              fontSize: '11.5px',
+                              color: '#991B1B',
+                              backgroundColor: '#FFFFFF',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #FCA5A5'
+                            }}>
+                              Reason: <strong>{row.cancellationReason}</strong>
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#991B1B' }}>
+                          {row.cancelledByNameAndRole ? (
+                            <span>Cancelled by: <strong>{row.cancelledByNameAndRole}</strong></span>
+                          ) : row.cancelledBy ? (
+                            <span>Cancelled by: <strong>{row.cancelledBy}</strong></span>
+                          ) : null}
+                          {row.cancelledAt && (
+                            <span>({new Date(row.cancelledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })})</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        padding: '8px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                        marginLeft: '23px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                      }}>
+                        {/* Horizontal Stepper Flow */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '300px', overflowX: 'auto', padding: '2px 0' }}>
+                          {lifecycle.steps.map((st, sIdx) => {
+                            const isLast = sIdx === lifecycle.steps.length - 1;
+                            const nextStep = lifecycle.steps[sIdx + 1];
+                            const isLineActive = st.isDone && (nextStep?.isDone || nextStep?.isActive);
+                            const StepIcon = st.icon;
+
+                            return (
+                              <React.Fragment key={st.id}>
+                                {/* Step Node */}
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                                  {st.isDone ? (
+                                    <>
+                                      <div style={{
+                                        width: '18px',
+                                        height: '18px',
+                                        borderRadius: '50%',
+                                        backgroundColor: '#0E7490',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        flexShrink: 0
+                                      }}>
+                                        <Check size={11} strokeWidth={3.5} style={{ color: '#FFFFFF' }} />
+                                      </div>
+                                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#0E7490', whiteSpace: 'nowrap' }}>
+                                        {st.label}
+                                      </span>
+                                    </>
+                                  ) : st.isActive ? (
+                                    <div style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      border: '1.5px solid #0E7490',
+                                      backgroundColor: '#F0FDFA',
+                                      color: '#0E7490',
+                                      flexShrink: 0
+                                    }}>
+                                      {StepIcon && <StepIcon size={12} style={{ color: '#0E7490' }} />}
+                                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>
+                                        {st.label}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexShrink: 0, opacity: 0.75 }}>
+                                      {StepIcon && <StepIcon size={13} style={{ color: '#94A3B8' }} />}
+                                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#94A3B8', whiteSpace: 'nowrap' }}>
+                                        {st.label}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Connecting Line */}
+                                {!isLast && (
+                                  <div style={{
+                                    flex: 1,
+                                    minWidth: '20px',
+                                    height: '2px',
+                                    backgroundColor: isLineActive ? '#0E7490' : '#E2E8F0',
+                                    borderRadius: '1px'
+                                  }} />
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
 
         {/* PAGINATION FOOTER - STRICT RULES MATCH */}
         {!tableLoading && filteredRows.length > 0 && (
@@ -8494,6 +8752,51 @@ export default function BomOrdersView(props) {
             <Eye size={14} style={{ color: '#0E7490' }} /> View Details
           </button>
 
+          {/* Reconfirm BOM Action Button (Sales Person Verification of Materials & Quantities) */}
+          {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
+            const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+            if (!codeVal) return null;
+            const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
+            if (!targetRow) return null;
+            if (targetRow.salesConfirmed || targetRow.cancelled || (targetRow.status || '').toLowerCase().includes('cancel') || targetRow.status === 'Completed' || targetRow.status === 'Closed' || targetRow.fullyCompleted) return null;
+
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (selectedRows.length > 1) {
+                    alert('Please select a single BOM order to reconfirm.');
+                    return;
+                  }
+                  setSelectedRows([]);
+                  setConfirmingBomModal({ ...targetRow, isEditMode: true });
+                }}
+                style={{
+                  backgroundColor: '#0E7490',
+                  border: '1px solid #0891B2',
+                  color: '#FFFFFF',
+                  borderRadius: '20px',
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 8px rgba(14, 116, 144, 0.35)',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Verify materials, check quantities with tick marks, and send BOM to Dispatch"
+              >
+                <CheckSquare size={14} style={{ color: '#FFFFFF' }} /> Reconfirm BOM
+              </button>
+            );
+          })()}
+
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
             const isOnlyDraft = (selectedRows || []).every(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
@@ -8567,6 +8870,47 @@ export default function BomOrdersView(props) {
             <CreditCard size={14} style={{ color: '#2563EB' }} /> Payment Details
           </button>
 
+          {/* Attach Payment Proof Button for Packed BOM Awaiting Sales Slip */}
+          {(() => {
+            const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+            if (!codeVal) return null;
+            const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
+            const isAwaitingProof = targetRow && (
+              targetRow.awaitingSalesPaymentProof ||
+              (typeof targetRow.status === 'string' && targetRow.status.toLowerCase().includes('awaiting sales payment proof'))
+            );
+            if (!isAwaitingProof || isCeo) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedRows([]);
+                  setUploadPaymentModal(targetRow);
+                }}
+                style={{
+                  backgroundColor: '#F59E0B',
+                  border: '1px solid #D97706',
+                  color: '#FFFFFF',
+                  borderRadius: '20px',
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 8px rgba(245, 158, 11, 0.35)',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Upload payment receipt / proof slip to release order to Accounts"
+              >
+                <Upload size={14} style={{ color: '#FFFFFF' }} /> Attach Payment Proof
+              </button>
+            );
+          })()}
+
           {(() => {
             const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
             if (!codeVal) return null;
@@ -8606,37 +8950,46 @@ export default function BomOrdersView(props) {
             );
           })()}
 
-          {canCancelBom && (() => {
+          {(() => {
             const hasCancellable = (selectedRows || []).some(codeVal => {
               const row = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return row && row.status !== 'Cancelled & Stock Restored' && row.status !== 'Completed' && row.status !== 'Closed' && !row.fullyCompleted;
+              return row && canUserCancelBom(row);
             });
             if (!hasCancellable) return null;
 
             return (
               <button
+                type="button"
                 onClick={() => {
+                  if (selectedRows.length > 1) {
+                    alert('Please select a single BOM order to cancel.');
+                    return;
+                  }
                   const targetCode = selectedRows[0];
                   const targetBom = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code) === targetCode);
-                  setSelectedRows([]);
-                  if (targetBom) handleCancelBomOrder(targetBom);
+                  if (targetBom) {
+                    setSelectedRows([]);
+                    handleCancelBomOrder(targetBom);
+                  }
                 }}
                 style={{
                   backgroundColor: '#FEF2F2',
                   border: '1px solid #FECACA',
                   color: '#DC2626',
-                  borderRadius: '10px',
-                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  padding: '6px 16px',
                   fontSize: '12px',
-                  fontWeight: '800',
+                  fontWeight: '700',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
-                  boxShadow: '0 1px 2px rgba(220, 38, 38, 0.1)'
+                  boxShadow: '0 1px 3px rgba(220, 38, 38, 0.12)',
+                  transition: 'all 0.15s ease'
                 }}
+                title="Cancel selected BOM order and restore inventory stock"
               >
                 <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
               </button>
@@ -8722,7 +9075,7 @@ export default function BomOrdersView(props) {
                 >
                   <Download size={14} style={{ color: '#0E7490' }} /> Export
                 </button>
-                {canCancelBom && quickPreviewRecord.status !== 'Cancelled & Stock Restored' && (
+                {canUserCancelBom(quickPreviewRecord) && (
                   <button
                     onClick={() => {
                       const rec = quickPreviewRecord;
@@ -8748,6 +9101,7 @@ export default function BomOrdersView(props) {
                     <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
                   </button>
                 )}
+
                 <button
                   onClick={() => {
                     const rec = quickPreviewRecord;
@@ -9615,9 +9969,30 @@ export default function BomOrdersView(props) {
                       const prevBal = uploadPaymentModal.balanceAmount != null ? uploadPaymentModal.balanceAmount : Math.max(0, (uploadPaymentModal.grandTotal || 0) - (uploadPaymentModal.partialAmount || 0));
                       const newBal = isPartial && balPaid > 0 ? Math.max(0, prevBal - balPaid) : prevBal;
 
+                      const isPackedAwaitingProof = Boolean(
+                        uploadPaymentModal.awaitingSalesPaymentProof ||
+                        (typeof uploadPaymentModal.status === 'string' && uploadPaymentModal.status.toLowerCase().includes('awaiting sales payment proof')) ||
+                        uploadPaymentModal.packingStatus === 'PACKING_VERIFIED' ||
+                        uploadPaymentModal.dispatchPackingVerified
+                      );
+
+                      const nextStatus = isPackedAwaitingProof
+                        ? 'Dispatch Packing Verified - Sent to Accounts'
+                        : (isPartial ? (newBal <= 0 ? 'Payment Uploaded & Verified' : uploadPaymentModal.status) : 'Payment Uploaded & Verified');
+
                       const updatedList = (bomStore || []).map(b => b.bomCode === uploadPaymentModal.bomCode ? {
                         ...b,
-                        status: isPartial ? (newBal <= 0 ? 'Payment Uploaded & Verified' : b.status) : 'Payment Uploaded & Verified',
+                        status: nextStatus,
+                        readyForAccounts: isPackedAwaitingProof ? true : b.readyForAccounts,
+                        awaitingSalesPaymentProof: false,
+                        pendingSalesDispatchPayment: false,
+                        dispatchPackingVerified: isPackedAwaitingProof ? true : b.dispatchPackingVerified,
+                        packingStatus: isPackedAwaitingProof ? 'PACKING_VERIFIED' : b.packingStatus,
+                        accountsVerification: {
+                          ...(b.accountsVerification || {}),
+                          readyForAccounts: isPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
+                          paymentStatus: 'Payment Proof Attached by Sales'
+                        },
                         paymentProofDoc: b.paymentProofDoc || pDocObj,
                         balanceProofDoc: pDocObj,
                         balanceAmount: newBal,
@@ -9643,11 +10018,27 @@ export default function BomOrdersView(props) {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
                         }).catch(() => {});
+
+                        if (isPackedAwaitingProof) {
+                          try {
+                            notifyBomPackedAndSentToAccounts({
+                              bomCode: targetBom.bomCode,
+                              customerName: targetBom.customerName || targetBom.c3,
+                              actorName: getCleanSalesPersonName(targetBom.salesPerson)
+                            });
+                          } catch (nErr) {
+                            console.warn('Failed to send Accounts notification:', nErr);
+                          }
+                        }
                       }
                       setUploadPaymentModal(null);
                       setPaymentProofFile(null);
                       setModalBalanceAmount('');
-                      alert('Payment proof uploaded and saved successfully!');
+                      if (isPackedAwaitingProof) {
+                        alert(`✅ Payment proof uploaded successfully!\n\nBecause Dispatch has completed packing, BOM ${targetBom?.bomCode || uploadPaymentModal.bomCode} has been forwarded to the Accounts team for verification.`);
+                      } else {
+                        alert('Payment proof uploaded and saved successfully!');
+                      }
                     } catch (err) {
                       alert(`Payment upload failed: ${err.message}`);
                     } finally {

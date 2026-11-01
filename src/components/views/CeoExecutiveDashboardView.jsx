@@ -14,7 +14,7 @@ import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 // Canonical BUSINZ KPI Grid Component for all CEO Dashboards
-function CeoKpiGrid({ kpis }) {
+export function CeoKpiGrid({ kpis }) {
   if (!kpis || !kpis.length) return null;
   return (
     <div 

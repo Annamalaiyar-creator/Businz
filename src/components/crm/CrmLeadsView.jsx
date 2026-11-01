@@ -181,10 +181,15 @@ export default function CrmLeadsView({
       const sessionId = (typeof localStorage !== 'undefined')
         ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '')
         : '';
-      const headers = { 'x-user-emp-id': loggedInEmpId };
+      const currentRole = effectiveRole || userRole || '';
+      const headers = { 
+        'x-user-emp-id': loggedInEmpId,
+        'x-user-role': currentRole,
+        'x-user-name': loggedInUserName
+      };
       if (sessionId) headers['x-session-id'] = sessionId;
 
-      const res = await fetch(`/api/crm/leads/notifications?employeeCode=${encodeURIComponent(loggedInEmpId)}`, {
+      const res = await fetch(`/api/crm/leads/notifications?employeeCode=${encodeURIComponent(loggedInEmpId)}&role=${encodeURIComponent(currentRole)}`, {
         headers
       });
       const json = await res.json();
@@ -201,13 +206,29 @@ export default function CrmLeadsView({
     fetchSalespersons();
     fetchNotifications();
 
+    const handleRealtimeNotif = (e) => {
+      const notif = e.detail;
+      if (notif) {
+        setNotifications(prev => [notif, ...(prev || []).filter(n => n.id !== notif.id)]);
+        fetchLeads();
+        if (typeof showToast === 'function' && notif.title) {
+          showToast(notif.title);
+        }
+      }
+    };
+
+    window.addEventListener('businz_notification_received', handleRealtimeNotif);
+
     // Periodic Refresh every 45s
     const timer = setInterval(() => {
       fetchLeads();
       fetchNotifications();
     }, 45000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('businz_notification_received', handleRealtimeNotif);
+    };
   }, [userRole, loggedInEmpId]);
 
   // Load Lead Detailed History and Open Lead 360° Intelligence View

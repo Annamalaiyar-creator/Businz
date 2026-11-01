@@ -89,13 +89,14 @@ function isClientRecipient(client, notification) {
     if (clientRole.includes(targetRole) || targetRole.includes(clientRole)) return true;
 
     // Common department aliases
-    if (targetRole === 'dispatch' && clientRole.includes('dispatch')) return true;
-    if (targetRole === 'accounts' && (clientRole.includes('account') || clientRole.includes('finance'))) return true;
-    if (targetRole === 'billing' && (clientRole.includes('bill') || clientRole.includes('invoice'))) return true;
-    if (targetRole === 'production' && clientRole.includes('production')) return true;
-    if (targetRole === 'procurement' && clientRole.includes('procurement')) return true;
-    if (targetRole === 'ceo' && (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director'))) return true;
-    if (targetRole === 'lead_managers' && (clientRole.includes('sales head') || clientRole === 'ceo' || clientRole.includes('technical administrator') || clientRole.includes('admin'))) return true;
+    if (targetRole.includes('dispatch') && clientRole.includes('dispatch')) return true;
+    if ((targetRole.includes('account') || targetRole.includes('finance')) && (clientRole.includes('account') || clientRole.includes('finance'))) return true;
+    if ((targetRole.includes('bill') || targetRole.includes('invoice')) && (clientRole.includes('bill') || clientRole.includes('invoice'))) return true;
+    if (targetRole.includes('sale') && clientRole.includes('sale')) return true;
+    if (targetRole.includes('production') && clientRole.includes('production')) return true;
+    if (targetRole.includes('procurement') && clientRole.includes('procurement')) return true;
+    if ((targetRole === 'ceo' || targetRole === 'md') && (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director'))) return true;
+    if (targetRole === 'lead_managers' && (clientRole.includes('sales head') || clientRole === 'ceo' || clientRole.includes('technical') || clientRole.includes('admin') || clientRole.includes('support') || clientRole.includes('director'))) return true;
   }
 
   return false;
@@ -263,13 +264,24 @@ export async function getNotificationsForUser(options = {}) {
 
   try {
     const values = [normalizedEmp, normalizedRole];
+    const isManagerRole = /ceo|director|admin|technical|support|sales head|sales manager/i.test(normalizedRole);
+    const leadManagerClause = isManagerRole ? `OR recipient_role IN ('lead_managers', 'management', 'admin', 'ceo')` : '';
+
     let query = `
       SELECT * FROM public.internal_notifications
       WHERE (
         recipient_emp_code = $1 
         OR recipient_role = $2 
         OR recipient_emp_code = 'ALL'
-        OR (recipient_role IS NOT NULL AND $2 ILIKE '%' || recipient_role || '%')
+        ${leadManagerClause}
+        OR (recipient_role IS NOT NULL AND (
+          $2 ILIKE '%' || recipient_role || '%' 
+          OR recipient_role ILIKE '%' || $2 || '%'
+          OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
+          OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
+          OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
+          OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+        ))
       )
     `;
 
@@ -296,7 +308,15 @@ export async function getNotificationsForUser(options = {}) {
         recipient_emp_code = $1 
         OR recipient_role = $2 
         OR recipient_emp_code = 'ALL'
-        OR (recipient_role IS NOT NULL AND $2 ILIKE '%' || recipient_role || '%')
+        ${leadManagerClause}
+        OR (recipient_role IS NOT NULL AND (
+          $2 ILIKE '%' || recipient_role || '%' 
+          OR recipient_role ILIKE '%' || $2 || '%'
+          OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
+          OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
+          OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
+          OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+        ))
       );
     `, [normalizedEmp, normalizedRole]);
 
@@ -323,16 +343,33 @@ export async function getNotificationsForUser(options = {}) {
 /**
  * Mark notification(s) as read
  */
-export async function markNotificationAsRead({ notificationId, empCode = '', all = false }) {
+export async function markNotificationAsRead({ notificationId, empCode = '', role = '', all = false }) {
   const normalizedEmp = String(empCode || '').toUpperCase().trim();
+  const normalizedRole = String(role || '').toLowerCase().trim();
+
+  const isManagerRole = /ceo|director|admin|technical|support|sales head|sales manager/i.test(normalizedRole);
+  const leadManagerClause = isManagerRole ? `OR recipient_role IN ('lead_managers', 'management', 'admin', 'ceo')` : '';
 
   try {
     if (all) {
       await executeSql(`
         UPDATE public.internal_notifications
         SET is_read = true, read_at = NOW()
-        WHERE is_read = false AND (recipient_emp_code = $1 OR recipient_emp_code = 'ALL');
-      `, [normalizedEmp]);
+        WHERE is_read = false AND (
+          recipient_emp_code = $1 
+          OR recipient_role = $2 
+          OR recipient_emp_code = 'ALL'
+          ${leadManagerClause}
+          OR (recipient_role IS NOT NULL AND (
+            $2 ILIKE '%' || recipient_role || '%' 
+            OR recipient_role ILIKE '%' || $2 || '%'
+            OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
+            OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
+            OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
+            OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+          ))
+        );
+      `, [normalizedEmp, normalizedRole]);
     } else if (notificationId) {
       await executeSql(`
         UPDATE public.internal_notifications
@@ -348,15 +385,67 @@ export async function markNotificationAsRead({ notificationId, empCode = '', all
   try {
     const list = readLocalNotificationsDisk();
     list.forEach(n => {
-      if (all && (n.recipient_emp_code === normalizedEmp || n.recipient_emp_code === 'ALL')) {
-        n.is_read = true;
-        n.read_at = new Date().toISOString();
+      if (all) {
+        if (isClientRecipient({ empCode: normalizedEmp, role: normalizedRole }, n)) {
+          n.is_read = true;
+          n.read_at = new Date().toISOString();
+        }
       } else if (notificationId && n.id === notificationId) {
         n.is_read = true;
         n.read_at = new Date().toISOString();
       }
     });
     writeLocalNotificationsDisk(list);
+  } catch (_) {}
+
+  return { success: true };
+}
+
+/**
+ * Permanently clear / purge notifications for a recipient (removes dummy or outdated alerts)
+ */
+export async function clearNotifications({ empCode = '', role = '', all = true, purgeAll = false }) {
+  const normalizedEmp = String(empCode || '').toUpperCase().trim();
+  const normalizedRole = String(role || '').toLowerCase().trim();
+
+  const isManagerRole = /ceo|director|admin|technical|support|sales head|sales manager/i.test(normalizedRole);
+  const leadManagerClause = isManagerRole ? `OR recipient_role IN ('lead_managers', 'management', 'admin', 'ceo')` : '';
+
+  try {
+    if (purgeAll || (isManagerRole && all && !normalizedEmp)) {
+      await executeSql(`DELETE FROM public.internal_notifications;`);
+    } else if (all) {
+      await executeSql(`
+        DELETE FROM public.internal_notifications
+        WHERE (
+          recipient_emp_code = $1 
+          OR recipient_role = $2 
+          OR recipient_emp_code = 'ALL'
+          ${leadManagerClause}
+          OR (recipient_role IS NOT NULL AND (
+            $2 ILIKE '%' || recipient_role || '%' 
+            OR recipient_role ILIKE '%' || $2 || '%'
+            OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
+            OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
+            OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
+            OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+          ))
+        );
+      `, [normalizedEmp, normalizedRole]);
+    }
+  } catch (err) {
+    console.warn('[InternalNotification clear Notice]:', err.message);
+  }
+
+  // Update local disk cache
+  try {
+    if (purgeAll || (isManagerRole && all && !normalizedEmp)) {
+      writeLocalNotificationsDisk([]);
+    } else {
+      const list = readLocalNotificationsDisk();
+      const remaining = list.filter(n => !isClientRecipient({ empCode: normalizedEmp, role: normalizedRole }, n));
+      writeLocalNotificationsDisk(remaining);
+    }
   } catch (_) {}
 
   return { success: true };

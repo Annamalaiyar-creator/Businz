@@ -2761,6 +2761,120 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setActiveDropdownIdx(null);
   };
 
+  // Clones/duplicates a Performa Invoice into a fresh new record with sequential number
+  const handleClonePi = async (pi) => {
+    if (!pi) return;
+    resetForm();
+    setEditIdx(null); // Creating a NEW record, not editing an existing one!
+
+    // 1. Fetch fresh sequential PI Number
+    const nextNo = await fetchNextPiNumber();
+    if (nextNo) setPiNumber(nextNo);
+
+    // 2. Set current date & validity (default 30 days)
+    const todayStr = new Date().toISOString().split('T')[0];
+    setPiDate(todayStr);
+    const validDate = new Date();
+    validDate.setDate(validDate.getDate() + 30);
+    setValidUntilDate(validDate.toISOString().split('T')[0]);
+
+    // 3. Clone Customer Information
+    setVendorName(pi.vendor || pi.customerName || '');
+    setContactPerson(pi.contactPerson || '');
+    setPhone(pi.phone || '');
+    setEmail(pi.email || '');
+    setGstNo(pi.gstNo || '');
+    setSalesPerson(getActiveUserName() || pi.salesPerson || '');
+
+    // 4. Clone Terms & Transportation
+    setPaymentTerms(normalizePaymentTerm(pi.paymentTerms || pi.paymentType || '100% Paid'));
+    setCreditDays(pi.creditDays || '');
+    setTransportMode(pi.transportMode || 'Transport');
+    setTransporterName(pi.transporterName || '');
+    setDestination(pi.destination || pi.deliveryCity || '');
+    setVehicleNo('');
+    setTransportScope(pi.transportScope || 'VRM Structures');
+
+    // 5. Clone Billing Address
+    const bAddr = pi.billingAddress || pi.billingAddressObj || {};
+    if (typeof bAddr === 'object') {
+      setBillingStreet(bAddr.street || bAddr.address || pi.billingStreet || '');
+      setBillingCity(bAddr.city || pi.billingCity || '');
+      setBillingState(bAddr.state || pi.billingState || '');
+      setBillingPincode(bAddr.pincode || bAddr.pin || pi.billingPincode || '');
+    } else if (typeof bAddr === 'string') {
+      setBillingStreet(bAddr || pi.billingStreet || '');
+      setBillingCity(pi.billingCity || '');
+      setBillingState(pi.billingState || '');
+      setBillingPincode(pi.billingPincode || '');
+    } else {
+      setBillingStreet(pi.billingStreet || '');
+      setBillingCity(pi.billingCity || '');
+      setBillingState(pi.billingState || '');
+      setBillingPincode(pi.billingPincode || '');
+    }
+
+    // 6. Clone Delivery Address
+    const dAddr = pi.deliveryAddress || pi.deliveryAddressObj || {};
+    if (typeof dAddr === 'object') {
+      setDeliveryStreet(dAddr.street || dAddr.address || pi.deliveryStreet || '');
+      setDeliveryCity(dAddr.city || pi.deliveryCity || '');
+      setDeliveryState(dAddr.state || pi.deliveryState || '');
+      setDeliveryPincode(dAddr.pincode || dAddr.pin || pi.deliveryPincode || '');
+    } else if (typeof dAddr === 'string') {
+      setDeliveryStreet(dAddr || pi.deliveryStreet || '');
+      setDeliveryCity(pi.deliveryCity || '');
+      setDeliveryState(pi.deliveryState || '');
+      setDeliveryPincode(pi.deliveryPincode || '');
+    } else {
+      setDeliveryStreet(pi.deliveryStreet || '');
+      setDeliveryCity(pi.deliveryCity || '');
+      setDeliveryState(pi.deliveryState || '');
+      setDeliveryPincode(pi.deliveryPincode || '');
+    }
+    setSameAsBilling(pi.sameAsBilling !== undefined ? pi.sameAsBilling : (!pi.deliveryStreet && !pi.deliveryAddress));
+
+    // 7. Clone Preset Groups & Items
+    if (pi.presetGroups) {
+      try {
+        setPresetGroups(JSON.parse(JSON.stringify(pi.presetGroups)));
+      } catch (_) {
+        setPresetGroups(pi.presetGroups);
+      }
+    } else {
+      setPresetGroups({});
+    }
+
+    if (Array.isArray(pi.items) && pi.items.length > 0) {
+      setPiItems(pi.items.map(it => ({
+        ...it,
+        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it) || pi.hsn
+      })));
+    } else {
+      setPiItems([
+        {
+          name: pi.productName || 'Solar Mounting Structures & Fasteners',
+          category: 'Structure Kit',
+          uom: 'NOS',
+          qty: String(pi.quantity || 1),
+          rate: String(pi.unitValue || 25000),
+          gstRate: '18%',
+          hsn: pi.hsn || getHsnCode(pi.productName)
+        }
+      ]);
+    }
+
+    // 8. Documents start clean for cloned record
+    setSignedPiDoc(null);
+    setPdfFile(null);
+    setUploadProgress(0);
+
+    // 9. Open Create view
+    setViewMode('create');
+    setActiveDropdownIdx(null);
+    showTopToast(`Cloned from PI ${pi.piNo || ''}. Assigned fresh PI number: ${nextNo || ''}`, 'success', 4000);
+  };
+
   // Deletes the PI
   const executeDeletePI = () => {
     if (deleteIdx !== null) {
@@ -3424,20 +3538,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                          />
                       </th>
-                      <th style={{ width: '140px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
-                      <th style={{ minWidth: '200px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
-                      <th style={{ width: '160px', minWidth: '150px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
-                      <th style={{ width: '150px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>GST No.</th>
-                      <th style={{ width: '120px', minWidth: '110px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
-                      <th style={{ width: '140px', minWidth: '120px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
-                      <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
+                      <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
+                      <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
+                      <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
+                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
+                      <th style={{ width: '160px', minWidth: '140px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tableLoading ? (
                       <>
                         <tr style={{ backgroundColor: '#F0FDFA' }}>
-                          <td colSpan={8} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
+                          <td colSpan={7} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <div className="businz-spin-ring" />
@@ -3467,16 +3580,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '90px', height: '14px' }} />
                             </td>
                             <td style={{ padding: '12px 14px' }}>
-                              <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
-                            </td>
-                            <td style={{ padding: '12px 14px' }}>
-                              <div className="skeleton-shimmer skeleton-text" style={{ width: '100px', height: '14px' }} />
-                            </td>
-                            <td style={{ padding: '12px 14px' }}>
-                              <div className="skeleton-shimmer skeleton-text" style={{ width: '110px', height: '14px' }} />
-                            </td>
-                            <td style={{ padding: '12px 14px' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '120px', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
                             </td>
                             <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '85px', height: '14px', marginLeft: 'auto' }} />
@@ -3489,7 +3599,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </>
                     ) : filteredPIList.length === 0 ? (
                       <tr>
-                        <td colSpan={8} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                        <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <FileText size={32} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Proforma Invoices found</span>
@@ -3590,24 +3700,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             </td>
                             <td
                               onClick={() => setSelectedPi(pi)}
-                              style={{ padding: '12px 14px', cursor: 'pointer' }}
+                              style={{ padding: '12px 14px', cursor: 'pointer', width: '150px', minWidth: '130px' }}
                             >
                               <div style={{ fontWeight: 'bold', color: '#2563EB', fontSize: '13px' }}>
                                 {pi.piNo}
                               </div>
                             </td>
-                            <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.vendor || pi.customerName || 'Direct Customer'}</span>
-                                {pi.contactPerson && <span style={{ fontSize: '11px', color: '#64748B' }}>Attn: {pi.contactPerson}</span>}
-                              </div>
-                              <div style={{ marginTop: '3px' }}>
-                                <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-block' }}>
-                                  {normalizePaymentTerm(pi.paymentTerms || pi.paymentType)}
-                                </span>
-                              </div>
+                            <td style={{ padding: '12px 14px', color: '#64748B', width: '130px', minWidth: '120px', whiteSpace: 'nowrap' }}>
+                              {pi.piDate}
                             </td>
-                            <td style={{ padding: '12px 14px', color: '#1E293B' }}>
+                            <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <div style={{
                                   width: '26px',
@@ -3637,9 +3739,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 </div>
                               </div>
                             </td>
-                            <td style={{ padding: '12px 14px', fontFamily: 'monospace', color: '#475569' }}>{pi.gstNo || '—'}</td>
-                            <td style={{ padding: '12px 14px', color: '#64748B' }}>{pi.piDate}</td>
-                            <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right' }}>{pi.amount}</td>
+                            <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B', minWidth: '220px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.vendor || pi.customerName || 'Direct Customer'}</span>
+                                {pi.contactPerson && <span style={{ fontSize: '11px', color: '#64748B' }}>Attn: {pi.contactPerson}</span>}
+                              </div>
+                              <div style={{ marginTop: '3px' }}>
+                                <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-block' }}>
+                                  {normalizePaymentTerm(pi.paymentTerms || pi.paymentType)}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right', width: '150px', minWidth: '130px' }}>
+                              {pi.amount}
+                            </td>
                             
                             {/* Pill status badge with bullet dot & clickable BOM link */}
                             <td style={{ padding: '12px 14px', textAlign: 'center' }}>
@@ -4132,6 +4245,43 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </button>
                   );
                 })()}
+
+                {/* Clone PI */}
+                {selectedPIs.length === 1 && (
+                  <button
+                    onClick={() => {
+                      const targetPiNo = selectedPIs[0];
+                      const targetPi = targetPiNo ? piList.find(p => p.piNo === targetPiNo) : null;
+                      setSelectedPIs([]);
+                      if (targetPi) {
+                        handleClonePi(targetPi);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      color: '#1E293B',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                    title="Clone / Duplicate this Proforma Invoice"
+                  >
+                    <Copy size={14} style={{ color: '#0E7490' }} />
+                    Clone PI
+                  </button>
+                )}
 
                 {/* Export / Print PDF */}
                 <button
@@ -6405,6 +6555,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     );
                   })()}
                   <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedPi;
+                      setSelectedPi(null);
+                      handleClonePi(target);
+                    }}
+                    title="Clone / Duplicate this Proforma Invoice"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      backgroundColor: '#FFFFFF',
+                      color: '#0F172A',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Copy size={14} style={{ color: '#0E7490' }} /> Clone PI
+                  </button>
+                  <button
                     onClick={() => setPrintModalPi(selectedPi)}
                     title="Open Print & PDF Template"
                     style={{
@@ -7080,6 +7254,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <Edit3 size={15} /> Edit Info
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedPi;
+                      setSelectedPi(null);
+                      handleClonePi(target);
+                    }}
+                    title="Clone / Duplicate this Proforma Invoice"
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: '10px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#0F172A',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Copy size={15} style={{ color: '#0E7490' }} /> Clone PI
+                  </button>
 
                   {selectedPi.status !== 'Cancelled' && !isConverted && (
                     <button

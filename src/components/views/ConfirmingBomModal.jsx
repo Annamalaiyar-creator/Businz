@@ -179,6 +179,12 @@ export default function ConfirmingBomModal({
           {!isAlreadyForwarded && (
             <button
               onClick={() => {
+                if (!allItemsConfirmed) {
+                  const unconfirmedCount = (confirmingBomModal.items || []).filter(i => !i.confirmed).length;
+                  alert(`⚠️ Please verify and mark all materials and quantities as correct (${unconfirmedCount} item(s) pending tick mark) before forwarding this BOM to Dispatch.`);
+                  return;
+                }
+
                 const isDeliveryMatching = Boolean(confirmingBomModal.sameAsBilling) || (
                   ((dObj.address || '').trim() === (bObj.address || '').trim()) &&
                   ((dObj.city || '').trim() === (bObj.city || '').trim()) &&
@@ -215,7 +221,9 @@ export default function ConfirmingBomModal({
                   deliveryAddressProofDocs: confirmingBomModal.sameAsBilling ? [] : (confirmingBomModal.deliveryAddressProofDocs || (confirmingBomModal.deliveryAddressProofDoc ? [confirmingBomModal.deliveryAddressProofDoc] : [])),
                   items: finalizedItems,
                   dispatchPacking: packingItems,
-                  status: 'Sent to Production',
+                  status: 'Sales Confirmed - Sent to Dispatch',
+                  salesConfirmed: true,
+                  salesConfirmedAt: new Date().toISOString(),
                   stockBlocked: true,
                   stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
                   stockDeducted: true,
@@ -288,24 +296,32 @@ export default function ConfirmingBomModal({
                 window.dispatchEvent(new Event('storage'));
 
                 // Trigger Real-time Workflow Notification with synthesized sound & deep-link to Dispatch Orders
-                notifyBomSentToDispatch({
-                  bomCode: confirmingBomModal.bomCode,
-                  customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
-                  salesPerson: confirmingBomModal.salesPerson
-                });
-                notifyBomCreatedToSales({
-                  bomCode: confirmingBomModal.bomCode,
-                  customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
-                  salesPerson: confirmingBomModal.salesPerson,
-                  salesPersonCode: confirmingBomModal.salesPersonCode || confirmingBomModal.createdById
-                });
+                try {
+                  if (typeof notifyBomSentToDispatch === 'function') {
+                    notifyBomSentToDispatch({
+                      bomCode: confirmingBomModal.bomCode,
+                      customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
+                      salesPerson: confirmingBomModal.salesPerson
+                    });
+                  }
+                  if (typeof notifyBomCreatedToSales === 'function') {
+                    notifyBomCreatedToSales({
+                      bomCode: confirmingBomModal.bomCode,
+                      customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
+                      salesPerson: confirmingBomModal.salesPerson,
+                      salesPersonCode: confirmingBomModal.salesPersonCode || confirmingBomModal.createdById
+                    });
+                  }
+                } catch (nErr) {
+                  console.warn('Notifications non-fatal:', nErr);
+                }
 
                 setConfirmingBomModal(null);
-                alert(`BOM (${confirmingBomModal.bomCode}) successfully verified and sent to Production (Work Orders) & Dispatch Orders!\n\nInventory has been allocated and deducted.`);
+                alert(`✅ BOM (${confirmingBomModal.bomCode}) successfully reconfirmed and sent to Dispatch for packing!\n\nInventory has been allocated and deducted.`);
               }}
               style={{
                 border: 'none',
-                backgroundColor: '#166534',
+                backgroundColor: allItemsConfirmed ? '#166534' : '#D97706',
                 color: 'white',
                 height: '40px',
                 padding: '0 24px',
@@ -316,11 +332,14 @@ export default function ConfirmingBomModal({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 2px 4px rgba(22,101,52,0.2)'
+                boxShadow: allItemsConfirmed ? '0 2px 8px rgba(22,101,52,0.3)' : '0 2px 8px rgba(217,119,6,0.3)',
+                transition: 'all 0.15s ease'
               }}
             >
               <CheckCircle style={{ width: '16px', height: '16px' }} />
-              Send BOM to Production & Dispatch
+              {allItemsConfirmed 
+                ? 'Send BOM to Production & Dispatch' 
+                : `Tick All Materials to Confirm (${(confirmingBomModal.items || []).filter(i => i.confirmed).length}/${(confirmingBomModal.items || []).length})`}
             </button>
           )}
         </div>

@@ -9,6 +9,7 @@ import SidebarRightColumn from './components/SidebarRightColumn';
 import MaterialReorderAlerts from './components/MaterialReorderAlerts';
 import LoginScreen from './components/LoginScreen';
 import NotificationToast from './components/NotificationToast';
+import realtimeNotificationService from './services/realtimeNotificationService';
 
 
 // Route/View-Level Code Splitting via React.lazy() (Preserves all behavior, isolates bundle weight)
@@ -331,8 +332,10 @@ function App() {
     return () => window.removeEventListener('controlroom_navigate_tab', handleCustomNavigate);
   }, []);
 
-  // Listen for real-time workflow notifications and local ERP toasts
+  // Always keep real-time workflow & lead notification stream active across the entire app
   useEffect(() => {
+    realtimeNotificationService.start();
+
     const handleIncomingToast = (e) => {
       if (!e || !e.detail) return;
       setToastAlert(e.detail);
@@ -375,6 +378,11 @@ function App() {
       localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
       localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
     }
+
+    // Reconnect notification socket immediately with the new role & credentials
+    try {
+      realtimeNotificationService.start(true);
+    } catch (_) {}
 
     const defaultTab = 'Dashboard';
     setActiveTab(defaultTab);

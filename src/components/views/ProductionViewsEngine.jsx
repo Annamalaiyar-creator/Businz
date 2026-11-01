@@ -808,6 +808,15 @@ export default function ProductionViewsEngine(props) {
       });
     }
 
+    if (!isDraft && (!newBomDocType || !newBomDocType.trim())) {
+      errors.docType = 'Document Type (DC or Invoice) is mandatory';
+      missingList.push({
+        field: 'Document Type (DC or Invoice) *',
+        message: 'Document Type is mandatory. Please select whether this order is for an Invoice or DC (Delivery Challan).',
+        targetId: 'prod-field-newBomDocType'
+      });
+    }
+
     if (!bomMaterialsList || bomMaterialsList.length === 0) {
       errors.items = 'At least 1 product item or preset kit is required';
       missingList.push({
@@ -883,6 +892,7 @@ export default function ProductionViewsEngine(props) {
     setBomFormErrors(errors);
     return { isValid: missingList.length === 0, missingList, errors };
   };
+  const [newBomDocType, setNewBomDocType] = useState('Invoice');
   const [newBomBillingStreet, setNewBomBillingStreet] = useState('');
   const [newBomBillingCity, setNewBomBillingCity] = useState('');
   const [newBomBillingState, setNewBomBillingState] = useState('');
@@ -1296,6 +1306,9 @@ export default function ProductionViewsEngine(props) {
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setPendingDcModal={setPendingDcModal}
                 showCustomAlert={showCustomAlert}
+                newBomDocType={newBomDocType}
+                setNewBomDocType={setNewBomDocType}
+                validateProductionBomForm={validateProductionBomForm}
               />
             );
           }
@@ -1638,6 +1651,9 @@ export default function ProductionViewsEngine(props) {
                 bomConfirmModal={bomConfirmModal}
                 setBomConfirmModal={setBomConfirmModal}
                 showCustomAlert={showCustomAlert}
+                newBomDocType={newBomDocType}
+                setNewBomDocType={setNewBomDocType}
+                validateProductionBomForm={validateProductionBomForm}
               />
             );
           }

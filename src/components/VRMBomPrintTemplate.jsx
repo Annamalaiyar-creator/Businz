@@ -248,7 +248,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
 
   // Helper to determine the exact quantity for BOM printout — decoupled from Set count, strictly matching PI and BOM
   const getItemQty = (item) => {
-    return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
+    const rawVal = item.qty ?? item.bomQty ?? item.quantity ?? item.targetQty ?? item.orderedQty ?? item.packedQty ?? item.itemQty ?? 0;
+    const cleanVal = typeof rawVal === 'string' ? rawVal.replace(/,/g, '').trim() : rawVal;
+    return parseFloat(cleanVal) || 0;
   };
 
   // Extract clean addresses
@@ -689,7 +691,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{hasAnyKits && kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set'}</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
             <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
-              Quantity
+              Total Quantity
             </th>
             <th style={{ padding: '8px 6px', width: '125px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Quantity Taken</th>
           </tr>
@@ -761,7 +763,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                                 fontWeight: '800'
                               }}
                             >
-                              {kg.unit === 'kW' ? `Total Capacity: ${kg.setCount || 1} kW` : `Total Quantity: ${kg.setCount || 1} ${Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}`}
+                              {kg.unit === 'kW' ? `${kg.setCount || 1} kW` : `${kg.setCount || 1} ${Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}`}
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#475569', fontWeight: '700' }}>

@@ -378,6 +378,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               const isAccountsEligible = (b) => {
                 if (!b) return false;
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+                if (b.awaitingSalesPaymentProof || (typeof b.status === 'string' && b.status.toLowerCase().includes('awaiting sales payment proof'))) return false;
                 const s = String(b.status || '').toLowerCase().trim();
                 const isSentToAccounts = Boolean(
                   b.accountsVerification?.readyForAccounts ||
@@ -649,23 +650,32 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') {
                   return Boolean(b.salesConfirmed || b.isSentToDispatch || s.includes('dispatch') || s.includes('packed'));
                 }
-                const isDraftOrPending = (b.status === 'Draft' || s === 'draft' || s.includes('pending confirmation') || s === 'pending sales confirmation');
-                const hasEnteredDispatch = Boolean(
-                  b.salesConfirmed ||
-                  b.isSentToDispatch ||
-                  s.includes('sent to dispatch') ||
-                  s.includes('dispatch') ||
-                  s.includes('packed') ||
-                  s.includes('accounts') ||
-                  s.includes('invoice') ||
-                  s.includes('loading') ||
-                  s.includes('completed') ||
-                  s.includes('closed')
+                // Orders pending sales reconfirmation or drafts must NEVER appear in Dispatch
+                const isDraftOrPending = Boolean(
+                  b.status === 'Draft' || s === 'draft' ||
+                  b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
+                  s === 'pending sales confirmation' || !b.salesConfirmed
                 );
-                if (isDraftOrPending && !hasEnteredDispatch) {
+                if (isDraftOrPending && !b.salesConfirmed) {
                   return false;
                 }
-                return hasEnteredDispatch || !isDraftOrPending;
+
+                const hasEnteredDispatch = Boolean(
+                  b.salesConfirmed && (
+                    b.isSentToDispatch ||
+                    s.includes('sent to dispatch') ||
+                    s.includes('sent to production') ||
+                    s.includes('confirmed') ||
+                    s.includes('dispatch') ||
+                    s.includes('packed') ||
+                    s.includes('accounts') ||
+                    s.includes('invoice') ||
+                    s.includes('loading') ||
+                    s.includes('completed') ||
+                    s.includes('closed')
+                  )
+                );
+                return hasEnteredDispatch;
               };
 
               const allDispatchBoms = (bomStore || []).filter(isDispatchEligible);
@@ -793,7 +803,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                       tabGroup = 'Packed';
                     }
                   } else if (isPartiallyPacked) {
-                    statusLabel = 'PARTIALLY PACKED';
+                    const isPartialSentToAccounts = Boolean(
+                      b.accountsVerification?.readyForAccounts ||
+                      String(b.status || '').toLowerCase().includes('sent to accounts')
+                    );
+                    statusLabel = isPartialSentToAccounts ? 'PARTIALLY PACKED - SENT TO ACCOUNTS' : 'PARTIALLY PACKED';
                     stBg = '#FEF3C7';
                     stFg = '#B45309';
                     stBorder = '1px solid #FDE68A';
@@ -822,7 +836,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                       ? `All ${totalItemsCount} of ${totalItemsCount} Items Packed & Verified` 
                       : 'Packing Verified & Passed to Accounts';
                   } else if (isPartiallyPacked) {
-                    packingProgressText = `${packedCount} of ${totalItemsCount} Items Packed`;
+                    const isPartialSent = Boolean(b.accountsVerification?.readyForAccounts || String(b.status || '').toLowerCase().includes('sent to accounts'));
+                    packingProgressText = `${packedCount} of ${totalItemsCount} Items Packed${isPartialSent ? ' (Sent to Accounts)' : ''}`;
                   } else if (totalItemsCount === 0) {
                     packingProgressText = 'Items Pending Packing';
                   }

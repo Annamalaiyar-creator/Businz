@@ -211,43 +211,133 @@ export function clearAllLiveNotifications() {
 }
 
 // -----------------------------------------------------------------------------------
-// Backwards-Compatible Workflow Notification No-Op Helpers
+// -----------------------------------------------------------------------------------
+// Enterprise Real-Time Department-to-Department Workflow Notification Dispatchers
 // -----------------------------------------------------------------------------------
 
+async function sendServerWorkflowNotification(payload) {
+  try {
+    const actorEmp = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
+    const actorName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || 'System';
+    const actorRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || 'System';
+
+    const res = await fetch('/api/workflow-notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-employee-code': actorEmp,
+        'x-user-name': actorName,
+        'x-user-role': actorRole
+      },
+      body: JSON.stringify({
+        ...payload,
+        actorEmpCode: actorEmp,
+        actorName,
+        actorRole
+      })
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn('[WorkflowNotif Send Error]:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 export function notifyStockShortageToProcurement() {
-  return { success: true, disabled: true };
+  return { success: true };
 }
 
 export function notifyBomCreatedToSales() {
-  return { success: true, disabled: true };
+  return { success: true };
 }
 
-export function notifyBomSentToDispatch() {
-  return { success: true, disabled: true };
+export function notifyBomSentToDispatch({ bomCode, customerName, salesPerson }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Dispatch Head',
+    eventType: 'BOM_SUBMITTED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `📦 New BOM Submitted: ${bomCode}`,
+    message: `BOM ${bomCode} (${customerName || 'Customer'}) has been confirmed by ${salesPerson || 'Sales'} and forwarded for Dispatch Packing.`,
+    targetTab: 'Dispatch Orders',
+    targetRecordId: bomCode,
+    dedupId: `bom_submitted_${bomCode}`
+  });
 }
 
-export function notifyBomPackedAndSentToAccounts() {
-  return { success: true, disabled: true };
+export function notifyBomPackedAndSentToAccounts({ bomCode, customerName, actorName }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Accounts Head',
+    eventType: 'PACKING_VERIFIED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `💳 Packing Verified: BOM ${bomCode}`,
+    message: `BOM ${bomCode} (${customerName || 'Customer'}) packed and verified by Dispatch. Ready for Accounts Payment Verification.`,
+    targetTab: 'Accounts Verification',
+    targetRecordId: bomCode,
+    dedupId: `bom_packing_verified_${bomCode}`
+  });
 }
 
 export function notifyPiCreated() {
-  return { success: true, disabled: true };
+  return { success: true };
 }
 
-export function notifyAccountsVerificationCompleted() {
-  return { success: true, disabled: true };
+export function notifyAccountsVerificationCompleted({ bomCode, customerName, actorName }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Billing',
+    eventType: 'ACCOUNTS_APPROVED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `📄 Accounts Verified: BOM ${bomCode}`,
+    message: `Payment & accounts verification complete for BOM ${bomCode} (${customerName || 'Customer'}). Ready for Tax Invoice generation.`,
+    targetTab: 'Invoice Management',
+    targetRecordId: bomCode,
+    dedupId: `bom_accounts_approved_${bomCode}`
+  });
 }
 
-export function notifyInvoiceCompletedReadyForDispatch() {
-  return { success: true, disabled: true };
+export function notifyInvoiceCompletedReadyForDispatch({ bomCode, customerName, invoiceNo }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Dispatch Head',
+    eventType: 'INVOICE_COMPLETED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `🚚 Invoice Confirmed — Ready for Loading: ${bomCode}`,
+    message: `Tax Invoice (${invoiceNo || bomCode}) completed for ${customerName || 'Customer'}. Ready for vehicle loading and final dispatch.`,
+    targetTab: 'Dispatch Orders',
+    targetRecordId: bomCode,
+    dedupId: `bom_invoice_ready_loading_${bomCode}`
+  });
 }
 
-export function notifyBomCancelledByDispatch() {
-  return { success: true, disabled: true };
+export function notifyDispatchCompletedToSales({ bomCode, customerName, salesPerson, salesPersonId, transporterName, lrNumber }) {
+  return sendServerWorkflowNotification({
+    recipientEmpCode: salesPersonId || null,
+    recipientRole: 'Sales Executive',
+    eventType: 'ORDER_DISPATCHED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `🚀 Order Dispatched: BOM ${bomCode}`,
+    message: `Order ${bomCode} (${customerName || 'Customer'}) has been loaded and dispatched via ${transporterName || 'Transporter'}${lrNumber ? ` (LR: ${lrNumber})` : ''}.`,
+    targetTab: 'Sales BOM',
+    targetRecordId: bomCode,
+    dedupId: `bom_dispatched_${bomCode}`
+  });
 }
 
-export function notifyDispatchCompletedToSales() {
-  return { success: true, disabled: true };
+export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, reason, cancelledBy }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Sales Executive',
+    eventType: 'BOM_CANCELLED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `❌ BOM ${bomCode} Cancelled`,
+    message: `BOM ${bomCode} (${customerName || 'Customer'}) was cancelled by ${cancelledBy || 'Dispatch'}. Reason: ${reason || 'Cancelled by Dispatch'}`,
+    targetTab: 'Sales BOM',
+    targetRecordId: bomCode,
+    dedupId: `bom_cancel_${bomCode}_${Date.now()}`
+  });
 }
 
 export function notifyGrnCompletedToAccounts() {

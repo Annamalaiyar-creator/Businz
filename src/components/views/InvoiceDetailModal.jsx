@@ -1159,6 +1159,15 @@ export default function InvoiceDetailModal({
               <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>Invoice Number</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#0F172A' }}>{invNoText}</h2>
+                {(inv?.docType === 'DC' || matchingBom?.docType === 'DC') ? (
+                  <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800' }}>
+                    🚚 DC (DELIVERY CHALLAN)
+                  </span>
+                ) : (
+                  <span style={{ backgroundColor: '#EEF2FF', color: '#3730A3', border: '1px solid #C7D2FE', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800' }}>
+                    📄 TAX INVOICE
+                  </span>
+                )}
                 {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? (
                   <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                     <Check style={{ width: '13px', height: '13px', strokeWidth: 3 }} /> INVOICE COMPLETED & LOCKED

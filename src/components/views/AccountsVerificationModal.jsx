@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
-  Loader2, ExternalLink, AlertTriangle, User, Truck
+  Loader2, ExternalLink, AlertTriangle, User, Truck, Package
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -221,6 +221,12 @@ export default function AccountsVerificationModal({
     accountsVerificationModal?.status === 'CANCELLED' ||
     accountsVerificationModal?.status === 'Cancelled & Stock Restored' ||
     (accountsVerificationModal?.status && typeof accountsVerificationModal.status === 'string' && accountsVerificationModal.status.toLowerCase().includes('cancel'))
+  );
+  const isPartialPackingOrder = Boolean(
+    accountsVerificationModal?.isPartialPacking ||
+    accountsVerificationModal?.accountsVerification?.isPartialPacking ||
+    accountsVerificationModal?.packingStatus === 'PARTIALLY_PACKED' ||
+    String(accountsVerificationModal?.status || '').toLowerCase().includes('partial')
   );
   const normalizePaymentTerm = (term) => {
     if (!term) return '';
@@ -533,6 +539,33 @@ export default function AccountsVerificationModal({
               }}>
                 {bomCodeText}
               </span>
+              {accountsVerificationModal?.docType === 'DC' ? (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px'
+                }}>
+                  🚚 DC (DELIVERY CHALLAN)
+                </span>
+              ) : (
+                <span style={{
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px'
+                }}>
+                  📄 TAX INVOICE
+                </span>
+              )}
               <span style={{
                 backgroundColor: 'rgba(14, 165, 233, 0.25)', border: '1px solid rgba(56, 189, 248, 0.5)',
                 color: '#E0F2FE', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800',
@@ -545,6 +578,23 @@ export default function AccountsVerificationModal({
                 status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isWhileDispatch && !hasUploadedPaymentProof ? 'AWAITING PAYMENT SLIP' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
                 size="sm"
               />
+              {isPartialPackingOrder && (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FCD34D',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <Package style={{ width: '13px', height: '13px', color: '#D97706' }} />
+                  PARTIAL SHIPMENT
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custNameText}</strong></span>
@@ -688,6 +738,40 @@ export default function AccountsVerificationModal({
           </div>
         </div>
       </div>
+
+      {/* ─── PARTIAL PACKING NOTICE BANNER ─── */}
+      {isPartialPackingOrder && (
+        <div style={{
+          backgroundColor: '#FFFBEB',
+          border: '1.5px solid #FDE68A',
+          borderRadius: '14px',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '14px',
+          boxShadow: '0 2px 8px rgba(245,158,11,0.06)'
+        }}>
+          <div style={{
+            width: '38px', height: '38px', borderRadius: '10px',
+            backgroundColor: '#FEF3C7', color: '#B45309',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Package style={{ width: '20px', height: '20px' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: '800', color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>Partially Packed Shipment</span>
+              <span style={{ fontSize: '11px', color: '#B45309', backgroundColor: '#FEF3C7', border: '1px solid #FCD34D', padding: '1px 8px', borderRadius: '12px', fontWeight: '800' }}>
+                Dispatch Forwarded
+              </span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#78350F', marginTop: '3px', lineHeight: '1.5' }}>
+              Dispatch has confirmed packing for a subset of items for this order. Accounts can verify payment details and generate the invoice sequence for this partial dispatch. Unpacked items will remain in the dispatch queue for future shipments.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── PAYMENT WHILE DISPATCH HOLD BANNER ─── */}
       {isWhileDispatch && !hasUploadedPaymentProof && (
@@ -1603,14 +1687,25 @@ export default function AccountsVerificationModal({
                           ₹ {it.amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                         <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
-                            backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
-                          }}>
-                            <CheckCircle style={{ width: '12px', height: '12px' }} />
-                            Packed in BOM
-                          </span>
+                          {it.packed ? (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                              backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
+                            }}>
+                              <CheckCircle style={{ width: '12px', height: '12px' }} />
+                              Packed in BOM
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                              backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
+                            }}>
+                              <Clock style={{ width: '12px', height: '12px' }} />
+                              Pending Packing
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

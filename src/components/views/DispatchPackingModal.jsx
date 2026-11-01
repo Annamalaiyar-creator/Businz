@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
-  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User
+  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User, AlertTriangle
 } from "lucide-react";
 import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, getMediaFromCacheAsync, uploadMediaFile } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
@@ -186,6 +186,7 @@ export default function DispatchPackingModal({
   const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
   const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showPartialConfirmModal, setShowPartialConfirmModal] = useState(false);
   const [dispatchCameraError, setDispatchCameraError] = useState('');
   const [localActiveMediaPreview, setLocalActiveMediaPreview] = useState(null);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -333,14 +334,32 @@ export default function DispatchPackingModal({
     dispatchPackingModal.tabGroup === 'Closed'
   );
 
+  const isOrderPartiallyPacked = Boolean(
+    dispatchPackingModal.status === 'Partially Packed' ||
+    dispatchPackingModal.status === 'Partially Packed - Sent to Accounts' ||
+    dispatchPackingModal.packingStatus === 'PARTIALLY_PACKED' ||
+    dispatchPackingModal.isPartialPacking ||
+    dispatchPackingModal.accountsVerification?.isPartialPacking ||
+    (Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0 &&
+      dispatchPackingModal.dispatchPacking.filter(p => p.packed).length > 0 &&
+      dispatchPackingModal.dispatchPacking.filter(p => p.packed).length < dispatchPackingModal.dispatchPacking.length)
+  );
+
+  const isPartiallySentToAccounts = Boolean(
+    isOrderPartiallyPacked && (
+      dispatchPackingModal.status === 'Partially Packed - Sent to Accounts' ||
+      dispatchPackingModal.accountsVerification?.readyForAccounts
+    )
+  );
+
   const isAlreadySentToAccounts = Boolean(
-    !isAccountsLocked && (
+    !isAccountsLocked && !isOrderPartiallyPacked && (
       dispatchPackingModal.status === 'Packed & Awaiting Accounts Verification' ||
       dispatchPackingModal.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
       dispatchPackingModal.status === 'Packing Verified - Sent to Accounts' ||
       dispatchPackingModal.tabGroup === 'Packed' ||
       dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
-      dispatchPackingModal.accountsVerification?.readyForAccounts
+      (dispatchPackingModal.accountsVerification?.readyForAccounts && !dispatchPackingModal.accountsVerification?.isPartialPacking)
     )
   );
 
@@ -431,7 +450,7 @@ export default function DispatchPackingModal({
   const progressPercent = isAlreadySentToAccounts ? 100 : (totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0);
   const isPartial = !isAlreadySentToAccounts && packedItemsCount > 0 && !allItemsPacked;
 
-  const savePackingData = (isPartialSave = false, proceedToLoading = false) => {
+  const savePackingData = (isPartialSave = false, proceedToLoading = false, sendPartialToAccounts = false) => {
     if (uploadingCount > 0) {
       alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
       return;
@@ -451,38 +470,70 @@ export default function DispatchPackingModal({
       (dispatchPackingModal.c5 && dispatchPackingModal.c5.includes('100%'))
     );
 
-    if (isPartialSave) {
+    const isWhileDispatch = Boolean(
+      dispatchPackingModal.paymentType === 'Payment While Dispatch' ||
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('while dispatch') ||
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('before dispatch')
+    );
+    const isPartialPaid = Boolean(
+      dispatchPackingModal.paymentType === 'Partial Paid' ||
+      dispatchPackingModal.paymentType === 'Partial Payment' ||
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('partial')
+    );
+
+    const hasPaymentProof = Boolean(
+      dispatchPackingModal.paymentProofDoc ||
+      dispatchPackingModal.payments?.proofDocObj ||
+      dispatchPackingModal.payments?.proofDoc ||
+      dispatchPackingModal.proofDoc ||
+      dispatchPackingModal.paymentProofAttached ||
+      dispatchPackingModal.hasPaymentProof
+    );
+
+    const needsSalesPaymentProof = (isWhileDispatch || isPartialPaid) && !hasPaymentProof;
+
+    if (sendPartialToAccounts) {
+      // User confirmed partial packing
+      confirmedItems = itemsToPack;
+      nextStatus = needsSalesPaymentProof ? 'Partially Packed — Awaiting Sales Payment Proof' : 'Partially Packed - Sent to Accounts';
+      isFullyConfirmed = false;
+    } else if (isPartialSave) {
       // User explicitly saving partial packing progress without sending to Accounts yet
       confirmedItems = itemsToPack;
       nextStatus = 'Partially Packed';
       isFullyConfirmed = false;
     } else {
-      // User confirmed packing: all items marked packed and forwarded to Accounts verification
+      // User confirmed packing: all items marked packed
       confirmedItems = (itemsToPack && itemsToPack.length > 0)
         ? itemsToPack.map(it => ({ ...it, qty: it.qty || it.bomQty || 1, packed: true }))
         : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
 
-      nextStatus = 'Packed & Awaiting Accounts Verification';
+      nextStatus = needsSalesPaymentProof ? 'Packed — Awaiting Sales Payment Proof' : 'Packed & Awaiting Accounts Verification';
       isFullyConfirmed = true;
     }
 
-    const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
-    const needsSalesPaymentNotification = isFullyConfirmed && isWhileDispatch;
+    const needsSalesPaymentNotification = (isFullyConfirmed || sendPartialToAccounts) && needsSalesPaymentProof;
+    const shouldSendToAccounts = (isFullyConfirmed || sendPartialToAccounts) && !needsSalesPaymentProof;
 
-    const accountsVerificationData = isFullyConfirmed
+    const accountsVerificationData = shouldSendToAccounts
       ? ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
           ? dispatchPackingModal.accountsVerification
           : {
-              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
+              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || null,
               hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
               softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
               verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
               readyForAccounts: true,
+              isPartialPacking: Boolean(sendPartialToAccounts || !isFullyConfirmed),
+              packedItemsCount: packedItemsCount,
+              totalItemsCount: totalItemsCount,
               packedAt: dispatchPackingModal.accountsVerification?.packedAt || new Date().toISOString()
             })
       : {
           ...(dispatchPackingModal.accountsVerification || {}),
-          readyForAccounts: false
+          readyForAccounts: false,
+          isPartialPacking: Boolean(sendPartialToAccounts || !isFullyConfirmed),
+          paymentStatus: needsSalesPaymentProof ? 'Awaiting Sales Payment Slip' : (dispatchPackingModal.accountsVerification?.paymentStatus || null)
         };
 
     const rawMedia = dispatchPackingModal.dispatchPackingMedia;
@@ -558,6 +609,7 @@ export default function DispatchPackingModal({
       dispatchPackingMedia: cleanMedia,
       status: nextStatus,
       packingStatus: isFullyConfirmed ? 'PACKING_VERIFIED' : 'PARTIALLY_PACKED',
+      isPartialPacking: Boolean(sendPartialToAccounts || (!isFullyConfirmed && packedItemsCount > 0)),
       packedAt: packedAt,
       packedBy: packedByName,
       packedById: packedByUserId,
@@ -566,7 +618,8 @@ export default function DispatchPackingModal({
       salesPersonCode: resolvedSpCode,
       createdBy: resolvedCreatedBy,
       createdById: resolvedCreatedById,
-      pendingSalesDispatchPayment: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.pendingSalesDispatchPayment) : needsSalesPaymentNotification,
+      awaitingSalesPaymentProof: Boolean(needsSalesPaymentProof),
+      pendingSalesDispatchPayment: Boolean(needsSalesPaymentProof),
       reissuedByAccounts: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.reissuedByAccounts) : false,
       isAccountsDone: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.isAccountsDone) : false,
       accountsVerification: wasAlreadySentToAccounts
@@ -645,9 +698,15 @@ export default function DispatchPackingModal({
 
     addLiveNotification({
       id: `notif-pack-${targetBomCode}-${Date.now()}`,
-      title: isFullyConfirmed ? 'BOM Packing Verified' : 'BOM Packing Updated',
-      message: `BOM Order ${targetBomCode} for ${resolvedCustomer} is ${isFullyConfirmed ? '100% Packed & Ready' : 'Partially Packed'}. Status: ${nextStatus}`,
-      type: isFullyConfirmed ? 'success' : 'info',
+      title: isFullyConfirmed
+        ? 'BOM Packing Verified'
+        : (sendPartialToAccounts ? 'Partial Packing Sent to Accounts' : 'BOM Packing Updated'),
+      message: isFullyConfirmed
+        ? `BOM Order ${targetBomCode} for ${resolvedCustomer} is 100% Packed & Ready. Status: ${nextStatus}`
+        : (sendPartialToAccounts
+            ? `BOM Order ${targetBomCode} for ${resolvedCustomer} was partially packed (${packedItemsCount}/${totalItemsCount} items) and sent to Accounts for verification.`
+            : `BOM Order ${targetBomCode} for ${resolvedCustomer} is Partially Packed (${packedItemsCount}/${totalItemsCount} items). Status: ${nextStatus}`),
+      type: isFullyConfirmed ? 'success' : (sendPartialToAccounts ? 'warning' : 'info'),
       category: 'Dispatch',
       time: 'Just now',
       targetTab: 'BOM Orders',
@@ -661,7 +720,26 @@ export default function DispatchPackingModal({
       }
     });
 
-    if (isFullyConfirmed) {
+    if (needsSalesPaymentProof) {
+      addLiveNotification({
+        id: `notif-payment-req-${targetBomCode}-${Date.now()}`,
+        title: '⚠️ Attach Payment Slip (Goods Packed)',
+        message: `Goods for BOM ${targetBomCode} (${resolvedCustomer}) are packed. Payment terms are "${dispatchPackingModal.paymentType}". Please attach payment proof so the order can proceed to Accounts.`,
+        type: 'warning',
+        category: 'Sales',
+        time: 'Just now',
+        targetTab: 'BOM Orders',
+        targetRoles: [resolvedSalesPerson, resolvedSalesPersonCode, 'Sales Executive', 'Sales Head'].filter(Boolean),
+        metadata: {
+          bomCode: targetBomCode,
+          customerName: resolvedCustomer,
+          salesPerson: resolvedSalesPerson,
+          salesPersonCode: resolvedSalesPersonCode,
+          step: 'ATTACH_PAYMENT_PROOF'
+        }
+      });
+      alert(`📦 Packing Verified!\n\nAll goods are packed. Because payment terms are "${dispatchPackingModal.paymentType}", this order has NOT been sent to Accounts yet.\n\nAn automated indication and alert have been sent to the Salesperson (${resolvedSalesPerson}) to attach the payment proof slip.\n\nOnce Sales attaches the payment proof, this order will automatically forward to the Accounts team.`);
+    } else if (isFullyConfirmed || sendPartialToAccounts) {
       // Trigger Real-time Workflow Notifications with Porter order alert sound & voice for Sales & Accounts
       notifyBomPackedAndSentToAccounts({
         bomCode: targetBomCode,
@@ -671,6 +749,7 @@ export default function DispatchPackingModal({
         createdBy: resolvedSalesPerson,
         createdById: resolvedSalesPersonCode
       });
+      alert(`✅ Packing Verified!\n\nAll ${totalItemsCount} items verified and marked packed. Order successfully forwarded to the Accounts team for verification.`);
     }
   } catch (saveErr) {
     console.error('Error during savePackingData:', saveErr);
@@ -732,6 +811,33 @@ export default function DispatchPackingModal({
               }}>
                 {dispatchPackingModal.bomCode}
               </span>
+              {dispatchPackingModal.docType === 'DC' ? (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px'
+                }}>
+                  🚚 DC (DELIVERY CHALLAN)
+                </span>
+              ) : (
+                <span style={{
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px'
+                }}>
+                  📄 TAX INVOICE
+                </span>
+              )}
               {isCancelled ? (
                 <span style={{
                   backgroundColor: '#FEE2E2',
@@ -742,6 +848,18 @@ export default function DispatchPackingModal({
                 }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }}></span>
                   CANCELLED (VIEW ONLY)
+                </span>
+              ) : isPartiallySentToAccounts ? (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FDE68A',
+                  padding: '3px 12px', borderRadius: '20px',
+                  fontSize: '11px', fontWeight: '800',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#D97706' }}></span>
+                  PARTIALLY PACKED • SENT TO ACCOUNTS ({packedItemsCount}/{totalItemsCount})
                 </span>
               ) : isAlreadySentToAccounts ? (
                 <span style={{
@@ -1544,32 +1662,60 @@ export default function DispatchPackingModal({
               </button>
             )}
 
-            {/* Case 2: Partial packing -> show ONLY Packed Partially */}
+            {/* Case 2: Partial packing -> show Save Draft and Confirm Partial Packing (Send to Accounts) */}
             {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && packedItemsCount > 0 && packedItemsCount < totalItemsCount && (
-              <button
-                type="button"
-                onClick={() => savePackingData(true)}
-                disabled={uploadingCount > 0}
-                style={{
-                  border: 'none',
-                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #D97706, #B45309)',
-                  color: '#FFFFFF',
-                  height: '40px',
-                  padding: '0 20px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 12px rgba(217,119,6,0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-                title="Save partial packing progress"
-              >
-                <Save style={{ width: '15px', height: '15px' }} />
-                Packed Partially ({packedItemsCount}/{totalItemsCount})
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => savePackingData(true, false, false)}
+                  disabled={uploadingCount > 0}
+                  style={{
+                    border: '1px solid #D97706',
+                    background: '#FEF3C7',
+                    color: '#B45309',
+                    height: '40px',
+                    padding: '0 16px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  title="Save partial packing progress as draft in Dispatch"
+                >
+                  <Save style={{ width: '15px', height: '15px' }} />
+                  Save Draft ({packedItemsCount}/{totalItemsCount})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPartialConfirmModal(true)}
+                  disabled={uploadingCount > 0}
+                  style={{
+                    border: 'none',
+                    background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #D97706, #B45309)',
+                    color: '#FFFFFF',
+                    height: '40px',
+                    padding: '0 20px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(217,119,6,0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  title="Confirm partial packing and forward to Accounts verification"
+                >
+                  <CheckCircle style={{ width: '15px', height: '15px' }} />
+                  {isPartiallySentToAccounts
+                    ? `Update Partial in Accounts (${packedItemsCount}/{totalItemsCount})`
+                    : `Confirm Partial Packing (Send to Accounts)`}
+                </button>
+              </div>
             )}
 
             {/* Case 3: 100% Packed -> show Packing Confirmed (opens confirmation modal) */}
@@ -1593,10 +1739,10 @@ export default function DispatchPackingModal({
                   alignItems: 'center',
                   gap: '8px'
                 }}
-                title="Confirm all goods packing and forward to Accounts"
+                title={needsSalesPaymentProof ? "Confirm packing and notify Sales to attach payment slip" : "Confirm all goods packing and forward to Accounts"}
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed')}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : (needsSalesPaymentProof ? 'Confirm Packing (Notify Sales for Payment)' : 'Packing Confirmed'))}
               </button>
             )}
           </div>
@@ -1816,7 +1962,17 @@ export default function DispatchPackingModal({
             <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
               Are you sure all <strong>{totalItemsCount} items</strong> and accessories are fully packed and verified?
               <br /><br />
-              This will mark packing as confirmed and forward the order to <strong>Accounts</strong> for payment & document verification.
+              {needsSalesPaymentProof ? (
+                <div style={{ backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', padding: '10px 12px', borderRadius: '8px', color: '#92400E', fontWeight: '600' }}>
+                  ℹ️ Payment terms are <strong>"{dispatchPackingModal.paymentType}"</strong> without an attached payment proof.
+                  <br />
+                  This will mark packing complete and notify the <strong>Sales Team</strong> to attach the payment slip. The order will <strong>not</strong> go to Accounts until Sales attaches the proof.
+                </div>
+              ) : (
+                <span>
+                  This will mark packing as confirmed and forward the order to <strong>Accounts</strong> for payment & document verification.
+                </span>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
@@ -1845,6 +2001,114 @@ export default function DispatchPackingModal({
                 }}
               >
                 <CheckCircle size={16} /> Yes, Confirm Packing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DISPATCH PARTIAL PACKING CONFIRMATION POPUP MODAL */}
+      {showPartialConfirmModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 999999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: '16px',
+            maxWidth: '520px', width: '100%', padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            display: 'flex', flexDirection: 'column', gap: '18px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px', height: '46px', borderRadius: '12px',
+                backgroundColor: '#FEF3C7', color: '#B45309',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>
+                  Confirm Partial Goods Packing
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  BOM Code: <strong>{targetCode}</strong> • Customer: <strong>{resolvedCustomer}</strong>
+                </p>
+              </div>
+            </div>
+
+            {/* Breakdown Card */}
+            <div style={{
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#92400E' }}>
+                  Packing Progress:
+                </span>
+                <span style={{
+                  fontSize: '12px', fontWeight: '800',
+                  backgroundColor: '#FEF3C7', color: '#B45309',
+                  padding: '2px 10px', borderRadius: '20px', border: '1px solid #FCD34D'
+                }}>
+                  {packedItemsCount} of {totalItemsCount} Items Packed ({progressPercent}%)
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ width: '100%', height: '8px', backgroundColor: '#FDE68A', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#D97706', borderRadius: '4px' }}></div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: '#78350F', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Packed: <strong>{packedItemsCount} items</strong></span>
+                <span>Remaining: <strong>{totalItemsCount - packedItemsCount} items</strong></span>
+              </div>
+            </div>
+
+            {/* Explanation / Verification Notice */}
+            <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              Are you sure you want to forward this <strong>partially packed order ({packedItemsCount}/{totalItemsCount} items)</strong> to <strong>Accounts Verification</strong>?
+              <br /><br />
+              • Accounts will verify payment & documentation for these packed items.
+              <br />
+              • The remaining <strong>{totalItemsCount - packedItemsCount} items</strong> can be packed and dispatched in a subsequent shipment.
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setShowPartialConfirmModal(false)}
+                style={{
+                  padding: '10px 18px', borderRadius: '8px', border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPartialConfirmModal(false);
+                  savePackingData(true, false, true);
+                }}
+                style={{
+                  padding: '10px 22px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#D97706', color: '#FFFFFF', fontSize: '13px', fontWeight: '800',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                  boxShadow: '0 4px 12px rgba(217,119,6,0.35)'
+                }}
+              >
+                <CheckCircle size={16} /> Yes, Send Partial to Accounts
               </button>
             </div>
           </div>

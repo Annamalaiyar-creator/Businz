@@ -264,7 +264,7 @@ export const toConsumerBomServer = (row) => {
     cgstAmount: Number(row.cgst_amount || 0),
     sgstAmount: Number(row.sgst_amount || 0),
     grandTotal: Number(row.grand_total || 0),
-    cancelled: Boolean(row.cancelled || extraData.cancelled),
+    cancelled: Boolean(row.cancelled || extraData.cancelled || String(row.status || '').toLowerCase().includes('cancel')),
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancelledByRole: extraData.cancelledByRole || null,
@@ -414,6 +414,15 @@ export const toDatabaseBomRowServer = (item) => {
   if (item.firstPrintTimeStr !== undefined) mergedExtra.firstPrintTimeStr = item.firstPrintTimeStr;
   if (item.secondPrintTimeStr !== undefined) mergedExtra.secondPrintTimeStr = item.secondPrintTimeStr;
   if (item.dispatchPrintHistory !== undefined) mergedExtra.dispatchPrintHistory = item.dispatchPrintHistory;
+  if (item.cancelled !== undefined || String(item.status || '').toLowerCase().includes('cancel')) {
+    mergedExtra.cancelled = Boolean(item.cancelled || String(item.status || '').toLowerCase().includes('cancel'));
+  }
+  if (item.cancelledAt) mergedExtra.cancelledAt = item.cancelledAt;
+  if (item.cancelledBy) mergedExtra.cancelledBy = item.cancelledBy;
+  if (item.cancelledByRole) mergedExtra.cancelledByRole = item.cancelledByRole;
+  if (item.cancelledByTeam) mergedExtra.cancelledByTeam = item.cancelledByTeam;
+  if (item.cancelledByNameAndRole) mergedExtra.cancelledByNameAndRole = item.cancelledByNameAndRole;
+  if (item.cancellationReason) mergedExtra.cancellationReason = item.cancellationReason;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
@@ -553,6 +562,13 @@ export function mergeBomRecords(existing, incoming) {
     status: (incoming.cancelled || String(incoming.status || '').toLowerCase().includes('cancel') || String(incoming.status || '').toLowerCase().includes('stock restored') || iRank >= eRank)
       ? incoming.status
       : existing.status,
+    cancelled: Boolean(incoming.cancelled || existing.cancelled || String(incoming.status || '').toLowerCase().includes('cancel')),
+    cancelledAt: incoming.cancelledAt || existing.cancelledAt || null,
+    cancelledBy: incoming.cancelledBy || existing.cancelledBy || null,
+    cancelledByRole: incoming.cancelledByRole || existing.cancelledByRole || null,
+    cancelledByTeam: incoming.cancelledByTeam || existing.cancelledByTeam || null,
+    cancelledByNameAndRole: incoming.cancelledByNameAndRole || existing.cancelledByNameAndRole || null,
+    cancellationReason: incoming.cancellationReason || existing.cancellationReason || '',
     packingStatus: (iRank >= eRank) ? (incoming.packingStatus || existing.packingStatus) : existing.packingStatus,
     fullyCompleted: (iRank >= eRank) ? (incoming.fullyCompleted ?? existing.fullyCompleted) : existing.fullyCompleted,
     // Deep merge dispatch packing and accounts verification

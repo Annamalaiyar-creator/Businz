@@ -2,6 +2,7 @@ import fs from 'fs';
 import { getStoreFilePath, isMaintenanceModeActive } from './runtimePaths.js';
 import { pool, query } from './db.js';
 import { recordJobStart, recordJobEnd, recordJobOverlap } from './memoryDiagnostics.js';
+import { createInternalNotification } from './internalNotificationService.js';
 
 /**
  * Execute a query with auto-connection handling
@@ -859,15 +860,35 @@ export async function updateLeadStatus({ leadId, newStatus, remarks = '', conver
       throw new Error(`Lead stage cannot be reversed from "${prevStatus}" to "${newStatus}". Stages can only increase.`);
     }
 
-    // 1. Update status and customer references
+    const isTerminalState = ['Converted', 'Customer', 'Dropped', 'Rejected', 'Won', 'Lost', 'Disqualified'].includes(newStatus);
+    const isConvertedState = ['Converted', 'Customer', 'Won'].includes(newStatus);
+
+    // 1. Update status, converted flags and customer references
     await client.query(`
       UPDATE public.leads SET
         status = $1,
         converted_customer_id = COALESCE($2, converted_customer_id),
         converted_customer_code = COALESCE($3, converted_customer_code),
+        is_converted = CASE WHEN $5 = true THEN true ELSE is_converted END,
+        is_unattended_24h = CASE WHEN $6 = true THEN false ELSE is_unattended_24h END,
+        is_unattended_48h = CASE WHEN $6 = true THEN false ELSE is_unattended_48h END,
         updated_at = NOW()
       WHERE id = $4 OR lead_number = $4
-    `, [newStatus, convertedCustomerId, convertedCustomerCode, leadId]);
+    `, [newStatus, convertedCustomerId, convertedCustomerCode, leadId, isConvertedState, isTerminalState]);
+
+    // If terminal state (Converted or Dropped/Rejected), resolve any open inactivity incidents immediately
+    if (isTerminalState) {
+      try {
+        await client.query(`
+          UPDATE public.lead_inactivity_incidents
+          SET resolved_at = NOW(),
+              resolved_by_user_id = $1,
+              resolution_type = $2
+          WHERE (lead_id = $3 OR lead_id = (SELECT id FROM public.leads WHERE lead_number = $3))
+            AND resolved_at IS NULL
+        `, [userId, isConvertedState ? 'LEAD_CONVERTED' : 'LEAD_REJECTED', leadId]);
+      } catch (_) {}
+    }
 
     // 2. Audit history
     const histId = `SH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
@@ -930,15 +951,39 @@ function broadcastLeadNotification() {
 }
 
 /**
- * Create Lead Notification (DECOMMISSIONED)
+ * Create Lead Notification (Wires directly to real-time internal notification engine)
  */
-export async function createLeadNotification() {
-  // No-op: Notifications decommissioned
-  return {
-    success: true,
-    notificationId: null,
-    deferredBroadcast: () => {}
-  };
+export async function createLeadNotification({
+  leadId,
+  type,
+  title,
+  message,
+  metadata = {},
+  specificRecipientId = null,
+  specificRecipientRole = null
+} = {}) {
+  try {
+    const res = await createInternalNotification({
+      recipientEmpCode: specificRecipientId || metadata?.recipientEmpCode || null,
+      recipientRole: specificRecipientRole || metadata?.recipientRole || 'lead_managers',
+      eventType: type || 'LEAD_INACTIVITY',
+      documentType: 'lead',
+      documentId: leadId,
+      title,
+      message,
+      actorEmpCode: 'SYSTEM',
+      actorName: 'Lead Automation Engine',
+      actorRole: 'System',
+      targetTab: 'Leads',
+      targetRecordId: leadId,
+      metadata,
+      dedupId: `lead_notif_${leadId}_${type}_${specificRecipientId || specificRecipientRole || 'mgmt'}_${Date.now()}`
+    });
+    return res;
+  } catch (err) {
+    console.warn('[createLeadNotification error]:', err.message);
+    return { success: false, error: err.message };
+  }
 }
 
 /**
@@ -1015,27 +1060,29 @@ export async function checkAndProcessLeadInactivity(options = {}) {
     // Fencing checkpoint 1: Verify this run is still authoritative
     if (runEpoch !== currentRunEpoch) return { aborted: true, reason: 'FENCED_BY_NEWER_RUN', runEpoch };
 
-  // 1. Query candidates for 2-Hour Inactivity / Status Unchanged Alert
+  // 1. Query candidates for 2-Hour Inactivity (Lead Assigned, No Move Made)
+  // STRICT EXCLUSION: Converted and Dropped/Rejected leads NEVER receive inactivity alerts!
   let candidates2h = { rows: [] };
   try {
     candidates2h = await dbQuery(`
       SELECT l.*
       FROM public.leads l
-      WHERE (
-          (l.assigned_at IS NOT NULL AND l.assigned_at <= $1 AND l.status IN ('New', 'Assigned', 'Contacted', 'In Progress'))
-          OR
-          (l.created_at <= $1 AND l.status = 'New')
-          OR
-          (l.updated_at <= $1 AND l.status IN ('New', 'Assigned', 'Contacted', 'In Progress'))
+      WHERE l.status IN ('New', 'Assigned')
+        AND l.status NOT IN ('Contacted', 'In Progress', 'Opportunity', 'Proposal Sent', 'Converted', 'Customer', 'Dropped', 'Rejected', 'Won', 'Lost', 'Disqualified')
+        AND (l.converted_customer_id IS NULL OR l.converted_customer_id = '')
+        AND (
+          (l.assigned_at IS NOT NULL AND l.assigned_at <= $1)
+          OR (l.created_at <= $1 AND l.status = 'New')
         )
-        AND (l.last_qualifying_activity_at IS NULL OR l.last_qualifying_activity_at <= $1)
+        AND l.last_qualifying_activity_at IS NULL
         AND l.is_unattended_24h = false
+        AND l.unattended_alert_sent_at IS NULL
     `, [twoHoursAgo]);
   } catch (dbErr) {
     console.warn('[Inactivity Engine] PostgreSQL query notice:', dbErr.message);
   }
 
-  // Also check disk store leads if any match 2 hours without activity
+  // Also check disk store leads if any match 2 hours without activity (ignoring converted / rejected)
   try {
     const diskPath = getStoreFilePath('crm_leads.json');
     if (fs.existsSync(diskPath)) {
@@ -1043,45 +1090,60 @@ export async function checkAndProcessLeadInactivity(options = {}) {
       if (Array.isArray(diskData)) {
         let modified = false;
         for (const lead of diskData) {
-          const isNotCompleted = ['New', 'Assigned', 'Contacted', 'In Progress'].includes(lead.status);
+          const isTerminal = ['Converted', 'Customer', 'Dropped', 'Rejected', 'Won', 'Lost', 'Disqualified'].includes(lead.status) || lead.is_converted || lead.converted_customer_id;
+          if (isTerminal) continue;
+
+          const isAssignedPending = ['New', 'Assigned'].includes(lead.status);
           const assignedTime = lead.assigned_at ? new Date(lead.assigned_at).getTime() : 0;
           const createdTime = lead.created_at ? new Date(lead.created_at).getTime() : 0;
-          const updatedTime = lead.updated_at ? new Date(lead.updated_at).getTime() : 0;
-          const lastActivityTime = lead.last_qualifying_activity_at ? new Date(lead.last_qualifying_activity_at).getTime() : 0;
-          const referenceTime = Math.max(assignedTime, createdTime, updatedTime);
+          const referenceTime = Math.max(assignedTime, createdTime);
+          const hasNoActivity = !lead.last_qualifying_activity_at;
 
           if (
-            isNotCompleted &&
+            isAssignedPending &&
             !lead.is_unattended_24h &&
             !lead.is_unattended_2h &&
             referenceTime > 0 &&
             referenceTime <= twoHoursAgo.getTime() &&
-            (!lastActivityTime || lastActivityTime <= twoHoursAgo.getTime())
+            hasNoActivity
           ) {
             lead.is_unattended_24h = true;
             lead.is_unattended_2h = true;
             lead.unattended_alert_sent_at = new Date().toISOString();
             modified = true;
 
-            // Trigger notification to CEO and Tech Support
+            // 1. Notify Assigned Salesperson directly
+            if (lead.assigned_to_user_id) {
+              await createLeadNotification({
+                leadId: lead.id,
+                type: 'LEAD_INACTIVITY_2H',
+                title: `⚠️ Lead Pending Action (2 Hours): ${lead.company_name || lead.lead_number}`,
+                message: `You have not attended lead #${lead.lead_number} (${lead.company_name || 'Prospect'}) and it has been 2 hours since assignment. Please contact the customer immediately.`,
+                specificRecipientId: lead.assigned_to_user_id,
+                specificRecipientRole: lead.assigned_to_role || 'Sales Executive',
+                metadata: {
+                  leadId: lead.id,
+                  leadNumber: lead.lead_number,
+                  companyName: lead.company_name,
+                  salesperson: lead.assigned_to_name
+                }
+              });
+            }
+
+            // 2. Notify CEO & Tech Support
             await createLeadNotification({
               leadId: lead.id,
               type: 'STATUS_UNCHANGED_2H',
               title: `⚠️ Lead Inactivity Alert (2 Hours): ${lead.company_name || lead.lead_number}`,
-              message: `Lead ${lead.lead_number} (${lead.company_name || 'Customer'}) has had NO progress or status change for over 2 hours (Current Status: "${lead.status}"). Assigned: ${lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned'}. Immediate attention required.`,
+              message: `Lead #${lead.lead_number} (${lead.company_name || 'Prospect'}) assigned to ${lead.assigned_to_name || 'Unassigned'} has not been attended for over 2 hours. Immediate follow-up required.`,
+              specificRecipientRole: 'lead_managers',
               metadata: {
                 leadId: lead.id,
                 leadNumber: lead.lead_number,
                 companyName: lead.company_name,
-                currentStatus: lead.status,
-                salesperson: lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned',
-                assignedBy: lead.assigned_by_name ? `${lead.assigned_by_name} (${lead.assigned_by_role})` : 'System',
-                assignedAt: lead.assigned_at,
-                isCeoTechSupportAlert: true,
-                step: 'STATUS_UNCHANGED_2H'
+                salesperson: lead.assigned_to_name
               }
             });
-            console.log(`[Inactivity Engine] 2h inactivity alert sent to CEO & Tech Support for lead ${lead.lead_number} (${lead.company_name}).`);
           }
         }
         if (modified) {
@@ -1123,52 +1185,72 @@ export async function checkAndProcessLeadInactivity(options = {}) {
         `, [lead.id]);
       });
 
-      // Dispatch Persistent Notification to CEO & Tech Support
+      // 1. Dispatch Real-Time Notification to the Assigned Salesperson
+      if (lead.assigned_to_user_id) {
+        await createLeadNotification({
+          leadId: lead.id,
+          type: 'LEAD_INACTIVITY_2H',
+          title: `⚠️ Lead Pending Action (2 Hours): ${lead.company_name || lead.lead_number}`,
+          message: `You have not attended lead #${lead.lead_number} (${lead.company_name}) and it has been 2 hours since assignment. Please contact the customer immediately.`,
+          specificRecipientId: lead.assigned_to_user_id,
+          specificRecipientRole: lead.assigned_to_role || 'Sales Executive',
+          metadata: {
+            leadId: lead.id,
+            leadNumber: lead.lead_number,
+            companyName: lead.company_name,
+            currentStatus: lead.status,
+            salesperson: lead.assigned_to_name
+          }
+        });
+      }
+
+      // 2. Dispatch Real-Time Notification to CEO & Tech Support
       await createLeadNotification({
         leadId: lead.id,
         type: 'STATUS_UNCHANGED_2H',
         title: `⚠️ Lead Inactivity Alert (2 Hours): ${lead.company_name || lead.lead_number}`,
-        message: `Lead ${lead.lead_number} (${lead.company_name || 'Customer'}) has had NO progress or status change for over 2 hours (Current Status: "${lead.status}"). Assigned: ${lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned'}. Immediate attention required.`,
+        message: `Lead #${lead.lead_number} (${lead.company_name}) assigned to ${lead.assigned_to_name || 'Unassigned'} has had NO progress for over 2 hours. Immediate follow-up required.`,
+        specificRecipientRole: 'lead_managers',
         metadata: {
           leadId: lead.id,
           leadNumber: lead.lead_number,
           companyName: lead.company_name,
           currentStatus: lead.status,
-          salesperson: lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned',
-          assignedBy: lead.assigned_by_name ? `${lead.assigned_by_name} (${lead.assigned_by_role})` : 'System',
-          assignedAt: lead.assigned_at,
-          isCeoTechSupportAlert: true,
-          step: 'STATUS_UNCHANGED_2H'
+          salesperson: lead.assigned_to_name
         }
       });
-      console.log(`[Inactivity Engine] 2h status unchanged alert generated for lead ${lead.lead_number} (${lead.company_name}).`);
+      console.log(`[Inactivity Engine] 2h inactivity alert sent to Salesperson and Management for lead ${lead.lead_number} (${lead.company_name}).`);
     } catch (err) {
       console.warn(`[Inactivity Engine] Error processing 2h alert for lead ${lead.id}:`, err.message);
     }
   }
 
-  // 2. Query candidates for 48-Hour Escalation Alert
+  // 2. Query candidates for 48-Hour Inactivity (Lead was Contacted, but NO MOVE made after 48 hours)
+  // STRICT EXCLUSION: Converted and Dropped/Rejected leads NEVER receive inactivity alerts!
   const candidates48 = await dbQuery(`
     SELECT l.*
     FROM public.leads l
-    WHERE l.assigned_at IS NOT NULL
-      AND l.assigned_at <= $1
-      AND l.last_qualifying_activity_at IS NULL
+    WHERE l.status = 'Contacted'
+      AND (l.converted_customer_id IS NULL OR l.converted_customer_id = '')
+      AND (
+        (l.last_qualifying_activity_at IS NOT NULL AND l.last_qualifying_activity_at <= $1)
+        OR (l.updated_at <= $1)
+      )
       AND l.is_unattended_48h = false
-      AND l.status IN ('New', 'Assigned')
+      AND l.escalation_alert_sent_at IS NULL
   `, [fortyEightHoursAgo]);
 
   // Fencing checkpoint 3: Ensure epoch is active before writing 48h alerts
   if (runEpoch !== currentRunEpoch) return { aborted: true, reason: 'FENCED_BY_NEWER_RUN', runEpoch };
 
-  for (const lead of candidates48.rows) {
+  for (const lead of (candidates48.rows || [])) {
     try {
       const incidentId = `INC-48H-${lead.id}-${Date.now()}`;
       await withTransaction(async (client) => {
         await client.query(`
           INSERT INTO public.lead_inactivity_incidents (
             id, lead_id, salesperson_id, salesperson_name, incident_type, assigned_at, alerted_at, details
-          ) VALUES ($1, $2, $3, $4, '48_HOUR_ESCALATION', $5, NOW(), $6)
+          ) VALUES ($1, $2, $3, $4, '48_HOUR_AFTER_CONTACT', $5, NOW(), $6)
           ON CONFLICT (lead_id, incident_type, salesperson_id, assigned_at) DO NOTHING
         `, [
           incidentId,
@@ -1176,7 +1258,7 @@ export async function checkAndProcessLeadInactivity(options = {}) {
           lead.assigned_to_user_id || 'UNASSIGNED',
           lead.assigned_to_name || 'Unassigned',
           lead.assigned_at || lead.created_at || new Date().toISOString(),
-          JSON.stringify({ leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source })
+          JSON.stringify({ leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source, status: lead.status })
         ]);
 
         await client.query(`
@@ -1186,21 +1268,39 @@ export async function checkAndProcessLeadInactivity(options = {}) {
         `, [lead.id]);
       });
 
+      // 1. Notify Assigned Salesperson of 48-hour follow-up requirement
+      if (lead.assigned_to_user_id) {
+        await createLeadNotification({
+          leadId: lead.id,
+          type: 'LEAD_INACTIVITY_48H',
+          title: `⚠️ Lead Follow-up Due (48 Hours): ${lead.company_name || lead.lead_number}`,
+          message: `It has been 48 hours since you contacted lead #${lead.lead_number} (${lead.company_name}) with no further move or progress. Please follow up and advance this lead.`,
+          specificRecipientId: lead.assigned_to_user_id,
+          specificRecipientRole: lead.assigned_to_role || 'Sales Executive',
+          metadata: {
+            leadId: lead.id,
+            leadNumber: lead.lead_number,
+            companyName: lead.company_name,
+            salesperson: lead.assigned_to_name
+          }
+        });
+      }
+
+      // 2. Notify CEO & Tech Support of 48-hour stall after contact
       await createLeadNotification({
         leadId: lead.id,
         type: 'ESCALATION_48H',
-        title: `🚨 ESCALATION: Lead Unattended Over 48 Hours: ${lead.company_name}`,
-        message: `CRITICAL: Lead ${lead.lead_number} for "${lead.company_name}" assigned to ${lead.assigned_to_name} remains completely unattended after 48 hours! Please review for immediate reassignment.`,
+        title: `🚨 48-Hour Inactivity After Contact: ${lead.company_name || lead.lead_number}`,
+        message: `Lead #${lead.lead_number} for "${lead.company_name}" assigned to ${lead.assigned_to_name || 'Sales Rep'} was contacted over 48 hours ago, but no further progress or follow-up has occurred.`,
+        specificRecipientRole: 'lead_managers',
         metadata: {
           leadId: lead.id,
           leadNumber: lead.lead_number,
           companyName: lead.company_name,
-          salesperson: lead.assigned_to_name,
-          assignedBy: `${lead.assigned_by_name} (${lead.assigned_by_role})`,
-          assignedAt: lead.assigned_at
+          salesperson: lead.assigned_to_name
         }
       });
-      console.log(`[Inactivity Engine] 48h escalation generated for lead ${lead.lead_number} (${lead.company_name}).`);
+      console.log(`[Inactivity Engine] 48h after-contact escalation sent for lead ${lead.lead_number} (${lead.company_name}).`);
     } catch (err) {
       console.warn(`[Inactivity Engine] Error processing 48h escalation for lead ${lead.id}:`, err.message);
     }

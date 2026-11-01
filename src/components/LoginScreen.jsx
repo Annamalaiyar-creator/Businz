@@ -431,7 +431,7 @@ export default function LoginScreen({ onLoginSuccess }) {
 
     const identifier = (empIdInput || usernameInput || '').trim();
     if (!identifier) {
-      setErrorMsg('Please enter your EMP ID or Email ID.');
+      setErrorMsg('Please enter your Emp ID or Email ID.');
       return;
     }
 
@@ -597,7 +597,7 @@ export default function LoginScreen({ onLoginSuccess }) {
             <p style={{ fontSize: '12.5px', color: '#64748B', margin: '6px 0 16px 0', lineHeight: '1.4', maxWidth: '380px' }}>
               {isSignUpMode 
                 ? 'Enter your details below to register your employee account & security verification.'
-                : 'Enter your EMP ID or Email ID and password to log into your account portal.'}
+                : 'Enter your Emp ID or Email ID and password to log into your account portal.'}
             </p>
 
             {/* FORM */}
@@ -633,12 +633,12 @@ export default function LoginScreen({ onLoginSuccess }) {
               {!isSignUpMode ? (
                 <div>
                   <label htmlFor="login-identifier" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
-                    EMP ID / Email ID
+                    Emp ID / Email ID
                   </label>
                   <input 
                     id="login-identifier" 
                     name="identifier" 
-                    aria-label="EMP ID / Email ID" 
+                    aria-label="Emp ID / Email ID" 
                     type="text"
                     required
                     autoComplete="username"
@@ -648,7 +648,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                       setUsernameInput(e.target.value);
                       setErrorMsg('');
                     }}
-                    placeholder="Enter EMP ID or Email ID (e.g. CEO-001 or admin@businz.com)"
+                    placeholder="Enter Emp ID / Email ID"
                     style={{
                       width: '100%',
                       height: '38px',
