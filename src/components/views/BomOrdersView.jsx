@@ -1551,6 +1551,7 @@ export default function BomOrdersView(props) {
       setNewBomRemarks('');
       const effectivePiPaymentTerm = pendingPi.paymentTerms || pendingPi.paymentType || pendingPi.payment_terms || pendingPi.terms || '100% Paid';
       setNewBomPaymentType(normalizePaymentTerm(effectivePiPaymentTerm));
+      setNewBomDocType(pendingPi.docType || 'Invoice');
       setNewBomDeliveryDate(pendingPi.deliveryDate || '');
       if (pendingPi.creditDays) setNewBomCreditDays(pendingPi.creditDays);
       if (pendingPi.partialAmount) setNewBomPartialAmount(String(pendingPi.partialAmount));
@@ -3403,7 +3404,7 @@ export default function BomOrdersView(props) {
             </h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
             <div>
               <label htmlFor="bom-orders-order-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Date</label>
               <input id="bom-orders-order-date" name="orderDate" aria-label="Order Date"
@@ -3447,6 +3448,35 @@ export default function BomOrdersView(props) {
                   <AlertCircle size={12} /> {formErrors.deliveryDate}
                 </span>
               )}
+            </div>
+            <div>
+              <label htmlFor="field-newBomDocType" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Document Type <span style={{ color: '#EF4444' }}>*</span>
+              </label>
+              <select
+                id="field-newBomDocType"
+                name="newBomDocType"
+                aria-label="Document Type"
+                value={newBomDocType}
+                onChange={(e) => setNewBomDocType(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '42px',
+                  borderRadius: '10px',
+                  border: newBomDocType === 'DC' ? '1.5px solid #F59E0B' : '1.5px solid #0E7490',
+                  backgroundColor: newBomDocType === 'DC' ? '#FFFBEB' : '#F0FDFA',
+                  padding: '0 12px',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  color: newBomDocType === 'DC' ? '#92400E' : '#0E7490',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="Invoice">📄 Invoice (Official Tax Invoice)</option>
+                <option value="DC">🚚 DC (Delivery Challan)</option>
+              </select>
             </div>
             <div>
               <label htmlFor="bom-orders-order-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Number</label>
@@ -8226,6 +8256,23 @@ export default function BomOrdersView(props) {
                           }}>
                             <AlertCircle size={11} style={{ color: '#D97706' }} />
                             Packed — Awaiting Sales Payment Proof
+                          </span>
+                        )}
+
+                        {row.docType === 'DC' && (
+                          <span style={{
+                            backgroundColor: '#FEF3C7',
+                            color: '#92400E',
+                            border: '1px solid #FCD34D',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            🚚 DC (Delivery Challan)
                           </span>
                         )}
 

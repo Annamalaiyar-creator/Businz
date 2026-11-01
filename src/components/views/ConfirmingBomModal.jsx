@@ -219,6 +219,7 @@ export default function ConfirmingBomModal({
                   deliveryAddressObj: finalDObj,
                   deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
                   deliveryAddressProofDocs: confirmingBomModal.sameAsBilling ? [] : (confirmingBomModal.deliveryAddressProofDocs || (confirmingBomModal.deliveryAddressProofDoc ? [confirmingBomModal.deliveryAddressProofDoc] : [])),
+                  docType: confirmingBomModal.docType || 'Invoice',
                   items: finalizedItems,
                   dispatchPacking: packingItems,
                   status: 'Sales Confirmed - Sent to Dispatch',
@@ -433,8 +434,8 @@ export default function ConfirmingBomModal({
           </span>
         </div>
 
-        {/* Customer (Locked), Company Name (Editable) & Payment Type (Editable) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+        {/* Customer (Locked), Company Name (Editable), Document Type (Editable) & Payment Type (Editable) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
           <div>
             <label htmlFor="confirming-bom-customer-name" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
               CUSTOMER NAME
@@ -469,6 +470,40 @@ export default function ConfirmingBomModal({
                   fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box'
                 }}
                />
+            )}
+          </div>
+
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+              DOCUMENT TYPE {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+            </label>
+            {isAlreadyForwarded ? (
+              <div style={{
+                fontSize: '12.5px', fontWeight: '800',
+                color: confirmingBomModal.docType === 'DC' ? '#92400E' : '#0E7490',
+                backgroundColor: confirmingBomModal.docType === 'DC' ? '#FEF3C7' : '#F0FDFA',
+                border: confirmingBomModal.docType === 'DC' ? '1px solid #FCD34D' : '1px solid #CCFBF1',
+                borderRadius: '8px', padding: '0 12px',
+                height: '40px', display: 'flex', alignItems: 'center'
+              }}>
+                {confirmingBomModal.docType === 'DC' ? '🚚 DC (Delivery Challan)' : '📄 Invoice (Tax Invoice)'}
+              </div>
+            ) : (
+              <select id="confirming-bom-doc-type" name="docType" aria-label="Document Type"
+                value={confirmingBomModal.docType || 'Invoice'}
+                onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, docType: e.target.value })}
+                style={{
+                  width: '100%', height: '40px', borderRadius: '8px',
+                  border: confirmingBomModal.docType === 'DC' ? '1.5px solid #F59E0B' : '1.5px solid #CBD5E1',
+                  backgroundColor: confirmingBomModal.docType === 'DC' ? '#FFFBEB' : '#FFFFFF',
+                  padding: '0 12px', fontSize: '13px', fontWeight: '800',
+                  color: confirmingBomModal.docType === 'DC' ? '#92400E' : '#0E7490',
+                  outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
+                }}
+              >
+                <option value="Invoice">📄 Invoice (Official Tax Invoice)</option>
+                <option value="DC">🚚 DC (Delivery Challan)</option>
+              </select>
             )}
           </div>
 
