@@ -1029,7 +1029,7 @@ export default function CreateBomFormPage(props) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <AlertCircle style={{ width: '16px', height: '16px', color: '#DC2626', flexShrink: 0 }} />
                         <span style={{ fontSize: '12px', color: '#991B1B', fontWeight: '600' }}>
-                          Alternate Delivery Address specified. Please upload Address Proof in the <strong>Document Attachments</strong> section at the bottom of this form.
+                          Alternate Delivery Address specified. Address proof can be attached (optional) in the <strong>Document Attachments</strong> section at the bottom of this form.
                         </span>
                       </div>
                       {deliveryDocs.length > 0 ? (
@@ -1976,10 +1976,10 @@ export default function CreateBomFormPage(props) {
                       </div>
                       <div>
                         <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
-                          Delivery Address Proof <span style={{ color: '#EF4444' }}>*</span>
+                          Delivery Address Proof <span style={{ color: '#64748B', fontWeight: '600' }}>(Optional)</span>
                         </h4>
                         <span style={{ fontSize: '11px', color: '#B91C1C' }}>
-                          Alternate delivery address specified. Upload electricity bill, GST certificate, lease copy, or premises photos.
+                          Alternate delivery address specified. Upload electricity bill, GST certificate, lease copy, or premises photos if available.
                         </span>
                       </div>
                     </div>
@@ -2279,11 +2279,7 @@ export default function CreateBomFormPage(props) {
                 alert(`⚠️ Incomplete Item Details:\n\n• ${invalidItems.join('\n• ')}`);
                 return;
               }
-              // Validate mandatory attachments
-              if (!sameAsBilling && deliveryDocs.length === 0) {
-                alert('⚠️ Address Proof attachment is mandatory when delivery address differs from billing address. Please attach the address proof in the Document Attachments section below.');
-                return;
-              }
+              {/* Validate mandatory payment attachment */}
               const isPaidOrder = (
                 newBomPaymentType === '100% Paid' ||
                 newBomPaymentType === '100% Advance' ||
