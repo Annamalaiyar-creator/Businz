@@ -450,6 +450,28 @@ export default function DispatchPackingModal({
   const progressPercent = isAlreadySentToAccounts ? 100 : (totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0);
   const isPartial = !isAlreadySentToAccounts && packedItemsCount > 0 && !allItemsPacked;
 
+  const isWhileDispatch = Boolean(
+    dispatchPackingModal?.paymentType === 'Payment While Dispatch' ||
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('while dispatch') ||
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('before dispatch')
+  );
+  const isPartialPaid = Boolean(
+    dispatchPackingModal?.paymentType === 'Partial Paid' ||
+    dispatchPackingModal?.paymentType === 'Partial Payment' ||
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('partial')
+  );
+
+  const hasPaymentProof = Boolean(
+    dispatchPackingModal?.paymentProofDoc ||
+    dispatchPackingModal?.payments?.proofDocObj ||
+    dispatchPackingModal?.payments?.proofDoc ||
+    dispatchPackingModal?.proofDoc ||
+    dispatchPackingModal?.paymentProofAttached ||
+    dispatchPackingModal?.hasPaymentProof
+  );
+
+  const needsSalesPaymentProof = (isWhileDispatch || isPartialPaid) && !hasPaymentProof;
+
   const savePackingData = (isPartialSave = false, proceedToLoading = false, sendPartialToAccounts = false) => {
     if (uploadingCount > 0) {
       alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
