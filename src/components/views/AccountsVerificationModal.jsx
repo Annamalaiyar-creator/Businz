@@ -680,8 +680,22 @@ export default function AccountsVerificationModal({
             <Receipt style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Type</div>
-            <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>{payTypeText}</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Type & Status</div>
+            <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>{payTypeText || '100% Paid'}</div>
+            <div style={{ marginTop: '3px' }}>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: '700',
+                color: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '#15803D' : (currentPayStatus.includes('Credit') ? '#1D4ED8' : '#B45309'),
+                backgroundColor: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '#DCFCE7' : (currentPayStatus.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                border: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '1px solid #BBF7D0' : (currentPayStatus.includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                padding: '2px 8px',
+                borderRadius: '4px',
+                display: 'inline-block'
+              }}>
+                {currentPayStatus || '100% Received'}
+              </span>
+            </div>
           </div>
         </div>
 

@@ -367,7 +367,28 @@ export default function ProductionTableView({
                         {row.c2 || row.name}
                       </td>
                       <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
-                        {activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
+                        {activeTab === 'Accounts Verification' ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', lineHeight: '1.2' }}>
+                            <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
+                              {row.paymentType || row.c3 || '100% Paid'}
+                            </span>
+                            {row.c7 && (
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: (row.c7.includes('Received') || row.c7.includes('Settled') || row.c7.includes('100%')) ? '#15803D' : (row.c7.includes('Credit') ? '#1D4ED8' : '#B45309'),
+                                backgroundColor: (row.c7.includes('Received') || row.c7.includes('Settled') || row.c7.includes('100%')) ? '#DCFCE7' : (row.c7.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                                border: (row.c7.includes('Received') || row.c7.includes('Settled') || row.c7.includes('100%')) ? '1px solid #BBF7D0' : (row.c7.includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                display: 'inline-block',
+                                width: 'fit-content'
+                              }}>
+                                {row.c7}
+                              </span>
+                            )}
+                          </div>
+                        ) : activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
                           <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
                             <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
                             {row.dateTimeObj.time && (

@@ -445,7 +445,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
-                  const payStatus = acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification');
+                  const isSettledCredit = Boolean(b.creditSettled || acc.creditSettled || (typeof b.status === 'string' && b.status.toLowerCase().includes('credit settled')));
+                  const payStatus = isSettledCredit
+                    ? '100% Received (Credit Settled)'
+                    : (acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification'));
                   
                   // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
                   const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
