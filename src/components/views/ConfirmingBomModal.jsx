@@ -484,9 +484,19 @@ export default function ConfirmingBomModal({
                 backgroundColor: confirmingBomModal.docType === 'DC' ? '#FEF3C7' : '#F0FDFA',
                 border: confirmingBomModal.docType === 'DC' ? '1px solid #FCD34D' : '1px solid #CCFBF1',
                 borderRadius: '8px', padding: '0 12px',
-                height: '40px', display: 'flex', alignItems: 'center'
+                height: '40px', display: 'flex', alignItems: 'center', gap: '6px'
               }}>
-                {confirmingBomModal.docType === 'DC' ? '🚚 DC (Delivery Challan)' : '📄 Invoice (Tax Invoice)'}
+                {confirmingBomModal.docType === 'DC' ? (
+                  <>
+                    <Truck size={14} strokeWidth={2.2} />
+                    <span>DC (Delivery Challan)</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText size={14} strokeWidth={2.2} />
+                    <span>Invoice (Tax Invoice)</span>
+                  </>
+                )}
               </div>
             ) : (
               <select id="confirming-bom-doc-type" name="docType" aria-label="Document Type"
@@ -501,8 +511,8 @@ export default function ConfirmingBomModal({
                   outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
                 }}
               >
-                <option value="Invoice">📄 Invoice (Official Tax Invoice)</option>
-                <option value="DC">🚚 DC (Delivery Challan)</option>
+                <option value="Invoice">Invoice (Official Tax Invoice)</option>
+                <option value="DC">DC (Delivery Challan)</option>
               </select>
             )}
           </div>

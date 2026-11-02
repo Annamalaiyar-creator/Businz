@@ -3553,8 +3553,8 @@ export default function BomOrdersView(props) {
                   cursor: 'pointer'
                 }}
               >
-                <option value="Invoice">📄 Invoice (Official Tax Invoice)</option>
-                <option value="DC">🚚 DC (Delivery Challan)</option>
+                <option value="Invoice">Invoice (Official Tax Invoice)</option>
+                <option value="DC">DC (Delivery Challan)</option>
               </select>
             </div>
             <div>
@@ -8494,7 +8494,8 @@ export default function BomOrdersView(props) {
                             alignItems: 'center',
                             gap: '4px'
                           }}>
-                            🚚 DC (Delivery Challan)
+                            <Truck size={12} strokeWidth={2.2} />
+                            <span>DC (Delivery Challan)</span>
                           </span>
                         )}
 

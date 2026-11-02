@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
-  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User, AlertTriangle
+  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User, AlertTriangle, FileText
 } from "lucide-react";
 import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, getMediaFromCacheAsync, uploadMediaFile } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
@@ -988,9 +988,13 @@ export default function DispatchPackingModal({
                   borderRadius: '20px',
                   fontSize: '11px',
                   fontWeight: '900',
-                  letterSpacing: '0.5px'
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
                 }}>
-                  🚚 DC (DELIVERY CHALLAN)
+                  <Truck size={13} strokeWidth={2.2} />
+                  <span>DC (DELIVERY CHALLAN)</span>
                 </span>
               ) : (
                 <span style={{
@@ -1001,9 +1005,13 @@ export default function DispatchPackingModal({
                   borderRadius: '20px',
                   fontSize: '11px',
                   fontWeight: '900',
-                  letterSpacing: '0.5px'
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
                 }}>
-                  📄 TAX INVOICE
+                  <FileText size={13} strokeWidth={2.2} />
+                  <span>TAX INVOICE</span>
                 </span>
               )}
               {isCancelled ? (

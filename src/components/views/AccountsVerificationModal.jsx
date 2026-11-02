@@ -547,9 +547,13 @@ export default function AccountsVerificationModal({
                   borderRadius: '20px',
                   fontSize: '11px',
                   fontWeight: '900',
-                  letterSpacing: '0.5px'
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
                 }}>
-                  🚚 DC (DELIVERY CHALLAN)
+                  <Truck size={13} strokeWidth={2.2} />
+                  <span>DC (DELIVERY CHALLAN)</span>
                 </span>
               ) : (
                 <span style={{
@@ -560,9 +564,13 @@ export default function AccountsVerificationModal({
                   borderRadius: '20px',
                   fontSize: '11px',
                   fontWeight: '900',
-                  letterSpacing: '0.5px'
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
                 }}>
-                  📄 TAX INVOICE
+                  <FileText size={13} strokeWidth={2.2} />
+                  <span>TAX INVOICE</span>
                 </span>
               )}
               <span style={{

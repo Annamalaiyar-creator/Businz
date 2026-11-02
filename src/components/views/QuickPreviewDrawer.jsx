@@ -282,10 +282,20 @@ export default function QuickPreviewDrawer({
           buttonContent = <>View Dispatched Shipment Details</>;
         } else if (isAwaitingLr) {
           buttonBg = 'linear-gradient(135deg, #D97706, #F59E0B)';
-          buttonContent = <>📄 Upload Transporter LR Copy & Close Order</>;
+          buttonContent = (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={16} strokeWidth={2.2} />
+              <span>Upload Transporter LR Copy & Close Order</span>
+            </span>
+          );
         } else if (isReadyForVehicleLoading) {
           buttonBg = 'linear-gradient(135deg, #0284C7, #0EA5E9)';
-          buttonContent = <>🚚 Proceed to Vehicle Loading & Complete Dispatch</>;
+          buttonContent = (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <Truck size={16} strokeWidth={2.2} />
+              <span>Proceed to Vehicle Loading & Complete Dispatch</span>
+            </span>
+          );
         } else if (isSentToAccounts) {
           return null;
         }

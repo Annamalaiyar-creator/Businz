@@ -397,9 +397,10 @@ export default function ProductionTableView({
                               fontWeight: '800',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '4px'
+                              gap: '5px'
                             }}>
-                              🚚 DC
+                              <Truck size={13} strokeWidth={2.2} />
+                              <span>DC</span>
                             </span>
                           ) : (
                             <span style={{
@@ -412,9 +413,10 @@ export default function ProductionTableView({
                               fontWeight: '800',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '4px'
+                              gap: '5px'
                             }}>
-                              📄 Invoice
+                              <FileText size={13} strokeWidth={2.2} />
+                              <span>Invoice</span>
                             </span>
                           )
                         ) : activeTab === 'Dispatch Orders' && row.dateTimeObj ? (

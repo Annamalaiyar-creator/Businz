@@ -499,8 +499,8 @@ export default function CreateBomFormPage(props) {
               }}
             >
               <option value="">-- Select DC or Invoice --</option>
-              <option value="Invoice">📄 Invoice (Official Tax Invoice)</option>
-              <option value="DC">🚚 DC (Delivery Challan)</option>
+              <option value="Invoice">Invoice (Official Tax Invoice)</option>
+              <option value="DC">DC (Delivery Challan)</option>
             </select>
             {bomFormErrors.docType && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
