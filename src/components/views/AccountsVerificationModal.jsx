@@ -28,7 +28,7 @@ export default function AccountsVerificationModal({
   showCustomAlert
 }) {
   const [viewingProofDocModal, setViewingProofDocModal] = useState(null);
-  const [accountsBomViewMode, setAccountsBomViewMode] = useState('paper');
+  const [accountsBomViewMode, setAccountsBomViewMode] = useState('table');
   const [resolvedProofDataUrl, setResolvedProofDataUrl] = useState(null);
   const [resolvedAddressProofDataUrl, setResolvedAddressProofDataUrl] = useState(null);
   const [isResolvingProof, setIsResolvingProof] = useState(false);
@@ -1539,17 +1539,46 @@ export default function AccountsVerificationModal({
         const dynamicAccItems = rawAccItems.map((it, idx) => {
           const q = parseFloat(it.qty || it.bomQty || 1) || 1;
           const r = parseFloat(it.rate || it.unitPrice || 0) || 0;
+          const matchingPacked = (accountsVerificationModal.dispatchPacking || []).find(p => (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code));
+          const pQty = (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '')
+            ? it.packedQty
+            : (matchingPacked && matchingPacked.packedQty !== undefined && matchingPacked.packedQty !== null && matchingPacked.packedQty !== '' ? matchingPacked.packedQty : (it.packed ? q : 0));
           return {
+            ...it,
             code: it.code || `PRD-00${idx + 1}`,
             name: it.name || `Item ${idx + 1}`,
             desc: it.category || it.desc || 'Standard component',
             qty: q,
+            packedQty: pQty,
             uom: it.uom || 'Nos',
             rate: r,
             amt: q * r,
-            packed: it.packed !== undefined ? Boolean(it.packed) : true
+            packed: it.packed !== undefined ? Boolean(it.packed) : (matchingPacked ? Boolean(matchingPacked.packed) : true),
+            isPresetItem: Boolean(it.isPresetItem || matchingPacked?.isPresetItem),
+            presetGroupId: it.presetGroupId || matchingPacked?.presetGroupId || null
           };
         });
+
+        const rawPresetGroups = accountsVerificationModal.presetGroups || {};
+        const pGroups = (Array.isArray(rawPresetGroups) && rawPresetGroups.length > 0)
+          ? rawPresetGroups
+          : (typeof rawPresetGroups === 'object' && Object.keys(rawPresetGroups).length > 0)
+            ? Object.values(rawPresetGroups)
+            : (accountsVerificationModal.presetName || (cleanNum(accountsVerificationModal.presetKitPrice) > 0))
+              ? [{
+                  presetName: accountsVerificationModal.presetName || 'Pre-Engineered Structure Kit Package',
+                  setCount: parseInt(accountsVerificationModal.presetSetCount) || 1,
+                  kitPrice: cleanNum(accountsVerificationModal.presetKitPrice) || 0
+                }]
+              : [];
+
+        const PRESET_THEMES = [
+          { primary: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC', tagBg: '#CFFAFE', tagText: '#155E75', badge: 'SET 1' },
+          { primary: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE', tagBg: '#E0E7FF', tagText: '#3730A3', badge: 'SET 2' },
+          { primary: '#D97706', bg: '#FFFBEB', border: '#FDE68A', tagBg: '#FEF3C7', tagText: '#92400E', badge: 'SET 3' },
+          { primary: '#059669', bg: '#ECFDF5', border: '#A7F3D0', tagBg: '#D1FAE5', tagText: '#065F46', badge: 'SET 4' },
+          { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', tagBg: '#EDE9FE', tagText: '#5B21B6', badge: 'SET 5' },
+        ];
 
         const accSubTotal = dynamicAccItems.reduce((acc, curr) => acc + curr.amt, 0);
         const accCgst = accSubTotal * 0.09;
@@ -1587,7 +1616,7 @@ export default function AccountsVerificationModal({
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                      BOM Document & Items Inspection
+                      BOM Items & Pricing Verification
                     </h3>
                     <span style={{
                       padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800',
@@ -1595,17 +1624,35 @@ export default function AccountsVerificationModal({
                       color: '#166534',
                       border: '1px solid #BBF7D0'
                     }}>
-                      Official Order Record
+                      Official Pricing & Quantities
                     </span>
                   </div>
                   <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-                    Verify items, quantities, and rates against the finalized BOM and dispatch packing list.
+                    Verify individual product prices, kit package prices, ordered BOM quantities, and dispatch packed quantities.
                   </p>
                 </div>
               </div>
 
               {/* View Switcher Buttons */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                <button
+                  onClick={() => setAccountsBomViewMode('table')}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    border: 'none',
+                    backgroundColor: accountsBomViewMode === 'table' ? '#FFFFFF' : 'transparent',
+                    color: accountsBomViewMode === 'table' ? '#0F172A' : '#64748B',
+                    padding: '6px 14px', borderRadius: '8px',
+                    fontSize: '12px', fontWeight: accountsBomViewMode === 'table' ? '800' : '600',
+                    cursor: 'pointer',
+                    boxShadow: accountsBomViewMode === 'table' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Layers style={{ width: '14px', height: '14px', color: accountsBomViewMode === 'table' ? '#2563EB' : '#64748B' }} />
+                  Itemized Pricing View
+                </button>
+
                 <button
                   onClick={() => setAccountsBomViewMode('paper')}
                   style={{
@@ -1622,24 +1669,6 @@ export default function AccountsVerificationModal({
                 >
                   <FileText style={{ width: '14px', height: '14px', color: accountsBomViewMode === 'paper' ? '#2563EB' : '#64748B' }} />
                   Paper BOM Sheet View
-                </button>
-
-                <button
-                  onClick={() => setAccountsBomViewMode('table')}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    border: 'none',
-                    backgroundColor: accountsBomViewMode === 'table' ? '#FFFFFF' : 'transparent',
-                    color: accountsBomViewMode === 'table' ? '#0F172A' : '#64748B',
-                    padding: '6px 14px', borderRadius: '8px',
-                    fontSize: '12px', fontWeight: accountsBomViewMode === 'table' ? '800' : '600',
-                    cursor: 'pointer',
-                    boxShadow: accountsBomViewMode === 'table' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Layers style={{ width: '14px', height: '14px', color: accountsBomViewMode === 'table' ? '#2563EB' : '#64748B' }} />
-                  Itemized Table View
                 </button>
               </div>
             </div>
@@ -1665,7 +1694,7 @@ export default function AccountsVerificationModal({
                 />
               </div>
             ) : (
-              /* ─── VIEW 2: INTERACTIVE BOM TABLE VIEW ─── */
+              /* ─── VIEW 2: INTERACTIVE BOM TABLE VIEW WITH KIT PRICING IN CENTER & PRODUCT PRICES ─── */
               <div style={{ overflowX: 'auto', width: '100%' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
@@ -1673,53 +1702,200 @@ export default function AccountsVerificationModal({
                       <th style={{ padding: '13px 16px', width: '50px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Code</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Description</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Required Qty</th>
+                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
+                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Packed Qty</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Unit Rate (₹)</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Line Total (₹)</th>
                       <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Physical Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dynamicAccItems.map((it, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC' }}>
-                        <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>{idx + 1}</td>
-                        <td style={{ padding: '14px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>{it.desc}</div>
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
-                          {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'right', color: '#475569' }}>
-                          ₹ {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
-                          ₹ {it.amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                          {it.packed ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '4px',
-                              padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
-                              backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
-                            }}>
-                              <CheckCircle style={{ width: '12px', height: '12px' }} />
-                              Packed in BOM
-                            </span>
-                          ) : (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '4px',
-                              padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
-                              backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
-                            }}>
-                              <Clock style={{ width: '12px', height: '12px' }} />
-                              Pending Packing
-                            </span>
+                    {/* Render Kit / Preset Groups if present */}
+                    {pGroups.length > 0 && pGroups.map((grp, gIdx) => {
+                      const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
+                      const sCount = parseInt(grp.setCount) || 1;
+                      const kPrice = cleanNum(grp.kitPrice) || 0;
+                      const kTotal = sCount * kPrice;
+                      const unitType = grp.unitType || (grp.isKwBased ? 'kW' : 'Sets');
+
+                      const kitItems = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
+
+                      return (
+                        <React.Fragment key={`acc-kit-${gIdx}`}>
+                          {/* Centered Kit Price Header Row per User Mandate */}
+                          <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                            <td colSpan={8} style={{ padding: '12px 20px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                                <span style={{
+                                  backgroundColor: theme.primary,
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '900',
+                                  padding: '3px 10px',
+                                  borderRadius: '6px',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  {theme.badge}
+                                </span>
+                                <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                                  {grp.presetName || 'Pre-Engineered Structure Kit'} ({sCount} {unitType})
+                                </span>
+                                <span style={{
+                                  fontSize: '14px',
+                                  fontWeight: '900',
+                                  color: theme.primary,
+                                  backgroundColor: '#FFFFFF',
+                                  border: `2px solid ${theme.primary}`,
+                                  padding: '4px 16px',
+                                  borderRadius: '20px',
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+                                }}>
+                                  Kit Price: ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </span>
+                                {sCount > 1 && (
+                                  <span style={{ fontSize: '13px', fontWeight: '800', color: theme.tagText }}>
+                                    Total Kit Value: ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Kit Components */}
+                          {kitItems.map((it, kIdx) => (
+                            <tr key={`kit-item-${gIdx}-${kIdx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: theme.bg }}>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', color: theme.primary, fontWeight: '700' }}>{`${gIdx + 1}.${kIdx + 1}`}</td>
+                              <td style={{ padding: '12px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ backgroundColor: theme.tagBg, color: theme.tagText, border: `1px solid ${theme.border}`, fontSize: '9px', fontWeight: '800', padding: '1px 6px', borderRadius: '3px' }}>
+                                    {theme.badge} COMPONENT
+                                  </span>
+                                  <span style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{it.desc}</div>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
+                                {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800' }}>
+                                <span style={{
+                                  backgroundColor: it.packedQty >= it.qty ? '#DCFCE7' : it.packedQty > 0 ? '#FEF3C7' : '#F1F5F9',
+                                  color: it.packedQty >= it.qty ? '#166534' : it.packedQty > 0 ? '#B45309' : '#64748B',
+                                  padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800'
+                                }}>
+                                  {it.packedQty} {it.uom}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700', backgroundColor: theme.tagBg, padding: '3px 8px', borderRadius: '4px' }}>
+                                  Included in Kit
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '3px 8px', borderRadius: '4px' }}>
+                                  Included in Kit
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 20px', textAlign: 'center' }}>
+                                {it.packed ? (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
+                                  }}>
+                                    <CheckCircle style={{ width: '12px', height: '12px' }} />
+                                    Packed
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
+                                  }}>
+                                    <Clock style={{ width: '12px', height: '12px' }} />
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* Loose / Individual Products */}
+                    {(() => {
+                      const looseItems = pGroups.length > 0
+                        ? dynamicAccItems.filter(it => !it.presetGroupId && !it.isPresetItem)
+                        : dynamicAccItems;
+
+                      if (looseItems.length === 0 && pGroups.length > 0) return null;
+
+                      return (
+                        <>
+                          {pGroups.length > 0 && looseItems.length > 0 && (
+                            <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                              <td colSpan={8} style={{ padding: '10px 18px' }}>
+                                <span style={{ padding: '3px 10px', borderRadius: '6px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '11px', fontWeight: '900', letterSpacing: '0.5px' }}>
+                                  INDIVIDUAL / STANDALONE PRODUCTS
+                                </span>
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                      </tr>
-                    ))}
+
+                          {looseItems.map((it, idx) => (
+                            <tr key={`loose-${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC' }}>
+                              <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>{idx + 1}</td>
+                              <td style={{ padding: '14px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B' }}>{it.desc}</div>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
+                                {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800' }}>
+                                <span style={{
+                                  backgroundColor: it.packedQty >= it.qty ? '#DCFCE7' : it.packedQty > 0 ? '#FEF3C7' : '#F1F5F9',
+                                  color: it.packedQty >= it.qty ? '#166534' : it.packedQty > 0 ? '#B45309' : '#64748B',
+                                  padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800'
+                                }}>
+                                  {it.packedQty} {it.uom}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                                ₹ {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '800', color: '#0E7490' }}>
+                                ₹ {it.amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                                {it.packed ? (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
+                                  }}>
+                                    <CheckCircle style={{ width: '12px', height: '12px' }} />
+                                    Packed
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
+                                  }}>
+                                    <Clock style={{ width: '12px', height: '12px' }} />
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </>
+                      );
+                    })()}
                   </tbody>
                 </table>
               </div>

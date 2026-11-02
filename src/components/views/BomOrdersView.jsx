@@ -9426,6 +9426,11 @@ export default function BomOrdersView(props) {
               const dPin = isSameAddr ? bPin : (quickPreviewRecord.deliveryPincode || dObj.pincode || dObj.pin || sourcePi?.deliveryPincode || bPin);
 
               const addrDoc = quickPreviewRecord.deliveryAddressProofDoc || sourcePi?.deliveryAddressProofDoc || sourcePi?.deliveryProofDoc;
+              const hasDispatchPacking = Boolean(
+                (quickPreviewRecord.dispatchPacking && Array.isArray(quickPreviewRecord.dispatchPacking) && quickPreviewRecord.dispatchPacking.length > 0) ||
+                quickPreviewRecord.packingStatus ||
+                quickPreviewRecord.packedAt
+              );
 
               return (
                 <>
@@ -9641,23 +9646,63 @@ export default function BomOrdersView(props) {
 
             {/* Itemized List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Itemized Products & Materials</h4>
-                <span style={{ fontSize: '11px', color: '#64748B' }}>{(quickPreviewRecord.items || []).length} items</span>
-              </div>
-              <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                      <th style={{ padding: '8px 10px' }}>#</th>
-                      <th style={{ padding: '8px 10px' }}>Product Description</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Qty</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Rate (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Total (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Preset Kit Package Rows */}
+                  {hasDispatchPacking && (
+                    <div style={{
+                      backgroundColor: '#ECFDF5',
+                      border: '1.5px solid #10B981',
+                      borderRadius: '12px',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      boxShadow: '0 2px 6px rgba(16,185,129,0.08)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CheckCircle style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
+                        <div>
+                          <strong style={{ color: '#065F46', fontSize: '13px', display: 'block' }}>
+                            📦 Notice to Sales: Goods Verified & Packed by Dispatch
+                          </strong>
+                          <span style={{ color: '#047857', fontSize: '12px' }}>
+                            Dispatch has packed this BOM ({quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' ? '100% Fully Packed' : 'Partially Packed'}). Review the comparison below between ordered BOM Qty and actual Packed Qty.
+                          </span>
+                        </div>
+                      </div>
+                      <span style={{
+                        backgroundColor: '#059669',
+                        color: '#FFFFFF',
+                        padding: '3px 10px',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' ? 'Fully Packed' : 'Partially Packed'}
+                      </span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h4 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Itemized Products & Materials</h4>
+                    <span style={{ fontSize: '11px', color: '#64748B' }}>{(quickPreviewRecord.items || []).length} items</span>
+                  </div>
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                          <th style={{ padding: '8px 10px' }}>#</th>
+                          <th style={{ padding: '8px 10px' }}>Product Description</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center' }}>BOM Qty</th>
+                          {hasDispatchPacking && (
+                            <th style={{ padding: '8px 10px', textAlign: 'center', color: '#0E7490' }}>Packed Qty</th>
+                          )}
+                          <th style={{ padding: '8px 10px', textAlign: 'right' }}>Rate (₹)</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right' }}>Total (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* Preset Kit Package Rows */}
                     {(() => {
                       const pGroups = (Array.isArray(quickPreviewRecord.presetGroups) && quickPreviewRecord.presetGroups.length > 0)
                         ? quickPreviewRecord.presetGroups
@@ -9689,6 +9734,11 @@ export default function BomOrdersView(props) {
                             <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: theme.primary }}>
                               {sCount} {unitType}
                             </td>
+                            {hasDispatchPacking && (
+                              <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: theme.primary }}>
+                                {sCount} {unitType}
+                              </td>
+                            )}
                             <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: theme.primary }}>
                               ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </td>
@@ -9725,6 +9775,13 @@ export default function BomOrdersView(props) {
                           theme = getPresetTheme(gIdx >= 0 ? gIdx : 0);
                         }
 
+                        const matchingPacked = (quickPreviewRecord.dispatchPacking || []).find(p => (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code));
+                        const packedQ = (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '')
+                          ? Number(it.packedQty)
+                          : (matchingPacked && matchingPacked.packedQty !== undefined && matchingPacked.packedQty !== null && matchingPacked.packedQty !== ''
+                              ? Number(matchingPacked.packedQty)
+                              : (matchingPacked?.packed ? q : (it.packed ? q : 0)));
+
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isKitPart ? theme.bg : '#FFFFFF' }}>
                             <td style={{ padding: '8px 10px', color: isKitPart ? theme.primary : '#94A3B8', fontWeight: '700', textAlign: 'center' }}>{idx + 1}</td>
@@ -9740,6 +9797,23 @@ export default function BomOrdersView(props) {
                               {it.category && <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '500' }}>{it.category}</span>}
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: isKitPart ? theme.primary : '#0E7490' }}>{q} {it.uom || ''}</td>
+                            {hasDispatchPacking && (
+                              <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800' }}>
+                                <span style={{
+                                  color: packedQ >= q ? '#059669' : packedQ > 0 ? '#D97706' : '#DC2626',
+                                  backgroundColor: packedQ >= q ? '#DCFCE7' : packedQ > 0 ? '#FEF3C7' : '#FEE2E2',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  {packedQ} {it.uom || ''}
+                                </span>
+                              </td>
+                            )}
                             <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: isKitPart ? theme.primary : '#475569' }}>
                               {isKitPart ? (
                                 <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700', backgroundColor: theme.tagBg, padding: '2px 5px', borderRadius: '3px' }}>Included</span>
@@ -9761,21 +9835,21 @@ export default function BomOrdersView(props) {
                   </tbody>
                   <tfoot>
                     <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #E2E8F0', fontWeight: '700', color: '#475569' }}>
-                      <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right' }}>Taxable Subtotal:</td>
+                      <td colSpan={hasDispatchPacking ? 5 : 4} style={{ padding: '8px 10px', textAlign: 'right' }}>Taxable Subtotal:</td>
                       <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
                         ₹ {subVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     {gstVal > 0 && (
                       <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '11.5px' }}>
-                        <td colSpan={4} style={{ padding: '4px 10px', textAlign: 'right' }}>GST:</td>
+                        <td colSpan={hasDispatchPacking ? 5 : 4} style={{ padding: '4px 10px', textAlign: 'right' }}>GST:</td>
                         <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: '700', color: '#64748B' }}>
                           ₹ {gstVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     )}
                     <tr style={{ backgroundColor: '#ECFEFF', borderTop: '1px solid #A5F3FC', fontWeight: '900', color: '#0E7490', fontSize: '13px' }}>
-                      <td colSpan={4} style={{ padding: '10px', textAlign: 'right', textTransform: 'uppercase' }}>Total Order Value:</td>
+                      <td colSpan={hasDispatchPacking ? 5 : 4} style={{ padding: '10px', textAlign: 'right', textTransform: 'uppercase' }}>Total Order Value:</td>
                       <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px', color: '#0E7490' }}>
                         ₹ {grandVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
@@ -9784,9 +9858,6 @@ export default function BomOrdersView(props) {
                 </table>
               </div>
             </div>
-          </>
-        );
-      })()}
 
             {/* Dispatch Packed Items Media Section in Quick Preview */}
             {(() => {
@@ -9956,6 +10027,9 @@ export default function BomOrdersView(props) {
                 </div>
               );
             })()}
+          </>
+        );
+      })()}
           </div>
         </div>
       )}
