@@ -490,12 +490,9 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                   // Format Total Amount
                   let totalAmtFormatted = '—';
-                  const rawAmt = Number(acc.totalAmount || (isVerified ? (b.grandTotal || b.subTotal || b.totalAmount || 0) : 0));
+                  const rawAmt = Number(acc.totalAmount || b.grandTotal || b.subTotal || b.totalAmount || 0);
                   if (rawAmt > 0) {
                     totalAmtFormatted = `₹ ${rawAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                  } else {
-                    const orderEst = Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
-                    totalAmtFormatted = orderEst > 0 ? `₹ ${orderEst.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Order)` : '—';
                   }
 
                   // Calculate and Format Cumulative Customer Credit Amount for Accounts verification
