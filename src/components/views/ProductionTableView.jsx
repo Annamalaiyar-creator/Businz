@@ -462,7 +462,7 @@ export default function ProductionTableView({
                           row.c4 || row.date2
                         )}
                       </td>
-                      {row.c5 !== undefined && (
+                      {row.c5 !== undefined && activeTab !== 'Dispatch Orders' && !pageConfig.headers[4]?.includes('Status') && (
                         <td style={{
                           padding: '14px 16px',
                           fontWeight: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value') || pageConfig.headers[4]?.includes('Qty') || pageConfig.headers[4]?.includes('Price')) ? '700' : '600',
