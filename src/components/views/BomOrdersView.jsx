@@ -57,12 +57,26 @@ export default function BomOrdersView(props) {
   const getOrderLifecycle = (row) => {
     if (!row) return { isCancelled: false, steps: [] };
     const statusStr = String(row.status || '').toLowerCase();
-    const isCancelled = statusStr.includes('cancel');
-    const isDispatched = row.status === 'Dispatched' || row.status === 'Closed' || row.status === 'CLOSED';
-    const isInvoiceGenerated = isDispatched || Boolean(row.invoiceGenerated || row.invoiceNo || row.taxInvoiceNo) || ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
-    const isAccountsVerified = isInvoiceGenerated || Boolean(row.accountsVerified) || ['Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified - Proceed Billing'].includes(row.status);
-    const isPackingVerified = isAccountsVerified || Boolean(row.dispatchPackingVerified) || ['Packed & Ready for Dispatch', 'Partially Packed', 'Packed — Awaiting Sales Payment Proof', 'Packed - Awaiting Sales Payment Proof'].includes(row.status) || Boolean(row.awaitingSalesPaymentProof);
-    const isSalesConfirmed = isPackingVerified || Boolean(row.salesConfirmed) || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed'].includes(row.status);
+    const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || statusStr.includes('cancel'));
+    const isDispatched = row.status === 'Dispatched' || row.status === 'Closed' || row.status === 'CLOSED' || statusStr.includes('dispatched');
+    const isInvoiceGenerated = isDispatched || Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo) || ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status) || statusStr.includes('invoice');
+    const isAccountsVerified = isInvoiceGenerated ||
+      Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
+      ['Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified - Proceed Billing', 'Accounts Verified & Passed to Invoice'].includes(row.status) ||
+      statusStr.includes('accounts verified') ||
+      statusStr.includes('passed to invoice');
+    const isPackingVerified = isAccountsVerified ||
+      Boolean(row.dispatchPackingVerified || row.packingVerified || row.dispatchPackingDone) ||
+      (Array.isArray(row.dispatchPacking) && row.dispatchPacking.length > 0 && row.dispatchPacking.some(p => p.packed)) ||
+      ['Packed & Ready for Dispatch', 'Partially Packed', 'Packed — Awaiting Sales Payment Proof', 'Packed - Awaiting Sales Payment Proof'].includes(row.status) ||
+      statusStr.includes('packed') ||
+      Boolean(row.awaitingSalesPaymentProof);
+    const isSalesConfirmed = isPackingVerified ||
+      Boolean(row.salesConfirmed || row.salesReconfirmed || row.creditSettled || row.paymentSettled) ||
+      ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed'].includes(row.status) ||
+      statusStr.includes('sales confirmed') ||
+      statusStr.includes('sent to dispatch') ||
+      statusStr.includes('credit settled');
 
     return {
       isCancelled,
@@ -123,6 +137,34 @@ export default function BomOrdersView(props) {
     }
   };
 
+  // Self-healing sanitizer for BOM records (ensures credit-settled orders stay in their true lifecycle stage)
+  const sanitizeBomRecord = (b) => {
+    if (!b) return b;
+    if (b.status === 'Credit Settled (100% Paid)') {
+      let trueStatus = 'Accounts Verified & Passed to Invoice';
+      if (b.invoiceGenerated || (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') || b.taxInvoiceNo) {
+        trueStatus = 'Invoice Generated';
+      } else if (b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified) {
+        trueStatus = 'Accounts Verified & Passed to Invoice';
+      } else if (b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)) {
+        trueStatus = 'Dispatch Packing Verified - Sent to Accounts';
+      } else if (b.salesConfirmed) {
+        trueStatus = 'Sales Confirmed - Sent to Dispatch';
+      }
+      return {
+        ...b,
+        status: trueStatus,
+        paymentStatus: 'Credit Settled (100% Paid)',
+        creditSettled: true,
+        salesConfirmed: true,
+        dispatchPackingVerified: Boolean(b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0) || trueStatus === 'Accounts Verified & Passed to Invoice'),
+        accountsVerified: Boolean(b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || trueStatus === 'Accounts Verified & Passed to Invoice'),
+        isAccountsDone: Boolean(b.isAccountsDone || b.accountsVerification?.verified || trueStatus === 'Accounts Verified & Passed to Invoice')
+      };
+    }
+    return b;
+  };
+
   // Cache-First Instant Hydration: load immediately from localStorage with 0ms delay
   const [bomStore, setBomStore] = useState(() => {
     try {
@@ -131,10 +173,11 @@ export default function BomOrdersView(props) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const { list: resolvedList } = resolveBomCollisions(parsed, 662);
-          if (resolvedList.length !== parsed.length) {
-            localStorage.setItem('controlroom_bom_store', JSON.stringify(resolvedList.map(stripDataUrlsFromRecord)));
+          const sanitized = resolvedList.map(sanitizeBomRecord);
+          if (resolvedList.length !== parsed.length || sanitized.some((b, i) => b.status !== resolvedList[i]?.status)) {
+            localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized.map(stripDataUrlsFromRecord)));
           }
-          return resolvedList.map(stripDataUrlsFromRecord);
+          return sanitized.map(stripDataUrlsFromRecord);
         }
       }
     } catch (_) {}
@@ -8358,7 +8401,16 @@ export default function BomOrdersView(props) {
                   row.awaitingSalesPaymentProof ||
                   (typeof row.status === 'string' && row.status.toLowerCase().includes('awaiting sales payment proof'))
                 );
-                const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
+                const isSentToDispatch = Boolean(
+                  row.salesConfirmed ||
+                  row.salesReconfirmed ||
+                  row.creditSettled ||
+                  row.isAccountsDone ||
+                  row.accountsVerified ||
+                  row.dispatchPackingVerified ||
+                  lifecycle.steps[1]?.isDone ||
+                  ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status)
+                );
                 const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
 
                 return (
@@ -10746,8 +10798,27 @@ export default function BomOrdersView(props) {
 
                     const updatedList = (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? {
                       ...b,
-                      status: 'Credit Settled (100% Paid)',
+                      status: (() => {
+                        if (b.status && b.status !== 'Credit Settled (100% Paid)' && b.status !== 'Pending Confirmation') {
+                          return b.status;
+                        }
+                        if (b.invoiceGenerated || (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') || b.taxInvoiceNo) {
+                          return 'Invoice Generated';
+                        }
+                        if (b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified) {
+                          return 'Accounts Verified & Passed to Invoice';
+                        }
+                        if (b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)) {
+                          return 'Dispatch Packing Verified - Sent to Accounts';
+                        }
+                        return b.salesConfirmed ? 'Sales Confirmed - Sent to Dispatch' : 'Accounts Verified & Passed to Invoice';
+                      })(),
+                      paymentStatus: 'Credit Settled (100% Paid)',
                       creditSettled: true,
+                      salesConfirmed: true,
+                      dispatchPackingVerified: Boolean(b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0) || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified),
+                      accountsVerified: Boolean(b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || b.status?.includes('Accounts Verified') || b.status?.includes('Invoice')),
+                      isAccountsDone: Boolean(b.isAccountsDone || b.accountsVerification?.verified || b.accountsVerified || b.status?.includes('Accounts Verified') || b.status?.includes('Invoice')),
                       creditSettledAt: new Date().toISOString(),
                       creditSettledBy: currentUserName || userRole,
                       creditSettledRole: userRole,
@@ -10760,6 +10831,7 @@ export default function BomOrdersView(props) {
                       paymentProofDocs: [...(Array.isArray(b.paymentProofDocs) ? b.paymentProofDocs : []), docMeta],
                       accountsVerification: {
                         ...(b.accountsVerification || {}),
+                        verified: Boolean(b.accountsVerification?.verified || b.isAccountsDone || b.accountsVerified || true),
                         creditSettled: true,
                         paymentStatus: 'Credit Settled (100% Paid)',
                         settledUtr: settleCreditUtr.trim(),
