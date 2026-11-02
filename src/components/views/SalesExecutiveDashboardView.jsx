@@ -2837,9 +2837,14 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                 <Users size={13} style={{ color: '#0E7490' }} />
                 <span>CUSTOMER SALES MIX</span>
               </div>
-              <span style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE', padding: '2px 8px', borderRadius: '12px' }}>
-                BY CUSTOMER TYPE
-              </span>
+              <button
+                type="button"
+                onClick={() => onNavigateTab && onNavigateTab('Monthly Customers by Rep')}
+                style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '800', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE', padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                title="View New Monthly Customers by Sales Person report"
+              >
+                New Monthly Customers ↗
+              </button>
             </div>
 
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
@@ -2852,9 +2857,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                 </tr>
               </thead>
               <tbody>
-                <tr style={{ borderBottom: '1px solid #F8FAFC' }}>
-                  <td style={{ padding: '6px 4px', color: '#1E293B', fontWeight: '600' }}>New customers</td>
-                  <td style={{ padding: '6px 4px', textAlign: 'center', color: '#475569' }}>{customerSalesMix.newCustomers.count}</td>
+                <tr
+                  onClick={() => onNavigateTab && onNavigateTab('Monthly Customers by Rep')}
+                  style={{ borderBottom: '1px solid #F8FAFC', cursor: onNavigateTab ? 'pointer' : 'default', backgroundColor: '#F0FDFA' }}
+                  title="Click to view New Monthly Customers by Sales Person"
+                >
+                  <td style={{ padding: '6px 4px', color: '#0E7490', fontWeight: '700', textDecoration: 'underline' }}>New customers ↗</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', color: '#0F766E', fontWeight: '800' }}>{customerSalesMix.newCustomers.count}</td>
                   <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>{customerSalesMix.newCustomers.salesLakhs}</td>
                   <td style={{ padding: '6px 4px', textAlign: 'right', color: '#64748B', fontWeight: '600' }}>{customerSalesMix.newCustomers.pct}</td>
                 </tr>

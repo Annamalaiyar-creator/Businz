@@ -348,18 +348,62 @@ export default function CrmCustomersView({
     }
   };
 
+  // Canonical deduplicated customers list
+  const canonicalCustomers = useMemo(() => {
+    const normName = (n) => String(n || '').toLowerCase().replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
+    const normGst = (g) => {
+      const clean = String(g || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+      return clean.length >= 10 ? clean : '';
+    };
+
+    const dedupMap = new Map();
+    (customers || []).forEach(c => {
+      if (!c) return;
+      const gKey = normGst(c.gstNumber || c.gstNo || c.gstin);
+      const nKey = normName(c.companyName || c.customerName || c.name);
+      const rawCode = String(c.customerCode || c.id || c.code || '').trim();
+      const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
+
+      const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
+      if (!dedupMap.has(dedupKey)) {
+        dedupMap.set(dedupKey, c);
+      } else {
+        const existing = dedupMap.get(dedupKey);
+        const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
+        const existingHasGst = normGst(existing.gstNumber || existing.gstNo || existing.gstin);
+        const cHasGst = normGst(c.gstNumber || c.gstNo || c.gstin);
+
+        const preferred = (isRealCode && !existingHasRealCode) ? c : existing;
+        const merged = {
+          ...existing,
+          ...c,
+          id: isRealCode ? c.customerCode || c.id : preferred.id,
+          customerCode: isRealCode ? c.customerCode || c.code : preferred.customerCode,
+          gstNumber: cHasGst || existingHasGst || preferred.gstNumber || '',
+          gstNo: cHasGst || existingHasGst || preferred.gstNo || '',
+          companyName: preferred.companyName || c.companyName || existing.companyName,
+          customerName: preferred.customerName || c.customerName || existing.customerName,
+          createdAt: existing.createdAt || c.createdAt
+        };
+        dedupMap.set(dedupKey, merged);
+      }
+    });
+
+    return Array.from(dedupMap.values());
+  }, [customers]);
+
   // Sub-tabs config matching BOM design pattern
   const pageTabs = useMemo(() => [
-    { id: 'All', label: 'All Accounts', count: customers.length, bg: '#E2E8F0', fg: '#475569' },
-    { id: 'EPC', label: 'EPC Contractors', count: customers.filter(c => (c.customerType || '').includes('EPC')).length, bg: '#DCFCE7', fg: '#166534' },
-    { id: 'IPP', label: 'IPP Developers', count: customers.filter(c => (c.customerType || '').includes('IPP') || (c.customerType || '').includes('Independent')).length, bg: '#DBEAFE', fg: '#1E40AF' },
-    { id: 'Rooftop', label: 'Rooftop Installers', count: customers.filter(c => (c.customerType || '').includes('Rooftop')).length, bg: '#FEF3C7', fg: '#B45309' },
-    { id: 'Distributor', label: 'Distributors', count: customers.filter(c => (c.customerType || '').includes('Distributor') || (c.customerType || '').includes('Reseller')).length, bg: '#F3E8FF', fg: '#7E22CE' }
-  ], [customers]);
+    { id: 'All', label: 'All Accounts', count: canonicalCustomers.length, bg: '#E2E8F0', fg: '#475569' },
+    { id: 'EPC', label: 'EPC Contractors', count: canonicalCustomers.filter(c => (c.customerType || '').includes('EPC')).length, bg: '#DCFCE7', fg: '#166534' },
+    { id: 'IPP', label: 'IPP Developers', count: canonicalCustomers.filter(c => (c.customerType || '').includes('IPP') || (c.customerType || '').includes('Independent')).length, bg: '#DBEAFE', fg: '#1E40AF' },
+    { id: 'Rooftop', label: 'Rooftop Installers', count: canonicalCustomers.filter(c => (c.customerType || '').includes('Rooftop')).length, bg: '#FEF3C7', fg: '#B45309' },
+    { id: 'Distributor', label: 'Distributors', count: canonicalCustomers.filter(c => (c.customerType || '').includes('Distributor') || (c.customerType || '').includes('Reseller')).length, bg: '#F3E8FF', fg: '#7E22CE' }
+  ], [canonicalCustomers]);
 
-  // Filtered customers matching BOM filtering logic
+  // Filtered customers matching BOM filtering logic with canonical deduplication
   const filteredCustomers = useMemo(() => {
-    return customers.filter(c => {
+    return canonicalCustomers.filter(c => {
       const q = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
         c.companyName?.toLowerCase().includes(q) ||

@@ -143,6 +143,58 @@ export const safeWriteJsonFileAsync = (filePath, data) => {
   });
 };
 
+// Canonical Deduplication Helper for Customer Catalogs
+const deduplicateCustomerRecords = (list) => {
+  if (!Array.isArray(list)) return [];
+  const normName = (n) => {
+    if (!n) return '';
+    return String(n)
+      .toLowerCase()
+      .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  };
+  const normGst = (g) => {
+    if (!g) return '';
+    const clean = String(g).toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    return clean.length >= 10 ? clean : '';
+  };
+
+  const finalMap = new Map();
+  for (const val of list) {
+    if (!val) continue;
+    const gKey = normGst(val.gstNumber || val.gstin || val.gstNo);
+    const nKey = normName(val.companyName || val.customerName || val.name);
+    const rawCode = String(val.customerCode || val.id || val.code || '').trim();
+    const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
+
+    const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
+
+    if (!finalMap.has(dedupKey)) {
+      finalMap.set(dedupKey, val);
+    } else {
+      const existing = finalMap.get(dedupKey);
+      const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
+      const existingHasGst = normGst(existing.gstNumber || existing.gstin || existing.gstNo);
+      const valHasGst = normGst(val.gstNumber || val.gstin || val.gstNo);
+
+      const merged = {
+        ...existing,
+        ...val,
+        id: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : existing.id)),
+        customerCode: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : (existing.customerCode || val.customerCode))),
+        gstNumber: (existingHasGst || valHasGst || existing.gstNumber || val.gstNumber || ''),
+        gstNo: (existingHasGst || valHasGst || existing.gstNo || val.gstNo || ''),
+        companyName: existing.companyName || val.companyName,
+        customerName: existing.customerName || val.customerName || existing.companyName || val.companyName,
+        createdAt: existing.createdAt || val.createdAt || new Date().toISOString()
+      };
+      finalMap.set(dedupKey, merged);
+    }
+  }
+  return Array.from(finalMap.values());
+};
+
 // In-memory active cache for server stores
 let supabaseMemoryStore = {};
 
@@ -152,8 +204,9 @@ try {
   if (fs.existsSync(custDisk)) {
     const list = JSON.parse(fs.readFileSync(custDisk, 'utf8'));
     if (Array.isArray(list) && list.length > 0) {
-      supabaseMemoryStore.customer_store = list;
-      supabaseMemoryStore.crm_customers = list;
+      const deduplicated = deduplicateCustomerRecords(list);
+      supabaseMemoryStore.customer_store = deduplicated;
+      supabaseMemoryStore.crm_customers = deduplicated;
     }
   }
 } catch (_) {}
@@ -323,13 +376,15 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
         };
       });
 
-      supabaseMemoryStore.customer_store = mapped;
-      supabaseMemoryStore.crm_customers = mapped;
+      const deduplicated = deduplicateCustomerRecords(mapped);
+
+      supabaseMemoryStore.customer_store = deduplicated;
+      supabaseMemoryStore.crm_customers = deduplicated;
       try {
-        fs.writeFileSync(getStoreFilePath('customer_store.json'), JSON.stringify(mapped, null, 2), 'utf8');
-        fs.writeFileSync(getStoreFilePath('crm_customers.json'), JSON.stringify(mapped, null, 2), 'utf8');
+        fs.writeFileSync(getStoreFilePath('customer_store.json'), JSON.stringify(deduplicated, null, 2), 'utf8');
+        fs.writeFileSync(getStoreFilePath('crm_customers.json'), JSON.stringify(deduplicated, null, 2), 'utf8');
       } catch (_) {}
-      return mapped;
+      return deduplicated;
     }
   } catch (err) {
     console.warn('[loadDatabaseCustomers] Supabase fetch notice:', err?.message || err);
@@ -425,102 +480,59 @@ const loadLocalCustomers = () => {
     }
   } catch (_) {}
 
-  // Auto-enrich with any customer referenced in PIs
-  const piSources = [];
-  try {
-    const p = getStoreFilePath('sales_pi_store.json');
-    if (fs.existsSync(p)) piSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
-  } catch (_) {}
-  try {
-    const p = getStoreFilePath('proforma_invoice_store.json');
-    if (fs.existsSync(p)) piSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
-  } catch (_) {}
+  // Strict Canonical Deduplication by Company Name and GST Number
+  // Guarantees: No duplicate records where one has GST/ID and another has no GST/ID
+  const normName = (n) => {
+    if (!n) return '';
+    return String(n)
+      .toLowerCase()
+      .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  };
 
-  piSources.forEach(pi => {
-    const comp = (pi.vendor || pi.customerName || pi.companyName || '').trim();
-    if (comp) {
-      register({
-        id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-        customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-        companyName: comp,
-        customerName: pi.contactPerson || comp,
-        customerType: pi.customerType || 'EPC Contractor',
-        industry: 'Solar Energy / Infrastructure',
-        gstNumber: pi.gstNo || pi.gstNumber || '—',
-        panNumber: pi.panNumber || '—',
-        address: (typeof pi.billingAddress === 'string' ? pi.billingAddress : pi.billingAddress?.street) || '',
-        city: (typeof pi.billingAddress === 'object' ? pi.billingAddress.city : '') || '',
-        state: (typeof pi.billingAddress === 'object' ? pi.billingAddress.state : '') || '',
-        pincode: (typeof pi.billingAddress === 'object' ? pi.billingAddress.pincode : '') || '',
-        dispatchAddress: (typeof pi.deliveryAddress === 'string' ? pi.deliveryAddress : pi.deliveryAddress?.street) || '',
-        dispatchCity: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.city : '') || '',
-        dispatchState: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.state : '') || '',
-        dispatchPincode: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.pincode : '') || '',
-        sameAsBilling: pi.sameAsBilling !== undefined ? pi.sameAsBilling : true,
-        creditLimit: 2500000,
-        creditDays: Number(pi.creditDays || 30),
-        paymentTerms: pi.paymentTerms || 'Due on Receipt',
-        assignedSalesperson: pi.salesPerson || pi.salesperson || 'Sales Executive',
-        primaryContact: {
-          name: pi.contactPerson || comp,
-          phone: pi.phone || '',
-          whatsapp: pi.phone || '',
-          email: pi.email || ''
-        },
-        phone: pi.phone || '—',
-        email: pi.email || '—',
-        status: 'ACTIVE',
-        createdAt: pi.createdAt || new Date().toISOString()
-      });
-    }
-  });
+  const normGst = (g) => {
+    if (!g) return '';
+    const clean = String(g).toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    return clean.length >= 10 ? clean : '';
+  };
 
-  // Auto-enrich with any customer referenced in BOMs
-  const bomSources = [];
-  try {
-    const p = getStoreFilePath('bom_store.json');
-    if (fs.existsSync(p)) bomSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
-  } catch (_) {}
-
-  bomSources.forEach(b => {
-    const comp = (b.customerName || b.companyName || '').trim();
-    if (comp) {
-      register({
-        id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-        customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-        companyName: comp,
-        customerName: b.contactPerson || comp,
-        customerType: b.customerType || 'EPC Contractor',
-        industry: 'Solar Energy / Infrastructure',
-        gstNumber: b.gstNo || '—',
-        address: b.billingAddress || '',
-        dispatchAddress: b.deliveryAddress || '',
-        paymentTerms: b.paymentType || 'Due on Receipt',
-        assignedSalesperson: b.salesPerson || 'Sales Executive',
-        primaryContact: {
-          name: b.contactPerson || comp,
-          phone: b.mobile || '',
-          whatsapp: b.mobile || '',
-          email: b.email || ''
-        },
-        phone: b.mobile || '—',
-        email: b.email || '—',
-        status: 'ACTIVE',
-        createdAt: b.createdAt || new Date().toISOString()
-      });
-    }
-  });
-
-  // Deduplicate by unique customer code or company name (preserves all distinct registered accounts)
   const finalMap = new Map();
+
   for (const val of custMap.values()) {
-    const codeKey = (val.customerCode || val.id || val.code || '').toLowerCase().trim();
-    const nameKey = (val.companyName || val.name || '').toLowerCase().trim();
-    const primaryKey = codeKey || nameKey;
-    if (primaryKey && !finalMap.has(primaryKey)) {
-      finalMap.set(primaryKey, val);
+    if (!val) continue;
+    const gKey = normGst(val.gstNumber || val.gstin || val.gstNo);
+    const nKey = normName(val.companyName || val.customerName || val.name);
+    const rawCode = String(val.customerCode || val.id || val.code || '').trim();
+    const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
+
+    // Primary deduplication group key: GST first if valid, else normalized company name, else rawCode
+    const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
+
+    if (!finalMap.has(dedupKey)) {
+      finalMap.set(dedupKey, val);
+    } else {
+      const existing = finalMap.get(dedupKey);
+      const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
+      const existingHasGst = normGst(existing.gstNumber || existing.gstin || existing.gstNo);
+      const valHasGst = normGst(val.gstNumber || val.gstin || val.gstNo);
+
+      // Merge intelligently: Prefer official VRM-CS code, valid GST, and more complete fields
+      const merged = {
+        ...existing,
+        ...val,
+        id: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : existing.id)),
+        customerCode: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : (existing.customerCode || val.customerCode))),
+        gstNumber: (existingHasGst || valHasGst || existing.gstNumber || val.gstNumber || ''),
+        gstNo: (existingHasGst || valHasGst || existing.gstNo || val.gstNo || ''),
+        companyName: existing.companyName || val.companyName,
+        customerName: existing.customerName || val.customerName || existing.companyName || val.companyName,
+        createdAt: existing.createdAt || val.createdAt || new Date().toISOString()
+      };
+      finalMap.set(dedupKey, merged);
     }
   }
+
   const result = Array.from(finalMap.values());
   if (result.length > 0) {
     supabaseMemoryStore.customer_store = result;
@@ -4137,10 +4149,47 @@ app.post('/api/customers', async (req, res) => {
     return res.status(400).json({ success: false, error: 'No customer data provided.' });
   }
 
+  const normalizeCustName = (n) => {
+    if (!n) return '';
+    return String(n)
+      .toLowerCase()
+      .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  };
+
+  const normalizeCustGst = (g) => {
+    if (!g) return '';
+    const clean = String(g).toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    return clean.length >= 10 ? clean : '';
+  };
+
+  const normalizeCustPhone = (p) => {
+    if (!p) return '';
+    const digits = String(p).replace(/\D/g, '');
+    return digits.length >= 10 ? digits.slice(-10) : '';
+  };
+
+  // Build multi-index lookup maps over localCustomers for strict deduplication
+  const byCode = new Map();
+  const byGst = new Map();
+  const byName = new Map();
+  const byPhone = new Map();
   const existingMap = new Map();
+
   localCustomers.forEach(c => {
-    const k = String(c.customerCode || c.id || '').trim().toLowerCase();
-    if (k) existingMap.set(k, c);
+    const codeKey = String(c.customerCode || c.id || '').trim().toLowerCase();
+    const gstKey = normalizeCustGst(c.gstNumber || c.gstNo || c.gstin);
+    const nameKey = normalizeCustName(c.companyName || c.customerName || c.name);
+    const phoneKey = normalizeCustPhone(c.phone || c.mobile || c.primaryContact?.phone);
+
+    if (codeKey) {
+      byCode.set(codeKey, c);
+      existingMap.set(codeKey, c);
+    }
+    if (gstKey) byGst.set(gstKey, c);
+    if (nameKey) byName.set(nameKey, c);
+    if (phoneKey) byPhone.set(phoneKey, c);
   });
 
   const savedRecords = [];
@@ -4148,58 +4197,95 @@ app.post('/api/customers', async (req, res) => {
 
   incomingList.forEach(incoming => {
     if (!incoming || typeof incoming !== 'object') return;
-    let customerId = incoming.customerCode || incoming.id;
-    if (!customerId || customerId.startsWith('CUST-VRM-')) {
-      const { code } = getNextSequence('CS', localCustomers);
-      customerId = code || `VRM-CS-${getFinancialYear()}-${String(nextCounter++).padStart(2, '0')}`;
+
+    const incName = incoming.companyName || incoming.customerName || incoming.name || '';
+    const incNormName = normalizeCustName(incName);
+    const incGst = normalizeCustGst(incoming.gstNumber || incoming.gstin || incoming.gstNo || '');
+    const incPhone = normalizeCustPhone(incoming.phone || incoming.mobile || incoming.primaryContact?.phone || '');
+    const rawIncCode = String(incoming.customerCode || incoming.id || '').trim();
+    const incCode = rawIncCode.toLowerCase();
+    const isFakeCode = !rawIncCode || incCode.startsWith('cust-') || incCode.startsWith('cust_') || incCode.startsWith('vrm-cust-') || incCode === incNormName;
+
+    // Strict Multi-field Deduplication Matching:
+    // 1. GST match (highest priority, globally unique in India)
+    // 2. Official Customer Code match (VRM-CS-...)
+    // 3. Normalized Company Name match
+    // 4. Primary Phone match
+    let matchedExisting = null;
+    if (incGst && byGst.has(incGst)) {
+      matchedExisting = byGst.get(incGst);
+    } else if (rawIncCode && !isFakeCode && byCode.has(incCode)) {
+      matchedExisting = byCode.get(incCode);
+    } else if (incNormName && byName.has(incNormName)) {
+      matchedExisting = byName.get(incNormName);
+    } else if (incPhone && byPhone.has(incPhone)) {
+      matchedExisting = byPhone.get(incPhone);
     }
+
+    let customerId = matchedExisting ? (matchedExisting.customerCode || matchedExisting.id) : null;
+    if (!customerId || isFakeCode) {
+      if (matchedExisting && matchedExisting.customerCode && !matchedExisting.customerCode.toLowerCase().startsWith('cust-')) {
+        customerId = matchedExisting.customerCode;
+      } else {
+        const { code } = getNextSequence('CS', localCustomers);
+        customerId = code || `VRM-CS-${getFinancialYear()}-${String(nextCounter++).padStart(2, '0')}`;
+      }
+    }
+
+    const effectiveGst = (incoming.gstNumber && incoming.gstNumber !== '—' ? incoming.gstNumber : '') ||
+                         (incoming.gstin && incoming.gstin !== '—' ? incoming.gstin : '') ||
+                         (matchedExisting?.gstNumber && matchedExisting.gstNumber !== '—' ? matchedExisting.gstNumber : '') ||
+                         '';
+
     const localCustomerRecord = {
+      ...(matchedExisting || {}),
       id: customerId,
       customerCode: customerId,
-      customerName: incoming.customerName || incoming.companyName || incoming.name || 'New Customer',
-      companyName: incoming.companyName || incoming.customerName || incoming.name || 'New Customer',
-      customerType: incoming.customerType || 'EPC Contractor',
-      industry: incoming.industry || '',
-      gstNumber: incoming.gstNumber || incoming.gstin || '',
-      panNumber: incoming.panNumber || incoming.pan || '',
-      address1: incoming.address1 || incoming.billingAddress1 || incoming.billingAddressObj?.address1 || incoming.address || incoming.streetAddress || '',
-      address2: incoming.address2 || incoming.billingAddress2 || incoming.billingAddressObj?.address2 || '',
-      billingAddress1: incoming.billingAddress1 || incoming.address1 || incoming.billingAddressObj?.address1 || '',
-      billingAddress2: incoming.billingAddress2 || incoming.address2 || incoming.billingAddressObj?.address2 || '',
-      address: incoming.address || incoming.streetAddress || '',
-      city: incoming.city || '',
-      state: incoming.state || '',
-      pincode: incoming.pincode || '',
-      dispatchAddress1: incoming.dispatchAddress1 || incoming.shippingAddress1 || incoming.deliveryAddressObj?.address1 || incoming.dispatchAddress || incoming.address || '',
-      dispatchAddress2: incoming.dispatchAddress2 || incoming.shippingAddress2 || incoming.deliveryAddressObj?.address2 || '',
-      shippingAddress1: incoming.shippingAddress1 || incoming.dispatchAddress1 || incoming.deliveryAddressObj?.address1 || '',
-      shippingAddress2: incoming.shippingAddress2 || incoming.dispatchAddress2 || incoming.deliveryAddressObj?.address2 || '',
-      dispatchAddress: incoming.dispatchAddress || incoming.address || '',
-      dispatchCity: incoming.dispatchCity || incoming.city || '',
-      dispatchState: incoming.dispatchState || incoming.state || '',
-      dispatchPincode: incoming.dispatchPincode || incoming.pincode || '',
-      sameAsBilling: incoming.sameAsBilling !== undefined ? incoming.sameAsBilling : true,
-      creditLimit: incoming.creditLimit || 2500000,
-      creditDays: incoming.creditDays || 30,
-      paymentTerms: incoming.paymentTerms || '50% Advance + 50% Dispatch',
-      assignedSalesperson: incoming.assignedSalesperson || '',
-      source: incoming.source || 'Direct',
-      altPhone: incoming.altPhone || incoming.altNumber || incoming.primaryContact?.altPhone || '',
-      altNumber: incoming.altNumber || incoming.altPhone || incoming.primaryContact?.altPhone || '',
-      primaryContact: incoming.primaryContact || {
-        name: incoming.contactPerson || incoming.contactName || '',
-        phone: incoming.phone || incoming.mobile || '',
-        altPhone: incoming.altPhone || incoming.altNumber || '',
-        whatsapp: incoming.whatsapp || incoming.phone || incoming.mobile || '',
-        email: incoming.email || ''
+      customerName: incoming.customerName || incoming.companyName || matchedExisting?.customerName || incoming.name || 'New Customer',
+      companyName: incoming.companyName || incoming.customerName || matchedExisting?.companyName || incoming.name || 'New Customer',
+      customerType: incoming.customerType || matchedExisting?.customerType || 'EPC Contractor',
+      industry: incoming.industry || matchedExisting?.industry || '',
+      gstNumber: effectiveGst,
+      gstNo: effectiveGst,
+      panNumber: incoming.panNumber || incoming.pan || matchedExisting?.panNumber || '',
+      address1: incoming.address1 || incoming.billingAddress1 || incoming.billingAddressObj?.address1 || incoming.address || incoming.streetAddress || matchedExisting?.address1 || '',
+      address2: incoming.address2 || incoming.billingAddress2 || incoming.billingAddressObj?.address2 || matchedExisting?.address2 || '',
+      billingAddress1: incoming.billingAddress1 || incoming.address1 || incoming.billingAddressObj?.address1 || matchedExisting?.billingAddress1 || '',
+      billingAddress2: incoming.billingAddress2 || incoming.address2 || incoming.billingAddressObj?.address2 || matchedExisting?.billingAddress2 || '',
+      address: incoming.address || incoming.streetAddress || matchedExisting?.address || '',
+      city: incoming.city || matchedExisting?.city || '',
+      state: incoming.state || matchedExisting?.state || '',
+      pincode: incoming.pincode || matchedExisting?.pincode || '',
+      dispatchAddress1: incoming.dispatchAddress1 || incoming.shippingAddress1 || incoming.deliveryAddressObj?.address1 || incoming.dispatchAddress || incoming.address || matchedExisting?.dispatchAddress1 || '',
+      dispatchAddress2: incoming.dispatchAddress2 || incoming.shippingAddress2 || incoming.deliveryAddressObj?.address2 || matchedExisting?.dispatchAddress2 || '',
+      shippingAddress1: incoming.shippingAddress1 || incoming.dispatchAddress1 || incoming.deliveryAddressObj?.address1 || matchedExisting?.shippingAddress1 || '',
+      shippingAddress2: incoming.shippingAddress2 || incoming.dispatchAddress2 || incoming.deliveryAddressObj?.address2 || matchedExisting?.shippingAddress2 || '',
+      dispatchAddress: incoming.dispatchAddress || incoming.address || matchedExisting?.dispatchAddress || '',
+      dispatchCity: incoming.dispatchCity || incoming.city || matchedExisting?.dispatchCity || '',
+      dispatchState: incoming.dispatchState || incoming.state || matchedExisting?.dispatchState || '',
+      dispatchPincode: incoming.dispatchPincode || incoming.pincode || matchedExisting?.dispatchPincode || '',
+      sameAsBilling: incoming.sameAsBilling !== undefined ? incoming.sameAsBilling : (matchedExisting?.sameAsBilling ?? true),
+      creditLimit: incoming.creditLimit || matchedExisting?.creditLimit || 2500000,
+      creditDays: incoming.creditDays || matchedExisting?.creditDays || 30,
+      paymentTerms: incoming.paymentTerms || matchedExisting?.paymentTerms || '50% Advance + 50% Dispatch',
+      assignedSalesperson: incoming.assignedSalesperson || matchedExisting?.assignedSalesperson || '',
+      source: incoming.source || matchedExisting?.source || 'Direct',
+      altPhone: incoming.altPhone || incoming.altNumber || incoming.primaryContact?.altPhone || matchedExisting?.altPhone || '',
+      altNumber: incoming.altNumber || incoming.altPhone || incoming.primaryContact?.altPhone || matchedExisting?.altNumber || '',
+      primaryContact: {
+        name: incoming.contactPerson || incoming.contactName || incoming.primaryContact?.name || matchedExisting?.primaryContact?.name || '',
+        phone: incoming.phone || incoming.mobile || incoming.primaryContact?.phone || matchedExisting?.primaryContact?.phone || '',
+        altPhone: incoming.altPhone || incoming.altNumber || incoming.primaryContact?.altPhone || matchedExisting?.primaryContact?.altPhone || '',
+        whatsapp: incoming.whatsapp || incoming.phone || incoming.mobile || incoming.primaryContact?.whatsapp || matchedExisting?.primaryContact?.whatsapp || '',
+        email: incoming.email || incoming.primaryContact?.email || matchedExisting?.primaryContact?.email || ''
       },
-      code: incoming.code || incoming.customerName || incoming.companyName || 'New Customer',
-      c2: incoming.c2 || incoming.companyName || incoming.customerName || 'New Customer',
-      c3: incoming.c3 || (incoming.primaryContact && incoming.primaryContact.name) || incoming.contactPerson || '',
-      c4: incoming.c4 || (incoming.primaryContact && incoming.primaryContact.phone) || incoming.phone || incoming.mobile || '',
-      c5: incoming.c5 || (incoming.primaryContact && incoming.primaryContact.email) || incoming.email || '',
-      c6: incoming.c6 || incoming.billingAddress || incoming.address || '',
-      billingAddressObj: incoming.billingAddressObj || {
+      code: customerId,
+      c2: incoming.companyName || incoming.customerName || matchedExisting?.companyName || 'New Customer',
+      c3: incoming.primaryContact?.name || incoming.contactPerson || matchedExisting?.c3 || '',
+      c4: incoming.primaryContact?.phone || incoming.phone || incoming.mobile || matchedExisting?.c4 || '',
+      c5: incoming.primaryContact?.email || incoming.email || matchedExisting?.c5 || '',
+      c6: incoming.billingAddress || incoming.address || matchedExisting?.c6 || '',
+      billingAddressObj: incoming.billingAddressObj || matchedExisting?.billingAddressObj || {
         address1: incoming.address1 || incoming.billingAddress1 || '',
         address2: incoming.address2 || incoming.billingAddress2 || '',
         address: incoming.address || '',
@@ -4207,8 +4293,8 @@ app.post('/api/customers', async (req, res) => {
         state: incoming.state || '',
         pincode: incoming.pincode || ''
       },
-      c7: incoming.c7 || incoming.deliveryAddress || incoming.dispatchAddress || incoming.address || '',
-      deliveryAddressObj: incoming.deliveryAddressObj || {
+      c7: incoming.deliveryAddress || incoming.dispatchAddress || incoming.address || matchedExisting?.c7 || '',
+      deliveryAddressObj: incoming.deliveryAddressObj || matchedExisting?.deliveryAddressObj || {
         address1: incoming.dispatchAddress1 || incoming.shippingAddress1 || '',
         address2: incoming.dispatchAddress2 || incoming.shippingAddress2 || '',
         address: incoming.dispatchAddress || incoming.address || '',
@@ -4216,12 +4302,28 @@ app.post('/api/customers', async (req, res) => {
         state: incoming.dispatchState || incoming.state || '',
         pincode: incoming.dispatchPincode || incoming.pincode || ''
       },
-      status: incoming.status || 'ACTIVE',
-      createdAt: incoming.createdAt || new Date().toISOString()
+      status: incoming.status || matchedExisting?.status || 'ACTIVE',
+      createdAt: incoming.createdAt || matchedExisting?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     const k = String(customerId).trim().toLowerCase();
-    existingMap.set(k, { ...(existingMap.get(k) || {}), ...localCustomerRecord });
+    existingMap.set(k, localCustomerRecord);
+
+    // If a previous dummy code key existed in existingMap, remove it so only the official record persists
+    if (matchedExisting && matchedExisting.id && matchedExisting.id.toLowerCase() !== k) {
+      existingMap.delete(matchedExisting.id.toLowerCase());
+    }
+    if (matchedExisting && matchedExisting.customerCode && matchedExisting.customerCode.toLowerCase() !== k) {
+      existingMap.delete(matchedExisting.customerCode.toLowerCase());
+    }
+
+    // Keep lookup maps updated
+    byCode.set(k, localCustomerRecord);
+    if (incGst) byGst.set(incGst, localCustomerRecord);
+    if (incNormName) byName.set(incNormName, localCustomerRecord);
+    if (incPhone) byPhone.set(incPhone, localCustomerRecord);
+
     savedRecords.push(localCustomerRecord);
   });
 
@@ -4323,7 +4425,8 @@ app.post('/api/customers', async (req, res) => {
 app.get('/api/customers', async (req, res) => {
   try {
     const customers = await loadDatabaseCustomers();
-    const all = (customers && customers.length > 0) ? customers : loadLocalCustomers();
+    const rawAll = (customers && customers.length > 0) ? customers : loadLocalCustomers();
+    const all = deduplicateCustomerRecords(rawAll);
     
     const q = String(req.query.q || req.query.search || '').trim().toLowerCase();
     const full = req.query.full === 'true';

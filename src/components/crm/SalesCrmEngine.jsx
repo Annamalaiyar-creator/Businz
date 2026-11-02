@@ -228,102 +228,53 @@ export default function SalesCrmEngine({
           (cloudCust || []).forEach(registerCust);
           (liveList || []).forEach(registerCust);
 
-          // 3. Proforma Invoices (Cloud + Local)
-          const allPIs = [...(cloudPIs || []), ...(proformaInvoices || [])];
-          try {
-            const rawPi = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('proforma_invoice_store');
-            if (rawPi) {
-              const parsed = JSON.parse(rawPi);
-              if (Array.isArray(parsed)) allPIs.push(...parsed);
-            }
-          } catch (_) {}
+          // Canonical deduplication helpers
+          const normName = (n) => {
+            if (!n) return '';
+            return String(n)
+              .toLowerCase()
+              .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
+              .replace(/[^a-z0-9]/g, '')
+              .trim();
+          };
+          const normGst = (g) => {
+            if (!g) return '';
+            const clean = String(g).toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+            return clean.length >= 10 ? clean : '';
+          };
 
-          allPIs.forEach(pi => {
-            const comp = (pi.vendor || pi.customerName || pi.companyName || '').trim();
-            if (comp) {
-              registerCust({
-                id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-                customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-                companyName: comp,
-                customerName: pi.contactPerson || comp,
-                customerType: pi.customerType || 'EPC Contractor',
-                industry: 'Solar Energy / Infrastructure',
-                gstNumber: pi.gstNo || pi.gstNumber || '—',
-                panNumber: pi.panNumber || '—',
-                address: (typeof pi.billingAddress === 'string' ? pi.billingAddress : pi.billingAddress?.street) || '',
-                city: (typeof pi.billingAddress === 'object' ? pi.billingAddress.city : '') || '',
-                state: (typeof pi.billingAddress === 'object' ? pi.billingAddress.state : '') || '',
-                pincode: (typeof pi.billingAddress === 'object' ? pi.billingAddress.pincode : '') || '',
-                dispatchAddress: (typeof pi.deliveryAddress === 'string' ? pi.deliveryAddress : pi.deliveryAddress?.street) || '',
-                dispatchCity: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.city : '') || '',
-                dispatchState: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.state : '') || '',
-                dispatchPincode: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.pincode : '') || '',
-                sameAsBilling: pi.sameAsBilling !== undefined ? pi.sameAsBilling : true,
-                creditLimit: 2500000,
-                creditDays: Number(pi.creditDays || 30),
-                paymentTerms: pi.paymentTerms || 'Due on Receipt',
-                assignedSalesperson: pi.salesPerson || pi.salesperson || 'Sales Executive',
-                primaryContact: {
-                  name: pi.contactPerson || comp,
-                  phone: pi.phone || '',
-                  whatsapp: pi.phone || '',
-                  email: pi.email || ''
-                },
-                phone: pi.phone || '—',
-                email: pi.email || '—',
-                status: 'ACTIVE',
-                createdAt: pi.createdAt || new Date().toISOString()
-              });
-            }
-          });
-
-          // 4. BOM Orders (Cloud + Local)
-          const allBoms = [...(cloudBoms || []), ...(boms || [])];
-          try {
-            const rawBom = localStorage.getItem('controlroom_bom_store');
-            if (rawBom) {
-              const parsed = JSON.parse(rawBom);
-              if (Array.isArray(parsed)) allBoms.push(...parsed);
-            }
-          } catch (_) {}
-
-          allBoms.forEach(b => {
-            const comp = (b.customerName || b.companyName || '').trim();
-            if (comp) {
-              registerCust({
-                id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-                customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-                companyName: comp,
-                customerName: b.contactPerson || comp,
-                customerType: b.customerType || 'EPC Contractor',
-                industry: 'Solar Energy / Infrastructure',
-                gstNumber: b.gstNo || '—',
-                address: b.billingAddress || '',
-                dispatchAddress: b.deliveryAddress || '',
-                paymentTerms: b.paymentType || 'Due on Receipt',
-                assignedSalesperson: b.salesPerson || 'Sales Executive',
-                primaryContact: {
-                  name: b.contactPerson || comp,
-                  phone: b.mobile || '',
-                  whatsapp: b.mobile || '',
-                  email: b.email || ''
-                },
-                phone: b.mobile || '—',
-                email: b.email || '—',
-                status: 'ACTIVE',
-                createdAt: b.createdAt || new Date().toISOString()
-              });
-            }
-          });
-
-          // Final deduplication by unique customer code / ID / company name
+          // Final deduplication by canonical GST or normalized company name
+          // Prevents duplicate entries (one with GST/code, one without)
           const finalMap = new Map();
           for (const val of map.values()) {
-            const codeKey = (val.customerCode || val.id || val.code || '').toLowerCase().trim();
-            const nameKey = (val.companyName || val.name || '').toLowerCase().trim();
-            const primaryKey = codeKey || nameKey;
-            if (primaryKey && !finalMap.has(primaryKey)) {
-              finalMap.set(primaryKey, val);
+            if (!val) continue;
+            const gKey = normGst(val.gstNumber || val.gstin || val.gstNo);
+            const nKey = normName(val.companyName || val.customerName || val.name);
+            const rawCode = String(val.customerCode || val.id || val.code || '').trim();
+            const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
+
+            const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
+
+            if (!finalMap.has(dedupKey)) {
+              finalMap.set(dedupKey, val);
+            } else {
+              const existing = finalMap.get(dedupKey);
+              const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
+              const existingHasGst = normGst(existing.gstNumber || existing.gstin || existing.gstNo);
+              const valHasGst = normGst(val.gstNumber || val.gstin || val.gstNo);
+
+              const merged = {
+                ...existing,
+                ...val,
+                id: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : existing.id)),
+                customerCode: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : (existing.customerCode || val.customerCode))),
+                gstNumber: (existingHasGst || valHasGst || existing.gstNumber || val.gstNumber || ''),
+                gstNo: (existingHasGst || valHasGst || existing.gstNo || val.gstNo || ''),
+                companyName: existing.companyName || val.companyName,
+                customerName: existing.customerName || val.customerName || existing.companyName || val.companyName,
+                createdAt: existing.createdAt || val.createdAt || new Date().toISOString()
+              };
+              finalMap.set(dedupKey, merged);
             }
           }
           const unified = Array.from(finalMap.values());
@@ -571,8 +522,27 @@ export default function SalesCrmEngine({
   };
 
   const handleSaveCustomer = async (customer) => {
-    const custKey = customer.customerCode || customer.id;
-    const updated = [customer, ...customers.filter(c => (c.customerCode || c.id) !== custKey)];
+    const custKey = String(customer.customerCode || customer.id || customer.code || '').trim().toLowerCase();
+    const custGst = String(customer.gstNumber || customer.gstNo || customer.gstin || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    const custName = String(customer.companyName || customer.customerName || customer.name || '')
+      .toLowerCase()
+      .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+
+    const updated = [customer, ...customers.filter(c => {
+      const cKey = String(c.customerCode || c.id || c.code || '').trim().toLowerCase();
+      if (custKey && cKey === custKey) return false;
+      const cGst = String(c.gstNumber || c.gstNo || c.gstin || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+      if (custGst && cGst && custGst.length >= 10 && cGst === custGst) return false;
+      const cName = String(c.companyName || c.customerName || c.name || '')
+        .toLowerCase()
+        .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+      if (custName && cName && custName === cName) return false;
+      return true;
+    })];
     setCustomers(updated);
     saveCrmStore('customers', updated);
 

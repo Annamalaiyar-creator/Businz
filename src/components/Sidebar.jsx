@@ -309,6 +309,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'Leads', icon: Users, badge: 'New' },
             { label: 'Customers', icon: Building2 },
+            { label: 'New Monthly Customers', targetTab: 'Monthly Customers by Rep', icon: UserCheck },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
             { label: 'Quotations', icon: FileText }
           ]

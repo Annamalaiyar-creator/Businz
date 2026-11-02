@@ -35,13 +35,7 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
 
     try {
       let loaded = [];
-      // 1. Try local storage cache
-      try {
-        const local = JSON.parse(localStorage.getItem('controlroom_customer_store') || localStorage.getItem('controlroom_customer_list') || '[]');
-        if (Array.isArray(local) && local.length > 0) loaded = local;
-      } catch (_) {}
-
-      // 2. Try native API
+      // 1. Try native API first for fresh, deduplicated customer catalog
       try {
         const res = await fetch('/api/customers').catch(() => null);
         if (res && res.ok) {
@@ -51,13 +45,55 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
         }
       } catch (_) {}
 
-      // 3. Try Supabase cloud fallback if needed
+      // 2. Try Supabase cloud fallback if needed
       if (loaded.length === 0) {
         const cloudData = await fetchCloudStore('customer_store', []).catch(() => []);
         if (Array.isArray(cloudData) && cloudData.length > 0) loaded = cloudData;
       }
 
-      setCustomers(Array.isArray(loaded) ? loaded : []);
+      // 3. Local storage fallback only if offline / empty
+      if (loaded.length === 0) {
+        try {
+          const local = JSON.parse(localStorage.getItem('controlroom_customer_store') || localStorage.getItem('controlroom_customer_list') || '[]');
+          if (Array.isArray(local) && local.length > 0) loaded = local;
+        } catch (_) {}
+      }
+
+      // Deduplicate loaded customers so each customer is counted once
+      const normName = (n) => String(n || '').toLowerCase().replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
+      const normGst = (g) => {
+        const clean = String(g || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+        return clean.length >= 10 ? clean : '';
+      };
+      const dedupMap = new Map();
+      (loaded || []).forEach(c => {
+        if (!c) return;
+        const gKey = normGst(c.gstNumber || c.gstNo || c.gstin);
+        const nKey = normName(c.companyName || c.customerName || c.name);
+        const rawCode = String(c.customerCode || c.id || c.code || '').trim();
+        const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
+        const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
+        if (!dedupMap.has(dedupKey)) {
+          dedupMap.set(dedupKey, c);
+        } else {
+          const existing = dedupMap.get(dedupKey);
+          const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
+          const existingHasGst = normGst(existing.gstNumber || existing.gstNo || existing.gstin);
+          const cHasGst = normGst(c.gstNumber || c.gstNo || c.gstin);
+          const preferred = (isRealCode && !existingHasRealCode) ? c : existing;
+          dedupMap.set(dedupKey, {
+            ...existing,
+            ...c,
+            id: isRealCode ? c.customerCode || c.id : preferred.id,
+            customerCode: isRealCode ? c.customerCode || c.code : preferred.customerCode,
+            gstNumber: cHasGst || existingHasGst || preferred.gstNumber || '',
+            gstNo: cHasGst || existingHasGst || preferred.gstNo || '',
+            createdAt: existing.createdAt || c.createdAt
+          });
+        }
+      });
+
+      setCustomers(Array.from(dedupMap.values()));
     } catch (err) {
       console.warn('Error loading customers for CEO monthly view:', err);
     } finally {
@@ -247,7 +283,7 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
                 New Monthly Customers by Sales Person
               </h2>
               <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '12px' }}>
-                CEO EXECUTIVE VIEW
+                {userRole === 'CEO' || userRole === 'Admin' ? 'CEO EXECUTIVE VIEW' : 'SALES & CRM VIEW'}
               </span>
             </div>
             <span style={{ fontSize: '12.5px', color: '#64748B' }}>
