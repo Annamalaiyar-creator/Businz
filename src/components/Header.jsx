@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  HelpCircle, ChevronDown, LogOut, 
+  ChevronDown, LogOut, 
   Menu, ChevronRight, LayoutDashboard, GitBranch, Users, ShieldCheck, 
   X, Share2, MessageSquare, Mail, Sliders, ExternalLink, Check, RefreshCw 
 } from 'lucide-react';
@@ -223,37 +223,6 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
 
       {/* Right side: Actions & Profile */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-
-        {/* Neumorphism Help & Support Button */}
-        <button 
-          title="Help & Support"
-          className="header-action-help"
-          style={{
-            width: '38px',
-            height: '38px',
-            borderRadius: '12px',
-            backgroundColor: '#FFFFFF',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
-            transition: 'transform 0.15s ease, boxShadow 0.15s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.2)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 14px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9)';
-          }}
-        >
-          <HelpCircle style={{ width: '18px', height: '18px', color: '#1E293B' }} />
-        </button>
 
         {/* Real-time Enterprise Notification Center */}
         <NotificationCenter onNavigateTab={onSelectTab} />

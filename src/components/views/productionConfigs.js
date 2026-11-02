@@ -433,7 +433,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
               return {
                 title: 'Accounts Verification & Document Control',
-                subtitle: 'Verify customer payment details (Payment Date, Total Amount, Payment Status) and Hard Copy BOM receipt',
+                subtitle: 'Verify customer payment details, document type (Invoice / DC), and Hard Copy BOM receipt',
                 actionText: '',
                 searchPlaceholder: 'Search Accounts Verification (BOM Code, Customer Name)...',
                 tabs: [
@@ -441,7 +441,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Verified', label: 'Verified', count: allAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Credit Amount', 'Status'],
+                headers: ['BOM Code', 'Customer Name', 'Document', 'Payment Type', 'Total Amount', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
@@ -587,13 +587,17 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const stBorder = isVerified ? '1px solid #BBF7D0' : isWhileDispPendingProof ? '1px solid #FECACA' : '1px solid #FDE68A';
                   const tabGroup = isVerified ? 'Verified' : 'Pending';
 
+                  const isDc = b.docType === 'DC' || b.documentType === 'DC' || b.invoiceType === 'DC' || String(b.docType || '').toUpperCase() === 'DC';
+                  const docTypeVal = isDc ? 'DC' : 'Invoice';
+
                   return {
                     ...b,
                     code: b.bomCode,
                     createdDateFormatted: createdDateFormatted,
                     c2: customerDisplayName,
-                    c3: b.paymentType || '100% Paid',
-                    c4: paymentDateFormatted,
+                    docType: docTypeVal,
+                    c3: docTypeVal,
+                    c4: b.paymentType || '100% Paid',
                     c5: totalAmtFormatted,
                     c6: creditAmtFormatted,
                     paymentStatusText: payStatus,

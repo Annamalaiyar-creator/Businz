@@ -216,11 +216,12 @@ export default function ProductionTableView({
                     </th>
                     {visibleHeaders.map((h, i) => {
                       const isRight = h.includes('Amount') || h.includes('Cost') || h.includes('Value') || h.includes('Price') || h.includes('Spend');
-                      const isCenter = h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status';
+                      const isCenter = h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status' || h === 'Document';
                       let colWidth = 'auto';
                       let minColWidth = '140px';
                       if (i === 0) { colWidth = '160px'; minColWidth = '150px'; }
                       else if (i === 1) { minColWidth = '200px'; }
+                      else if (h === 'Document') { colWidth = '125px'; minColWidth = '115px'; }
                       else if (isCenter) { colWidth = '160px'; minColWidth = '150px'; }
                       else if (isRight) { colWidth = '150px'; minColWidth = '140px'; }
                       else if (h.includes('Date') || h.includes('Time')) { colWidth = '145px'; minColWidth = '140px'; }
@@ -377,11 +378,61 @@ export default function ProductionTableView({
                       >
                         {row.c2 || row.name}
                       </td>
+                      <td style={{
+                        padding: '14px 16px',
+                        color: '#475569',
+                        fontWeight: '500',
+                        whiteSpace: 'nowrap',
+                        textAlign: activeTab === 'Accounts Verification' ? 'center' : 'left'
+                      }}>
+                        {activeTab === 'Accounts Verification' ? (
+                          (row.docType === 'DC' || row.c3 === 'DC') ? (
+                            <span style={{
+                              backgroundColor: '#FEF3C7',
+                              color: '#92400E',
+                              border: '1px solid #FCD34D',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11.5px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              🚚 DC
+                            </span>
+                          ) : (
+                            <span style={{
+                              backgroundColor: '#EFF6FF',
+                              color: '#1D4ED8',
+                              border: '1px solid #BFDBFE',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11.5px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              📄 Invoice
+                            </span>
+                          )
+                        ) : activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
+                            <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
+                            {row.dateTimeObj.time && (
+                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
+                            )}
+                          </div>
+                        ) : (
+                          row.c3 || row.date1
+                        )}
+                      </td>
                       <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
                         {activeTab === 'Accounts Verification' ? (
                           <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', lineHeight: '1.2' }}>
                             <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
-                              {row.paymentType || row.c3 || '100% Paid'}
+                              {row.paymentType || row.c4 || '100% Paid'}
                             </span>
                             {(row.paymentStatusText || row.c7) && (
                               <span style={{
@@ -399,18 +450,10 @@ export default function ProductionTableView({
                               </span>
                             )}
                           </div>
-                        ) : activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
-                            <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
-                            {row.dateTimeObj.time && (
-                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
-                            )}
-                          </div>
                         ) : (
-                          row.c3 || row.date1
+                          row.c4 || row.date2
                         )}
                       </td>
-                      <td style={{ padding: '14px 16px', color: '#64748B', fontWeight: '500', whiteSpace: 'nowrap' }}>{row.c4 || row.date2}</td>
                       {row.c5 !== undefined && (
                         <td style={{
                           padding: '14px 16px',

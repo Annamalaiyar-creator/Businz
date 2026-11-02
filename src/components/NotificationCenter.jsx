@@ -288,31 +288,7 @@ export default function NotificationCenter({ onNavigateTab }) {
                 </button>
               )}
 
-              {state.notifications.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearAll}
-                  style={{
-                    border: 'none',
-                    background: 'none',
-                    color: '#64748B',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '4px 6px',
-                    borderRadius: '6px'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                  title="Clear all notifications"
-                >
-                  <Trash2 size={13} />
-                  Clear all
-                </button>
-              )}
+
 
               <button
                 type="button"
