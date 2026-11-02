@@ -10,7 +10,7 @@ import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../util
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import { supabase } from "../../supabaseClient";
 import StatusBadge from "../StatusBadge";
-import { VRMBomPrintSheet } from "../VRMBomPrintTemplate";
+// VRMBomPrintSheet removed per user mandate: strictly display itemized interactive BOM table with centered kit pricing in accounts login
 
 export default function AccountsVerificationModal({
   accountsVerificationModal,
@@ -28,7 +28,6 @@ export default function AccountsVerificationModal({
   showCustomAlert
 }) {
   const [viewingProofDocModal, setViewingProofDocModal] = useState(null);
-  const [accountsBomViewMode, setAccountsBomViewMode] = useState('table');
   const [resolvedProofDataUrl, setResolvedProofDataUrl] = useState(null);
   const [resolvedAddressProofDataUrl, setResolvedAddressProofDataUrl] = useState(null);
   const [isResolvingProof, setIsResolvingProof] = useState(false);
@@ -1632,70 +1631,10 @@ export default function AccountsVerificationModal({
                   </p>
                 </div>
               </div>
-
-              {/* View Switcher Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                <button
-                  onClick={() => setAccountsBomViewMode('table')}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    border: 'none',
-                    backgroundColor: accountsBomViewMode === 'table' ? '#FFFFFF' : 'transparent',
-                    color: accountsBomViewMode === 'table' ? '#0F172A' : '#64748B',
-                    padding: '6px 14px', borderRadius: '8px',
-                    fontSize: '12px', fontWeight: accountsBomViewMode === 'table' ? '800' : '600',
-                    cursor: 'pointer',
-                    boxShadow: accountsBomViewMode === 'table' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Layers style={{ width: '14px', height: '14px', color: accountsBomViewMode === 'table' ? '#2563EB' : '#64748B' }} />
-                  Itemized Pricing View
-                </button>
-
-                <button
-                  onClick={() => setAccountsBomViewMode('paper')}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    border: 'none',
-                    backgroundColor: accountsBomViewMode === 'paper' ? '#FFFFFF' : 'transparent',
-                    color: accountsBomViewMode === 'paper' ? '#0F172A' : '#64748B',
-                    padding: '6px 14px', borderRadius: '8px',
-                    fontSize: '12px', fontWeight: accountsBomViewMode === 'paper' ? '800' : '600',
-                    cursor: 'pointer',
-                    boxShadow: accountsBomViewMode === 'paper' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <FileText style={{ width: '14px', height: '14px', color: accountsBomViewMode === 'paper' ? '#2563EB' : '#64748B' }} />
-                  Paper BOM Sheet View
-                </button>
-              </div>
             </div>
 
-            {/* ─── VIEW 1: AUTHENTIC VRM BILL OF MATERIALS PRINT SHEET ─── */}
-            {accountsBomViewMode === 'paper' ? (
-              <div style={{ padding: '24px', backgroundColor: '#F8FAFC', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
-                <VRMBomPrintSheet
-                  bomData={{
-                    ...accountsVerificationModal,
-                    items: (dynamicAccItems && dynamicAccItems.length > 0)
-                      ? dynamicAccItems.map(it => ({
-                          code: it.code,
-                          name: it.name,
-                          category: it.desc,
-                          qty: it.qty,
-                          uom: it.uom,
-                          rate: it.rate,
-                          gstRate: '18%'
-                        }))
-                      : (accountsVerificationModal.items || [])
-                  }}
-                />
-              </div>
-            ) : (
-              /* ─── VIEW 2: INTERACTIVE BOM TABLE VIEW WITH KIT PRICING IN CENTER & PRODUCT PRICES ─── */
-              <div style={{ overflowX: 'auto', width: '100%' }}>
+            {/* ─── INTERACTIVE BOM TABLE VIEW WITH KIT PRICING IN CENTER & PRODUCT PRICES ─── */}
+            <div style={{ overflowX: 'auto', width: '100%' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
@@ -1722,9 +1661,9 @@ export default function AccountsVerificationModal({
 
                       return (
                         <React.Fragment key={`acc-kit-${gIdx}`}>
-                          {/* Centered Kit Price Header Row per User Mandate */}
+                          {/* Centered Kit Header Row with GST Value */}
                           <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                            <td colSpan={8} style={{ padding: '12px 20px', textAlign: 'center' }}>
+                            <td colSpan={8} style={{ padding: '10px 20px', textAlign: 'center' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
                                 <span style={{
                                   backgroundColor: theme.primary,
@@ -1737,31 +1676,23 @@ export default function AccountsVerificationModal({
                                 }}>
                                   {theme.badge}
                                 </span>
-                                <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
                                   {grp.presetName || 'Pre-Engineered Structure Kit'} ({sCount} {unitType})
                                 </span>
-                                <span style={{
-                                  fontSize: '14px',
-                                  fontWeight: '900',
-                                  color: theme.primary,
-                                  backgroundColor: '#FFFFFF',
-                                  border: `2px solid ${theme.primary}`,
-                                  padding: '4px 16px',
-                                  borderRadius: '20px',
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
-                                }}>
-                                  Kit Price: ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>
+                                  Kit Rate: <strong style={{ color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {unitType}
                                 </span>
-                                {sCount > 1 && (
-                                  <span style={{ fontSize: '13px', fontWeight: '800', color: theme.tagText }}>
-                                    Total Kit Value: ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                  </span>
-                                )}
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#166534' }}>
+                                  GST (18%): <strong>₹ {(kTotal * 0.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                </span>
+                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490' }}>
+                                  Total with GST: <strong>₹ {(kTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                </span>
                               </div>
                             </td>
                           </tr>
 
-                          {/* Kit Components */}
+                          {/* Kit Components with Vertically Centered Kit Price & GST Value */}
                           {kitItems.map((it, kIdx) => (
                             <tr key={`kit-item-${gIdx}-${kIdx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: theme.bg }}>
                               <td style={{ padding: '12px 16px', textAlign: 'center', color: theme.primary, fontWeight: '700' }}>{`${gIdx + 1}.${kIdx + 1}`}</td>
@@ -1787,16 +1718,48 @@ export default function AccountsVerificationModal({
                                   {it.packedQty} {it.uom}
                                 </span>
                               </td>
-                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                                <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700', backgroundColor: theme.tagBg, padding: '3px 8px', borderRadius: '4px' }}>
-                                  Included in Kit
-                                </span>
-                              </td>
-                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                                <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '3px 8px', borderRadius: '4px' }}>
-                                  Included in Kit
-                                </span>
-                              </td>
+                              {kIdx === 0 && (
+                                <>
+                                  <td
+                                    rowSpan={kitItems.length}
+                                    style={{
+                                      padding: '12px 16px',
+                                      textAlign: 'center',
+                                      verticalAlign: 'middle',
+                                      backgroundColor: '#FFFFFF',
+                                      borderLeft: `1px solid ${theme.border}`,
+                                      borderRight: `1px solid ${theme.border}`
+                                    }}
+                                  >
+                                    <div style={{ fontSize: '13px', fontWeight: '800', color: theme.primary }}>
+                                      ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '600' }}>
+                                      per {unitType}
+                                    </div>
+                                  </td>
+                                  <td
+                                    rowSpan={kitItems.length}
+                                    style={{
+                                      padding: '12px 16px',
+                                      textAlign: 'center',
+                                      verticalAlign: 'middle',
+                                      backgroundColor: '#FFFFFF',
+                                      borderRight: `1px solid ${theme.border}`
+                                    }}
+                                  >
+                                    <div style={{ fontSize: '13px', fontWeight: '900', color: '#0F172A' }}>
+                                      ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700', marginTop: '3px' }}>
+                                      + 18% GST: ₹ {(kTotal * 0.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '800', marginTop: '2px', borderTop: '1px dashed #CBD5E1', paddingTop: '2px' }}>
+                                      Total: ₹ {(kTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                  </td>
+                                </>
+                              )}
                               <td style={{ padding: '12px 20px', textAlign: 'center' }}>
                                 {it.packed ? (
                                   <span style={{
@@ -1899,7 +1862,6 @@ export default function AccountsVerificationModal({
                   </tbody>
                 </table>
               </div>
-            )}
 
             {/* Document Section Footer */}
             <div style={{

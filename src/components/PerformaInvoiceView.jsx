@@ -7427,41 +7427,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   )}
                 </div>
 
-                {/* 3b. Preset Kits Section (if presets used) */}
-                {Object.keys(presetGroupsMap).length > 0 && (
-                  <div style={{ backgroundColor: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '14px', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                      <Boxes size={16} color="#15803D" />
-                      <strong style={{ fontSize: '13px', color: '#14532D', textTransform: 'uppercase' }}>
-                        Configured Preset Proposal Kits ({Object.keys(presetGroupsMap).length})
-                      </strong>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-                      {Object.values(presetGroupsMap).map((grp, gIdx) => {
-                        const uPrice = parseFloat(grp.kitPrice) || 0;
-                        const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 0;
-                        const gTotal = uPrice * sCount;
-                        const unitName = grp.unit || 'Sets';
-                        const isKw = unitName === 'kW';
-                        return (
-                          <div key={gIdx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', borderRadius: '10px', padding: '12px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>{grp.presetName}</div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '6px' }}>
-                              <span>{isKw ? 'Total Capacity' : 'Total Quantity'}: <strong>{sCount} {isKw ? 'kW' : `Set${sCount !== 1 ? 's' : ''}`}</strong></span>
-                              <span>GST: <strong>{grp.gstRate || '18%'}</strong></span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '4px' }}>
-                              <span>{isKw ? 'Rate / kW' : 'Kit Rate'}: <strong>₹{uPrice.toLocaleString('en-IN')}</strong></span>
-                              <span>Total: <strong style={{ color: '#15803D' }}>₹{Math.round(gTotal).toLocaleString('en-IN')}</strong></span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. Complete Invoice Line Items & Presets */}
+                {/* 4. Complete Invoice Line Items & Presets (Kit Price in Middle with GST Value) */}
                 <div style={{ border: '1px solid #E2E8F0', borderRadius: '14px', overflow: 'hidden' }}>
                   <div style={{ padding: '12px 18px', backgroundColor: '#F1F5F9', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -7533,6 +7499,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           const itGstPct = parseFloat(String(it.gstRate || '18').replace('%', '')) || 18;
                           const itAmt = isPreset ? null : (itTaxable + (itTaxable * (itGstPct / 100)));
 
+                          // Center-aligned kit pricing and GST calculation
+                          const kUnitPrice = parseFloat(currentGroup?.kitPrice) || 0;
+                          const kSetCount = parseFloat(currentGroup?.setCount || 1) || 1;
+                          const kTaxable = kUnitPrice * kSetCount;
+                          const kGstPct = parseFloat(String(currentGroup?.gstRate || '18').replace('%', '')) || 18;
+                          const kGstAmt = kTaxable * (kGstPct / 100);
+                          const kTotalWithGst = kTaxable + kGstAmt;
+
                           return (
                             <React.Fragment key={idx}>
                               {isFirstInGroup && (
@@ -7567,7 +7541,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseFloat(currentGroup?.setCount || 1) || 0)).toLocaleString('en-IN')}</strong>{(parseFloat(currentGroup?.setCount || 1) || 0) !== 1 ? ` (${currentGroup?.setCount || 1} ${currentGroup?.unit || 'Sets'} × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
+                                        <span style={{ color: '#0E7490', fontWeight: '800' }}>Kit Pricing Center-Aligned Below</span>
                                       </div>
                                     </div>
                                   </td>
@@ -7642,30 +7616,97 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <td style={{ padding: '10px 12px', textAlign: 'center', color: '#334155', fontWeight: '600' }}>
                                   {itQty} {it.uom || 'NOS'}
                                 </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
-                                  {isPreset ? (
-                                    <span style={{ fontSize: '11px', color: theme.primary, fontStyle: 'italic', fontWeight: '700' }}>In Kit ({theme.badge})</span>
-                                  ) : (
-                                    `₹ ${itRate.toLocaleString('en-IN')}`
-                                  )}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontWeight: '600' }}>
-                                  {isPreset ? (
-                                    <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
-                                  ) : (
-                                    `₹ ${itTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                                  )}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4338CA', fontWeight: '700' }}>
-                                  {it.gstRate || '18%'}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
-                                  {isPreset ? (
-                                    <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
-                                  ) : (
-                                    `₹ ${(itAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                                  )}
-                                </td>
+                                {isPreset ? (
+                                  isFirstInGroup ? (
+                                    <>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF',
+                                          borderLeft: '1px solid #E2E8F0',
+                                          borderRight: '1px solid #E2E8F0'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '800', color: theme.primary, fontSize: '12px' }}>
+                                          ₹ {kUnitPrice.toLocaleString('en-IN')}
+                                        </div>
+                                        <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '600' }}>
+                                          per {currentGroup?.unit || 'Set'}
+                                        </div>
+                                      </td>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF',
+                                          borderRight: '1px solid #E2E8F0'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px' }}>
+                                          ₹ {kTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </div>
+                                        {kSetCount > 1 && (
+                                          <div style={{ fontSize: '9.5px', color: '#64748B' }}>
+                                            ({kSetCount} × ₹{kUnitPrice.toLocaleString('en-IN')})
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF',
+                                          borderRight: '1px solid #E2E8F0'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '800', color: '#4338CA', fontSize: '11.5px' }}>
+                                          {kGstPct}%
+                                        </div>
+                                        <div style={{ fontSize: '10px', fontWeight: '700', color: '#166534', marginTop: '2px' }}>
+                                          ₹ {kGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </div>
+                                      </td>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '900', color: '#0E7490', fontSize: '13px' }}>
+                                          ₹ {kTotalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </div>
+                                        <div style={{ fontSize: '9px', fontWeight: '700', color: '#64748B' }}>
+                                          Total (with GST)
+                                        </div>
+                                      </td>
+                                    </>
+                                  ) : null
+                                ) : (
+                                  <>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                                      ₹ {itRate.toLocaleString('en-IN')}
+                                    </td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontWeight: '600' }}>
+                                      ₹ {itTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4338CA', fontWeight: '700' }}>
+                                      {it.gstRate || '18%'}
+                                    </td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
+                                      ₹ {(itAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </>
+                                )}
                               </tr>
                             </React.Fragment>
                           );
