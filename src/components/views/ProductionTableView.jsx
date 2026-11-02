@@ -1108,16 +1108,20 @@ export default function ProductionTableView({
             );
           })()}
 
-          {/* Delete Button - Excluded for BOM Orders, Dispatch Orders, Invoice Ledger, and Delivery Challans per user request */}
+          {/* Delete Button - Excluded for Accounts Verification, BOM Orders, Dispatch Orders, Invoice Ledger, and Delivery Challans per user request */}
           {!isSuperUser &&
+            activeTab !== 'Accounts Verification' &&
             activeTab !== 'Dispatch Orders' &&
             activeTab !== 'Invoice Management' &&
             activeTab !== 'Delivery Challans' &&
             activeTab !== 'BOM Orders & Client Specifications' &&
             activeTab !== 'Sales BOM' &&
+            pageConfig?.title !== 'Accounts Verification & Document Control' &&
             pageConfig?.title !== 'BOM Orders & Client Specifications' &&
             pageConfig?.title !== 'Invoice Ledger & 3-Way Matching' &&
             pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' &&
+            !String(activeTab || '').toLowerCase().includes('accounts') &&
+            !String(pageConfig?.title || '').toLowerCase().includes('accounts') &&
             !String(pageConfig?.title || '').toLowerCase().includes('bom') &&
             !String(pageConfig?.title || '').toLowerCase().includes('invoice') &&
             !String(pageConfig?.title || '').toLowerCase().includes('3-way matching') &&
