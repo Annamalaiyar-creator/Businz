@@ -476,9 +476,10 @@ export default function BomOrdersView(props) {
       setPaymentProofFiles([]);
       setPaymentProofFile(null);
       setModalBalanceAmount('');
-      const isCredit = String(uploadPaymentModal.paymentType || '').toLowerCase().includes('credit') ||
-                       String(uploadPaymentModal.paymentType || '').toLowerCase().includes('net ') ||
-                       Number(uploadPaymentModal.creditDays || 0) > 0;
+      const pType = String(uploadPaymentModal.paymentType || '').toLowerCase();
+      const accPay = String(uploadPaymentModal.accountsVerification?.paymentType || '').toLowerCase();
+      const creditDaysCount = Number(uploadPaymentModal.creditDays || uploadPaymentModal.accountsVerification?.creditDays || 0);
+      const isCredit = pType.includes('credit') || pType.includes('net ') || pType.includes('net 30') || accPay.includes('credit') || creditDaysCount > 0 || Boolean(uploadPaymentModal.isCreditOrder);
       setPaymentModalTab(isCredit ? 'credit' : 'proof');
 
       // Initialize Settle Credit fields for this order
@@ -10438,58 +10439,115 @@ export default function BomOrdersView(props) {
               </button>
             </div>
 
-            {/* TOP NAVIGATION / MODE SWITCH: Payment Proof vs Credit Payment */}
-            <div style={{ display: 'flex', gap: '8px', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setPaymentModalTab('proof')}
-                style={{
-                  flex: 1,
-                  padding: '8px 14px',
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  borderRadius: '7px',
-                  border: 'none',
-                  backgroundColor: paymentModalTab === 'proof' ? '#FFFFFF' : 'transparent',
-                  color: paymentModalTab === 'proof' ? '#0E7490' : '#64748B',
-                  boxShadow: paymentModalTab === 'proof' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Receipt size={14} /> Payment Proof
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentModalTab('credit')}
-                style={{
-                  flex: 1,
-                  padding: '8px 14px',
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  borderRadius: '7px',
-                  border: 'none',
-                  backgroundColor: paymentModalTab === 'credit' ? '#0E7490' : 'transparent',
-                  color: paymentModalTab === 'credit' ? '#FFFFFF' : '#64748B',
-                  boxShadow: paymentModalTab === 'credit' ? '0 2px 4px rgba(14,116,144,0.3)' : 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <CreditCard size={14} /> Credit Payment
-              </button>
-            </div>
+            {(() => {
+              const pType = String(uploadPaymentModal.paymentType || '').toLowerCase();
+              const accPay = String(uploadPaymentModal.accountsVerification?.paymentType || '').toLowerCase();
+              const cDays = Number(uploadPaymentModal.creditDays || uploadPaymentModal.accountsVerification?.creditDays || 0);
+              const isOrderCredit = pType.includes('credit') || pType.includes('net ') || pType.includes('net 30') || accPay.includes('credit') || cDays > 0 || Boolean(uploadPaymentModal.isCreditOrder);
 
-            {/* TAB 1: CREDIT PAYMENT / SETTLE CREDIT VIEW */}
-            {paymentModalTab === 'credit' && (
+              return (
+                <>
+                  {/* TOP NAVIGATION / MODE SWITCH: Payment Proof vs Credit Payment (Strictly locked to customer's order type) */}
+                  <div style={{ display: 'flex', gap: '8px', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
+                    {!isOrderCredit ? (
+                      <>
+                        <button
+                          type="button"
+                          style={{
+                            flex: 1,
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: '800',
+                            borderRadius: '7px',
+                            border: 'none',
+                            backgroundColor: '#FFFFFF',
+                            color: '#0E7490',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                            cursor: 'default',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <Receipt size={14} /> Payment Proof
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          title="Locked: This order is not a credit payment order"
+                          style={{
+                            flex: 1,
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            borderRadius: '7px',
+                            border: '1px dashed #CBD5E1',
+                            backgroundColor: '#F8FAFC',
+                            color: '#94A3B8',
+                            cursor: 'not-allowed',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            opacity: 0.7
+                          }}
+                        >
+                          <Lock size={13} style={{ color: '#94A3B8' }} /> Credit Payment (Locked)
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled
+                          title="Locked: Payment Proof is locked for credit customers"
+                          style={{
+                            flex: 1,
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            borderRadius: '7px',
+                            border: '1px dashed #CBD5E1',
+                            backgroundColor: '#F8FAFC',
+                            color: '#94A3B8',
+                            cursor: 'not-allowed',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            opacity: 0.7
+                          }}
+                        >
+                          <Lock size={13} style={{ color: '#94A3B8' }} /> Payment Proof (Locked)
+                        </button>
+                        <button
+                          type="button"
+                          style={{
+                            flex: 1,
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: '800',
+                            borderRadius: '7px',
+                            border: 'none',
+                            backgroundColor: '#0E7490',
+                            color: '#FFFFFF',
+                            boxShadow: '0 2px 4px rgba(14,116,144,0.3)',
+                            cursor: 'default',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <CreditCard size={14} /> Credit Payment
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* TAB 1: CREDIT PAYMENT / SETTLE CREDIT VIEW (Visible ONLY for Credit orders) */}
+                  {isOrderCredit && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Order Overview Summary Card */}
                 <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', fontSize: '12px' }}>
@@ -10679,8 +10737,8 @@ export default function BomOrdersView(props) {
               </div>
             )}
 
-            {/* TAB 2: REGULAR PAYMENT PROOF VIEW (While Dispatch / Partial) */}
-            {paymentModalTab === 'proof' && (() => {
+            {/* TAB 2: REGULAR PAYMENT PROOF VIEW (Visible ONLY for Non-Credit orders) */}
+            {!isOrderCredit && (() => {
               const totalAttachedCount = existingPaymentDocsList.length + paymentProofFiles.length;
               const isPartial = uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment';
               const isWhileDispatch = uploadPaymentModal.paymentType === 'Payment While Dispatch' || String(uploadPaymentModal.paymentType || '').includes('While Dispatch');
@@ -11098,6 +11156,9 @@ export default function BomOrdersView(props) {
                 </div>
               );
             })()}
+          </>
+        );
+      })()}
           </div>
         </div>
       )}
