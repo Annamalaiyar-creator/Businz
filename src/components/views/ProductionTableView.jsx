@@ -706,6 +706,19 @@ export default function ProductionTableView({
               )
             );
 
+            if (activeTab === 'Accounts Verification') {
+              const targetCode = selectedRows[0];
+              const targetRow = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode);
+              const isAccDone = targetRow && Boolean(
+                targetRow.isAccountsDone ||
+                targetRow.accountsVerification?.verified ||
+                targetRow.tabGroup === 'Verified' ||
+                targetRow.status === 'ACCOUNTS VERIFIED' ||
+                String(targetRow.status || '').toLowerCase().includes('verified')
+              );
+              if (isAccDone) return null;
+            }
+
             return (
               <button
                 onClick={() => {
@@ -815,7 +828,7 @@ export default function ProductionTableView({
                   })()
                 ) : activeTab === 'Accounts Verification' ? (
                   <>
-                    <CheckCircle size={14} style={{ color: '#0E7490' }} /> Verify Accounts & Pass to Invoice
+                    <CheckCircle size={14} style={{ color: '#0E7490' }} /> Verify Accounts
                   </>
                 ) : activeTab === 'Invoice Management' ? (
                   <>

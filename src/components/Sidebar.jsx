@@ -297,7 +297,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Goods Receipt Note (GRN)', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined },
             { label: 'Store Inventory', targetTab: 'Inventory Stores', icon: Warehouse },
             { label: 'Raw Material Inventory', targetTab: 'Raw Material Directory', icon: Layers },
-            { label: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined }
+            { label: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined },
+            { label: 'Invoice Management', targetTab: 'Invoice Management', icon: Receipt }
           ]
         }
       ];
@@ -370,7 +371,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'MAIN MENU',
           items: [
             { label: 'Billing Dashboard', icon: LayoutDashboard },
-            { label: 'Billing', targetTab: 'Invoice Management', icon: Receipt },
+            { label: 'Invoice Management', targetTab: 'Invoice Management', icon: Receipt },
             { label: 'Delivery Challans', icon: FileCheck }
           ]
         }

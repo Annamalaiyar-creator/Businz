@@ -614,23 +614,6 @@ export default function AccountsVerificationModal({
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {canCancelBom && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && !isCancelled && (
-            <button
-              onClick={() => handleCancelBomOrder(accountsVerificationModal)}
-              style={{
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                color: '#FEE2E2', height: '42px', padding: '0 18px',
-                borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                cursor: 'pointer', backdropFilter: 'blur(4px)',
-                display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-              title="Cancel BOM and release reserved inventory"
-            >
-              <XCircle style={{ width: '15px', height: '15px', color: '#FCA5A5' }} />
-              Cancel BOM
-            </button>
-          )}
           <button
             onClick={() => setAccountsVerificationModal(null)}
             style={{
@@ -663,7 +646,7 @@ export default function AccountsVerificationModal({
               ) : (
                 <>
                   <CheckCircle style={{ width: '16px', height: '16px' }} />
-                  Complete Verification & Create Invoice
+                  Complete Verification
                 </>
               )}
             </button>
@@ -2055,23 +2038,6 @@ export default function AccountsVerificationModal({
             Confirm payment date, total amount, and customer payment status to complete accounts clearance.
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {canCancelBom && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && !isCancelled && (
-              <button
-                onClick={() => handleCancelBomOrder(accountsVerificationModal)}
-                style={{
-                  border: '1px solid #FECACA',
-                  background: '#FEF2F2',
-                  color: '#DC2626', height: '42px', padding: '0 20px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                  boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
-                }}
-                title="Cancel BOM and release reserved inventory"
-              >
-                <XCircle style={{ width: '15px', height: '15px', color: '#DC2626' }} />
-                Cancel BOM & Release Stock
-              </button>
-            )}
             <button
               onClick={completeVerification}
               style={{
@@ -2096,7 +2062,7 @@ export default function AccountsVerificationModal({
               ) : (
                 <>
                   <CheckCircle style={{ width: '15px', height: '15px' }} />
-                  Approve Payment & Send to Invoice Team
+                  Complete Verification
                 </>
               )}
             </button>
