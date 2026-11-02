@@ -95,7 +95,7 @@ export default function QuickPreviewDrawer({
             View Full Details
           </button>
 
-          {canCancelBom && ['Dispatch Orders', 'Accounts Verification', 'BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) && quickPreviewRecord.status !== 'Cancelled & Stock Restored' && quickPreviewRecord.status !== 'CANCELLED' && !quickPreviewRecord.cancelled && (() => {
+          {canCancelBom && activeTab !== 'Accounts Verification' && !String(activeTab || '').toLowerCase().includes('account') && ['Dispatch Orders', 'BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) && quickPreviewRecord.status !== 'Cancelled & Stock Restored' && quickPreviewRecord.status !== 'CANCELLED' && !quickPreviewRecord.cancelled && (() => {
             if (activeTab === 'Dispatch Orders') {
               const isSent = Boolean(
                 quickPreviewRecord.status === 'Packed & Awaiting Accounts Verification' ||
