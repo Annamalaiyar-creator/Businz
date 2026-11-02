@@ -6172,6 +6172,22 @@ app.post('/api/boms', async (req, res) => {
               targetRecordId: finalCode,
               dedupId: `bom_accounts_approved_${finalCode}`
             });
+          } else if (persistedBom.creditSettled || persistedBom.status === 'Credit Settled (100% Paid)' || persistedBom.status === 'Payment Uploaded & Settled') {
+            // Workflow: Sales settled credit payment -> notify Accounts
+            createInternalNotification({
+              recipientRole: 'Accounts Head',
+              eventType: 'CREDIT_PAYMENT_SETTLED',
+              documentType: 'bom',
+              documentId: finalCode,
+              title: `💳 Credit Payment Settled: ${finalCode}`,
+              message: `${actorName || 'Sales'} recorded payment of ₹ ${Number(persistedBom.creditSettledAmount || persistedBom.grandTotal || 0).toLocaleString('en-IN')} for ${custName} (UTR: ${persistedBom.creditSettledUtr || 'N/A'}). Credit settled.`,
+              actorEmpCode: actorEmp,
+              actorName,
+              actorRole,
+              targetTab: 'Accounts Verification',
+              targetRecordId: finalCode,
+              dedupId: `bom_credit_settled_${finalCode}_${Date.now()}`
+            });
           } else if (persistedBom.status === 'Dispatch Packing Verified - Sent to Accounts' || persistedBom.dispatchPackingVerified || persistedBom.status === 'Packed & Awaiting Accounts Verification' || persistedBom.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' || persistedBom.accountsVerification?.readyForAccounts) {
             // Workflow: Dispatch -> Accounts: Packing verified, ready for payment verification
             createInternalNotification({

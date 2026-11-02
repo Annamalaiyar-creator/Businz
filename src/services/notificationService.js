@@ -342,6 +342,26 @@ export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerso
   });
 }
 
+export function notifyCreditPaymentSettled({ bomCode, customerName, salesPerson, amount, utrNumber }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Accounts Head',
+    eventType: 'CREDIT_PAYMENT_SETTLED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `💳 Credit Payment Settled: ${bomCode}`,
+    message: `${salesPerson || 'Sales'} recorded payment of ₹ ${Number(amount || 0).toLocaleString('en-IN')} for ${customerName || 'Customer'} (UTR: ${utrNumber || 'N/A'}). Credit settled.`,
+    targetTab: 'Accounts Verification',
+    targetRecordId: bomCode,
+    metadata: {
+      bomCode,
+      customerName,
+      amount,
+      utrNumber
+    },
+    dedupId: `credit_settled_${bomCode}_${Date.now()}`
+  });
+}
+
 export function notifyGrnCompletedToAccounts() {
   return { success: true, disabled: true };
 }

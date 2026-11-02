@@ -479,34 +479,81 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     totalAmtFormatted = orderEst > 0 ? `₹ ${orderEst.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Order)` : '—';
                   }
 
-                  // Calculate and Format Credit Amount for Accounts verification
+                  // Calculate and Format Cumulative Customer Credit Amount for Accounts verification
                   const payTypeNorm = String(b.paymentType || b.paymentTerms || '').trim().toLowerCase();
                   const cDays = Number(b.creditDays || 0);
                   const baseOrderVal = rawAmt > 0 ? rawAmt : Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
+
+                  // Helper to check if a BOM's credit has been settled
+                  const isBomCreditSettled = (item) => {
+                    if (!item) return true;
+                    if (item.creditSettled || item.paymentSettled || item.paymentUpdated) return true;
+                    const s = String(item.status || '').toLowerCase();
+                    if (s.includes('credit settled') || s.includes('payment settled') || s.includes('payment uploaded & settled')) return true;
+                    const accItem = item.accountsVerification || {};
+                    if (accItem.creditSettled || accItem.paymentStatus === 'Credit Settled (100% Paid)') return true;
+                    return false;
+                  };
+
+                  // Customer matching for cumulative credit tracking
+                  const normCust = (name) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                  const bCustNorm = normCust(b.customerName || b.companyName || b.c2 || b.vendor || b.clientName);
+                  const bGstNorm = String(b.gstNo || b.customerGst || b.c3 || '').toUpperCase().trim();
+                  const bCode = b.bomCode || b.code || b.id;
+
+                  // 1. Calculate previous unsettled credit for this customer from prior orders
+                  let prevUnsettledCredit = 0;
+                  if (bCustNorm.length >= 2 || bGstNorm.length >= 5) {
+                    (bomStore || []).forEach(other => {
+                      const otherCode = other.bomCode || other.code || other.id;
+                      if (!otherCode || otherCode === bCode) return;
+                      if (other.cancelled || other.status === 'Cancelled' || other.status === 'Cancelled & Stock Restored' || (typeof other.status === 'string' && other.status.toLowerCase().includes('cancel'))) return;
+
+                      // Check customer match
+                      const otherCustNorm = normCust(other.customerName || other.companyName || other.c2 || other.vendor || other.clientName);
+                      const otherGstNorm = String(other.gstNo || other.customerGst || other.c3 || '').toUpperCase().trim();
+                      const isMatch = (bGstNorm && otherGstNorm && bGstNorm === otherGstNorm) ||
+                        (bCustNorm && otherCustNorm && (bCustNorm === otherCustNorm || bCustNorm.includes(otherCustNorm) || otherCustNorm.includes(bCustNorm)));
+                      if (!isMatch) return;
+
+                      // Check if other order was credit and is not settled
+                      const otherPType = String(other.paymentType || other.paymentTerms || other.accountsVerification?.paymentStatus || '').toLowerCase();
+                      const otherCDays = Number(other.creditDays || 0);
+                      const isOtherCredit = otherPType.includes('credit') || otherPType.includes('net 30') || otherCDays > 0;
+
+                      if (isOtherCredit && !isBomCreditSettled(other)) {
+                        const otherAmt = Number(other.accountsVerification?.totalAmount || other.grandTotal || other.subTotal || other.totalAmount || 0);
+                        if (otherAmt > 0) {
+                          prevUnsettledCredit += otherAmt;
+                        }
+                      }
+                    });
+                  }
+
+                  // 2. Current order credit
+                  let currentOrderCredit = 0;
+                  const isCurrentSettled = isBomCreditSettled(b);
+                  if (!isCurrentSettled) {
+                    if (payTypeNorm.includes('credit') || payTypeNorm.includes('net 30') || cDays > 0) {
+                      currentOrderCredit = baseOrderVal > 0 ? baseOrderVal : 0;
+                    } else if (payTypeNorm.includes('partial') || payTypeNorm.includes('50%')) {
+                      currentOrderCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
+                    } else if (payTypeNorm.includes('while dispatch') || payTypeNorm.includes('before dispatch')) {
+                      currentOrderCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
+                    }
+                  }
+
+                  const totalCustomerCredit = prevUnsettledCredit + currentOrderCredit;
                   let creditAmtFormatted = '—';
 
-                  if (payTypeNorm.includes('credit') || payTypeNorm.includes('net 30')) {
-                    creditAmtFormatted = baseOrderVal > 0
-                      ? `₹ ${baseOrderVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}${cDays > 0 ? ` (${cDays}d)` : ''}`
-                      : (cDays > 0 ? `${cDays} Days Credit` : 'Credit Order');
-                  } else if (payTypeNorm.includes('partial') || payTypeNorm.includes('50%')) {
-                    const pendingCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
-                    creditAmtFormatted = pendingCredit > 0
-                      ? `₹ ${pendingCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (50% Bal)`
-                      : '50% Balance Credit';
-                  } else if (payTypeNorm.includes('while dispatch') || payTypeNorm.includes('before dispatch')) {
-                    const pendingCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
-                    creditAmtFormatted = pendingCredit > 0
-                      ? `₹ ${pendingCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (On Dispatch)`
-                      : 'On Dispatch';
-                  } else if (payTypeNorm.includes('100%') || payTypeNorm.includes('paid')) {
-                    creditAmtFormatted = '₹ 0.00 (Nil)';
-                  } else if (b.creditAmount && Number(b.creditAmount) > 0) {
-                    creditAmtFormatted = `₹ ${Number(b.creditAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                  } else if (cDays > 0) {
-                    creditAmtFormatted = baseOrderVal > 0
-                      ? `₹ ${baseOrderVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (${cDays}d)`
-                      : `${cDays} Days Credit`;
+                  if (isCurrentSettled && prevUnsettledCredit === 0) {
+                    creditAmtFormatted = '₹ 0.00 (Settled)';
+                  } else if (prevUnsettledCredit > 0 && currentOrderCredit > 0) {
+                    creditAmtFormatted = `₹ ${totalCustomerCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (₹ ${prevUnsettledCredit.toLocaleString('en-IN')} Prev + ₹ ${currentOrderCredit.toLocaleString('en-IN')})`;
+                  } else if (prevUnsettledCredit > 0 && currentOrderCredit === 0) {
+                    creditAmtFormatted = `₹ ${prevUnsettledCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Prev Credit)`;
+                  } else if (currentOrderCredit > 0) {
+                    creditAmtFormatted = `₹ ${currentOrderCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}${cDays > 0 ? ` (${cDays}d)` : ''}`;
                   } else {
                     creditAmtFormatted = '₹ 0.00 (Nil)';
                   }

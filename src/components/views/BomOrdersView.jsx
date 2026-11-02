@@ -24,7 +24,7 @@ import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from '../PerformaIn
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import ExecutiveOrderDossierModal from './ExecutiveOrderDossierModal';
 import LrUploadPopupModal from './LrUploadPopupModal';
-import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts } from '../../services/notificationService';
+import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts, notifyCreditPaymentSettled } from '../../services/notificationService';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 
 export default function BomOrdersView(props) {
@@ -410,6 +410,14 @@ export default function BomOrdersView(props) {
   }, [showBOMForm, customerList.length]);
   const [confirmingBomModal, setConfirmingBomModal] = useState(null);
   const [uploadPaymentModal, setUploadPaymentModal] = useState(null);
+  const [settleCreditModal, setSettleCreditModal] = useState(null);
+  const [settleCreditUtr, setSettleCreditUtr] = useState('');
+  const [settleCreditDate, setSettleCreditDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [settleCreditMode, setSettleCreditMode] = useState('NEFT / RTGS (Direct Bank Transfer)');
+  const [settleCreditAmount, setSettleCreditAmount] = useState('');
+  const [settleCreditFile, setSettleCreditFile] = useState(null);
+  const [settleCreditNotes, setSettleCreditNotes] = useState('');
+  const [isSettlingCredit, setIsSettlingCredit] = useState(false);
   const [paymentProofFile, setPaymentProofFile] = useState(null);
   const [paymentProofFiles, setPaymentProofFiles] = useState([]);
   const [existingPaymentDocsList, setExistingPaymentDocsList] = useState([]);
@@ -452,6 +460,20 @@ export default function BomOrdersView(props) {
       setPaymentProofFile(null);
     }
   }, [uploadPaymentModal]);
+
+  // Synchronize settleCreditModal default values when opened
+  useEffect(() => {
+    if (settleCreditModal) {
+      setSettleCreditUtr('');
+      setSettleCreditDate(new Date().toISOString().split('T')[0]);
+      setSettleCreditMode('NEFT / RTGS (Direct Bank Transfer)');
+      const defAmt = Number(settleCreditModal.grandTotal || settleCreditModal.subTotal || settleCreditModal.totalAmount || 0);
+      setSettleCreditAmount(defAmt > 0 ? String(defAmt) : '');
+      setSettleCreditFile(null);
+      setSettleCreditNotes('');
+      setIsSettlingCredit(false);
+    }
+  }, [settleCreditModal]);
 
   // Create BOM Form Specific State
   const [newBomCode, setNewBomCode] = useState('');
@@ -9105,6 +9127,58 @@ export default function BomOrdersView(props) {
             );
           })()}
 
+          {/* Settle Credit / Record Payment Button for Credit Orders */}
+          {(() => {
+            const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+            if (!codeVal) return null;
+            const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
+            if (!targetRow || targetRow.cancelled || isCeo) return null;
+
+            const pType = String(targetRow.paymentType || targetRow.paymentTerms || '').toLowerCase();
+            const accPay = String(targetRow.accountsVerification?.paymentStatus || '').toLowerCase();
+            const cDays = Number(targetRow.creditDays || 0);
+            const isCreditOrder = pType.includes('credit') || pType.includes('net 30') || accPay.includes('credit') || cDays > 0;
+
+            const isAlreadySettled = Boolean(
+              targetRow.creditSettled || 
+              targetRow.paymentSettled || 
+              String(targetRow.status || '').toLowerCase().includes('credit settled') ||
+              targetRow.accountsVerification?.creditSettled
+            );
+
+            if (!isCreditOrder || isAlreadySettled) return null;
+
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedRows([]);
+                  setSettleCreditModal(targetRow);
+                }}
+                style={{
+                  backgroundColor: '#059669',
+                  border: '1px solid #047857',
+                  color: '#FFFFFF',
+                  borderRadius: '20px',
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35)',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Record customer payment and close credit for this order"
+              >
+                <Receipt size={14} style={{ color: '#FFFFFF' }} /> Settle Credit / Record Payment
+              </button>
+            );
+          })()}
+
           {(() => {
             const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
             if (!codeVal) return null;
@@ -10416,6 +10490,310 @@ export default function BomOrdersView(props) {
                   {uploadingPayment ? 'Uploading Proofs...' : 'Save & Update Payment Proof'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SETTLE CREDIT / RECORD PAYMENT MODAL */}
+      {settleCreditModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, fontFamily: "'DM Sans', sans-serif", padding: '16px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '18px', padding: '28px', maxWidth: '540px', width: '100%', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid #E2E8F0', maxHeight: '90vh', overflowY: 'auto' }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #A7F3D0' }}>
+                  <Receipt style={{ width: '22px', height: '22px' }} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '17px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Settle Credit / Record Payment</h3>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>{settleCreditModal.bomCode} — {settleCreditModal.customerName || settleCreditModal.companyName || 'Customer'}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSettleCreditModal(null)} 
+                disabled={isSettlingCredit}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B', padding: '4px' }}
+              >
+                <X style={{ width: '20px', height: '20px' }} />
+              </button>
+            </div>
+
+            {/* Order Overview Summary Card */}
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', fontSize: '12px' }}>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Customer Name</span>
+                <strong style={{ color: '#0F172A', fontSize: '13px' }}>{settleCreditModal.customerName || settleCreditModal.companyName || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Agreed Payment Terms</span>
+                <strong style={{ color: '#2563EB', fontSize: '13px' }}>
+                  {settleCreditModal.paymentType || (settleCreditModal.creditDays ? `${settleCreditModal.creditDays} Days Credit` : 'Credit Payment')}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Order Total / Credit Due</span>
+                <strong style={{ color: '#059669', fontSize: '15px', fontWeight: '800' }}>
+                  ₹ {Number(settleCreditModal.grandTotal || settleCreditModal.subTotal || settleCreditModal.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>BOM Ref Number</span>
+                <strong style={{ color: '#0E7490', fontSize: '13px' }}>{settleCreditModal.bomCode || '—'}</strong>
+              </div>
+            </div>
+
+            {/* Input Form Fields */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              
+              {/* Row 1: Payment Date & Amount */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Payment Received Date <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={settleCreditDate}
+                    onChange={(e) => setSettleCreditDate(e.target.value)}
+                    disabled={isSettlingCredit}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Settled Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={settleCreditAmount}
+                    onChange={(e) => setSettleCreditAmount(e.target.value)}
+                    placeholder="Enter amount paid"
+                    disabled={isSettlingCredit}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Payment Mode & UTR / Ref Number */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Payment Mode <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <select
+                    value={settleCreditMode}
+                    onChange={(e) => setSettleCreditMode(e.target.value)}
+                    disabled={isSettlingCredit}
+                    style={{ width: '100%', height: '40px', padding: '0 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}
+                  >
+                    <option value="NEFT / RTGS (Direct Bank Transfer)">NEFT / RTGS (Direct Bank)</option>
+                    <option value="IMPS Transfer">IMPS Transfer</option>
+                    <option value="UPI Transfer">UPI Transfer</option>
+                    <option value="Cheque / DD">Cheque / Demand Draft</option>
+                    <option value="Cash Deposit">Cash Deposit</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Bank Reference / UTR Number <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={settleCreditUtr}
+                    onChange={(e) => setSettleCreditUtr(e.target.value)}
+                    placeholder="e.g. HDFC00012345678"
+                    disabled={isSettlingCredit}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              {/* Row 3: Upload Bank Slip / Payment Receipt */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Upload Bank Slip / Payment Receipt <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  disabled={isSettlingCredit}
+                  onChange={(e) => {
+                    const f = e.target.files && e.target.files[0];
+                    if (f) setSettleCreditFile(f);
+                  }}
+                  style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
+                />
+                {settleCreditFile && (
+                  <span style={{ fontSize: '11px', color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
+                    <CheckCircle style={{ width: '13px', height: '13px' }} /> Selected: {settleCreditFile.name} ({Math.round(settleCreditFile.size / 1024)} KB)
+                  </span>
+                )}
+              </div>
+
+              {/* Row 4: Notes / Remarks */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Remarks / Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={settleCreditNotes}
+                  onChange={(e) => setSettleCreditNotes(e.target.value)}
+                  placeholder="Enter remarks or payment notes..."
+                  disabled={isSettlingCredit}
+                  style={{ width: '100%', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '8px 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Notice Banner */}
+              <div style={{ backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '8px', padding: '10px 12px', fontSize: '11.5px', color: '#065F46', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle style={{ width: '16px', height: '16px', flexShrink: 0, color: '#059669' }} />
+                <span>
+                  <strong>Instant Clearance:</strong> Credit for this order will be closed immediately, reducing the customer's outstanding credit. The Accounts team will receive an instant real-time notification with the UTR and slip.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setSettleCreditModal(null)}
+                disabled={isSettlingCredit}
+                style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSettlingCredit}
+                onClick={async () => {
+                  if (!settleCreditUtr.trim()) {
+                    alert('⚠️ Please enter the Bank Reference / UTR Number.');
+                    return;
+                  }
+                  if (!settleCreditFile) {
+                    alert('⚠️ Please select or upload the bank payment slip/receipt image.');
+                    return;
+                  }
+                  const paidNum = cleanNum(settleCreditAmount, 0);
+                  if (paidNum <= 0) {
+                    alert('⚠️ Please enter a valid settled payment amount (₹).');
+                    return;
+                  }
+
+                  try {
+                    setIsSettlingCredit(true);
+                    const targetCode = settleCreditModal.bomCode || settleCreditModal.code || settleCreditModal.id;
+                    const compressed = await compressAndSaveFile(settleCreditFile);
+                    const docMeta = {
+                      name: compressed.name || settleCreditFile.name,
+                      originalName: settleCreditFile.name,
+                      type: settleCreditFile.type,
+                      size: compressed.size || settleCreditFile.size,
+                      dataUrl: compressed.dataUrl,
+                      uploadedAt: new Date().toISOString(),
+                      category: 'payment-proof',
+                      utr: settleCreditUtr.trim(),
+                      settledAmount: paidNum,
+                      paymentDate: settleCreditDate,
+                      paymentMode: settleCreditMode,
+                      notes: settleCreditNotes.trim()
+                    };
+
+                    saveMediaToCache(docMeta.name, compressed.dataUrl);
+
+                    const updatedList = (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? {
+                      ...b,
+                      status: 'Credit Settled (100% Paid)',
+                      creditSettled: true,
+                      creditSettledAt: new Date().toISOString(),
+                      creditSettledBy: currentUserName || userRole,
+                      creditSettledRole: userRole,
+                      creditSettledUtr: settleCreditUtr.trim(),
+                      creditSettledDate: settleCreditDate,
+                      creditSettledAmount: paidNum,
+                      creditSettledMode: settleCreditMode,
+                      creditSettledNotes: settleCreditNotes.trim(),
+                      paymentProofDoc: docMeta,
+                      paymentProofDocs: [...(Array.isArray(b.paymentProofDocs) ? b.paymentProofDocs : []), docMeta],
+                      accountsVerification: {
+                        ...(b.accountsVerification || {}),
+                        creditSettled: true,
+                        paymentStatus: 'Credit Settled (100% Paid)',
+                        settledUtr: settleCreditUtr.trim(),
+                        settledDate: settleCreditDate,
+                        settledAmount: paidNum,
+                        paymentProofDoc: docMeta
+                      },
+                      payments: {
+                        ...b.payments,
+                        creditSettled: true,
+                        settledUtr: settleCreditUtr.trim(),
+                        settledDate: settleCreditDate,
+                        proofDoc: docMeta.name,
+                        proofDocObj: docMeta,
+                        paymentUpdated: true
+                      }
+                    } : b);
+
+                    setBomStore(updatedList);
+                    safeSaveBomStoreToLocal(updatedList);
+
+                    const targetBom = updatedList.find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
+                    if (targetBom) {
+                      saveCloudBomRow(targetBom);
+                      fetch('/api/boms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+                      }).catch(() => {});
+
+                      // Send real-time notification to Accounts
+                      try {
+                        notifyCreditPaymentSettled({
+                          bomCode: targetBom.bomCode,
+                          customerName: targetBom.customerName || targetBom.companyName || targetBom.c2 || 'Customer',
+                          salesPerson: currentUserName || targetBom.salesPerson || 'Sales Executive',
+                          amount: paidNum,
+                          utrNumber: settleCreditUtr.trim()
+                        });
+                      } catch (nErr) {
+                        console.warn('Failed to send notification to Accounts:', nErr);
+                      }
+                    }
+
+                    // Dispatch events for local real-time sync
+                    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
+                    window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_bom_store' } }));
+
+                    setSettleCreditModal(null);
+                    alert(`✅ Credit payment of ₹ ${paidNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })} for ${settleCreditModal.customerName || 'Customer'} settled successfully!\n\n• Order marked as "Credit Settled (100% Paid)".\n• Customer credit balance cleared.\n• Accounts team notified in real time.`);
+                  } catch (err) {
+                    alert(`❌ Failed to settle credit: ${err.message}`);
+                  } finally {
+                    setIsSettlingCredit(false);
+                  }
+                }}
+                style={{
+                  padding: '9px 22px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: isSettlingCredit ? '#94A3B8' : '#059669',
+                  color: 'white',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: isSettlingCredit ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(5,150,105,0.3)'
+                }}
+              >
+                {isSettlingCredit ? 'Settling Credit...' : '✓ Confirm & Settle Credit'}
+              </button>
             </div>
           </div>
         </div>

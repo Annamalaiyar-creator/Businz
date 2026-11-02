@@ -338,11 +338,13 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
     raw === 'invoice confirmed' ||
     raw === 'confirmed' ||
     raw === 'invoice_confirmed' ||
-    raw.includes('confirmed')
+    raw.includes('confirmed') ||
+    raw.includes('settled')
   ) {
     let display = customLabel || 'Completed';
     if (!customLabel) {
-      if (raw.includes('confirmed')) display = 'Invoice Confirmed';
+      if (raw.includes('credit settled') || raw.includes('settled')) display = 'Credit Settled';
+      else if (raw.includes('confirmed')) display = 'Invoice Confirmed';
       else if (raw === 'approved') display = 'Approved';
       else if (raw === 'scheduled') display = 'Scheduled';
       else if (raw.includes('closed')) display = 'Closed';

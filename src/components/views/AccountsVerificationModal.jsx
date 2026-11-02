@@ -949,30 +949,99 @@ export default function AccountsVerificationModal({
             const cDays = Number(accountsVerificationModal?.creditDays || 30);
             const totalVal = cleanNum(currentTotalAmount, 0) || cleanNum(accountsVerificationModal?.grandTotal, 0);
             if (!isCredit) return null;
+
+            // Helper to check if a BOM's credit has been settled
+            const isBomCreditSettled = (item) => {
+              if (!item) return true;
+              if (item.creditSettled || item.paymentSettled || item.paymentUpdated) return true;
+              const s = String(item.status || '').toLowerCase();
+              if (s.includes('credit settled') || s.includes('payment settled') || s.includes('payment uploaded & settled')) return true;
+              const accItem = item.accountsVerification || {};
+              if (accItem.creditSettled || accItem.paymentStatus === 'Credit Settled (100% Paid)') return true;
+              return false;
+            };
+
+            const allBoms = (Array.isArray(bomStore) && bomStore.length > 0)
+              ? bomStore
+              : (() => {
+                  try {
+                    const localBoms = localStorage.getItem('controlroom_bom_store');
+                    return localBoms ? JSON.parse(localBoms) : [];
+                  } catch (_) { return []; }
+                })();
+
+            const normCust = (name) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+            const m = accountsVerificationModal || {};
+            const bCustNorm = normCust(m.customerName || m.companyName || m.c2 || m.vendor || m.clientName);
+            const bGstNorm = String(m.gstNo || m.customerGst || m.c3 || '').toUpperCase().trim();
+            const bCode = m.bomCode || m.code || m.id;
+
+            let prevUnsettledCredit = 0;
+            if (bCustNorm.length >= 2 || bGstNorm.length >= 5) {
+              allBoms.forEach(other => {
+                const otherCode = other.bomCode || other.code || other.id;
+                if (!otherCode || otherCode === bCode) return;
+                if (other.cancelled || other.status === 'Cancelled' || other.status === 'Cancelled & Stock Restored' || (typeof other.status === 'string' && other.status.toLowerCase().includes('cancel'))) return;
+
+                const otherCustNorm = normCust(other.customerName || other.companyName || other.c2 || other.vendor || other.clientName);
+                const otherGstNorm = String(other.gstNo || other.customerGst || other.c3 || '').toUpperCase().trim();
+                const isMatch = (bGstNorm && otherGstNorm && bGstNorm === otherGstNorm) ||
+                  (bCustNorm && otherCustNorm && (bCustNorm === otherCustNorm || bCustNorm.includes(otherCustNorm) || otherCustNorm.includes(bCustNorm)));
+                if (!isMatch) return;
+
+                const otherPType = String(other.paymentType || other.paymentTerms || other.accountsVerification?.paymentStatus || '').toLowerCase();
+                const otherCDays = Number(other.creditDays || 0);
+                const isOtherCredit = otherPType.includes('credit') || otherPType.includes('net 30') || otherCDays > 0;
+
+                if (isOtherCredit && !isBomCreditSettled(other)) {
+                  const otherAmt = Number(other.accountsVerification?.totalAmount || other.grandTotal || other.subTotal || other.totalAmount || 0);
+                  if (otherAmt > 0) {
+                    prevUnsettledCredit += otherAmt;
+                  }
+                }
+              });
+            }
+
+            const totalCreditRisk = prevUnsettledCredit + totalVal;
+
             return (
               <div style={{
                 marginTop: '12px',
-                padding: '10px 14px',
-                borderRadius: '8px',
+                padding: '12px 16px',
+                borderRadius: '10px',
                 backgroundColor: '#EFF6FF',
                 border: '1px solid #BFDBFE',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
                 fontSize: '12px',
                 color: '#1E40AF'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Receipt size={16} style={{ color: '#2563EB', flexShrink: 0 }} />
-                  <span>
-                    <strong>Customer Credit Terms:</strong> {cDays} Days Credit Cycle
-                  </span>
+                  <Receipt size={18} style={{ color: '#2563EB', flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontWeight: '800', color: '#1E3A8A' }}>
+                      Customer Credit Terms: {cDays} Days Credit Cycle
+                    </div>
+                    {prevUnsettledCredit > 0 && (
+                      <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '700', backgroundColor: '#FEF3C7', padding: '1px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '3px' }}>
+                        ⚠️ ₹ {prevUnsettledCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} Previous Unsettled Credit
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', marginRight: '6px' }}>Credit Amount:</span>
-                  <strong style={{ fontSize: '13px', color: '#1E3A8A' }}>
-                    {totalVal > 0 ? `₹ ${totalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Order Total'}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>Total Customer Credit:</div>
+                  <strong style={{ fontSize: '15px', color: '#1E3A8A', fontWeight: '800' }}>
+                    {totalCreditRisk > 0 ? `₹ ${totalCreditRisk.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Order Total'}
                   </strong>
+                  {prevUnsettledCredit > 0 && totalVal > 0 && (
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                      (₹{prevUnsettledCredit.toLocaleString('en-IN')} Prev + ₹{totalVal.toLocaleString('en-IN')} Current)
+                    </div>
+                  )}
                 </div>
               </div>
             );
