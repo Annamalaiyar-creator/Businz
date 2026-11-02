@@ -4618,6 +4618,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   const isPushed = Boolean(target.zohoSynced);
                   const isCurrentlyPushing = syncingPiNo === target.piNo;
 
+                  // Exclude Convert to BOM and Push to Zoho from floating menu in Tech Support login per user mandate
+                  if (isTechSupportLogin) return null;
+
                   return (
                     <React.Fragment key={target.piNo}>
                       {isConverted ? (
@@ -7277,41 +7280,43 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           </button>
                         );
                       })}
-                      <button
-                        type="button"
-                        onClick={() => syncPiToZoho(selectedPi)}
-                        disabled={syncingPiNo === selectedPi.piNo}
-                        title={selectedPi.zohoSynced ? `Synced to Zoho Books as Quote #${selectedPi.zohoEstimateNo || selectedPi.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: selectedPi.zohoSynced ? '#F0FDF4' : '#0E7490',
-                          color: selectedPi.zohoSynced ? '#15803D' : '#FFFFFF',
-                          border: selectedPi.zohoSynced ? '1px solid #86EFAC' : 'none',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: '800',
-                          cursor: syncingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: selectedPi.zohoSynced ? 'none' : '0 2px 6px rgba(14,116,144,0.25)',
-                          opacity: syncingPiNo === selectedPi.piNo ? 0.7 : 1
-                        }}
-                      >
-                        {syncingPiNo === selectedPi.piNo ? (
-                          <>
-                            <RotateCcw size={14} className="animate-spin" /> Pushing to Zoho...
-                          </>
-                        ) : selectedPi.zohoSynced ? (
-                          <>
-                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
-                          </>
-                        ) : (
-                          <>
-                            <UploadCloud size={14} /> Push to Zoho
-                          </>
-                        )}
-                      </button>
+                      {!isTechSupportLogin && (
+                        <button
+                          type="button"
+                          onClick={() => syncPiToZoho(selectedPi)}
+                          disabled={syncingPiNo === selectedPi.piNo}
+                          title={selectedPi.zohoSynced ? `Synced to Zoho Books as Quote #${selectedPi.zohoEstimateNo || selectedPi.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: selectedPi.zohoSynced ? '#F0FDF4' : '#0E7490',
+                            color: selectedPi.zohoSynced ? '#15803D' : '#FFFFFF',
+                            border: selectedPi.zohoSynced ? '1px solid #86EFAC' : 'none',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            fontWeight: '800',
+                            cursor: syncingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: selectedPi.zohoSynced ? 'none' : '0 2px 6px rgba(14,116,144,0.25)',
+                            opacity: syncingPiNo === selectedPi.piNo ? 0.7 : 1
+                          }}
+                        >
+                          {syncingPiNo === selectedPi.piNo ? (
+                            <>
+                              <RotateCcw size={14} className="animate-spin" /> Pushing to Zoho...
+                            </>
+                          ) : selectedPi.zohoSynced ? (
+                            <>
+                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
+                            </>
+                          ) : (
+                            <>
+                              <UploadCloud size={14} /> Push to Zoho
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -8008,7 +8013,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </button>
                     </div>
                   ) : (
-                    selectedPi.status !== 'Cancelled' && selectedPi.status !== 'Draft' && (
+                    !isTechSupportLogin && selectedPi.status !== 'Cancelled' && selectedPi.status !== 'Draft' && (
                       <button
                         type="button"
                         onClick={() => {
