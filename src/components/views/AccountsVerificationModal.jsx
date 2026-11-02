@@ -1782,7 +1782,7 @@ export default function AccountsVerificationModal({
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '13px 16px', width: '50px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                      <th style={{ padding: '13px 16px', width: '55px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Code</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Description</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
@@ -1842,12 +1842,7 @@ export default function AccountsVerificationModal({
                               <td style={{ padding: '12px 16px', textAlign: 'center', color: theme.primary, fontWeight: '700' }}>{`${gIdx + 1}.${kIdx + 1}`}</td>
                               <td style={{ padding: '12px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
                               <td style={{ padding: '12px 16px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{ backgroundColor: theme.tagBg, color: theme.tagText, border: `1px solid ${theme.border}`, fontSize: '9px', fontWeight: '800', padding: '1px 6px', borderRadius: '3px' }}>
-                                    {theme.badge} COMPONENT
-                                  </span>
-                                  <span style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</span>
-                                </div>
+                                <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
                                 <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{it.desc}</div>
                               </td>
                               <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
