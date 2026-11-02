@@ -783,6 +783,11 @@ export default function BomOrdersView(props) {
       const code = String(b.bomCode || b.code || b.id || '').trim();
       if (/^BOM-(STAGING|USER|POST|DEV-TEST)/i.test(code)) return false;
       return true;
+    }).map(b => {
+      if (b && b.status === 'Draft') {
+        return { ...b, status: 'Pending Sales Confirmation' };
+      }
+      return b;
     });
     if (!isRestrictedSalesUser) return rawList;
 
@@ -1866,7 +1871,6 @@ export default function BomOrdersView(props) {
     searchPlaceholder: `Search ${activeTab} (BOM Code, Customer Name, Product)...`,
     tabs: [
       { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
-      { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft' && !b.cancelled).length, bg: '#fff7ed', fg: '#c2410c' },
       { id: 'Pending', label: 'Pending Sales Confirmation', count: (visibleBomStore || []).filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
       { id: 'AddressAction', label: 'Address Proof Requested', count: (visibleBomStore || []).filter(b => (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && !b.cancelled).length, bg: '#fee2e2', fg: '#b91c1c' },
       { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: (visibleBomStore || []).filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed' && !b.cancelled).length, bg: '#dcfce7', fg: '#166534' },
@@ -1877,11 +1881,10 @@ export default function BomOrdersView(props) {
     ],
     headers: ['BOM Code', 'Date & Time', 'Customer Name', 'Sales Person', 'Payment Type', 'Total (₹)', 'Printout Status', 'Status'],
     rows: (visibleBomStore || []).filter(Boolean).map(b => {
-      const isDraft = b.status === 'Draft';
       const isCancelled = b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel');
       const isAddressRequested = b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales';
       const isClosedOrCompleted = b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed');
-      const isPending = !b.status || b.status === 'Pending Sales Confirmation' || b.status === 'Pending Confirmation' || b.status === 'Pending';
+      const isPending = !b.status || b.status === 'Pending Sales Confirmation' || b.status === 'Pending Confirmation' || b.status === 'Pending' || b.status === 'Draft';
       const isPackedOrDispatch = (b.status || '').toLowerCase().includes('dispatch') || (b.status || '').toLowerCase().includes('packed') || (b.status || '').toLowerCase().includes('loading');
       const isConfirmed = b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed || isPackedOrDispatch;
 
@@ -1900,11 +1903,6 @@ export default function BomOrdersView(props) {
         stFg = '#047857';
         stBorder = '1px solid #a7f3d0';
         tabGroup = 'Closed';
-      } else if (isDraft) {
-        stBg = '#fff7ed';
-        stFg = '#c2410c';
-        stBorder = '1px solid #fed7aa';
-        tabGroup = 'Draft';
       } else if (isAddressRequested) {
         stBg = '#fee2e2';
         stFg = '#b91c1c';
@@ -2016,7 +2014,7 @@ export default function BomOrdersView(props) {
         dispatchPrintedBy: printedBy,
         c4: normalizePaymentTerm(b.paymentType || b.paymentTerms || b.piPaymentTerms),
         c5: gVal > 0 ? formatCurrency(gVal) : (b.grandTotal != null ? formatCurrency(b.grandTotal) : '—'),
-        status: isAddressRequested ? 'Address Proof Requested from Sales' : (isClosedOrCompleted ? (b.status || 'Completed') : (b.status || 'Pending Sales Confirmation')),
+        status: isAddressRequested ? 'Address Proof Requested from Sales' : (isClosedOrCompleted ? (b.status || 'Completed') : ((b.status && b.status !== 'Draft') ? b.status : 'Pending Sales Confirmation')),
         stBg,
         stFg,
         stBorder,
@@ -2055,9 +2053,7 @@ export default function BomOrdersView(props) {
       matchesTab = Boolean(isClosedOrDone) && !isCancelled;
     } else if (subTab.includes('cancel')) {
       matchesTab = isCancelled;
-    } else if (subTab === 'draft' || (subTab.includes('draft') && !subTab.includes('pending'))) {
-      matchesTab = Boolean(rStatus.includes('draft') && !isCancelled);
-    } else if (subTab.includes('pending')) {
+    } else if (subTab.includes('pending') || subTab.includes('draft')) {
       matchesTab = Boolean((rStatus.includes('pending') || rStatus.includes('draft')) && !isCancelled);
     } else if (subTab.includes('sent')) {
       matchesTab = Boolean((rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !isCancelled);
@@ -5501,7 +5497,7 @@ export default function BomOrdersView(props) {
                           paymentProofDocs: paymentDocs,
                           paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && paymentDocs.length > 0,
                           remarks: newBomRemarks || '',
-                          status: isDraft ? 'Draft' : 'Pending Confirmation',
+                          status: 'Pending Confirmation',
                           salesConfirmed: false,
                           salesConfirmedAt: null,
                           salesPerson: effectiveSalesPersonName,
@@ -8996,11 +8992,11 @@ export default function BomOrdersView(props) {
           })()}
 
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
-            const isOnlyDraft = (selectedRows || []).every(codeVal => {
+            const isOnlyEditable = (selectedRows || []).every(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return r && r.status === 'Draft';
+              return r && (!r.status || ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Pending'].includes(r.status));
             });
-            if (!isOnlyDraft) return null;
+            if (!isOnlyEditable) return null;
 
             return (
               <button

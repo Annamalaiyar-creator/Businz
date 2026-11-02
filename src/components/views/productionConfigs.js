@@ -1200,8 +1200,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search Sales BOM (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
               headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
@@ -1212,11 +1211,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'BOM': {
@@ -1226,8 +1225,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search BOM (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
               headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
@@ -1238,11 +1236,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'BOM Orders': {
@@ -1252,8 +1250,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search BOM Orders (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
               headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
@@ -1264,11 +1261,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'Customer Management': {
@@ -1298,8 +1295,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search BOM (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
               headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
@@ -1310,11 +1306,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'Production Reports': {

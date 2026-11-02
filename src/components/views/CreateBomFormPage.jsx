@@ -2486,7 +2486,7 @@ export default function CreateBomFormPage(props) {
                       paymentProofDocs: paymentDocs,
                       paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && paymentDocs.length > 0,
                       remarks: newBomRemarks || '',
-                      status: isDraft ? 'Draft' : 'Pending Confirmation',
+                      status: 'Pending Confirmation',
                       salesConfirmed: false,
                       salesConfirmedAt: null,
                       salesPerson: effectiveSalesPersonName,
