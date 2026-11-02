@@ -176,6 +176,11 @@ export default function CustomerFormView({
                 const cleanGst = String(gstNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
                 const targetNorm = normStr(company);
 
+                const loggedInUserName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || '';
+                const loggedInEmpId = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
+                const activeUserRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '';
+                const repName = (loggedInUserName && loggedInUserName !== 'undefined' && loggedInUserName !== 'null') ? loggedInUserName : (activeUserRole.toLowerCase().includes('sales') ? 'Annamalaiyar' : 'Sales Executive');
+
                 const newCustObj = {
                   id: assignedCode,
                   customerCode: assignedCode,
@@ -213,6 +218,14 @@ export default function CustomerFormView({
                   stFg: '#166534',
                   stBorder: '1px solid #bbf7d0',
                   tabGroup: 'Active',
+                  assignedSalesperson: repName,
+                  salesPerson: repName,
+                  salesperson: repName,
+                  salesRep: repName,
+                  createdBy: repName,
+                  c8: repName,
+                  createdById: loggedInEmpId || 'SE-1000',
+                  salesPersonCode: loggedInEmpId || 'SE-1000',
                   createdAt: new Date().toISOString()
                 };
 
@@ -227,6 +240,20 @@ export default function CustomerFormView({
                   });
                   return [newCustObj, ...filtered];
                 });
+
+                // Sync new customer to central API database
+                try {
+                  fetch('/api/customers', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-user-emp-id': loggedInEmpId || 'SE-1000',
+                      'x-user-name': repName,
+                      'x-user-role': activeUserRole || 'Sales Executive'
+                    },
+                    body: JSON.stringify(newCustObj)
+                  }).catch(() => {});
+                } catch (_) {}
 
                 setNewBomProductName(company || name);
                 if (deliveryStr) {

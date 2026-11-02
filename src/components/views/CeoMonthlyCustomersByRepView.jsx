@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Users, Building2, UserCheck, Calendar, Search, Filter,
+  Users, Building2, UserCheck, Search, Filter,
   Phone, Mail, MapPin, Download, RefreshCw, FileText,
-  TrendingUp, Award, CheckCircle, ExternalLink, ChevronLeft, ChevronRight
+  Award, CheckCircle, ExternalLink, X, Eye, Edit3, Trash2,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 
@@ -10,6 +11,12 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Identity and Role Scoping
+  const loggedInRole = userRole || localStorage.getItem('controlroom_user_role') || 'CEO';
+  const isCeo = ['CEO', 'MD', 'Managing Director', 'Admin', 'Super Admin'].includes(loggedInRole);
+  const loggedInEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+  const loggedInUserName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
 
   // Month-wise filter (defaults to current month 'YYYY-MM')
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -23,10 +30,62 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
   // Row selection for standard table
   const [selectedCustomerRows, setSelectedCustomerRows] = useState([]);
 
+  // Active customer for View Details drawer
+  const [activeCustomerDetail, setActiveCustomerDetail] = useState(null);
+
   // Pagination states (strictly 5 and 10 per page per BUSINZ mandate)
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [pageJump, setPageJump] = useState('');
+
+  // Helper date parsing
+  const getCustomerDateStr = (c) => c?.createdAt || c?.created_at || c?.date || c?.onboardedDate || c?.updatedAt || '';
+
+  const getRecordMonthKey = (dStr) => {
+    if (!dStr) return null;
+    const d = new Date(dStr);
+    if (isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  };
+
+  const formatMonthLabel = (monthKey) => {
+    if (!monthKey || monthKey === 'all') return 'All Months (Cumulative)';
+    const parts = monthKey.split('-');
+    if (parts.length !== 2) return monthKey;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const date = new Date(year, month - 1, 1);
+    return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  // Helper to extract salesperson name cleanly
+  const getRepName = (c) => {
+    const raw = c?.assignedSalesperson || c?.salesPerson || c?.salesperson || c?.salesRep || c?.c8 || c?.createdBy || '';
+    if (!raw || !raw.trim()) return 'Unassigned / Direct';
+    return String(raw).replace(/\s*\([^)]*\)/g, '').trim();
+  };
+
+  // Check if customer belongs to the logged in salesperson
+  const isCustomerOfSalesperson = (c) => {
+    if (isCeo) return true;
+    const rName = getRepName(c).toLowerCase();
+    const uName = loggedInUserName.toLowerCase();
+    const cEmpId = String(c?.createdById || c?.assignedSalespersonCode || c?.salesPersonCode || '').toLowerCase().trim();
+    const myEmpId = loggedInEmpId.toLowerCase().trim();
+
+    if (myEmpId && cEmpId && (cEmpId === myEmpId || (myEmpId === 'se-001' && cEmpId === 'se-1000') || (myEmpId === 'se-1000' && cEmpId === 'se-001'))) {
+      return true;
+    }
+    if (uName && (rName.includes(uName) || uName.includes(rName))) {
+      return true;
+    }
+    if (uName.includes('sales') && (rName.includes('sales') || rName.includes('annamalaiyar'))) {
+      return true;
+    }
+    return false;
+  };
 
   // Load customer data
   const loadCustomers = async (isManual = false) => {
@@ -95,7 +154,7 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
 
       setCustomers(Array.from(dedupMap.values()));
     } catch (err) {
-      console.warn('Error loading customers for CEO monthly view:', err);
+      console.warn('Error loading customers for monthly view:', err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -106,70 +165,47 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
     loadCustomers();
   }, []);
 
-  // Helper date parsing
-  const getCustomerDateStr = (c) => c.createdAt || c.created_at || c.date || c.onboardedDate || c.updatedAt || '';
+  // Scoped customers according to role
+  const scopedCustomers = useMemo(() => {
+    if (isCeo) return customers;
+    return customers.filter(c => isCustomerOfSalesperson(c));
+  }, [customers, isCeo, loggedInUserName, loggedInEmpId]);
 
-  const getRecordMonthKey = (dStr) => {
-    if (!dStr) return null;
-    const d = new Date(dStr);
-    if (isNaN(d.getTime())) return null;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}`;
-  };
-
-  const formatMonthLabel = (monthKey) => {
-    if (!monthKey || monthKey === 'all') return 'All Months (Cumulative)';
-    const parts = monthKey.split('-');
-    if (parts.length !== 2) return monthKey;
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10);
-    const date = new Date(year, month - 1, 1);
-    return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  };
-
-  // Helper to extract salesperson name cleanly
-  const getRepName = (c) => {
-    const raw = c.assignedSalesperson || c.salesPerson || c.salesperson || c.salesRep || c.c8 || c.createdBy || '';
-    if (!raw || !raw.trim()) return 'Unassigned / Direct';
-    return String(raw).replace(/\s*\([^)]*\)/g, '').trim();
-  };
-
-  // Extract all available months across customer base
+  // Extract all available months across scoped customers
   const availableMonths = useMemo(() => {
     const monthSet = new Set();
     const now = new Date();
     const curMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     monthSet.add(curMonthKey);
 
-    customers.forEach(c => {
+    scopedCustomers.forEach(c => {
       const mk = getRecordMonthKey(getCustomerDateStr(c));
       if (mk) monthSet.add(mk);
     });
 
     return Array.from(monthSet).sort().reverse();
-  }, [customers]);
+  }, [scopedCustomers]);
 
-  // Distinct salespersons list across customers
+  // Distinct salespersons list across scoped customers
   const distinctReps = useMemo(() => {
     const repSet = new Set();
-    customers.forEach(c => {
+    scopedCustomers.forEach(c => {
       const r = getRepName(c);
       if (r) repSet.add(r);
     });
     return Array.from(repSet).sort();
-  }, [customers]);
+  }, [scopedCustomers]);
 
   // Scoped customers for selected month
   const monthlyCustomers = useMemo(() => {
-    return customers.filter(c => {
+    return scopedCustomers.filter(c => {
       if (selectedMonth !== 'all') {
         const mk = getRecordMonthKey(getCustomerDateStr(c));
         if (mk !== selectedMonth) return false;
       }
       return true;
     });
-  }, [customers, selectedMonth]);
+  }, [scopedCustomers, selectedMonth]);
 
   // Grouped customer counts by sales person for selected month
   const repBreakdown = useMemo(() => {
@@ -187,7 +223,7 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
   // Final filtered customer list for table (respecting selected rep & search query)
   const filteredCustomers = useMemo(() => {
     return monthlyCustomers.filter(c => {
-      if (selectedRep !== 'all') {
+      if (isCeo && selectedRep !== 'all') {
         const r = getRepName(c);
         if (r.toLowerCase() !== selectedRep.toLowerCase()) return false;
       }
@@ -208,7 +244,7 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
 
       return true;
     });
-  }, [monthlyCustomers, selectedRep, searchQuery]);
+  }, [monthlyCustomers, selectedRep, searchQuery, isCeo]);
 
   // Executive Monthly KPIs
   const kpis = useMemo(() => {
@@ -235,7 +271,10 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
   // CSV Export
   const handleExportCsv = () => {
     const headers = ['#', 'Customer Name', 'Assigned Sales Person', 'GST Number', 'Contact Person', 'Phone', 'Email', 'City', 'State', 'Onboarding Date'];
-    const rows = filteredCustomers.map((c, i) => [
+    const rows = (selectedCustomerRows.length > 0
+      ? filteredCustomers.filter(c => selectedCustomerRows.includes(c.id || c.customerCode || c.code))
+      : filteredCustomers
+    ).map((c, i) => [
       i + 1,
       `"${(c.customerName || c.companyName || c.code || '').replace(/"/g, '""')}"`,
       `"${getRepName(c).replace(/"/g, '""')}"`,
@@ -252,78 +291,62 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `New_Customers_By_Rep_${selectedMonth}.csv`);
+    link.setAttribute('download', `New_Monthly_Customers_${selectedMonth}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '90px', boxSizing: 'border-box' }}>
       
-      {/* 1. HEADER SECTION */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '12px',
-            backgroundColor: '#ECFEFF',
-            color: '#0E7490',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 2px 6px rgba(14, 116, 144, 0.15)'
-          }}>
-            <UserCheck size={24} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '900', margin: 0, color: '#0F172A', letterSpacing: '-0.3px' }}>
-                New Monthly Customers by Sales Person
-              </h2>
-              <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '12px' }}>
-                {userRole === 'CEO' || userRole === 'Admin' ? 'CEO EXECUTIVE VIEW' : 'SALES & CRM VIEW'}
-              </span>
-            </div>
-            <span style={{ fontSize: '12.5px', color: '#64748B' }}>
-              Track newly onboarded accounts for the selected month grouped and analyzed per sales representative.
+      {/* 1. TOP HEADER (BUSINZ DESIGN SYSTEM) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.2px' }}>
+              New Monthly Customers
+            </h2>
+            <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '12px' }}>
+              {isCeo ? 'CEO EXECUTIVE OVERVIEW' : 'MY CLIENT ONBOARDING'}
             </span>
           </div>
+          <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+            {isCeo
+              ? 'Track newly onboarded customer accounts for the selected month across all sales representatives.'
+              : 'Your new client accounts created and onboarded this month.'}
+          </span>
         </div>
 
-        {/* Global Controls */}
+        {/* Global Action Controls (Calendar Icon REMOVED per user mandate) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Calendar size={15} style={{ color: '#0E7490' }} />
-            <select
-              id="ceo-monthly-customers-select"
-              name="selectedMonth"
-              aria-label="Filter by month"
-              value={selectedMonth}
-              onChange={(e) => {
-                setSelectedMonth(e.target.value);
-                setCurrentPage(1);
-              }}
-              style={{
-                height: '38px',
-                borderRadius: '8px',
-                border: '1.5px solid #0E7490',
-                padding: '0 12px',
-                fontSize: '12.5px',
-                fontWeight: '700',
-                color: '#0E7490',
-                backgroundColor: '#ECFEFF',
-                cursor: 'pointer',
-                outline: 'none'
-              }}
-            >
-              <option value="all">All Months (Cumulative)</option>
-              {availableMonths.map(mk => (
-                <option key={mk} value={mk}>{formatMonthLabel(mk)}</option>
-              ))}
-            </select>
-          </div>
+          <select
+            id="monthly-customers-period-select"
+            name="selectedMonth"
+            aria-label="Filter by month"
+            value={selectedMonth}
+            onChange={(e) => {
+              setSelectedMonth(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              height: '38px',
+              borderRadius: '8px',
+              border: '1.5px solid #0E7490',
+              padding: '0 12px',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              color: '#0E7490',
+              backgroundColor: '#ECFEFF',
+              cursor: 'pointer',
+              outline: 'none'
+            }}
+          >
+            <option value="all">All Months (Cumulative)</option>
+            {availableMonths.map(mk => (
+              <option key={mk} value={mk}>{formatMonthLabel(mk)}</option>
+            ))}
+          </select>
 
           <button
             onClick={() => loadCustomers(true)}
@@ -370,225 +393,297 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
         </div>
       </div>
 
-      {/* 2. EXECUTIVE MONTHLY ACQUISITION RIBBON */}
+      {/* 2. STATS RIBBON */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-        gap: '14px',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: '12px',
         width: '100%',
         boxSizing: 'border-box'
       }}>
         {/* KPI 1 */}
         <div style={{
           backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
           borderRadius: '12px',
-          padding: '16px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+          border: '1px solid #E2E8F0',
+          padding: '14px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-              New Accounts Onboarded
+          <div style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '8px',
+            backgroundColor: '#ECFEFF',
+            color: '#0E7490',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Building2 size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', display: 'block' }}>
+              {isCeo ? 'New Accounts Added' : 'My New Customers'}
             </span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Building2 size={15} />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '900', color: '#0F172A', marginTop: '6px' }}>
-            {kpis.totalCount} Customers
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px', marginTop: '6px' }}>
-            <span>Target Month: </span>
-            <strong style={{ color: '#0E7490' }}>{formatMonthLabel(selectedMonth)}</strong>
+            <span style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', display: 'block', lineHeight: 1.2 }}>
+              {kpis.totalCount} <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>in {formatMonthLabel(selectedMonth)}</span>
+            </span>
           </div>
         </div>
 
         {/* KPI 2 */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
-          borderRadius: '12px',
-          padding: '16px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-              Top Acquiring Sales Rep
-            </span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Award size={15} />
+        {isCeo ? (
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+            padding: '14px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+          }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '8px',
+              backgroundColor: '#F0FDF4',
+              color: '#16A34A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Award size={18} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', display: 'block' }}>
+                Top Acquiring Rep
+              </span>
+              <span style={{ fontSize: '16px', fontWeight: 800, color: '#16A34A', display: 'block', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {kpis.topRepName} ({kpis.topRepCount})
+              </span>
             </div>
           </div>
-          <div style={{ fontSize: '20px', fontWeight: '900', color: '#16A34A', marginTop: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {kpis.topRepName}
+        ) : (
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+            padding: '14px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+          }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '8px',
+              backgroundColor: '#F0FDF4',
+              color: '#16A34A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Award size={18} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', display: 'block' }}>
+                Acquisition Share
+              </span>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: '#16A34A', display: 'block', lineHeight: 1.2 }}>
+                100% Personal Target
+              </span>
+            </div>
           </div>
-          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px', marginTop: '6px' }}>
-            <span>Accounts added: </span>
-            <strong style={{ color: '#16A34A' }}>{kpis.topRepCount} accounts</strong>
-          </div>
-        </div>
+        )}
 
         {/* KPI 3 */}
         <div style={{
           backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
           borderRadius: '12px',
-          padding: '16px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+          border: '1px solid #E2E8F0',
+          padding: '14px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
+          <div style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '8px',
+            backgroundColor: '#FEF3C7',
+            color: '#D97706',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <CheckCircle size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', display: 'block' }}>
               GST Registered Corporate
             </span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CheckCircle size={15} />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '900', color: '#D97706', marginTop: '6px' }}>
-            {kpis.gstCount} Accounts
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px', marginTop: '6px' }}>
-            <span>Compliance verification: </span>
-            <strong style={{ color: '#D97706' }}>{kpis.gstPct}% registered</strong>
+            <span style={{ fontSize: '18px', fontWeight: 800, color: '#D97706', display: 'block', lineHeight: 1.2 }}>
+              {kpis.gstCount} <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>({kpis.gstPct}%)</span>
+            </span>
           </div>
         </div>
 
         {/* KPI 4 */}
         <div style={{
           backgroundColor: '#FFFFFF',
+          borderRadius: '12px',
+          border: '1px solid #E2E8F0',
+          padding: '14px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '8px',
+            backgroundColor: '#F3E8FF',
+            color: '#9333EA',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Users size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', display: 'block' }}>
+              {isCeo ? 'Active Acquiring Reps' : 'Created By'}
+            </span>
+            <span style={{ fontSize: '18px', fontWeight: 800, color: '#9333EA', display: 'block', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isCeo ? `${kpis.activeRepsCount} Sales Reps` : (loggedInUserName || 'Sales Executive')}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. CEO-ONLY SALES PERSON BREAKDOWN QUICK PILLS */}
+      {isCeo && repBreakdown.length > 0 && (
+        <div style={{
+          backgroundColor: '#FFFFFF',
           border: '1px solid #E2E8F0',
           borderRadius: '12px',
           padding: '16px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-              Active Acquiring Reps
+            <strong style={{ fontSize: '12.5px', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Sales Person Acquisition Breakdown ({formatMonthLabel(selectedMonth)})
+            </strong>
+            <span style={{ fontSize: '12px', color: '#64748B' }}>
+              Click a card to filter customer records below
             </span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F3E8FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={15} />
-            </div>
           </div>
-          <div style={{ fontSize: '24px', fontWeight: '900', color: '#9333EA', marginTop: '6px' }}>
-            {kpis.activeRepsCount} Sales Reps
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px', marginTop: '6px' }}>
-            <span>Active pipeline contributors</span>
-          </div>
-        </div>
-      </div>
 
-      {/* 3. SALES PERSON ACQUISITION CARDS (QUICK FILTER PILLS) */}
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: '12px',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong style={{ fontSize: '13px', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-            Sales Person Acquisition Breakdown ({formatMonthLabel(selectedMonth)})
-          </strong>
-          <span style={{ fontSize: '12px', color: '#64748B' }}>
-            Click a card to filter customer records below
-          </span>
-        </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+            <button
+              onClick={() => {
+                setSelectedRep('all');
+                setCurrentPage(1);
+              }}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: selectedRep === 'all' ? '2px solid #0E7490' : '1px solid #E2E8F0',
+                backgroundColor: selectedRep === 'all' ? '#ECFEFF' : '#F8FAFC',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span style={{ fontSize: '12px', fontWeight: '700', color: selectedRep === 'all' ? '#0E7490' : '#475569' }}>
+                All Sales Reps
+              </span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '18px', fontWeight: '900', color: '#0F172A' }}>{monthlyCustomers.length}</span>
+                <span style={{ fontSize: '11px', color: '#64748B' }}>new clients</span>
+              </div>
+            </button>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-          {/* "All" Card */}
-          <button
-            onClick={() => {
-              setSelectedRep('all');
-              setCurrentPage(1);
-            }}
-            style={{
-              padding: '10px 14px',
-              borderRadius: '10px',
-              border: selectedRep === 'all' ? '2px solid #0E7490' : '1px solid #E2E8F0',
-              backgroundColor: selectedRep === 'all' ? '#ECFEFF' : '#F8FAFC',
-              cursor: 'pointer',
-              textAlign: 'left',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <span style={{ fontSize: '12px', fontWeight: '700', color: selectedRep === 'all' ? '#0E7490' : '#475569' }}>
-              All Sales Reps
-            </span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-              <span style={{ fontSize: '18px', fontWeight: '900', color: '#0F172A' }}>{monthlyCustomers.length}</span>
-              <span style={{ fontSize: '11px', color: '#64748B' }}>new clients</span>
-            </div>
-          </button>
-
-          {/* Rep Cards */}
-          {repBreakdown.map((r, idx) => {
-            const isSelected = selectedRep.toLowerCase() === r.repName.toLowerCase();
-            return (
-              <button
-                key={idx}
-                onClick={() => {
-                  setSelectedRep(isSelected ? 'all' : r.repName);
-                  setCurrentPage(1);
-                }}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  border: isSelected ? '2px solid #0E7490' : '1px solid #E2E8F0',
-                  backgroundColor: isSelected ? '#ECFEFF' : '#FFFFFF',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    backgroundColor: isSelected ? '#0E7490' : '#E2E8F0',
-                    color: isSelected ? '#FFFFFF' : '#475569',
-                    fontSize: '10px',
-                    fontWeight: '800',
+            {repBreakdown.map((r, idx) => {
+              const isSelected = selectedRep.toLowerCase() === r.repName.toLowerCase();
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setSelectedRep(isSelected ? 'all' : r.repName);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: isSelected ? '2px solid #0E7490' : '1px solid #E2E8F0',
+                    backgroundColor: isSelected ? '#ECFEFF' : '#FFFFFF',
+                    cursor: 'pointer',
+                    textAlign: 'left',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    {r.repName[0]?.toUpperCase()}
+                    flexDirection: 'column',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      backgroundColor: isSelected ? '#0E7490' : '#E2E8F0',
+                      color: isSelected ? '#FFFFFF' : '#475569',
+                      fontSize: '10px',
+                      fontWeight: '800',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {r.repName[0]?.toUpperCase()}
+                    </div>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      color: isSelected ? '#0E7490' : '#0F172A',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {r.repName}
+                    </span>
                   </div>
-                  <span style={{
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    color: isSelected ? '#0E7490' : '#0F172A',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}>
-                    {r.repName}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                  <span style={{ fontSize: '18px', fontWeight: '900', color: isSelected ? '#0E7490' : '#0F172A' }}>
-                    {r.count}
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#64748B' }}>
-                    ({monthlyCustomers.length > 0 ? ((r.count / monthlyCustomers.length) * 100).toFixed(0) : 0}%)
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                    <span style={{ fontSize: '18px', fontWeight: '900', color: isSelected ? '#0E7490' : '#0F172A' }}>
+                      {r.count}
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#64748B' }}>
+                      ({monthlyCustomers.length > 0 ? ((r.count / monthlyCustomers.length) * 100).toFixed(0) : 0}%)
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 4. FILTERS & SEARCH ROW */}
       <div style={{
@@ -631,34 +726,36 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
           />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
-            Filter Sales Rep:
-          </span>
-          <select
-            value={selectedRep}
-            onChange={(e) => {
-              setSelectedRep(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{
-              height: '38px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              padding: '0 12px',
-              fontSize: '12.5px',
-              fontWeight: '700',
-              color: '#0F172A',
-              backgroundColor: '#FFFFFF',
-              outline: 'none'
-            }}
-          >
-            <option value="all">All Sales Representatives ({monthlyCustomers.length})</option>
-            {distinctReps.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+        {isCeo && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
+              Filter Sales Rep:
+            </span>
+            <select
+              value={selectedRep}
+              onChange={(e) => {
+                setSelectedRep(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                height: '38px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                padding: '0 12px',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                color: '#0F172A',
+                backgroundColor: '#FFFFFF',
+                outline: 'none'
+              }}
+            >
+              <option value="all">All Sales Representatives ({monthlyCustomers.length})</option>
+              {distinctReps.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* 5. MAIN DATA TABLE (STANDARD BUSINZ TABLE SYSTEM) */}
@@ -679,24 +776,25 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
                   />
                 </th>
                 <th style={{ padding: '12px 14px' }}>Customer / Company Name</th>
-                <th style={{ padding: '12px 14px' }}>Sales Person (Rep)</th>
+                {isCeo && <th style={{ padding: '12px 14px' }}>Sales Person (Rep)</th>}
                 <th style={{ padding: '12px 14px' }}>GST Number</th>
                 <th style={{ padding: '12px 14px' }}>Primary Contact</th>
                 <th style={{ padding: '12px 14px' }}>Location</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center' }}>Customer Type</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center' }}>Onboarding Date</th>
+                <th style={{ padding: '12px 14px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
+                  <td colSpan={isCeo ? 9 : 8} style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
                     Loading customer accounts for {formatMonthLabel(selectedMonth)}...
                   </td>
                 </tr>
               ) : currentRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
+                  <td colSpan={isCeo ? 9 : 8} style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
                     No customer accounts onboarded for {formatMonthLabel(selectedMonth)} matching current filters.
                   </td>
                 </tr>
@@ -750,37 +848,39 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
                         )}
                       </td>
 
-                      {/* Sales Person */}
-                      <td style={{ padding: '12px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{
-                            width: '26px',
-                            height: '26px',
-                            borderRadius: '50%',
-                            backgroundColor: '#ECFEFF',
-                            color: '#0E7490',
-                            border: '1px solid #A5F3FC',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '11px',
-                            fontWeight: '800',
-                            flexShrink: 0
-                          }}>
-                            {rep[0]?.toUpperCase()}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A' }}>
-                              {rep}
+                      {/* Sales Person (CEO View) */}
+                      {isCeo && (
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '50%',
+                              backgroundColor: '#ECFEFF',
+                              color: '#0E7490',
+                              border: '1px solid #A5F3FC',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              flexShrink: 0
+                            }}>
+                              {rep[0]?.toUpperCase()}
                             </div>
-                            {c.assignedSalespersonCode && (
-                              <span style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
-                                {c.assignedSalespersonCode}
-                              </span>
-                            )}
+                            <div>
+                              <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A' }}>
+                                {rep}
+                              </div>
+                              {c.assignedSalespersonCode && (
+                                <span style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                  {c.assignedSalespersonCode}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
+                      )}
 
                       {/* GST */}
                       <td style={{ padding: '12px 14px', fontFamily: 'monospace', color: '#475569', fontSize: '12px' }}>
@@ -820,6 +920,28 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
                       <td style={{ padding: '12px 14px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap' }}>
                         {dStr ? (dStr.split('T')[0] || dStr) : '—'}
                       </td>
+
+                      {/* Action */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => setActiveCustomerDetail(c)}
+                          style={{
+                            padding: '4px 10px',
+                            backgroundColor: '#ECFEFF',
+                            color: '#0E7490',
+                            border: '1px solid #A5F3FC',
+                            borderRadius: '6px',
+                            fontSize: '11.5px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Eye size={12} /> View
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -828,7 +950,7 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
           </table>
         </div>
 
-        {/* Standard Pagination Footer */}
+        {/* Standard Pagination Footer (Strictly [5, 10] per page per BUSINZ mandate) */}
         {filteredCustomers.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -919,7 +1041,7 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
         )}
       </div>
 
-      {/* Floating Bottom Action Bar */}
+      {/* 6. FLOATING BOTTOM ACTION BAR (SINGLE LINE, ZERO 3-DOT MENUS) */}
       {selectedCustomerRows.length > 0 && (
         <div style={{
           position: 'fixed',
@@ -940,8 +1062,29 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
           flexWrap: 'nowrap'
         }}>
           <span style={{ fontSize: '13px', fontWeight: '700', color: '#38BDF8' }}>
-            {selectedCustomerRows.length} Customer Account(s) Selected
+            {selectedCustomerRows.length} Selected
           </span>
+          <div style={{ height: '16px', width: '1px', backgroundColor: '#334155' }} />
+          <button
+            onClick={() => {
+              const firstId = selectedCustomerRows[0];
+              const match = filteredCustomers.find(c => (c.id || c.customerCode || c.code) === firstId);
+              if (match) setActiveCustomerDetail(match);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Eye size={14} color="#38BDF8" /> View Details
+          </button>
           <div style={{ height: '16px', width: '1px', backgroundColor: '#334155' }} />
           <button
             onClick={handleExportCsv}
@@ -971,8 +1114,145 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
               cursor: 'pointer'
             }}
           >
-            ✕ Clear Selection
+            ✕
           </button>
+        </div>
+      )}
+
+      {/* 7. CUSTOMER DETAIL SLIDE-OVER DRAWER */}
+      {activeCustomerDetail && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.45)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 1100,
+          display: 'flex',
+          justifyContent: 'flex-end'
+        }}
+        onClick={() => setActiveCustomerDetail(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              height: '100%',
+              backgroundColor: '#FFFFFF',
+              boxShadow: '-8px 0 25px rgba(0,0,0,0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              animation: 'slideInRight 0.25s ease'
+            }}
+          >
+            {/* Drawer Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Customer Profile
+                </span>
+                <h3 style={{ margin: '4px 0 0 0', fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>
+                  {activeCustomerDetail.customerName || activeCustomerDetail.companyName || 'Customer Details'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setActiveCustomerDetail(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '6px', borderRadius: '6px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', flex: 1 }}>
+              {/* Account Overview Box */}
+              <div style={{ backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '10px', padding: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Customer Code</span>
+                    <strong style={{ fontSize: '13px', color: '#0E7490', fontFamily: 'monospace' }}>
+                      {activeCustomerDetail.customerCode || activeCustomerDetail.code || '—'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>GST Number</span>
+                    <strong style={{ fontSize: '13px', color: '#0F172A', fontFamily: 'monospace' }}>
+                      {activeCustomerDetail.gstNumber || activeCustomerDetail.gstNo || 'Unregistered'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Assigned Sales Rep</span>
+                    <strong style={{ fontSize: '13px', color: '#0F172A' }}>
+                      {getRepName(activeCustomerDetail)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Onboarding Date</span>
+                    <strong style={{ fontSize: '13px', color: '#0F172A' }}>
+                      {getCustomerDateStr(activeCustomerDetail) ? String(getCustomerDateStr(activeCustomerDetail)).split('T')[0] : '—'}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div>
+                <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Contact Information
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: '#1E293B' }}>
+                    <Users size={16} color="#64748B" />
+                    <span>Contact: <strong>{activeCustomerDetail.contactPerson || activeCustomerDetail.c3 || '—'}</strong></span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: '#1E293B' }}>
+                    <Phone size={16} color="#64748B" />
+                    <span>Phone: <strong>{activeCustomerDetail.phone || activeCustomerDetail.c4 || activeCustomerDetail.mobile || '—'}</strong></span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: '#1E293B' }}>
+                    <Mail size={16} color="#64748B" />
+                    <span>Email: <strong>{activeCustomerDetail.email || activeCustomerDetail.c5 || '—'}</strong></span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', color: '#1E293B' }}>
+                    <MapPin size={16} color="#64748B" style={{ marginTop: '2px', flexShrink: 0 }} />
+                    <span>
+                      Address: {activeCustomerDetail.address || activeCustomerDetail.street || activeCustomerDetail.c6 || '—'}, {activeCustomerDetail.city || ''} {activeCustomerDetail.state || ''} {activeCustomerDetail.pincode || ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Commercial Terms */}
+              <div>
+                <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Commercial Profile
+                </h4>
+                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Customer Type</span>
+                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{activeCustomerDetail.customerType || 'EPC Contractor'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Payment Terms</span>
+                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{activeCustomerDetail.paymentTerms || '100% Advance'}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#F8FAFC' }}>
+              <button
+                onClick={() => setActiveCustomerDetail(null)}
+                style={{ padding: '8px 18px', backgroundColor: '#0E7490', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

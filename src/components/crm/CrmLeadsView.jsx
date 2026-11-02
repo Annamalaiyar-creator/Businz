@@ -357,13 +357,25 @@ export default function CrmLeadsView({
         const assignedId = (lead.assigned_to_user_id || '').toLowerCase().trim();
         const assignedName = (lead.assigned_to_name || lead.assigned_salesperson || '').toLowerCase().trim();
 
+        const isGenericSales = (effectiveRoleLower.includes('sales') && (myEmp === 'se-001' || myName === 'sales executive' || !myEmp));
+        const matchedSalesperson = (salespersons || []).find(s => 
+          (s.employee_code && s.employee_code.toLowerCase() === myEmp) ||
+          (s.employee_name && s.employee_name.toLowerCase().includes(myName)) ||
+          (s.employee_name && myName.includes(s.employee_name.toLowerCase()))
+        );
+        const activeRepCode = (matchedSalesperson?.employee_code || (isGenericSales ? 'se-1000' : myEmp)).toLowerCase();
+        const activeRepName = (matchedSalesperson?.employee_name || myName).toLowerCase();
+
         const isUnassigned = !lead.assigned_to_user_id || lead.status === 'New';
         const isAssignedToMe = (
           isUnassigned ||
           (myEmp && (assignedId === myEmp || assignedName.includes(myEmp) || (assignedId && myEmp.includes(assignedId)))) ||
-          (myName && (assignedName.includes(myName) || (assignedName && myName.includes(assignedName))))
+          (myName && (assignedName.includes(myName) || (assignedName && myName.includes(assignedName)))) ||
+          (activeRepCode && (assignedId === activeRepCode || assignedName.includes(activeRepCode))) ||
+          (activeRepName && (assignedName.includes(activeRepName) || activeRepName.includes(assignedName))) ||
+          (isGenericSales && (lead.assigned_to_role || '').toLowerCase().includes('sales'))
         );
-        if ((myEmp || myName) && !isAssignedToMe) return false;
+        if ((myEmp || myName || activeRepCode) && !isAssignedToMe) return false;
       }
 
       const matchSource = sourceFilter === 'All' || lead.source === sourceFilter;

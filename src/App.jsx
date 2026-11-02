@@ -372,8 +372,20 @@ function App() {
       localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
       localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');
     } else if (norm.includes('sales')) {
-      localStorage.setItem('controlroom_logged_emp_id', 'SE-001');
-      localStorage.setItem('controlroom_logged_user_name', 'Sales Executive');
+      let salesCode = 'SE-1000';
+      let salesName = 'Annamalaiyar';
+      try {
+        const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+        const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+        const sEmp = allEmps.find(e => e && ((e.role || '').toLowerCase().includes('sales') || (e.department || '').toLowerCase().includes('sales')));
+        if (sEmp) {
+          salesCode = sEmp.employee_code || sEmp.code || salesCode;
+          salesName = sEmp.employee_name || sEmp.name || salesName;
+        }
+      } catch (_) {}
+      localStorage.setItem('controlroom_logged_emp_id', salesCode);
+      localStorage.setItem('controlroom_logged_user_name', salesName);
     } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
       localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
       localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');

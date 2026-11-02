@@ -316,22 +316,68 @@ export async function getLeads({ userRole = '', userEmpId = '', userName = '', s
 
   // Salesperson data isolation: Sales Executives can see leads assigned to their employee ID or Name, PLUS unassigned leads
   if (!hasGlobalView) {
-    if (cleanEmpId || cleanName) {
-      const orClauses = [];
-      if (cleanEmpId) {
-        orClauses.push(`LOWER(TRIM(COALESCE(l.assigned_to_user_id, ''))) = LOWER(TRIM($${paramIdx}))`);
-        params.push(cleanEmpId);
-        paramIdx++;
+    const matchCodes = new Set();
+    const matchNames = new Set();
+
+    if (cleanEmpId) {
+      matchCodes.add(cleanEmpId.toLowerCase());
+      if (cleanEmpId.toLowerCase() === 'se-001' || cleanEmpId.toLowerCase() === 'se-default') {
+        matchCodes.add('se-1000');
+        matchCodes.add('se-001');
       }
-      if (cleanName) {
+      if (cleanEmpId.toLowerCase() === 'se-1000') matchCodes.add('se-001');
+    }
+    if (cleanName) {
+      matchNames.add(cleanName.toLowerCase());
+      if (cleanName.toLowerCase() === 'sales executive' || cleanName.toLowerCase() === 'sales') {
+        matchNames.add('annamalaiyar');
+        matchCodes.add('se-1000');
+        matchCodes.add('se-001');
+      }
+    }
+
+    // Try resolving all active sales reps from employees_store
+    try {
+      const empsFilePath = getStoreFilePath('employees_store.json');
+      if (fs.existsSync(empsFilePath)) {
+        const emps = JSON.parse(fs.readFileSync(empsFilePath, 'utf8'));
+        if (Array.isArray(emps)) {
+          const salesEmps = emps.filter(e => (e.role || '').toLowerCase().includes('sales'));
+          const matched = salesEmps.find(e =>
+            (cleanEmpId && (e.employee_code || e.code || '').toLowerCase() === cleanEmpId.toLowerCase()) ||
+            (cleanName && (e.employee_name || e.name || '').toLowerCase().includes(cleanName.toLowerCase())) ||
+            (cleanName && cleanName.toLowerCase().includes((e.employee_name || e.name || '').toLowerCase()))
+          );
+          if (matched) {
+            if (matched.employee_code || matched.code) matchCodes.add((matched.employee_code || matched.code).toLowerCase());
+            if (matched.employee_name || matched.name) matchNames.add((matched.employee_name || matched.name).toLowerCase());
+          }
+          if (userRole.toLowerCase().includes('sales') && (cleanEmpId.toLowerCase() === 'se-001' || cleanName.toLowerCase() === 'sales executive')) {
+            salesEmps.forEach(se => {
+              if (se.employee_code || se.code) matchCodes.add((se.employee_code || se.code).toLowerCase());
+              if (se.employee_name || se.name) matchNames.add((se.employee_name || se.name).toLowerCase());
+            });
+          }
+        }
+      }
+    } catch (_) {}
+
+    const orClauses = [];
+    if (matchCodes.size > 0) {
+      orClauses.push(`LOWER(TRIM(COALESCE(l.assigned_to_user_id, ''))) = ANY($${paramIdx}::text[])`);
+      params.push(Array.from(matchCodes));
+      paramIdx++;
+    }
+    if (matchNames.size > 0) {
+      matchNames.forEach(nm => {
         orClauses.push(`l.assigned_to_name ILIKE $${paramIdx}`);
         orClauses.push(`l.assigned_salesperson ILIKE $${paramIdx}`);
-        params.push(`%${cleanName}%`);
+        params.push(`%${nm}%`);
         paramIdx++;
-      }
-      orClauses.push(`(l.assigned_to_user_id IS NULL OR l.assigned_to_user_id = '' OR l.status = 'New')`);
-      sql += ` AND (${orClauses.join(' OR ')})`;
+      });
     }
+    orClauses.push(`(l.assigned_to_user_id IS NULL OR l.assigned_to_user_id = '' OR l.status = 'New')`);
+    sql += ` AND (${orClauses.join(' OR ')})`;
   }
 
   if (unassignedOnly) {

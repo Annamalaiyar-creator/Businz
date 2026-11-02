@@ -2841,7 +2841,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                 type="button"
                 onClick={() => onNavigateTab && onNavigateTab('Monthly Customers by Rep')}
                 style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '800', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE', padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                title="View New Monthly Customers by Sales Person report"
+                title="View New Monthly Customers report"
               >
                 New Monthly Customers ↗
               </button>
@@ -2860,7 +2860,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                 <tr
                   onClick={() => onNavigateTab && onNavigateTab('Monthly Customers by Rep')}
                   style={{ borderBottom: '1px solid #F8FAFC', cursor: onNavigateTab ? 'pointer' : 'default', backgroundColor: '#F0FDFA' }}
-                  title="Click to view New Monthly Customers by Sales Person"
+                  title="Click to view New Monthly Customers"
                 >
                   <td style={{ padding: '6px 4px', color: '#0E7490', fontWeight: '700', textDecoration: 'underline' }}>New customers ↗</td>
                   <td style={{ padding: '6px 4px', textAlign: 'center', color: '#0F766E', fontWeight: '800' }}>{customerSalesMix.newCustomers.count}</td>
