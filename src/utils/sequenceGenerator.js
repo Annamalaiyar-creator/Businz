@@ -48,6 +48,9 @@ export function formatSequenceCode(moduleType, seqNumber, date = new Date()) {
   }
   const num = Math.max(1, parseInt(seqNumber, 10) || 1);
   const padded = String(num).padStart(2, '0');
+  if (cleanType === 'BOM') {
+    return `VRM-BOM-${padded}`;
+  }
   return `VRM-${cleanType}-${fy}-${padded}`;
 }
 
@@ -63,7 +66,9 @@ export function extractMaxSequence(moduleType, fy, records = []) {
 
   let cleanType = String(moduleType || '').toUpperCase().trim();
   let regex;
-  if (cleanType === 'LEAD' || cleanType === 'LD') {
+  if (cleanType === 'BOM') {
+    regex = /^(?:VRM-BOM-(?:\d{4}-)?|BOM-)(\d+)$/i;
+  } else if (cleanType === 'LEAD' || cleanType === 'LD') {
     cleanType = 'LD';
     regex = new RegExp(`^VRM-(?:LD|LEAD)-${fy}-(\\d+)$`, 'i');
   } else if (cleanType === 'CS' || cleanType === 'CUST' || cleanType === 'CUSTOMER') {
@@ -125,17 +130,26 @@ export function extractMaxSequence(moduleType, fy, records = []) {
  * @returns {{ code: string, nextNum: number, financialYear: number }}
  */
 export function getNextSequence(moduleType, records = [], date = new Date()) {
+  // Support reversed argument order getNextSequence(records, moduleType)
+  if (Array.isArray(moduleType) && typeof records === 'string') {
+    const temp = moduleType;
+    moduleType = records;
+    records = temp;
+  }
   const fy = getFinancialYear(date);
   const maxSeq = extractMaxSequence(moduleType, fy, records);
   const nextNum = maxSeq + 1;
   const code = formatSequenceCode(moduleType, nextNum, date);
-  return { code, nextNum, financialYear: fy };
+  const result = { code, nextNum, financialYear: fy };
+  result.toString = () => code;
+  result.valueOf = () => code;
+  return result;
 }
 
 /**
- * Helper to match any BOM code (both new VRM-BOM-YYYY-XX and legacy BOM-XXX)
+ * Helper to match any BOM code (both VRM-BOM-XX, VRM-BOM-YYYY-XX, and legacy BOM-XXX)
  */
-export const BOM_CODE_REGEX = /^(?:VRM-BOM-\d{4}-\d+|BOM-\d+)$/i;
+export const BOM_CODE_REGEX = /^(?:VRM-BOM-(?:\d{4}-)?\d+|BOM-\d+)$/i;
 
 /**
  * Helper to match any Invoice code (both new VRM-INV-YYYY-XX and legacy INV-XXXXXX)

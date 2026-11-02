@@ -255,6 +255,8 @@ export default function BomOrdersView(props) {
           } else {
             const { list: resolvedList } = resolveBomCollisions(data, 662);
             const parseBomSeq = (code) => {
+              const vrm = String(code || '').match(/VRM-BOM-(?:\d{4}-)?(\d+)/i);
+              if (vrm) return parseInt(vrm[1], 10);
               const m = String(code || '').match(/BOM-(\d+)/i);
               return m ? parseInt(m[1], 10) : 0;
             };
@@ -2065,7 +2067,7 @@ export default function BomOrdersView(props) {
 
       return {
         ...b,
-        code: b.bomCode || b.code || 'BOM-101',
+        code: (b.bomCode || b.code || 'BOM-101').replace(/^VRM-BOM-\d{4}-(\d+)/i, 'VRM-BOM-$1'),
         c2: formattedDate,
         dateTimeObj: dt,
         c3: displayName,

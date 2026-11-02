@@ -289,7 +289,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   const billingLines = formatAddressLines(rawBAddr, bCity, bState, bPin);
   const deliveryLines = formatAddressLines(rawDAddr, dCity, dState, dPin);
 
-  const bomNumber = b.bomCode || b.code || b.piNo || b.id || 'BOM-001';
+  const bomNumber = (b.bomCode || b.code || b.piNo || b.id || 'BOM-001').replace(/^VRM-BOM-\d{4}-(\d+)/i, 'VRM-BOM-$1');
   const rawBomDate = b.date || b.bomDate || b.piDate || b.salesConfirmedAt || (b.createdAt ? String(b.createdAt).substring(0, 10) : new Date().toISOString().split('T')[0]);
   const orderDateFormatted = formatDateDDMMYYYY(rawBomDate);
 
@@ -1332,7 +1332,7 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
 
   if (!bomData) return null;
 
-  const bomNumber = b.bomCode || b.code || b.piNo || b.id || 'BOM Order';
+  const bomNumber = (b.bomCode || b.code || b.piNo || b.id || 'BOM Order').replace(/^VRM-BOM-\d{4}-(\d+)/i, 'VRM-BOM-$1');
 
   const modalContent = (
     <div

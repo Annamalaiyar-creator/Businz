@@ -38,8 +38,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
             .filter(isInvoiceEligibleBom)
             .map(b => {
               const bCode = b.bomCode || b.code || 'BOM-2026';
-              const matchSeq = bCode.match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || bCode.match(/BOM-(\d+)/i);
-              const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-${(bCode.match(/(\d+)$/)?.[1] || '01')}`;
+              const matchSeq = bCode.match(/(?:VRM-BOM-)?(?:(\d{4})-)?(\d+)/i) || bCode.match(/BOM-(\d+)/i);
+              const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1] || '2026'}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-${(bCode.match(/(\d+)$/)?.[1] || '01')}`;
               const hasExplicitInv = b.invoiceNo && b.invoiceNo !== 'Pending Confirmation' && !b.invoiceNo.toLowerCase().includes('pending');
               const invNo = hasExplicitInv ? b.invoiceNo : derivedInvNo;
               const isConf = Boolean(b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
@@ -131,7 +131,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
           const findMatchingBom = (inv) => {
             if (!inv) return null;
             const directRef = (inv.poNo || inv.bomCode || '').toLowerCase().trim();
-            const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
+            const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-(?:\d{4}-)?\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
             const invNum = (inv.invNo || inv.code || inv.id || '').toLowerCase().trim();
 
             return (bomStore || []).find(b => {
@@ -160,7 +160,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
             return true;
           }).map(inv => {
             const matchingBom = findMatchingBom(inv);
-            const resolvedBomCode = matchingBom?.bomCode || matchingBom?.code || inv.poNo || inv.bomCode || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
+            const resolvedBomCode = matchingBom?.bomCode || matchingBom?.code || inv.poNo || inv.bomCode || (inv.notes || '').match(/(?:VRM-BOM-(?:\d{4}-)?\d+|BOM-[0-9]+)/i)?.[0] || '';
             const isConf = Boolean(
               (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed === true)) ||
               inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed === true
@@ -174,8 +174,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
             const existingAmt = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal);
             const resolvedAmount = existingAmt > 0 ? existingAmt : (bomTotal > 0 ? bomTotal : 0);
 
-            const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
-            const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : '';
+            const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(?:(\d{4})-)?(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
+            const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1] || '2026'}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : '';
             const rawInv = inv.invNo || inv.invoiceNo || inv.code || '';
             const hasExplicitInv = rawInv && rawInv !== 'Pending Confirmation' && !rawInv.toLowerCase().includes('pending');
             const matchingBomInv = matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' && !matchingBom.invoiceNo.toLowerCase().includes('pending');
@@ -352,8 +352,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 const matchingBom = findMatchingBom(i);
                 const resolvedBomCode = i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code || 'BOM-001';
                 const resolvedAmt = cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || 0;
-                const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
-                const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
+                const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(?:(\d{4})-)?(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
+                const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1] || '2026'}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
                 const finalCode = (i.invNo && i.invNo !== 'Pending Confirmation' && !i.invNo.toLowerCase().includes('pending')) ? i.invNo : (matchingBom?.invoiceNo || fallbackInvNo);
 
                 return {
@@ -362,7 +362,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   invNo: finalCode,
                   invoiceNo: finalCode,
                   c2: i.vendor || i.customerName || matchingBom?.customerName || 'Customer',
-                  c3: resolvedBomCode,
+                  c3: (resolvedBomCode || '').replace(/^VRM-BOM-\d{4}-(\d+)/i, 'VRM-BOM-$1'),
                   c4: cleanDateStr(i.date),
                   c5: resolvedAmt > 0 ? formatCurrency(resolvedAmt) : (typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (i.invAmt || '₹ 0.00')),
                   c6: isConfirmed ? 'Completed & Locked' : (i.pay || 'Ready for Payment'),
@@ -418,7 +418,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
               const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort((a, b) => {
                 const parseBomSeq = (code) => {
-                  const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                  const vrm = String(code || '').match(/VRM-BOM-(?:\d{4}-)?(\d+)/i);
                   if (vrm) return parseInt(vrm[1], 10);
                   const m = String(code || '').match(/BOM-(\d+)/i);
                   return m ? parseInt(m[1], 10) : 0;
@@ -592,7 +592,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                   return {
                     ...b,
-                    code: b.bomCode,
+                    code: (b.bomCode || b.code || b.id || '').replace(/^VRM-BOM-\d{4}-(\d+)/i, 'VRM-BOM-$1'),
                     createdDateFormatted: createdDateFormatted,
                     c2: customerDisplayName,
                     docType: docTypeVal,
@@ -768,7 +768,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Dispatch Packing Status'],
                 rows: allDispatchBoms.sort((a, b) => {
                   const parseBomSeq = (code) => {
-                    const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                    const vrm = String(code || '').match(/VRM-BOM-(?:\d{4}-)?(\d+)/i);
                     if (vrm) return parseInt(vrm[1], 10);
                     const m = String(code || '').match(/BOM-(\d+)/i);
                     return m ? parseInt(m[1], 10) : 0;
@@ -1037,7 +1037,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                   const rowObj = {
                     ...b,
-                    code: b.bomCode || b.code || b.id,
+                    code: (b.bomCode || b.code || b.id || '').replace(/^VRM-BOM-\d{4}-(\d+)/i, 'VRM-BOM-$1'),
                     customerName: customerDisplayName,
                     companyName: customerDisplayName,
                     c2: customerDisplayName,

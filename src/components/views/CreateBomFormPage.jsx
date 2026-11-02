@@ -2563,7 +2563,7 @@ export default function CreateBomFormPage(props) {
                     if (!isDraft) {
                       try {
                         const reserved = await getAndReserveNextBomCode(true);
-                        if (reserved && (/^VRM-BOM-\d{4}-\d+$/i.test(reserved) || /^BOM-\d+$/i.test(reserved))) {
+                        if (reserved && (/^VRM-BOM-(?:\d{4}-)?\d+$/i.test(reserved) || /^BOM-\d+$/i.test(reserved))) {
                           finalAssignedCode = reserved;
                         }
                       } catch (err) {

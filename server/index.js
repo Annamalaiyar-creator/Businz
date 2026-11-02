@@ -5074,14 +5074,14 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
           try {
             const dbRes = await query(`
               SELECT bom_code FROM public.bom_orders
-              WHERE bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
+              WHERE bom_code ~ '^VRM-BOM-(?:[0-9]{4}-)?[0-9]+$'
             `).catch(() => null);
             if (dbRes?.rows) records.push(...dbRes.rows);
 
             // Also check proforma_invoices for any converted_bom_code
             const piDbRes = await query(`
               SELECT converted_bom_code FROM public.proforma_invoices
-              WHERE converted_bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
+              WHERE converted_bom_code ~ '^VRM-BOM-(?:[0-9]{4}-)?[0-9]+$'
             `).catch(() => null);
             if (piDbRes?.rows) records.push(...piDbRes.rows);
           } catch (dbErr) {
@@ -5428,7 +5428,7 @@ async function repairBomSequences() {
 
   // 4. Update sequence counter
   const extractMaxBoms = (supabaseMemoryStore.bom_store || []).map(b => {
-    const m = String(b.bomCode || b.code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+    const m = String(b.bomCode || b.code || '').match(/VRM-BOM-(?:\d{4}-)?(\d+)/i);
     return m ? parseInt(m[1], 10) : 0;
   });
   const maxBomNum = extractMaxBoms.length > 0 ? Math.max(...extractMaxBoms) : 0;
@@ -6227,9 +6227,9 @@ app.post('/api/boms', async (req, res) => {
 
         // 6. Update sequence metadata in leaves table if needed
         try {
-          const vrmMatch = String(finalCode).match(/^VRM-BOM-(\d{4})-(\d+)$/i);
+          const vrmMatch = String(finalCode).match(/^VRM-BOM-(?:(\d{4})-)?(\d+)$/i);
           if (vrmMatch) {
-            const fy = parseInt(vrmMatch[1], 10);
+            const fy = vrmMatch[1] ? parseInt(vrmMatch[1], 10) : getFinancialYear();
             const seqVal = parseInt(vrmMatch[2], 10);
             if (serverBomSequenceCounter && typeof serverBomSequenceCounter === 'object' && serverBomSequenceCounter.fy === fy) {
               serverBomSequenceCounter.maxNum = Math.max(serverBomSequenceCounter.maxNum || 0, seqVal);

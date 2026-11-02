@@ -355,7 +355,7 @@ export default function ProductionViewsEngine(props) {
               });
 
               const parseBomSeq = (code) => {
-                const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                const vrm = String(code || '').match(/VRM-BOM-(?:\d{4}-)?(\d+)/i);
                 if (vrm) return parseInt(vrm[1], 10);
                 const m = String(code || '').match(/BOM-(\d+)/i);
                 return m ? parseInt(m[1], 10) : 0;
