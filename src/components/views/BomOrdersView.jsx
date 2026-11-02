@@ -10687,23 +10687,61 @@ export default function BomOrdersView(props) {
                   try {
                     setIsSettlingCredit(true);
                     const targetCode = settleCreditModal.bomCode || settleCreditModal.code || settleCreditModal.id;
-                    const compressed = await compressAndSaveFile(settleCreditFile);
-                    const docMeta = {
-                      name: compressed.name || settleCreditFile.name,
-                      originalName: settleCreditFile.name,
-                      type: settleCreditFile.type,
-                      size: compressed.size || settleCreditFile.size,
-                      dataUrl: compressed.dataUrl,
-                      uploadedAt: new Date().toISOString(),
-                      category: 'payment-proof',
-                      utr: settleCreditUtr.trim(),
-                      settledAmount: paidNum,
-                      paymentDate: settleCreditDate,
-                      paymentMode: settleCreditMode,
-                      notes: settleCreditNotes.trim()
-                    };
 
-                    saveMediaToCache(docMeta.name, compressed.dataUrl);
+                    let docMeta = null;
+                    try {
+                      const uploaded = await uploadBomDocumentFile({
+                        file: settleCreditFile,
+                        bomCode: targetCode,
+                        category: 'payment-proof'
+                      });
+                      if (uploaded && uploaded.name) {
+                        docMeta = {
+                          ...uploaded,
+                          originalName: settleCreditFile.name,
+                          utr: settleCreditUtr.trim(),
+                          settledAmount: paidNum,
+                          paymentDate: settleCreditDate,
+                          paymentMode: settleCreditMode,
+                          notes: settleCreditNotes.trim()
+                        };
+                      }
+                    } catch (uErr) {
+                      console.warn('uploadBomDocumentFile non-fatal, falling back to local compressed:', uErr);
+                    }
+
+                    if (!docMeta) {
+                      const compressed = await new Promise((resolve) => {
+                        compressAndSaveFile(settleCreditFile, (res) => {
+                          resolve(res || {
+                            name: settleCreditFile.name,
+                            originalName: settleCreditFile.name,
+                            type: settleCreditFile.type,
+                            size: settleCreditFile.size,
+                            dataUrl: null
+                          });
+                        });
+                      });
+
+                      docMeta = {
+                        name: compressed?.name || settleCreditFile.name,
+                        originalName: settleCreditFile.name,
+                        type: settleCreditFile.type,
+                        size: compressed?.size || settleCreditFile.size,
+                        dataUrl: compressed?.dataUrl || null,
+                        uploadedAt: new Date().toISOString(),
+                        category: 'payment-proof',
+                        utr: settleCreditUtr.trim(),
+                        settledAmount: paidNum,
+                        paymentDate: settleCreditDate,
+                        paymentMode: settleCreditMode,
+                        notes: settleCreditNotes.trim()
+                      };
+
+                      if (docMeta.name && compressed?.dataUrl) {
+                        saveMediaToCache(docMeta.name, compressed.dataUrl);
+                      }
+                    }
 
                     const updatedList = (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? {
                       ...b,
