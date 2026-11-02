@@ -28,8 +28,38 @@ class RealtimeNotificationService {
     return (localStorage.getItem('controlroom_user_role') || '').trim();
   }
 
+  getRole() {
+    return this.getUserRole();
+  }
+
   getUserName() {
     return (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+  }
+
+  getReadIds() {
+    try {
+      const raw = localStorage.getItem('controlroom_read_notifications');
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  saveReadId(id) {
+    if (!id) return;
+    try {
+      const readSet = this.getReadIds();
+      readSet.add(String(id));
+      localStorage.setItem('controlroom_read_notifications', JSON.stringify(Array.from(readSet).slice(-300)));
+    } catch (_) {}
+  }
+
+  saveAllReadIds(ids = []) {
+    try {
+      const readSet = this.getReadIds();
+      ids.forEach(id => { if (id) readSet.add(String(id)); });
+      localStorage.setItem('controlroom_read_notifications', JSON.stringify(Array.from(readSet).slice(-300)));
+    } catch (_) {}
   }
 
   /**
@@ -199,8 +229,12 @@ class RealtimeNotificationService {
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.notifications)) {
-          this.notifications = json.notifications;
-          this.unreadCount = json.unreadCount || this.notifications.filter(n => !n.is_read).length;
+          const readSet = this.getReadIds();
+          this.notifications = json.notifications.map(n => ({
+            ...n,
+            is_read: Boolean(n.is_read || readSet.has(String(n.id)))
+          }));
+          this.unreadCount = this.notifications.filter(n => !n.is_read).length;
           this.emitChange();
         }
       }
@@ -218,9 +252,13 @@ class RealtimeNotificationService {
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.notifications)) {
+          const readSet = this.getReadIds();
           json.notifications.forEach(n => {
             if (!this.notifications.some(existing => existing.id === n.id)) {
-              this.notifications.unshift(n);
+              this.notifications.unshift({
+                ...n,
+                is_read: Boolean(n.is_read || readSet.has(String(n.id)))
+              });
             }
           });
           this.unreadCount = this.notifications.filter(n => !n.is_read).length;
@@ -238,19 +276,46 @@ class RealtimeNotificationService {
       if (all) {
         this.notifications.forEach(n => { n.is_read = true; });
         this.unreadCount = 0;
+        this.saveAllReadIds(this.notifications.map(n => n.id));
       } else if (notificationId) {
-        const match = this.notifications.find(n => n.id === notificationId);
+        const match = this.notifications.find(n => n.id === notificationId || String(n.id) === String(notificationId));
         if (match) match.is_read = true;
         this.unreadCount = this.notifications.filter(n => !n.is_read).length;
+        this.saveReadId(notificationId);
       }
       this.emitChange();
 
       const empCode = this.getEmpCode();
-      const role = this.getRole();
-      await fetch('/api/notifications/mark-read', {
+      const role = this.getUserRole();
+      const res = await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notificationId, empCode, role, all })
+      });
+      if (!res.ok) {
+        console.warn('[RealtimeNotifs markRead server response]:', res.status);
+      }
+    } catch (err) {
+      console.warn('[RealtimeNotifs markRead error]:', err);
+    }
+  }
+
+  /**
+   * Permanently clear / delete a single notification
+   */
+  async deleteNotification(notificationId) {
+    if (!notificationId) return;
+    try {
+      this.notifications = this.notifications.filter(n => n.id !== notificationId && String(n.id) !== String(notificationId));
+      this.unreadCount = this.notifications.filter(n => !n.is_read).length;
+      this.emitChange();
+
+      const empCode = this.getEmpCode();
+      const role = this.getUserRole();
+      await fetch('/api/notifications/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId, empCode, role, all: false })
       });
     } catch (_) {}
   }
@@ -262,6 +327,9 @@ class RealtimeNotificationService {
     try {
       this.notifications = [];
       this.unreadCount = 0;
+      try {
+        localStorage.removeItem('controlroom_read_notifications');
+      } catch (_) {}
       this.emitChange();
 
       const empCode = this.getEmpCode();

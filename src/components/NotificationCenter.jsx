@@ -135,6 +135,15 @@ export default function NotificationCenter({ onNavigateTab }) {
     realtimeNotificationService.markAsRead(item.id);
   };
 
+  const handleDeleteSingle = (e, item) => {
+    e.stopPropagation();
+    setState(prev => ({
+      notifications: prev.notifications.filter(n => n.id !== item.id),
+      unreadCount: item.is_read ? prev.unreadCount : Math.max(0, prev.unreadCount - 1)
+    }));
+    realtimeNotificationService.deleteNotification(item.id);
+  };
+
   const handleMarkAllRead = (e) => {
     e.stopPropagation();
     setState(prev => ({
@@ -276,6 +285,32 @@ export default function NotificationCenter({ onNavigateTab }) {
                 >
                   <CheckCheck size={14} />
                   Mark all read
+                </button>
+              )}
+
+              {state.notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    color: '#64748B',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 6px',
+                    borderRadius: '6px'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  title="Clear all notifications"
+                >
+                  <Trash2 size={13} />
+                  Clear all
                 </button>
               )}
 
@@ -467,51 +502,81 @@ export default function NotificationCenter({ onNavigateTab }) {
                           )}
                         </div>
 
-                        {isUnread ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {isUnread ? (
+                            <button
+                              type="button"
+                              onClick={(e) => handleMarkSingleRead(e, item)}
+                              title="Mark as read"
+                              style={{
+                                border: '1px solid #CFFAFE',
+                                backgroundColor: '#ECFEFF',
+                                color: '#0E7490',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                fontSize: '10.5px',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#0E7490';
+                                e.currentTarget.style.color = '#FFFFFF';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                e.currentTarget.style.color = '#0E7490';
+                              }}
+                            >
+                              <Check size={12} strokeWidth={2.5} />
+                              Mark as read
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: '700',
+                                color: '#94A3B8',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              <Check size={11} /> Read
+                            </span>
+                          )}
+
                           <button
                             type="button"
-                            onClick={(e) => handleMarkSingleRead(e, item)}
-                            title="Mark as read & remove from notifications"
+                            onClick={(e) => handleDeleteSingle(e, item)}
+                            title="Dismiss notification"
                             style={{
-                              border: '1px solid #CFFAFE',
-                              backgroundColor: '#ECFEFF',
-                              color: '#0E7490',
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              fontSize: '10.5px',
-                              fontWeight: '800',
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#94A3B8',
+                              padding: '3px 4px',
+                              borderRadius: '4px',
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '3px',
-                              transition: 'all 0.15s ease'
+                              justifyContent: 'center',
+                              transition: 'color 0.15s ease, background-color 0.15s ease'
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#0E7490';
-                              e.currentTarget.style.color = '#FFFFFF';
+                              e.currentTarget.style.backgroundColor = '#FEE2E2';
+                              e.currentTarget.style.color = '#DC2626';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = '#ECFEFF';
-                              e.currentTarget.style.color = '#0E7490';
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = '#94A3B8';
                             }}
                           >
-                            <Check size={12} strokeWidth={2.5} />
-                            Mark as read
+                            <Trash2 size={12} />
                           </button>
-                        ) : (
-                          <span
-                            style={{
-                              fontSize: '10px',
-                              fontWeight: '700',
-                              color: '#94A3B8',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '3px'
-                            }}
-                          >
-                            <Check size={11} /> Read
-                          </span>
-                        )}
+                        </div>
                       </div>
                     </div>
 

@@ -404,7 +404,7 @@ export async function markNotificationAsRead({ notificationId, empCode = '', rol
 /**
  * Permanently clear / purge notifications for a recipient (removes dummy or outdated alerts)
  */
-export async function clearNotifications({ empCode = '', role = '', all = true, purgeAll = false }) {
+export async function clearNotifications({ notificationId, empCode = '', role = '', all = true, purgeAll = false }) {
   const normalizedEmp = String(empCode || '').toUpperCase().trim();
   const normalizedRole = String(role || '').toLowerCase().trim();
 
@@ -412,7 +412,9 @@ export async function clearNotifications({ empCode = '', role = '', all = true, 
   const leadManagerClause = isManagerRole ? `OR recipient_role IN ('lead_managers', 'management', 'admin', 'ceo')` : '';
 
   try {
-    if (purgeAll || (isManagerRole && all && !normalizedEmp)) {
+    if (notificationId) {
+      await executeSql(`DELETE FROM public.internal_notifications WHERE id = $1;`, [notificationId]);
+    } else if (purgeAll || (isManagerRole && all && !normalizedEmp)) {
       await executeSql(`DELETE FROM public.internal_notifications;`);
     } else if (all) {
       await executeSql(`
@@ -439,7 +441,11 @@ export async function clearNotifications({ empCode = '', role = '', all = true, 
 
   // Update local disk cache
   try {
-    if (purgeAll || (isManagerRole && all && !normalizedEmp)) {
+    if (notificationId) {
+      const list = readLocalNotificationsDisk();
+      const remaining = list.filter(n => n.id !== notificationId);
+      writeLocalNotificationsDisk(remaining);
+    } else if (purgeAll || (isManagerRole && all && !normalizedEmp)) {
       writeLocalNotificationsDisk([]);
     } else {
       const list = readLocalNotificationsDisk();

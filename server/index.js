@@ -2947,12 +2947,12 @@ app.post('/api/notifications/mark-read', async (req, res) => {
 });
 
 app.post('/api/notifications/clear', async (req, res) => {
-  const { all, purgeAll } = req.body || {};
+  const { notificationId, all, purgeAll } = req.body || {};
   const empCode = req.body?.empCode || req.headers['x-employee-code'] || req.headers['x-user-emp-id'] || '';
   const role = req.body?.role || req.headers['x-user-role'] || '';
 
   try {
-    const result = await clearNotifications({ empCode, role, all: all !== false, purgeAll: Boolean(purgeAll) });
+    const result = await clearNotifications({ notificationId, empCode, role, all: all !== false, purgeAll: Boolean(purgeAll) });
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
