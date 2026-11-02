@@ -1049,6 +1049,45 @@ export default function AccountsVerificationModal({
 
           {/* Payment Proof Document & Remittance Slip Image Inspection */}
           {(() => {
+            const rawProof = accountsVerificationModal.paymentProofDoc ||
+              accountsVerificationModal.balancePaymentProofDoc ||
+              accountsVerificationModal.balanceProofDoc ||
+              accountsVerificationModal.payments?.proofDocObj ||
+              accountsVerificationModal.payments?.balanceProofDocObj ||
+              accountsVerificationModal.payments?.proofDoc ||
+              accountsVerificationModal.payments?.balanceProofDoc ||
+              accountsVerificationModal.proofDoc ||
+              accountsVerificationModal.salesPoDetails?.proofDocObj ||
+              accountsVerificationModal.salesPoDetails?.balanceProofDocObj ||
+              null;
+
+            let fallbackDocName = null;
+            if (rawProof) {
+              if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
+                fallbackDocName = rawProof;
+              } else if (rawProof.name) {
+                fallbackDocName = rawProof.name;
+              } else if (rawProof.originalName) {
+                fallbackDocName = rawProof.originalName;
+              }
+            }
+            if (!fallbackDocName && accountsVerificationModal.paymentProofDocName) {
+              fallbackDocName = accountsVerificationModal.paymentProofDocName;
+            }
+            if (!fallbackDocName && accountsVerificationModal.payments?.proofDoc) {
+              fallbackDocName = accountsVerificationModal.payments.proofDoc;
+            }
+            if (!fallbackDocName && accountsVerificationModal.payments?.balanceProofDoc) {
+              fallbackDocName = accountsVerificationModal.payments.balanceProofDoc;
+            }
+
+            const docName = fallbackDocName || (rawProof ? 'Payment_Proof' : null);
+            const pDocDataUrl = resolvedProofDataUrl ||
+              resolveDocumentUrl(rawProof) ||
+              ((typeof rawProof === 'string' && rawProof.startsWith('data:')) ? rawProof : null) ||
+              (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || accountsVerificationModal.proofDocData || accountsVerificationModal.payments?.proofDocData || null) ||
+              (fallbackDocName ? getMediaFromCache(fallbackDocName) : null);
+
             const allPaymentDocs = (() => {
               if (Array.isArray(accountsVerificationModal.paymentProofDocs) && accountsVerificationModal.paymentProofDocs.length > 0) {
                 return accountsVerificationModal.paymentProofDocs;
@@ -1067,18 +1106,8 @@ export default function AccountsVerificationModal({
               if (Array.isArray(accountsVerificationModal.payments?.proofDocs) && accountsVerificationModal.payments.proofDocs.length > 0) {
                 return accountsVerificationModal.payments.proofDocs;
               }
-              const single = accountsVerificationModal.paymentProofDoc ||
-                accountsVerificationModal.balancePaymentProofDoc ||
-                accountsVerificationModal.balanceProofDoc ||
-                accountsVerificationModal.payments?.proofDocObj ||
-                accountsVerificationModal.payments?.balanceProofDocObj ||
-                accountsVerificationModal.payments?.proofDoc ||
-                accountsVerificationModal.payments?.balanceProofDoc ||
-                accountsVerificationModal.proofDoc ||
-                accountsVerificationModal.salesPoDetails?.proofDocObj ||
-                accountsVerificationModal.salesPoDetails?.balanceProofDocObj;
-              if (single) {
-                return [typeof single === 'object' ? single : { name: single }];
+              if (rawProof) {
+                return [typeof rawProof === 'object' ? rawProof : { name: rawProof }];
               }
               return [];
             })();
@@ -1287,7 +1316,7 @@ export default function AccountsVerificationModal({
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : (docName || rawProof || pDocDataUrl) ? (
                   <div
                     onClick={() => setViewingProofDocModal({
                       ...accountsVerificationModal,
@@ -1369,6 +1398,47 @@ export default function AccountsVerificationModal({
                       }}>
                         <CheckCircle size={13} color="#0E7490" /> Verified via Bank Remittance
                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+                        <Receipt size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>Payment Terms: {currentPayConfig?.label || 'Credit / Standard Terms'}</span>
+                          <span style={{ fontSize: '10px', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Terms Confirmed</span>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                          Standard credit / agreed terms for {bomCodeText}. Payment slip will be collected upon credit cycle settlement.
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      backgroundColor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      color: '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <CheckCircle size={13} color="#0E7490" /> Verified via Terms
                     </div>
                   </div>
                 )}
