@@ -2251,7 +2251,16 @@ const handleUploadFallback = async (req, res) => {
             ...(Array.isArray(bom.deliveryAddressProofDocs) ? bom.deliveryAddressProofDocs : []),
             bom.balanceProofDoc,
             bom.payments?.proofDocObj,
-            bom.payments?.balanceProofDocObj
+            bom.payments?.balanceProofDocObj,
+            bom.lrCopyDoc,
+            bom.vehicleLoading?.lrCopyDoc,
+            ...(Array.isArray(bom.vehicleLoading?.photos) ? bom.vehicleLoading.photos : []),
+            ...(Array.isArray(bom.vehicleLoading?.videos) ? bom.vehicleLoading.videos : []),
+            ...(Array.isArray(bom.dispatchPackingMedia?.photos) ? bom.dispatchPackingMedia.photos : []),
+            ...(Array.isArray(bom.dispatchPackingMedia?.videos) ? bom.dispatchPackingMedia.videos : []),
+            ...(Array.isArray(bom.loadingPhotos) ? bom.loadingPhotos : []),
+            ...(Array.isArray(bom.photos) ? bom.photos : []),
+            ...(Array.isArray(bom.vehiclePhotos) ? bom.vehiclePhotos : [])
           ].filter(Boolean);
 
           for (const d of docCandidates) {
@@ -2377,7 +2386,16 @@ app.get('/api/media/find/:name', (req, res) => {
             ...(Array.isArray(bom.deliveryAddressProofDocs) ? bom.deliveryAddressProofDocs : []),
             bom.balanceProofDoc,
             bom.payments?.proofDocObj,
-            bom.payments?.balanceProofDocObj
+            bom.payments?.balanceProofDocObj,
+            bom.lrCopyDoc,
+            bom.vehicleLoading?.lrCopyDoc,
+            ...(Array.isArray(bom.vehicleLoading?.photos) ? bom.vehicleLoading.photos : []),
+            ...(Array.isArray(bom.vehicleLoading?.videos) ? bom.vehicleLoading.videos : []),
+            ...(Array.isArray(bom.dispatchPackingMedia?.photos) ? bom.dispatchPackingMedia.photos : []),
+            ...(Array.isArray(bom.dispatchPackingMedia?.videos) ? bom.dispatchPackingMedia.videos : []),
+            ...(Array.isArray(bom.loadingPhotos) ? bom.loadingPhotos : []),
+            ...(Array.isArray(bom.photos) ? bom.photos : []),
+            ...(Array.isArray(bom.vehiclePhotos) ? bom.vehiclePhotos : [])
           ].filter(Boolean);
 
           for (const doc of candidates) {

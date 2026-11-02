@@ -24,6 +24,7 @@ import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from '../PerformaIn
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import ExecutiveOrderDossierModal from './ExecutiveOrderDossierModal';
 import LrUploadPopupModal from './LrUploadPopupModal';
+import DispatchMediaThumbnail from './DispatchMediaThumbnail';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts, notifyCreditPaymentSettled } from '../../services/notificationService';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 
@@ -7076,56 +7077,27 @@ export default function BomOrdersView(props) {
                 {hasMedia ? (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '4px' }}>
                     {packPhotos.map((ph, pIdx) => {
-                      const directStorageUrl = ph.storagePath ? `/api/uploads/${ph.storageBucket || 'bom-documents'}/${ph.storagePath}` : '';
-                      const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
-                        ? ph.url
-                        : (directStorageUrl || (ph.dataUrl && !ph.dataUrl.startsWith('blob:') ? ph.dataUrl : '') || (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${encodeURIComponent(ph.name)}` : '')));
                       return (
-                        <div
-                          key={pIdx}
-                          onClick={() => setPreviewDocModal({ title: ph.name || `Packed Item Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Photo ${pIdx + 1}`, dataUrl: photoUrl, url: ph.url || photoUrl } })}
-                          style={{
-                            height: '84px',
-                            borderRadius: '10px',
-                            overflow: 'hidden',
-                            cursor: 'pointer',
-                            border: '1.5px solid #CBD5E1',
-                            backgroundColor: '#0F172A',
-                            position: 'relative',
-                            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                            transition: 'transform 0.15s ease'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                          <img
-                            src={photoUrl || ph.dataUrl}
-                            alt={ph.name}
-                            onError={(e) => {
-                              if (!e.currentTarget.dataset.retried && ph.name) {
-                                e.currentTarget.dataset.retried = 'true';
-                                fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
-                                  .then(r => r.json())
-                                  .then(data => {
-                                    if (data?.found && data?.url) {
-                                      e.currentTarget.src = data.url;
-                                      saveMediaToCache(ph.name, data.url);
-                                    }
-                                  }).catch(() => {});
+                        <DispatchMediaThumbnail
+                          key={ph.id || pIdx}
+                          photo={ph}
+                          bomCode={confirmingBomModal?.bomCode || confirmingBomModal?.code}
+                          label="View Photo"
+                          onClick={(resolvedUrl) => {
+                            setPreviewDocModal({
+                              title: ph.name || `Packed Item Photo ${pIdx + 1}`,
+                              bomCode: confirmingBomModal?.bomCode || confirmingBomModal?.code,
+                              doc: {
+                                ...ph,
+                                name: ph.name || `Photo ${pIdx + 1}`,
+                                dataUrl: resolvedUrl,
+                                url: resolvedUrl,
+                                storageBucket: ph.storageBucket || 'bom-documents',
+                                storagePath: ph.storagePath
                               }
-                            }}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                          <div style={{
-                            position: 'absolute', bottom: 0, left: 0, right: 0,
-                            backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
-                            padding: '2px 6px', fontSize: '10px', fontWeight: '700',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                          }}>
-                            <span>📷 View Photo</span>
-                            <span>›</span>
-                          </div>
-                        </div>
+                            });
+                          }}
+                        />
                       );
                     })}
                     {packVideos.map((vd, vIdx) => {
@@ -7283,10 +7255,12 @@ export default function BomOrdersView(props) {
                       <button
                         type="button"
                         onClick={() => {
-                          const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : ((lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
+                          const lrStorageUrl = lrDoc?.storagePath ? `/api/uploads/bom-documents/${lrDoc.storagePath.replace(/^\/+/, '').replace(/^bom-documents\//, '')}` : '';
+                          const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? (lrDoc.url.startsWith('/uploads/') ? `/api${lrDoc.url}` : lrDoc.url) : (lrStorageUrl || (lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:') ? lrDoc.dataUrl : '') || (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
                           setPreviewDocModal({
                             title: `Lorry Receipt (LR) — ${lrNo !== '—' ? lrNo : confirmingBomModal.bomCode}`,
-                            doc: { ...lrDoc, url: docUrl, dataUrl: docUrl }
+                            bomCode: confirmingBomModal?.bomCode || confirmingBomModal?.code,
+                            doc: { ...lrDoc, url: docUrl, dataUrl: docUrl, storageBucket: lrDoc.storageBucket || 'bom-documents', storagePath: lrDoc.storagePath }
                           });
                         }}
                         style={{ border: 'none', backgroundColor: '#16A34A', color: 'white', padding: '6px 14px', borderRadius: '6px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
@@ -7303,55 +7277,27 @@ export default function BomOrdersView(props) {
                       </span>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                         {finalPhotos.map((ph, pIdx) => {
-                          const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
-                            ? ph.url
-                            : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
                           return (
-                            <div
-                              key={pIdx}
-                              onClick={() => setPreviewDocModal({ title: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, dataUrl: photoUrl, url: ph.url || photoUrl } })}
-                              style={{
-                                height: '84px',
-                                borderRadius: '10px',
-                                overflow: 'hidden',
-                                cursor: 'pointer',
-                                border: '1.5px solid #CBD5E1',
-                                backgroundColor: '#0F172A',
-                                position: 'relative',
-                                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                                transition: 'transform 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                            >
-                              <img
-                                src={photoUrl || ph.dataUrl}
-                                alt={ph.name || `Loading photo ${pIdx + 1}`}
-                                onError={(e) => {
-                                  if (!e.currentTarget.dataset.retried && ph.name) {
-                                    e.currentTarget.dataset.retried = 'true';
-                                    fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
-                                      .then(r => r.json())
-                                      .then(data => {
-                                        if (data?.found && data?.url) {
-                                          e.currentTarget.src = data.url;
-                                          saveMediaToCache(ph.name, data.url);
-                                        }
-                                      }).catch(() => {});
+                            <DispatchMediaThumbnail
+                              key={ph.id || pIdx}
+                              photo={ph}
+                              bomCode={confirmingBomModal?.bomCode || confirmingBomModal?.code}
+                              label="View Photo"
+                              onClick={(resolvedUrl) => {
+                                setPreviewDocModal({
+                                  title: ph.name || `Vehicle Loading Photo ${pIdx + 1}`,
+                                  bomCode: confirmingBomModal?.bomCode || confirmingBomModal?.code,
+                                  doc: {
+                                    ...ph,
+                                    name: ph.name || `Vehicle Loading Photo ${pIdx + 1}`,
+                                    dataUrl: resolvedUrl,
+                                    url: resolvedUrl,
+                                    storageBucket: ph.storageBucket || 'bom-documents',
+                                    storagePath: ph.storagePath
                                   }
-                                }}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              />
-                              <div style={{
-                                position: 'absolute', bottom: 0, left: 0, right: 0,
-                                backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
-                                padding: '2px 6px', fontSize: '10px', fontWeight: '700',
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                              }}>
-                                <span>📷 View Photo</span>
-                                <span>›</span>
-                              </div>
-                            </div>
+                                });
+                              }}
+                            />
                           );
                         })}
                       </div>
@@ -10267,39 +10213,28 @@ export default function BomOrdersView(props) {
                   {hasMedia ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                       {packPhotos.map((ph, pIdx) => {
-                        const directStorageUrl = ph.storagePath ? `/api/uploads/${ph.storageBucket || 'bom-documents'}/${ph.storagePath}` : '';
-                        const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
-                          ? ph.url
-                          : (directStorageUrl || (ph.dataUrl && !ph.dataUrl.startsWith('blob:') ? ph.dataUrl : '') || (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${encodeURIComponent(ph.name)}` : '')));
                         return (
-                          <div
-                            key={pIdx}
-                            onClick={() => setPreviewDocModal({ title: ph.name || `Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Photo ${pIdx + 1}`, dataUrl: photoUrl, url: ph.url || photoUrl } })}
-                            style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
-                          >
-                            <img
-                              src={photoUrl || ph.dataUrl}
-                              alt={ph.name}
-                              onError={(e) => {
-                                if (!e.currentTarget.dataset.retried && ph.name) {
-                                  e.currentTarget.dataset.retried = 'true';
-                                  fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
-                                    .then(r => r.json())
-                                    .then(data => {
-                                      if (data?.found && data?.url) {
-                                        e.currentTarget.src = data.url;
-                                        saveMediaToCache(ph.name, data.url);
-                                      }
-                                    }).catch(() => {});
+                          <DispatchMediaThumbnail
+                            key={ph.id || pIdx}
+                            photo={ph}
+                            bomCode={quickPreviewRecord?.bomCode || quickPreviewRecord?.code}
+                            height="76px"
+                            label="Photo"
+                            onClick={(resolvedUrl) => {
+                              setPreviewDocModal({
+                                title: ph.name || `Photo ${pIdx + 1}`,
+                                bomCode: quickPreviewRecord?.bomCode || quickPreviewRecord?.code,
+                                doc: {
+                                  ...ph,
+                                  name: ph.name || `Photo ${pIdx + 1}`,
+                                  dataUrl: resolvedUrl,
+                                  url: resolvedUrl,
+                                  storageBucket: ph.storageBucket || 'bom-documents',
+                                  storagePath: ph.storagePath
                                 }
-                              }}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                              <span>📷 Photo</span>
-                              <span>›</span>
-                            </div>
-                          </div>
+                              });
+                            }}
+                          />
                         );
                       })}
                       {packVideos.map((vd, vIdx) => {
@@ -10363,46 +10298,28 @@ export default function BomOrdersView(props) {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
                     {loadingPhotos.map((ph, pIdx) => {
-                      const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
-                        ? ph.url
-                        : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
                       return (
-                        <div
-                          key={pIdx}
-                          onClick={() => setPreviewDocModal({ title: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, dataUrl: photoUrl, url: photoUrl } })}
-                          style={{
-                            height: '76px',
-                            borderRadius: '10px',
-                            overflow: 'hidden',
-                            cursor: 'pointer',
-                            border: '1px solid #CBD5E1',
-                            backgroundColor: '#0F172A',
-                            position: 'relative'
-                          }}
-                        >
-                          <img
-                            src={photoUrl || ph.dataUrl}
-                            alt={ph.name || `Loading photo ${pIdx + 1}`}
-                            onError={(e) => {
-                              if (!e.currentTarget.dataset.retried && ph.name) {
-                                e.currentTarget.dataset.retried = 'true';
-                                fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
-                                  .then(r => r.json())
-                                  .then(data => {
-                                    if (data?.found && data?.url) {
-                                      e.currentTarget.src = data.url;
-                                      saveMediaToCache(ph.name, data.url);
-                                    }
-                                  }).catch(() => {});
+                        <DispatchMediaThumbnail
+                          key={ph.id || pIdx}
+                          photo={ph}
+                          bomCode={quickPreviewRecord?.bomCode || quickPreviewRecord?.code}
+                          height="76px"
+                          label="View"
+                          onClick={(resolvedUrl) => {
+                            setPreviewDocModal({
+                              title: ph.name || `Vehicle Loading Photo ${pIdx + 1}`,
+                              bomCode: quickPreviewRecord?.bomCode || quickPreviewRecord?.code,
+                              doc: {
+                                ...ph,
+                                name: ph.name || `Vehicle Loading Photo ${pIdx + 1}`,
+                                dataUrl: resolvedUrl,
+                                url: resolvedUrl,
+                                storageBucket: ph.storageBucket || 'bom-documents',
+                                storagePath: ph.storagePath
                               }
-                            }}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                            <span>📷 View</span>
-                            <span>›</span>
-                          </div>
-                        </div>
+                            });
+                          }}
+                        />
                       );
                     })}
                   </div>
