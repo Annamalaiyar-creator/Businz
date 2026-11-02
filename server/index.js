@@ -166,23 +166,25 @@ const deduplicateCustomerRecords = (list) => {
     const gKey = normGst(val.gstNumber || val.gstin || val.gstNo);
     const nKey = normName(val.companyName || val.customerName || val.name);
     const rawCode = String(val.customerCode || val.id || val.code || '').trim();
-    const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
+    const isRealCode = /^VRM-CS-\d{4}-\d+$/i.test(rawCode);
 
-    const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
+    const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : (isRealCode ? `code_${rawCode.toLowerCase()}` : `fallback_${normName(val.companyName || val.customerName || val.id)}`));
 
     if (!finalMap.has(dedupKey)) {
       finalMap.set(dedupKey, val);
     } else {
       const existing = finalMap.get(dedupKey);
-      const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
+      const existingHasRealCode = /^VRM-CS-\d{4}-\d+$/i.test(String(existing.customerCode || existing.code || existing.id || '').trim());
       const existingHasGst = normGst(existing.gstNumber || existing.gstin || existing.gstNo);
       const valHasGst = normGst(val.gstNumber || val.gstin || val.gstNo);
 
+      const resolvedCode = existingHasRealCode ? (existing.customerCode || existing.code) : (isRealCode ? (val.customerCode || val.code) : (existing.customerCode || val.customerCode || ''));
       const merged = {
         ...existing,
         ...val,
-        id: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : existing.id)),
-        customerCode: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : (existing.customerCode || val.customerCode))),
+        id: resolvedCode || existing.id,
+        customerCode: resolvedCode || existing.customerCode,
+        code: resolvedCode || existing.code,
         gstNumber: (existingHasGst || valHasGst || existing.gstNumber || val.gstNumber || ''),
         gstNo: (existingHasGst || valHasGst || existing.gstNo || val.gstNo || ''),
         companyName: existing.companyName || val.companyName,
@@ -192,7 +194,31 @@ const deduplicateCustomerRecords = (list) => {
       finalMap.set(dedupKey, merged);
     }
   }
-  return Array.from(finalMap.values());
+
+  // Ensure all deduplicated customers strictly follow the VRM-CS-YYYY-XX structure
+  const result = Array.from(finalMap.values());
+  const fy = getFinancialYear();
+  let maxSeq = 0;
+  result.forEach(c => {
+    const m = String(c.customerCode || c.id || c.code || '').match(new RegExp(`^VRM-CS-${fy}-(\\d+)$`, 'i'));
+    if (m && m[1]) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+  });
+
+  result.forEach(c => {
+    const raw = String(c.customerCode || c.id || c.code || '').trim();
+    if (!/^VRM-CS-\d{4}-\d+$/i.test(raw)) {
+      maxSeq++;
+      const assigned = `VRM-CS-${fy}-${String(maxSeq).padStart(2, '0')}`;
+      c.id = assigned;
+      c.customerCode = assigned;
+      c.code = assigned;
+    }
+  });
+
+  return result;
 };
 
 // In-memory active cache for server stores
@@ -411,12 +437,13 @@ const loadLocalCustomers = () => {
     const k = name.toLowerCase();
     const idKey = (c.customerCode || c.id || '').toLowerCase().trim();
     const existing = custMap.get(k) || (idKey ? custMap.get(idKey) : null) || {};
+    const validCode = (/^VRM-CS-\d{4}-\d+$/i.test(c.customerCode || c.id || c.code || '')) ? (c.customerCode || c.id || c.code) : (existing.customerCode || '');
     const merged = {
       ...existing,
       ...c,
-      id: c.customerCode || c.id || existing.id || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-      customerCode: c.customerCode || c.id || existing.customerCode || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
-      code: c.customerCode || c.id || existing.customerCode || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      id: validCode || existing.id,
+      customerCode: validCode || existing.customerCode,
+      code: validCode || existing.code,
       companyName: name,
       c2: name,
       customerName: c.customerName || existing.customerName || name,
@@ -497,43 +524,7 @@ const loadLocalCustomers = () => {
     return clean.length >= 10 ? clean : '';
   };
 
-  const finalMap = new Map();
-
-  for (const val of custMap.values()) {
-    if (!val) continue;
-    const gKey = normGst(val.gstNumber || val.gstin || val.gstNo);
-    const nKey = normName(val.companyName || val.customerName || val.name);
-    const rawCode = String(val.customerCode || val.id || val.code || '').trim();
-    const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
-
-    // Primary deduplication group key: GST first if valid, else normalized company name, else rawCode
-    const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
-
-    if (!finalMap.has(dedupKey)) {
-      finalMap.set(dedupKey, val);
-    } else {
-      const existing = finalMap.get(dedupKey);
-      const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
-      const existingHasGst = normGst(existing.gstNumber || existing.gstin || existing.gstNo);
-      const valHasGst = normGst(val.gstNumber || val.gstin || val.gstNo);
-
-      // Merge intelligently: Prefer official VRM-CS code, valid GST, and more complete fields
-      const merged = {
-        ...existing,
-        ...val,
-        id: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : existing.id)),
-        customerCode: (existingHasRealCode ? existing.customerCode : (isRealCode ? val.customerCode : (existing.customerCode || val.customerCode))),
-        gstNumber: (existingHasGst || valHasGst || existing.gstNumber || val.gstNumber || ''),
-        gstNo: (existingHasGst || valHasGst || existing.gstNo || val.gstNo || ''),
-        companyName: existing.companyName || val.companyName,
-        customerName: existing.customerName || val.customerName || existing.companyName || val.companyName,
-        createdAt: existing.createdAt || val.createdAt || new Date().toISOString()
-      };
-      finalMap.set(dedupKey, merged);
-    }
-  }
-
-  const result = Array.from(finalMap.values());
+  const result = deduplicateCustomerRecords(Array.from(custMap.values()));
   if (result.length > 0) {
     supabaseMemoryStore.customer_store = result;
     supabaseMemoryStore.crm_customers = result;
@@ -4208,9 +4199,9 @@ app.post('/api/customers', async (req, res) => {
     const incNormName = normalizeCustName(incName);
     const incGst = normalizeCustGst(incoming.gstNumber || incoming.gstin || incoming.gstNo || '');
     const incPhone = normalizeCustPhone(incoming.phone || incoming.mobile || incoming.primaryContact?.phone || '');
-    const rawIncCode = String(incoming.customerCode || incoming.id || '').trim();
+    const rawIncCode = String(incoming.customerCode || incoming.id || incoming.code || '').trim();
     const incCode = rawIncCode.toLowerCase();
-    const isFakeCode = !rawIncCode || incCode.startsWith('cust-') || incCode.startsWith('cust_') || incCode.startsWith('vrm-cust-') || incCode === incNormName;
+    const isFakeCode = !rawIncCode || !/^VRM-CS-\d{4}-\d+$/i.test(rawIncCode);
 
     // Strict Multi-field Deduplication Matching:
     // 1. GST match (highest priority, globally unique in India)
@@ -4228,10 +4219,10 @@ app.post('/api/customers', async (req, res) => {
       matchedExisting = byPhone.get(incPhone);
     }
 
-    let customerId = matchedExisting ? (matchedExisting.customerCode || matchedExisting.id) : null;
-    if (!customerId || isFakeCode) {
-      if (matchedExisting && matchedExisting.customerCode && !matchedExisting.customerCode.toLowerCase().startsWith('cust-')) {
-        customerId = matchedExisting.customerCode;
+    let customerId = matchedExisting ? (matchedExisting.customerCode || matchedExisting.id || matchedExisting.code) : null;
+    if (!customerId || !/^VRM-CS-\d{4}-\d+$/i.test(customerId)) {
+      if (rawIncCode && !isFakeCode) {
+        customerId = rawIncCode;
       } else {
         const { code } = getNextSequence('CS', localCustomers);
         customerId = code || `VRM-CS-${getFinancialYear()}-${String(nextCounter++).padStart(2, '0')}`;
@@ -4247,6 +4238,7 @@ app.post('/api/customers', async (req, res) => {
       ...(matchedExisting || {}),
       id: customerId,
       customerCode: customerId,
+      code: customerId,
       customerName: incoming.customerName || incoming.companyName || matchedExisting?.customerName || incoming.name || 'New Customer',
       companyName: incoming.companyName || incoming.customerName || matchedExisting?.companyName || incoming.name || 'New Customer',
       customerType: incoming.customerType || matchedExisting?.customerType || 'EPC Contractor',

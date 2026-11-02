@@ -362,14 +362,14 @@ export default function CrmCustomersView({
       const gKey = normGst(c.gstNumber || c.gstNo || c.gstin);
       const nKey = normName(c.companyName || c.customerName || c.name);
       const rawCode = String(c.customerCode || c.id || c.code || '').trim();
-      const isRealCode = rawCode && !rawCode.toLowerCase().startsWith('cust-') && !rawCode.toLowerCase().startsWith('cust_');
+      const isRealCode = /^VRM-CS-\d{4}-\d+$/i.test(rawCode);
 
       const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
       if (!dedupMap.has(dedupKey)) {
         dedupMap.set(dedupKey, c);
       } else {
         const existing = dedupMap.get(dedupKey);
-        const existingHasRealCode = existing.customerCode && !existing.customerCode.toLowerCase().startsWith('cust-');
+        const existingHasRealCode = /^VRM-CS-\d{4}-\d+$/i.test(String(existing.customerCode || existing.id || '').trim());
         const existingHasGst = normGst(existing.gstNumber || existing.gstNo || existing.gstin);
         const cHasGst = normGst(c.gstNumber || c.gstNo || c.gstin);
 
