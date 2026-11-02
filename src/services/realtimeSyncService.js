@@ -198,7 +198,17 @@ export const initRealtimeSync = () => {
                   if (Array.isArray(existing)) {
                     const idx = existing.findIndex(p => p && (String(p.piNo || p.id).trim().toLowerCase() === k));
                     if (idx !== -1) {
-                      existing[idx] = { ...existing[idx], ...updatedPi };
+                      existing[idx] = {
+                        ...existing[idx],
+                        ...updatedPi,
+                        salesPerson: updatedPi.salesPerson || updatedPi.assignedSalesperson || existing[idx].salesPerson,
+                        salesPersonCode: updatedPi.salesPersonCode || updatedPi.assignedSalespersonCode || existing[idx].salesPersonCode,
+                        assignedSalesperson: updatedPi.assignedSalesperson || updatedPi.salesPerson || existing[idx].assignedSalesperson,
+                        assignedSalespersonCode: updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode || existing[idx].assignedSalespersonCode,
+                        assignedToCode: updatedPi.assignedToCode || updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode,
+                        assignedToId: updatedPi.assignedToId || updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode,
+                        assignedToName: updatedPi.assignedToName || updatedPi.assignedSalesperson || updatedPi.salesPerson
+                      };
                     } else {
                       existing.unshift(updatedPi);
                     }

@@ -579,6 +579,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
       const assignedName = String(pi.assignedSalesperson || pi.assignedToName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
 
+      // -1. Strict Instant Real-Time Safeguard: If PI is explicitly assigned to another salesperson, it must immediately be excluded
+      const isAssignedToOther = assignedCode && assignedCode !== curCode && !(
+        (curCode === 'SE-1000' && assignedCode === 'SE-001') ||
+        (curCode === 'SE-001' && assignedCode === 'SE-1000')
+      );
+      if (isAssignedToOther) {
+        return false;
+      }
+
       // 0. Direct match on assigned salesperson code or assigned name (from Tech Support or Management assignment)
       if (curCode && assignedCode && (assignedCode === curCode || (curCode === 'SE-1000' && assignedCode === 'SE-001') || (curCode === 'SE-001' && assignedCode === 'SE-1000'))) {
         return true;
@@ -832,7 +841,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           let next;
           if (idx !== -1) {
             next = [...list];
-            next[idx] = { ...list[idx], ...norm };
+            next[idx] = {
+              ...list[idx],
+              ...norm,
+              salesPerson: norm.salesPerson || norm.assignedSalesperson || norm.salesperson || list[idx].salesPerson,
+              salesperson: norm.salesperson || norm.salesPerson || norm.assignedSalesperson || list[idx].salesperson,
+              salesRep: norm.salesRep || norm.salesPerson || norm.assignedSalesperson || list[idx].salesRep,
+              salesPersonCode: norm.salesPersonCode || norm.assignedSalespersonCode || list[idx].salesPersonCode,
+              assignedSalesperson: norm.assignedSalesperson || norm.salesPerson || list[idx].assignedSalesperson,
+              assignedSalespersonCode: norm.assignedSalespersonCode || norm.salesPersonCode || list[idx].assignedSalespersonCode,
+              assignedToCode: norm.assignedToCode || norm.assignedSalespersonCode || norm.salesPersonCode,
+              assignedToId: norm.assignedToId || norm.assignedSalespersonCode || norm.salesPersonCode,
+              assignedToName: norm.assignedToName || norm.assignedSalesperson || norm.salesPerson
+            };
           } else {
             next = [norm, ...list];
           }
@@ -857,7 +878,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   let next;
                   if (idx !== -1) {
                     next = [...list];
-                    next[idx] = { ...list[idx], ...normMatched };
+                    next[idx] = {
+                      ...list[idx],
+                      ...normMatched,
+                      salesPerson: normMatched.salesPerson || normMatched.assignedSalesperson || list[idx].salesPerson,
+                      salesperson: normMatched.salesperson || normMatched.salesPerson || list[idx].salesperson,
+                      salesRep: normMatched.salesRep || normMatched.salesPerson || list[idx].salesRep,
+                      salesPersonCode: normMatched.salesPersonCode || normMatched.assignedSalespersonCode || list[idx].salesPersonCode,
+                      assignedSalesperson: normMatched.assignedSalesperson || normMatched.salesPerson || list[idx].assignedSalesperson,
+                      assignedSalespersonCode: normMatched.assignedSalespersonCode || normMatched.salesPersonCode || list[idx].assignedSalespersonCode,
+                      assignedToCode: normMatched.assignedToCode || normMatched.assignedSalespersonCode || normMatched.salesPersonCode,
+                      assignedToId: normMatched.assignedToId || normMatched.assignedSalespersonCode || normMatched.salesPersonCode,
+                      assignedToName: normMatched.assignedToName || normMatched.assignedSalesperson || normMatched.salesPerson
+                    };
                   } else {
                     next = [normMatched, ...list];
                   }

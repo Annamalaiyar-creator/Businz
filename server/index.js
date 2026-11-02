@@ -9982,6 +9982,9 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
       localSales = [...supabaseMemoryStore['sales_pi_store']];
     }
 
+    let prevAssignedToCode = null;
+    let prevAssignedToName = null;
+
     const assignmentMeta = {
       salesPerson: assignedToName,
       salesperson: assignedToName,
@@ -9990,6 +9993,9 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
       salesPersonEmail: assignedToEmail || (updatedPi ? updatedPi.salesPersonEmail : ''),
       assignedSalesperson: assignedToName,
       assignedSalespersonCode: assignedToId,
+      assignedToCode: assignedToId,
+      assignedToId: assignedToId,
+      assignedToName: assignedToName,
       assignedBy: assignerUser.employee_name,
       assignedByRole: assignerUser.role,
       assignedAt: assignedTimestamp,
@@ -10002,6 +10008,8 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
         const match = String(p.piNo || p.id || '').trim().toLowerCase() === cleanPiNo.toLowerCase();
         if (match) {
           foundInSales = true;
+          prevAssignedToCode = p.assignedSalespersonCode || p.salesPersonCode || p.assignedToCode || null;
+          prevAssignedToName = p.assignedSalesperson || p.salesPerson || p.assignedToName || null;
           const prevHistory = Array.isArray(p.assignmentHistory) ? p.assignmentHistory : [];
           const newHistoryItem = {
             assigned_to_name: assignedToName,
@@ -10043,6 +10051,10 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
           localProforma = localProforma.map(p => {
             if (String(p.piNo || p.id || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) {
               foundInProforma = true;
+              if (!prevAssignedToCode) {
+                prevAssignedToCode = p.assignedSalespersonCode || p.salesPersonCode || p.assignedToCode || null;
+                prevAssignedToName = p.assignedSalesperson || p.salesPerson || p.assignedToName || null;
+              }
               const merged = {
                 ...(updatedPi || p),
                 ...assignmentMeta
@@ -10062,10 +10074,27 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
       } catch (_) {}
     }
 
-    broadcastRealtimeEvent('sales_pi_assigned', { piNo: cleanPiNo, assignedToId, assignedToName, updatedPi, pi: updatedPi });
-    broadcastRealtimeEvent('pi_updated', { action: 'assign', piNo: cleanPiNo, assignedToId, assignedToName, updatedPi, pi: updatedPi });
+    broadcastRealtimeEvent('sales_pi_assigned', {
+      piNo: cleanPiNo,
+      assignedToId,
+      assignedToName,
+      previousAssigneeId: prevAssignedToCode,
+      previousAssigneeName: prevAssignedToName,
+      updatedPi,
+      pi: updatedPi
+    });
+    broadcastRealtimeEvent('pi_updated', {
+      action: 'assign',
+      piNo: cleanPiNo,
+      assignedToId,
+      assignedToName,
+      previousAssigneeId: prevAssignedToCode,
+      previousAssigneeName: prevAssignedToName,
+      updatedPi,
+      pi: updatedPi
+    });
 
-    // Send real-time internal notification to the assigned salesperson
+    // Send real-time internal notification to the newly assigned salesperson
     try {
       await createInternalNotification({
         recipientEmpCode: assignedToId,
@@ -10084,6 +10113,29 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
       });
     } catch (notifErr) {
       console.warn('[PI Notification Warning]:', notifErr.message);
+    }
+
+    // Also notify previous assignee if reassigned so their screen removes it in real time
+    if (prevAssignedToCode && String(prevAssignedToCode).trim().toLowerCase() !== String(assignedToId).trim().toLowerCase()) {
+      try {
+        await createInternalNotification({
+          recipientEmpCode: prevAssignedToCode,
+          recipientRole: 'Sales Executive',
+          eventType: 'PI_REASSIGNED',
+          documentType: 'proforma_invoice',
+          documentId: cleanPiNo,
+          title: `ℹ️ Proforma Invoice Reassigned: ${cleanPiNo}`,
+          message: `Proforma Invoice #${cleanPiNo} has been reassigned to ${assignedToName} by ${assignerUser.employee_name}.`,
+          actorEmpCode: assignerUser.employee_code,
+          actorName: assignerUser.employee_name,
+          actorRole: assignerUser.role,
+          targetTab: 'Proforma Invoice',
+          targetRecordId: cleanPiNo,
+          dedupId: `pi_reassigned_${cleanPiNo}_${prevAssignedToCode}_${Date.now()}`
+        });
+      } catch (prevNotifErr) {
+        console.warn('[PI Reassign Notification Warning]:', prevNotifErr.message);
+      }
     }
 
     res.json({
