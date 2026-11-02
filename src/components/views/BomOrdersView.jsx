@@ -475,6 +475,28 @@ export default function BomOrdersView(props) {
     if (uploadPaymentModal) {
       setPaymentProofFiles([]);
       setPaymentProofFile(null);
+      setModalBalanceAmount('');
+      const isCredit = String(uploadPaymentModal.paymentType || '').toLowerCase().includes('credit') ||
+                       String(uploadPaymentModal.paymentType || '').toLowerCase().includes('net ') ||
+                       Number(uploadPaymentModal.creditDays || 0) > 0;
+      setPaymentModalTab(isCredit ? 'credit' : 'proof');
+      const cDays = Number(uploadPaymentModal.creditDays || 30) || 30;
+      setModalCreditDays(cDays);
+      setModalCreditTerm(uploadPaymentModal.paymentType || 'Net 30 Days');
+      setModalCreditApprovedBy(uploadPaymentModal.creditApprovedBy || 'MD / Management');
+      setModalCreditNotes(uploadPaymentModal.creditNotes || '');
+
+      const rawDate = uploadPaymentModal.date || uploadPaymentModal.createdAt || new Date();
+      const baseD = new Date(rawDate);
+      if (!isNaN(baseD.getTime())) {
+        baseD.setDate(baseD.getDate() + cDays);
+        setModalCreditDueDate(baseD.toISOString().split('T')[0]);
+      } else {
+        const d = new Date();
+        d.setDate(d.getDate() + cDays);
+        setModalCreditDueDate(d.toISOString().split('T')[0]);
+      }
+
       const docs = (() => {
         if (Array.isArray(uploadPaymentModal.paymentProofDocs) && uploadPaymentModal.paymentProofDocs.length > 0) {
           return [...uploadPaymentModal.paymentProofDocs];
@@ -501,6 +523,8 @@ export default function BomOrdersView(props) {
       setPaymentProofFiles([]);
       setExistingPaymentDocsList([]);
       setPaymentProofFile(null);
+      setModalBalanceAmount('');
+      setPaymentModalTab('proof');
     }
   }, [uploadPaymentModal]);
 
@@ -540,6 +564,13 @@ export default function BomOrdersView(props) {
   const [newBomPaymentType, setNewBomPaymentType] = useState('100% Paid');
   const [newBomPartialAmount, setNewBomPartialAmount] = useState('');
   const [modalBalanceAmount, setModalBalanceAmount] = useState('');
+  const [paymentModalTab, setPaymentModalTab] = useState('proof'); // 'proof' | 'credit'
+  const [modalCreditDays, setModalCreditDays] = useState(30);
+  const [modalCreditDueDate, setModalCreditDueDate] = useState('');
+  const [modalCreditTerm, setModalCreditTerm] = useState('Net 30 Days');
+  const [modalCreditApprovedBy, setModalCreditApprovedBy] = useState('MD / Management');
+  const [modalCreditNotes, setModalCreditNotes] = useState('');
+  const [isSavingCredit, setIsSavingCredit] = useState(false);
   const [newBomCreditDays, setNewBomCreditDays] = useState(7);
   const [sameAsBilling, setSameAsBilling] = useState(true);
   const [newBomDeliveryProofDoc, setNewBomDeliveryProofDoc] = useState(null);
@@ -9047,7 +9078,34 @@ export default function BomOrdersView(props) {
             if (!codeVal) return null;
             const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
             if (!targetRow) return null;
-            if (targetRow.salesConfirmed || targetRow.cancelled || (targetRow.status || '').toLowerCase().includes('cancel') || targetRow.status === 'Completed' || targetRow.status === 'Closed' || targetRow.fullyCompleted) return null;
+
+            const storeBom = (bomStore || []).find(b => (b.bomCode || b.code || b.id) === (targetRow.bomCode || targetRow.code || targetRow.id));
+            const effectiveBom = storeBom || targetRow;
+
+            // Reconfirm BOM must strictly NOT be visible if already confirmed and sent to dispatch packing
+            const isAlreadyConfirmedOrSent = Boolean(
+              effectiveBom.salesConfirmed ||
+              effectiveBom.salesReconfirmed ||
+              effectiveBom.salesConfirmedAt ||
+              effectiveBom.stockBlocked ||
+              effectiveBom.stockDeducted ||
+              effectiveBom.dispatchPackingVerified ||
+              effectiveBom.packingStatus === 'PACKING_VERIFIED' ||
+              (effectiveBom.dispatchPacking && effectiveBom.dispatchPacking.some(p => p && (p.packed || p.scanned || p.checked))) ||
+              (typeof effectiveBom.status === 'string' && (
+                effectiveBom.status.toLowerCase().includes('dispatch') ||
+                effectiveBom.status.toLowerCase().includes('packing') ||
+                effectiveBom.status.toLowerCase().includes('confirmed') ||
+                effectiveBom.status.toLowerCase().includes('accounts') ||
+                effectiveBom.status.toLowerCase().includes('invoice') ||
+                effectiveBom.status.toLowerCase().includes('closed') ||
+                effectiveBom.status.toLowerCase().includes('completed') ||
+                effectiveBom.status.toLowerCase().includes('cancel')
+              )) ||
+              effectiveBom.cancelled ||
+              effectiveBom.fullyCompleted
+            );
+            if (isAlreadyConfirmedOrSent) return null;
 
             return (
               <button
@@ -10183,387 +10241,733 @@ export default function BomOrdersView(props) {
 
       {/* VIEW / UPLOAD PAYMENT DETAILS MODAL */}
       {uploadPaymentModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, fontFamily: "'DM Sans', sans-serif" }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '28px', maxWidth: '520px', width: '90%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, fontFamily: "'DM Sans', sans-serif", padding: '16px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px 28px', maxWidth: '620px', width: '100%', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            
+            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CreditCard style={{ width: '18px', height: '18px' }} />
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CreditCard style={{ width: '20px', height: '20px' }} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Payment Details & Proof</h3>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>{uploadPaymentModal.bomCode} — {uploadPaymentModal.paymentType || '100% Full Advance'}</span>
+                  <h3 style={{ fontSize: '17px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Payment Details & Proof</h3>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>
+                    {uploadPaymentModal.bomCode || uploadPaymentModal.code} — {uploadPaymentModal.customerName || uploadPaymentModal.companyName || 'Customer Order'}
+                  </span>
                 </div>
               </div>
-              <button onClick={() => setUploadPaymentModal(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}><X style={{ width: '18px', height: '18px' }} /></button>
+              <button onClick={() => setUploadPaymentModal(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}>
+                <X style={{ width: '20px', height: '20px' }} />
+              </button>
             </div>
 
-            {(() => {
-              const totalAttachedCount = existingPaymentDocsList.length + paymentProofFiles.length;
-              const hasProof = totalAttachedCount > 0;
+            {/* TOP NAVIGATION / MODE SWITCH: Payment Proof vs Credit Payment */}
+            <div style={{ display: 'flex', gap: '8px', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setPaymentModalTab('proof')}
+                style={{
+                  flex: 1,
+                  padding: '8px 14px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  borderRadius: '7px',
+                  border: 'none',
+                  backgroundColor: paymentModalTab === 'proof' ? '#FFFFFF' : 'transparent',
+                  color: paymentModalTab === 'proof' ? '#0E7490' : '#64748B',
+                  boxShadow: paymentModalTab === 'proof' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Receipt size={14} /> Payment Proof (While Dispatch / Partial)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentModalTab('credit')}
+                style={{
+                  flex: 1,
+                  padding: '8px 14px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  borderRadius: '7px',
+                  border: 'none',
+                  backgroundColor: paymentModalTab === 'credit' ? '#0E7490' : 'transparent',
+                  color: paymentModalTab === 'credit' ? '#FFFFFF' : '#64748B',
+                  boxShadow: paymentModalTab === 'credit' ? '0 2px 4px rgba(14,116,144,0.3)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <CreditCard size={14} /> Credit Payment
+              </button>
+            </div>
 
-              return (
-                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Payment Status</span>
-                    <span style={{ backgroundColor: hasProof ? '#DCFCE7' : '#FEF3C7', color: hasProof ? '#166534' : '#B45309', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '12px', border: hasProof ? '1px solid #BBF7D0' : '1px solid #FDE68A' }}>
-                      {hasProof ? `✓ ${totalAttachedCount} Payment Proof${totalAttachedCount > 1 ? 's' : ''} Attached` : '• Pending Payment Upload'}
+            {/* TAB 1: CREDIT PAYMENT VIEW */}
+            {paymentModalTab === 'credit' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Order Summary Card */}
+                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '12px' }}>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Customer</span>
+                    <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.customerName || uploadPaymentModal.companyName || '—'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Total Amount</span>
+                    <strong style={{ color: '#059669', fontSize: '13px' }}>
+                      ₹ {Number(uploadPaymentModal.grandTotal || uploadPaymentModal.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Current Terms</span>
+                    <strong style={{ color: '#0E7490' }}>{uploadPaymentModal.paymentType || 'Credit Payment'}</strong>
+                  </div>
+                </div>
+
+                {/* Credit Configuration Card */}
+                <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
+                    <Lock size={16} style={{ color: '#0E7490' }} />
+                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                      Configure Customer Credit Approval & Terms
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', fontSize: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Customer Name</span>
-                      <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.customerName || uploadPaymentModal.companyName || '—'}</strong>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                        Credit Payment Term
+                      </label>
+                      <select
+                        value={modalCreditTerm}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setModalCreditTerm(val);
+                          let days = 30;
+                          if (val.includes('15')) days = 15;
+                          else if (val.includes('30')) days = 30;
+                          else if (val.includes('45')) days = 45;
+                          else if (val.includes('60')) days = 60;
+                          else if (val.includes('7')) days = 7;
+                          setModalCreditDays(days);
+                          const rawDate = uploadPaymentModal.date || uploadPaymentModal.createdAt || new Date();
+                          const baseD = new Date(rawDate);
+                          if (!isNaN(baseD.getTime())) {
+                            baseD.setDate(baseD.getDate() + days);
+                            setModalCreditDueDate(baseD.toISOString().split('T')[0]);
+                          }
+                        }}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', fontWeight: '600', color: '#0F172A', outline: 'none' }}
+                      >
+                        <option value="Net 30 Days">Net 30 Days (Standard Credit)</option>
+                        <option value="Net 15 Days">Net 15 Days</option>
+                        <option value="Net 45 Days">Net 45 Days</option>
+                        <option value="Net 60 Days">Net 60 Days</option>
+                        <option value="Credit Payment">Credit Payment (Custom)</option>
+                      </select>
                     </div>
+
                     <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Payment Terms</span>
-                      <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.paymentType || '100% Full Advance'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Grand Total Amount</span>
-                      <strong style={{ color: '#059669', fontSize: '14px', fontWeight: '800' }}>
-                        ₹ {Number(uploadPaymentModal.grandTotal || uploadPaymentModal.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Order Ref Code</span>
-                      <strong style={{ color: '#0E7490' }}>{uploadPaymentModal.bomCode || '—'}</strong>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                        Credit Days Limit
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="180"
+                        value={modalCreditDays}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          setModalCreditDays(val);
+                          const rawDate = uploadPaymentModal.date || uploadPaymentModal.createdAt || new Date();
+                          const baseD = new Date(rawDate);
+                          if (!isNaN(baseD.getTime()) && val > 0) {
+                            baseD.setDate(baseD.getDate() + val);
+                            setModalCreditDueDate(baseD.toISOString().split('T')[0]);
+                          }
+                        }}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', fontWeight: '600', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                        placeholder="e.g. 30"
+                      />
                     </div>
                   </div>
 
-                  {/* 1. Existing Attached Proofs Gallery */}
-                  {existingPaymentDocsList.length > 0 && (
-                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <CheckCircle size={14} style={{ color: '#16A34A' }} />
-                          Verified Payment Slips on File ({existingPaymentDocsList.length})
-                        </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                        Payment Due Date
+                      </label>
+                      <input
+                        type="date"
+                        value={modalCreditDueDate}
+                        onChange={(e) => setModalCreditDueDate(e.target.value)}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                        Approved By / Authorization
+                      </label>
+                      <input
+                        type="text"
+                        value={modalCreditApprovedBy}
+                        onChange={(e) => setModalCreditApprovedBy(e.target.value)}
+                        placeholder="e.g. MD / Management Approval"
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                      Credit Terms Notes & Authorization Reference
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={modalCreditNotes}
+                      onChange={(e) => setModalCreditNotes(e.target.value)}
+                      placeholder="Add any specific credit agreement notes, customer PO reference, or payment schedule terms..."
+                      style={{ width: '100%', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '8px 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Credit Action Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setUploadPaymentModal(null)}
+                    style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingCredit}
+                    onClick={async () => {
+                      setIsSavingCredit(true);
+                      try {
+                        const cDays = parseInt(modalCreditDays, 10) || 30;
+                        const updatedBomData = {
+                          ...uploadPaymentModal,
+                          paymentType: modalCreditTerm,
+                          paymentTerms: modalCreditTerm,
+                          creditDays: cDays,
+                          creditDueDate: modalCreditDueDate,
+                          creditApprovedBy: modalCreditApprovedBy,
+                          creditNotes: modalCreditNotes,
+                          isCreditOrder: true,
+                          paymentUpdated: true
+                        };
+
+                        const updatedList = (bomStore || []).map(b => (b.bomCode === uploadPaymentModal.bomCode || b.code === uploadPaymentModal.bomCode || b.id === uploadPaymentModal.bomCode) ? {
+                          ...b,
+                          ...updatedBomData
+                        } : b);
+
+                        setBomStore(updatedList);
+                        safeSaveBomStoreToLocal(updatedList);
+
+                        const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode || b.code === uploadPaymentModal.bomCode || b.id === uploadPaymentModal.bomCode);
+                        if (targetBom) {
+                          saveCloudBomRow(targetBom);
+                          fetch('/api/boms', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+                          }).catch(() => {});
+                        }
+
+                        setUploadPaymentModal(null);
+                        alert(`✅ Credit terms (${modalCreditTerm}, ${cDays} Days) saved successfully for ${uploadPaymentModal.bomCode}!`);
+                      } catch (err) {
+                        alert('Failed to save credit terms: ' + (err.message || 'Unknown error'));
+                      } finally {
+                        setIsSavingCredit(false);
+                      }
+                    }}
+                    style={{
+                      padding: '9px 22px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: '#0E7490',
+                      color: 'white',
+                      fontSize: '13px',
+                      fontWeight: '800',
+                      cursor: isSavingCredit ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 4px rgba(14,116,144,0.3)',
+                      opacity: isSavingCredit ? 0.7 : 1
+                    }}
+                  >
+                    {isSavingCredit ? (
+                      <>
+                        <RotateCcw style={{ width: '15px', height: '15px', animation: 'spin 0.75s linear infinite' }} />
+                        Saving Credit Terms...
+                      </>
+                    ) : (
+                      <>
+                        <Save style={{ width: '15px', height: '15px' }} />
+                        Save Credit Terms
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: REGULAR PAYMENT PROOF VIEW (While Dispatch / Partial) */}
+            {paymentModalTab === 'proof' && (() => {
+              const totalAttachedCount = existingPaymentDocsList.length + paymentProofFiles.length;
+              const isPartial = uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment';
+              const isWhileDispatch = uploadPaymentModal.paymentType === 'Payment While Dispatch' || String(uploadPaymentModal.paymentType || '').includes('While Dispatch');
+              const prevBal = uploadPaymentModal.balanceAmount != null ? uploadPaymentModal.balanceAmount : Math.max(0, (uploadPaymentModal.grandTotal || 0) - (uploadPaymentModal.partialAmount || 0));
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                  {/* Order Financial Status Banner */}
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Payment Status</span>
+                      <span style={{ backgroundColor: totalAttachedCount > 0 ? '#DCFCE7' : '#FEF3C7', color: totalAttachedCount > 0 ? '#166534' : '#B45309', fontSize: '11px', fontWeight: '800', padding: '3px 10px', borderRadius: '10px', border: totalAttachedCount > 0 ? '1px solid #BBF7D0' : '1px solid #FDE68A' }}>
+                        {totalAttachedCount > 0 ? `✓ ${totalAttachedCount} Payment Proof${totalAttachedCount > 1 ? 's' : ''} on File` : '• Awaiting Payment Proof'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Customer</span>
+                        <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.customerName || uploadPaymentModal.companyName || '—'}</strong>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                        {existingPaymentDocsList.map((doc, idx) => {
-                          const dName = doc.name || doc.originalName || `Proof #${idx + 1}`;
-                          const dUrl = doc.dataUrl || doc.url || doc.previewUrl || getMediaFromCache(dName);
-                          const isImg = Boolean(dUrl && (dUrl.startsWith('data:image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(dName)));
-                          return (
-                            <div key={idx} style={{ border: '1px solid #CBD5E1', borderRadius: '10px', padding: '8px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                              <div
-                                onClick={() => setPreviewDocModal({ title: `Payment Proof #${idx + 1}: ${dName}`, doc, bomCode: uploadPaymentModal.bomCode })}
-                                style={{ width: '100%', height: '80px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '1px solid #F1F5F9' }}
-                                title="Click to view full image"
-                              >
-                                {isImg && dUrl ? (
-                                  <img src={dUrl} alt={dName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  <FileText size={28} style={{ color: '#0E7490' }} />
-                                )}
-                              </div>
-                              <span style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'center' }} title={dName}>
-                                {dName}
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Payment Terms</span>
+                        <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.paymentType || '100% Full Advance'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Total Amount</span>
+                        <strong style={{ color: '#059669', fontSize: '13px' }}>
+                          ₹ {Number(uploadPaymentModal.grandTotal || uploadPaymentModal.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 1: Adding Payment Proof (for Payment While Dispatch & Partially Paid) */}
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Receipt size={16} /> Section 1: Add Payment Proof ({isWhileDispatch ? 'Payment While Dispatch' : (isPartial ? 'Partially Paid' : 'Advance Payment')})
+                      </span>
+                      {isWhileDispatch && (
+                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #FDE68A' }}>
+                          Payment While Dispatch
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Breakdown for Partial Payment */}
+                    {isPartial && (
+                      <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontSize: '11px', color: '#0D9488', display: 'block', fontWeight: '700' }}>Advance Paid:</span>
+                          <strong style={{ fontSize: '13px', color: '#0F766E' }}>₹{Number(uploadPaymentModal.partialAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '11px', color: '#0D9488', display: 'block', fontWeight: '700' }}>Remaining Balance Due:</span>
+                          <strong style={{ fontSize: '14px', color: '#0F766E' }}>
+                            ₹{Number(prevBal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+
+                    {isPartial && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
+                          Balance Amount Paid Now (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="Enter balance amount paid..."
+                          value={modalBalanceAmount}
+                          onChange={(e) => setModalBalanceAmount(e.target.value)}
+                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    )}
+
+                    {/* File Dropzone */}
+                    <div style={{
+                      border: '2px dashed #0E7490',
+                      backgroundColor: '#F0FDFA',
+                      borderRadius: '10px',
+                      padding: '14px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <UploadCloud style={{ width: '26px', height: '26px', color: '#0E7490' }} />
+                      <span style={{ fontSize: '12px', color: '#334155', fontWeight: '700' }}>
+                        Select payment proof image(s) or bank transfer slip
+                      </span>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 4px rgba(14,116,144,0.25)' }}>
+                        <Upload style={{ width: '13px', height: '13px' }} />
+                        {paymentProofFiles.length > 0 ? '+ Add More Images' : 'Browse Files'}
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              const newFiles = Array.from(e.target.files).filter(f => {
+                                try {
+                                  validateClientFile(f);
+                                  return true;
+                                } catch (err) {
+                                  alert(`⚠️ Skipped ${f.name}: ${err.message}`);
+                                  return false;
+                                }
+                              });
+                              setPaymentProofFiles(prev => [...prev, ...newFiles]);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                      <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                        Supported formats: JPG, PNG, WEBP, PDF
+                      </span>
+                    </div>
+
+                    {/* Newly Staged Files List */}
+                    {paymentProofFiles.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490' }}>
+                          New Files Ready to Save ({paymentProofFiles.length}):
+                        </span>
+                        {paymentProofFiles.map((file, fIdx) => (
+                          <div
+                            key={fIdx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 10px',
+                              backgroundColor: '#F0FDFA',
+                              border: '1px solid #99F6E4',
+                              borderRadius: '6px',
+                              fontSize: '11.5px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                              <FileText size={14} style={{ color: '#0E7490', flexShrink: 0 }} />
+                              <span style={{ fontWeight: '700', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
+                                {file.name}
                               </span>
-                              <div style={{ display: 'flex', gap: '4px', width: '100%' }}>
+                              <span style={{ color: '#64748B', fontSize: '10px', flexShrink: 0 }}>
+                                ({(file.size / 1024).toFixed(0)} KB)
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPaymentProofFiles(prev => prev.filter((_, i) => i !== fIdx))}
+                              style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                              title="Remove"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SECTION 2: Existing Payment Proof on File (Compact box without raw thumbnail) */}
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle size={15} style={{ color: '#16A34A' }} />
+                        Section 2: Existing Payment Proof on File ({existingPaymentDocsList.length})
+                      </span>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
+                        <Plus size={12} /> Add / Replace Image
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              const newFiles = Array.from(e.target.files).filter(f => {
+                                try { validateClientFile(f); return true; } catch (err) { alert(err.message); return false; }
+                              });
+                              setPaymentProofFiles(prev => [...prev, ...newFiles]);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {existingPaymentDocsList.length === 0 ? (
+                      <div style={{ padding: '12px', textAlign: 'center', fontSize: '11.5px', color: '#64748B', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
+                        No payment proof previously uploaded by sales. Use Section 1 above to attach payment proof.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {existingPaymentDocsList.map((doc, idx) => {
+                          const dName = doc.name || doc.originalName || `Payment_Proof_${idx + 1}.jpg`;
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '8px 12px',
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: '8px',
+                                gap: '10px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <FileText size={16} />
+                                </div>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={dName}>
+                                    {dName}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: '#64748B' }}>
+                                    Payment Slip #{idx + 1} {doc.size ? `• ${(doc.size / 1024).toFixed(0)} KB` : ''}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                                 <button
                                   type="button"
                                   onClick={() => setPreviewDocModal({ title: `Payment Proof #${idx + 1}: ${dName}`, doc, bomCode: uploadPaymentModal.bomCode })}
-                                  style={{ flex: 1, padding: '3px 6px', fontSize: '10.5px', fontWeight: '700', color: '#2563EB', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}
+                                  style={{
+                                    padding: '4px 10px',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    color: '#0E7490',
+                                    backgroundColor: '#ECFEFF',
+                                    border: '1px solid #A5F3FC',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
                                 >
-                                  <Eye size={10} /> View
+                                  <Eye size={12} /> View
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setExistingPaymentDocsList(prev => prev.filter((_, i) => i !== idx))}
-                                  style={{ padding: '3px 6px', fontSize: '10.5px', fontWeight: '700', color: '#DC2626', backgroundColor: '#FEE2E2', border: '1px solid #FECACA', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Remove this proof"
+                                  style={{
+                                    padding: '4px 8px',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    color: '#DC2626',
+                                    backgroundColor: '#FEF2F2',
+                                    border: '1px solid #FECACA',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px'
+                                  }}
+                                  title="Remove this image"
                                 >
-                                  <X size={11} />
+                                  <Trash2 size={12} /> Remove
                                 </button>
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
-                  {uploadPaymentModal.paymentType === 'Partial Payment' && (
-                    <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <span style={{ fontSize: '11px', color: '#0D9488', display: 'block', fontWeight: '700' }}>Advance Paid:</span>
-                        <strong style={{ fontSize: '13px', color: '#0F766E' }}>₹{Number(uploadPaymentModal.partialAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '11px', color: '#0D9488', display: 'block', fontWeight: '700' }}>Remaining Balance Due:</span>
-                        <strong style={{ fontSize: '14px', color: '#0F766E' }}>
-                          ₹{Number(uploadPaymentModal.balanceAmount != null ? uploadPaymentModal.balanceAmount : Math.max(0, (uploadPaymentModal.grandTotal || 0) - (uploadPaymentModal.partialAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </strong>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 2. Multi-Upload Support (At least 4 images) */}
-                  {!isCeo && (
-                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                        <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F766E' }}>
-                          Upload Payment Proof Document(s) & Slips (At least 4 images supported):
-                        </span>
-                        {totalAttachedCount >= 4 ? (
-                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #BBF7D0' }}>
-                            ✓ {totalAttachedCount} Images Ready (Target Met)
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #FDE68A' }}>
-                            {totalAttachedCount} / 4 Images Attached
-                          </span>
-                        )}
-                      </div>
-
-                      {(uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment') && (
-                        <div>
-                          <label htmlFor="bom-orders-balance-amount-paid" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
-                            Balance Amount Paid (₹)
-                          </label>
-                          <input id="bom-orders-balance-amount-paid" name="balanceAmountPaid" aria-label="Balance Amount Paid (₹)"
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="Enter balance amount paid..."
-                            value={modalBalanceAmount}
-                            onChange={(e) => setModalBalanceAmount(e.target.value)}
-                            style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                           />
-                        </div>
-                      )}
-
-                      {/* Drag & Drop Multi-Image Dropzone */}
-                      <div style={{
-                        border: '2px dashed #0E7490',
-                        backgroundColor: '#F0FDFA',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        textAlign: 'center',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}>
-                        <UploadCloud style={{ width: '28px', height: '28px', color: '#0E7490' }} />
-                        <span style={{ fontSize: '12px', color: '#334155', fontWeight: '700' }}>
-                          Drag & drop or select multiple payment proof images / bank slips
-                        </span>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '8px 18px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 4px rgba(14,116,144,0.3)' }}>
-                          <Upload style={{ width: '14px', height: '14px' }} />
-                          {paymentProofFiles.length > 0 ? '+ Add More Images' : 'Browse Files (Multi-Select 4+ Images)'}
-                          <input
-                            id="bom-orders-input-6"
-                            name="input6"
-                            aria-label="Select Payment Proof Attachments"
-                            type="file"
-                            multiple
-                            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-                            style={{ display: 'none' }}
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files.length > 0) {
-                                const newFiles = Array.from(e.target.files).filter(f => {
-                                  try {
-                                    validateClientFile(f);
-                                    return true;
-                                  } catch (err) {
-                                    alert(`⚠️ Skipped ${f.name}: ${err.message}`);
-                                    return false;
-                                  }
+                  {/* Bottom Actions for Proof */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setUploadPaymentModal(null)}
+                      style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                      Close
+                    </button>
+                    {!isCeo && (
+                      <button
+                        type="button"
+                        disabled={uploadingPayment}
+                        onClick={async () => {
+                          if (paymentProofFiles.length === 0 && existingPaymentDocsList.length === 0) {
+                            alert('Please attach or select at least one payment proof image!');
+                            return;
+                          }
+                          setUploadingPayment(true);
+                          try {
+                            const newlyUploadedDocs = [];
+                            for (const f of paymentProofFiles) {
+                              if (f instanceof File) {
+                                const uploadedMeta = await uploadBomDocumentFile({
+                                  file: f,
+                                  bomCode: uploadPaymentModal.bomCode,
+                                  category: 'payment-proof'
                                 });
-                                setPaymentProofFiles(prev => [...prev, ...newFiles]);
-                                e.target.value = '';
+                                newlyUploadedDocs.push(uploadedMeta);
+                              } else {
+                                newlyUploadedDocs.push(typeof f === 'object' ? f : { name: f });
                               }
-                            }}
-                          />
-                        </label>
-                        <span style={{ fontSize: '10.5px', color: '#64748B' }}>
-                          Supported: JPG, PNG, WEBP, PDF (Select 4 or more receipts, slips, or cheques)
-                        </span>
-                      </div>
+                            }
+                            const allPaymentDocs = [...existingPaymentDocsList, ...newlyUploadedDocs];
+                            const primaryProof = allPaymentDocs[0] || null;
 
-                      {/* Staged New Uploads Preview */}
-                      {paymentProofFiles.length > 0 && (
-                        <div style={{ marginTop: '4px' }}>
-                          <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#0E7490', display: 'block', marginBottom: '8px' }}>
-                            New Images Ready to Upload ({paymentProofFiles.length}):
-                          </span>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                            {paymentProofFiles.map((file, fIdx) => {
-                              const isImg = file.type && file.type.startsWith('image/');
-                              const previewUrl = isImg ? URL.createObjectURL(file) : null;
-                              return (
-                                <div key={fIdx} style={{ border: '1px solid #99F6E4', borderRadius: '10px', padding: '8px', backgroundColor: '#FFFFFF', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14,116,144,0.08)' }}>
-                                  <div style={{ width: '100%', height: '80px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {isImg && previewUrl ? (
-                                      <img src={previewUrl} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    ) : (
-                                      <FileText size={28} style={{ color: '#0E7490' }} />
-                                    )}
-                                  </div>
-                                  <span style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'center' }} title={file.name}>
-                                    {file.name}
-                                  </span>
-                                  <span style={{ fontSize: '10px', color: '#64748B' }}>
-                                    {(file.size / 1024).toFixed(0)} KB
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setPaymentProofFiles(prev => prev.filter((_, i) => i !== fIdx))}
-                                    style={{ position: 'absolute', top: '4px', right: '4px', width: '20px', height: '20px', borderRadius: '50%', border: 'none', backgroundColor: '#EF4444', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}
-                                    title="Remove file"
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                            const balPaid = parseFloat(modalBalanceAmount) || 0;
+                            const newBal = isPartial && balPaid > 0 ? Math.max(0, prevBal - balPaid) : prevBal;
+
+                            const isPackedAwaitingProof = Boolean(
+                              uploadPaymentModal.awaitingSalesPaymentProof ||
+                              (typeof uploadPaymentModal.status === 'string' && uploadPaymentModal.status.toLowerCase().includes('awaiting sales payment proof')) ||
+                              uploadPaymentModal.packingStatus === 'PACKING_VERIFIED' ||
+                              uploadPaymentModal.dispatchPackingVerified
+                            );
+
+                            const nextStatus = isPackedAwaitingProof
+                              ? 'Dispatch Packing Verified - Sent to Accounts'
+                              : (isPartial ? (newBal <= 0 ? 'Payment Uploaded & Verified' : uploadPaymentModal.status) : 'Payment Uploaded & Verified');
+
+                            const updatedList = (bomStore || []).map(b => b.bomCode === uploadPaymentModal.bomCode ? {
+                              ...b,
+                              status: nextStatus,
+                              readyForAccounts: isPackedAwaitingProof ? true : b.readyForAccounts,
+                              awaitingSalesPaymentProof: false,
+                              pendingSalesDispatchPayment: false,
+                              dispatchPackingVerified: isPackedAwaitingProof ? true : b.dispatchPackingVerified,
+                              packingStatus: isPackedAwaitingProof ? 'PACKING_VERIFIED' : b.packingStatus,
+                              paymentProofDoc: primaryProof,
+                              paymentProofDocs: allPaymentDocs,
+                              balanceProofDoc: primaryProof,
+                              balancePaymentProofDocs: allPaymentDocs,
+                              uploadedDocuments: [
+                                ...(Array.isArray(b.uploadedDocuments) ? b.uploadedDocuments.filter(d => !d.category?.includes('payment') && !d.type?.includes('payment')) : []),
+                                ...allPaymentDocs
+                              ],
+                              accountsVerification: {
+                                ...(b.accountsVerification || {}),
+                                readyForAccounts: isPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
+                                paymentProofDoc: primaryProof,
+                                paymentProofDocs: allPaymentDocs,
+                                paymentStatus: 'Payment Proof Attached by Sales'
+                              },
+                              balanceAmount: newBal,
+                              paymentUpdated: true,
+                              payments: {
+                                ...b.payments,
+                                proofDoc: primaryProof?.originalName || primaryProof?.name || null,
+                                proofDocObj: primaryProof,
+                                proofDocs: allPaymentDocs,
+                                proofDocObjs: allPaymentDocs,
+                                proofDocData: primaryProof?.dataUrl || null,
+                                balanceProofDoc: primaryProof?.originalName || primaryProof?.name || null,
+                                balanceProofDocObj: primaryProof,
+                                balanceUploaded: true,
+                                paymentUpdated: true
+                              }
+                            } : b);
+                            setBomStore(updatedList);
+                            safeSaveBomStoreToLocal(updatedList);
+
+                            const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
+                            if (targetBom) {
+                              saveCloudBomRow(targetBom);
+                              fetch('/api/boms', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+                              }).catch(() => {});
+
+                              if (isPackedAwaitingProof) {
+                                try {
+                                  notifyBomPackedAndSentToAccounts({
+                                    bomCode: targetBom.bomCode,
+                                    customerName: targetBom.customerName || targetBom.c3,
+                                    actorName: getCleanSalesPersonName(targetBom.salesPerson)
+                                  });
+                                } catch (nErr) {
+                                  console.warn('Failed to send Accounts notification:', nErr);
+                                }
+                              }
+                            }
+                            setUploadPaymentModal(null);
+                            setPaymentProofFiles([]);
+                            setExistingPaymentDocsList([]);
+                            setPaymentProofFile(null);
+                            setModalBalanceAmount('');
+                            alert(`✅ ${allPaymentDocs.length} Payment proof document(s) uploaded and saved successfully!`);
+                          } catch (err) {
+                            alert(`Payment upload failed: ${err.message}`);
+                          } finally {
+                            setUploadingPayment(false);
+                          }
+                        }}
+                        style={{
+                          padding: '9px 22px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          backgroundColor: '#0E7490',
+                          color: 'white',
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          cursor: uploadingPayment ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 4px rgba(14,116,144,0.3)',
+                          opacity: uploadingPayment ? 0.7 : 1
+                        }}
+                      >
+                        {uploadingPayment ? (
+                          <>
+                            <RotateCcw style={{ width: '15px', height: '15px', animation: 'spin 0.75s linear infinite' }} />
+                            Uploading Proofs...
+                          </>
+                        ) : (
+                          <>
+                            <Save style={{ width: '15px', height: '15px' }} />
+                            Save & Update Payment Proof
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })()}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-              <button
-                onClick={() => setUploadPaymentModal(null)}
-                style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
-              >
-                Close
-              </button>
-              {isCeo && (
-                <span style={{ fontSize: '12px', color: '#0E7490', fontWeight: '700', alignSelf: 'center', marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  ℹ️ Executive View Only — Payment records managed by Accounts & Sales
-                </span>
-              )}
-              {!isCeo && (
-                <button
-                  disabled={uploadingPayment}
-                  onClick={async () => {
-                    if (paymentProofFiles.length === 0 && existingPaymentDocsList.length === 0) {
-                      alert('Please attach or select at least one payment proof image!');
-                      return;
-                    }
-                    setUploadingPayment(true);
-                    try {
-                      const newlyUploadedDocs = [];
-                      for (const f of paymentProofFiles) {
-                        if (f instanceof File) {
-                          const uploadedMeta = await uploadBomDocumentFile({
-                            file: f,
-                            bomCode: uploadPaymentModal.bomCode,
-                            category: 'payment-proof'
-                          });
-                          newlyUploadedDocs.push(uploadedMeta);
-                        } else {
-                          newlyUploadedDocs.push(typeof f === 'object' ? f : { name: f });
-                        }
-                      }
-                      const allPaymentDocs = [...existingPaymentDocsList, ...newlyUploadedDocs];
-                      const primaryProof = allPaymentDocs[0] || null;
-
-                      const isPartial = uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment';
-                      const balPaid = parseFloat(modalBalanceAmount) || 0;
-                      const prevBal = uploadPaymentModal.balanceAmount != null ? uploadPaymentModal.balanceAmount : Math.max(0, (uploadPaymentModal.grandTotal || 0) - (uploadPaymentModal.partialAmount || 0));
-                      const newBal = isPartial && balPaid > 0 ? Math.max(0, prevBal - balPaid) : prevBal;
-
-                      const isPackedAwaitingProof = Boolean(
-                        uploadPaymentModal.awaitingSalesPaymentProof ||
-                        (typeof uploadPaymentModal.status === 'string' && uploadPaymentModal.status.toLowerCase().includes('awaiting sales payment proof')) ||
-                        uploadPaymentModal.packingStatus === 'PACKING_VERIFIED' ||
-                        uploadPaymentModal.dispatchPackingVerified
-                      );
-
-                      const nextStatus = isPackedAwaitingProof
-                        ? 'Dispatch Packing Verified - Sent to Accounts'
-                        : (isPartial ? (newBal <= 0 ? 'Payment Uploaded & Verified' : uploadPaymentModal.status) : 'Payment Uploaded & Verified');
-
-                      const updatedList = (bomStore || []).map(b => b.bomCode === uploadPaymentModal.bomCode ? {
-                        ...b,
-                        status: nextStatus,
-                        readyForAccounts: isPackedAwaitingProof ? true : b.readyForAccounts,
-                        awaitingSalesPaymentProof: false,
-                        pendingSalesDispatchPayment: false,
-                        dispatchPackingVerified: isPackedAwaitingProof ? true : b.dispatchPackingVerified,
-                        packingStatus: isPackedAwaitingProof ? 'PACKING_VERIFIED' : b.packingStatus,
-                        paymentProofDoc: primaryProof,
-                        paymentProofDocs: allPaymentDocs,
-                        balanceProofDoc: primaryProof,
-                        balancePaymentProofDocs: allPaymentDocs,
-                        uploadedDocuments: [
-                          ...(Array.isArray(b.uploadedDocuments) ? b.uploadedDocuments.filter(d => !d.category?.includes('payment') && !d.type?.includes('payment')) : []),
-                          ...allPaymentDocs
-                        ],
-                        accountsVerification: {
-                          ...(b.accountsVerification || {}),
-                          readyForAccounts: isPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
-                          paymentProofDoc: primaryProof,
-                          paymentProofDocs: allPaymentDocs,
-                          paymentStatus: 'Payment Proof Attached by Sales'
-                        },
-                        balanceAmount: newBal,
-                        paymentUpdated: true,
-                        payments: {
-                          ...b.payments,
-                          proofDoc: primaryProof?.originalName || primaryProof?.name || null,
-                          proofDocObj: primaryProof,
-                          proofDocs: allPaymentDocs,
-                          proofDocObjs: allPaymentDocs,
-                          proofDocData: primaryProof?.dataUrl || null,
-                          balanceProofDoc: primaryProof?.originalName || primaryProof?.name || null,
-                          balanceProofDocObj: primaryProof,
-                          balanceUploaded: true,
-                          paymentUpdated: true
-                        }
-                      } : b);
-                      setBomStore(updatedList);
-                      safeSaveBomStoreToLocal(updatedList);
-
-                      const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
-                      if (targetBom) {
-                        saveCloudBomRow(targetBom);
-                        fetch('/api/boms', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
-                        }).catch(() => {});
-
-                        if (isPackedAwaitingProof) {
-                          try {
-                            notifyBomPackedAndSentToAccounts({
-                              bomCode: targetBom.bomCode,
-                              customerName: targetBom.customerName || targetBom.c3,
-                              actorName: getCleanSalesPersonName(targetBom.salesPerson)
-                            });
-                          } catch (nErr) {
-                            console.warn('Failed to send Accounts notification:', nErr);
-                          }
-                        }
-                      }
-                      setUploadPaymentModal(null);
-                      setPaymentProofFiles([]);
-                      setExistingPaymentDocsList([]);
-                      setPaymentProofFile(null);
-                      setModalBalanceAmount('');
-                      alert(`✅ ${allPaymentDocs.length} Payment proof document(s) uploaded and saved successfully!`);
-                    } catch (err) {
-                      alert(`Payment upload failed: ${err.message}`);
-                    } finally {
-                      setUploadingPayment(false);
-                    }
-                  }}
-                  style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: uploadingPayment ? '#94A3B8' : '#0E7490', color: 'white', fontSize: '13px', fontWeight: '800', cursor: uploadingPayment ? 'not-allowed' : 'pointer' }}
-                >
-                  {uploadingPayment ? 'Uploading Proofs...' : 'Save & Update Payment Proof'}
-                </button>
-              )}
-            </div>
           </div>
         </div>
       )}
