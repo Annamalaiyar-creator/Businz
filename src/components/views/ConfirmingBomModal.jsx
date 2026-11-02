@@ -501,7 +501,14 @@ export default function ConfirmingBomModal({
             ) : (
               <select id="confirming-bom-doc-type" name="docType" aria-label="Document Type"
                 value={confirmingBomModal.docType || 'Invoice'}
-                onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, docType: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setConfirmingBomModal({
+                    ...confirmingBomModal,
+                    docType: val,
+                    ...(val === 'DC' ? { paymentType: '100% Paid' } : {})
+                  });
+                }}
                 style={{
                   width: '100%', height: '40px', borderRadius: '8px',
                   border: confirmingBomModal.docType === 'DC' ? '1.5px solid #F59E0B' : '1.5px solid #CBD5E1',
@@ -519,12 +526,23 @@ export default function ConfirmingBomModal({
 
           <div>
             <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
-              PAYMENT TYPE {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+              PAYMENT TYPE {!isAlreadyForwarded && confirmingBomModal.docType !== 'DC' && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
             </label>
             {isAlreadyForwarded ? (
               <div style={{ fontSize: '13px', fontWeight: '700', color: '#2563EB', height: '40px', display: 'flex', alignItems: 'center' }}>
                 {normalizePaymentTerm(confirmingBomModal.paymentType)}
               </div>
+            ) : confirmingBomModal.docType === 'DC' ? (
+              <select id="confirming-bom-payment-type" name="paymentType" aria-label="PaymentType"
+                value="100% Paid"
+                disabled
+                style={{
+                  width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px',
+                  fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', boxSizing: 'border-box'
+                }}
+              >
+                <option value="100% Paid">100% Paid</option>
+              </select>
             ) : (
               <select id="confirming-bom-payment-type" name="paymentType" aria-label="PaymentType"
                 value={normalizePaymentTerm(confirmingBomModal.paymentType)}
@@ -542,7 +560,7 @@ export default function ConfirmingBomModal({
             )}
           </div>
 
-          {(confirmingBomModal.paymentType === 'Partial Paid' || confirmingBomModal.paymentType === 'Partial Payment') && (
+          {confirmingBomModal.docType !== 'DC' && (confirmingBomModal.paymentType === 'Partial Paid' || confirmingBomModal.paymentType === 'Partial Payment') && (
             <div style={{ gridColumn: 'span 2', backgroundColor: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '10px', padding: '12px 14px', marginTop: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>

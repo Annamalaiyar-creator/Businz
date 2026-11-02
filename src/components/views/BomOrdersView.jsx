@@ -761,13 +761,13 @@ export default function BomOrdersView(props) {
       });
     }
 
-    // 5. Payment Proof for 100% Paid / Partial Paid Orders (Mandatory per policy)
+    // 5. Payment Proof for 100% Paid / Partial Paid Orders (Mandatory per policy, unless DC)
     const isPaidOrder = newBomPaymentType === '100% Paid' || newBomPaymentType === '100% Advance';
     const isPartialOrder = newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment';
     const currentPaymentDocs = Array.isArray(newBomPaymentProofDoc)
       ? newBomPaymentProofDoc
       : (newBomPaymentProofDoc ? [newBomPaymentProofDoc] : []);
-    if (!isDraft && (isPaidOrder || isPartialOrder)) {
+    if (!isDraft && newBomDocType !== 'DC' && (isPaidOrder || isPartialOrder)) {
       if (currentPaymentDocs.length === 0) {
         errors.paymentProof = 'Payment Attachment / Slip is mandatory';
         missingList.push({
@@ -3537,7 +3537,14 @@ export default function BomOrdersView(props) {
                 name="newBomDocType"
                 aria-label="Document Type"
                 value={newBomDocType}
-                onChange={(e) => setNewBomDocType(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNewBomDocType(val);
+                  if (val === 'DC') {
+                    setNewBomPaymentType('100% Paid');
+                    setNewBomPaymentProofDoc(null);
+                  }
+                }}
                 style={{
                   width: '100%',
                   height: '42px',
@@ -4871,22 +4878,32 @@ export default function BomOrdersView(props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label htmlFor="bom-orders-payment-terms" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Terms</label>
-                <select id="bom-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms"
-                  value={newBomPaymentType}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setNewBomPaymentType(val);
-                    if (val === 'Credit Payment' || val === 'Payment While Dispatch') {
-                      setNewBomPaymentProofDoc(null);
-                    }
-                  }}
-                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
-                >
-                  <option value="100% Paid">100% Paid</option>
-                  <option value="Partial Paid">Partial Paid</option>
-                  <option value="Payment While Dispatch">Payment While Dispatch</option>
-                  <option value="Credit Payment">Credit Payment</option>
-                </select>
+                {newBomDocType === 'DC' ? (
+                  <select id="bom-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms"
+                    value="100% Paid"
+                    disabled
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', fontWeight: '700' }}
+                  >
+                    <option value="100% Paid">100% Paid</option>
+                  </select>
+                ) : (
+                  <select id="bom-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms"
+                    value={newBomPaymentType}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewBomPaymentType(val);
+                      if (val === 'Credit Payment' || val === 'Payment While Dispatch') {
+                        setNewBomPaymentProofDoc(null);
+                      }
+                    }}
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value="100% Paid">100% Paid</option>
+                    <option value="Partial Paid">Partial Paid</option>
+                    <option value="Payment While Dispatch">Payment While Dispatch</option>
+                    <option value="Credit Payment">Credit Payment</option>
+                  </select>
+                )}
               </div>
 
               {(newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && (
@@ -5224,8 +5241,8 @@ export default function BomOrdersView(props) {
                   </div>
                 )}
 
-                {/* 2. Payment Proof Upload */}
-                {isPaidOrder && (
+                {/* 2. Payment Proof Upload (Shows if 100% or Partial Paid, but NOT for DC) */}
+                {isPaidOrder && newBomDocType !== 'DC' && (
                   <div style={{
                     padding: '18px 20px',
                     backgroundColor: '#F0FDF4',

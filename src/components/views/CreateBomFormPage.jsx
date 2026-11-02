@@ -485,6 +485,11 @@ export default function CreateBomFormPage(props) {
               onChange={(e) => {
                 const val = e.target.value;
                 setNewBomDocType(val);
+                if (val === 'DC') {
+                  setNewBomPaymentType('100% Paid');
+                  setNewBomPaymentProofDoc(null);
+                  setPaymentDocs([]);
+                }
                 if (bomFormErrors.docType) {
                   setBomFormErrors(prev => ({ ...prev, docType: null }));
                 }
@@ -1696,22 +1701,32 @@ export default function CreateBomFormPage(props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label htmlFor="create-bom-form-payment-terms" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Terms</label>
-              <select id="create-bom-form-payment-terms" name="paymentTerms" aria-label="Payment Terms"
-                value={newBomPaymentType}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setNewBomPaymentType(val);
-                  if (val === 'Credit Payment' || val === 'Payment While Dispatch') {
-                    setNewBomPaymentProofDoc(null);
-                  }
-                }}
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="100% Paid">100% Paid</option>
-                <option value="Partial Paid">Partial Paid</option>
-                <option value="Payment While Dispatch">Payment While Dispatch</option>
-                <option value="Credit Payment">Credit Payment</option>
-              </select>
+              {newBomDocType === 'DC' ? (
+                <select id="create-bom-form-payment-terms" name="paymentTerms" aria-label="Payment Terms"
+                  value="100% Paid"
+                  disabled
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', fontWeight: '700' }}
+                >
+                  <option value="100% Paid">100% Paid</option>
+                </select>
+              ) : (
+                <select id="create-bom-form-payment-terms" name="paymentTerms" aria-label="Payment Terms"
+                  value={newBomPaymentType}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewBomPaymentType(val);
+                    if (val === 'Credit Payment' || val === 'Payment While Dispatch') {
+                      setNewBomPaymentProofDoc(null);
+                    }
+                  }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="100% Paid">100% Paid</option>
+                  <option value="Partial Paid">Partial Paid</option>
+                  <option value="Payment While Dispatch">Payment While Dispatch</option>
+                  <option value="Credit Payment">Credit Payment</option>
+                </select>
+              )}
             </div>
 
             {(newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && (
@@ -2057,8 +2072,8 @@ export default function CreateBomFormPage(props) {
                 </div>
               )}
 
-              {/* 2. Payment Proof Upload (Shows if 100% or Partial Paid) */}
-              {isPaidOrder && (
+              {/* 2. Payment Proof Upload (Shows if 100% or Partial Paid, but NOT for DC) */}
+              {isPaidOrder && newBomDocType !== 'DC' && (
                 <div style={{
                   padding: '18px 20px',
                   backgroundColor: '#F0FDF4',
@@ -2259,7 +2274,7 @@ export default function CreateBomFormPage(props) {
                 String(newBomPaymentType || '').toLowerCase().includes('advance') ||
                 String(newBomPaymentType || '').toLowerCase().includes('partial')
               );
-              if (isPaidOrder && paymentDocs.length === 0) {
+              if (newBomDocType !== 'DC' && isPaidOrder && paymentDocs.length === 0) {
                 alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${newBomPaymentType}" orders. Please attach the payment proof slip in the Document Attachments section below.`);
                 return;
               }

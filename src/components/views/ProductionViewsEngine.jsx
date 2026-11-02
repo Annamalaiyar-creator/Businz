@@ -866,7 +866,7 @@ export default function ProductionViewsEngine(props) {
       String(newBomPaymentType || '').toLowerCase().includes('partial')
     );
 
-    if (!isDraft && isPaymentProofRequired) {
+    if (!isDraft && newBomDocType !== 'DC' && isPaymentProofRequired) {
       const hasPaymentProof = Array.isArray(newBomPaymentProofDoc)
         ? newBomPaymentProofDoc.length > 0
         : Boolean(newBomPaymentProofDoc);
