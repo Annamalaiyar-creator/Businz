@@ -3347,7 +3347,9 @@ export default function BomOrdersView(props) {
 
       const isFixedKit = isFixedQuantityPreset(presetId, targetPreset.label || presetName);
       const newItems = targetPreset.items.map(it => {
-        const baseQ = parseFloat(it.qty) || 1;
+        const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+        const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+        const baseQ = hasQty ? parseFloat(rawQ) : '';
         const matchedCatalog = (itemsList || []).find(ci => ci.name && ci.name.toLowerCase().trim() === String(it.name || '').toLowerCase().trim()) || (VRM_PRODUCTS || []).find(vp => vp.name && vp.name.toLowerCase().trim() === String(it.name || '').toLowerCase().trim());
         const resolvedCode = it.code || (matchedCatalog ? matchedCatalog.code : '');
         return {
@@ -3356,7 +3358,7 @@ export default function BomOrdersView(props) {
           presetGroupId: groupId,
           presetName,
           baseQty: baseQ,
-          qty: String(baseQ),
+          qty: hasQty ? String(baseQ) : '',
           rate: '0',
           gstRate: isDcrBosKit ? '5%' : (it.gstRate || initialGstRate),
           isPresetItem: true

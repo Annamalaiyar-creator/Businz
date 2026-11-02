@@ -450,7 +450,9 @@ export default function QuickPreviewDrawer({
                     <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
                     <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{it.name || '—'}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569' }}>{it.uom || it.unit || 'NOS'}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>{it.qty || 1}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
+                      {it.qty !== undefined && it.qty !== null && String(it.qty).trim() !== '' && String(it.qty).trim() !== '0' ? it.qty : ''}
+                    </td>
                   </tr>
                 ))}
               </tbody>

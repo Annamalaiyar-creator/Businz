@@ -2399,7 +2399,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const isFixedKit = isFixedQuantityPreset(presetId, targetPreset.label || presetName);
     const newItems = targetPreset.items.map(it => {
-      const baseQ = parseFloat(it.qty) || 1;
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+      const baseQ = hasQty ? parseFloat(rawQ) : '';
       const resCode = resolveProductCode(it);
       return {
         ...it,
@@ -2407,7 +2409,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: String(baseQ),
+        qty: hasQty ? String(baseQ) : '',
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || presetHsn,
@@ -2439,7 +2441,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const parentPresetName = parentGroup.presetName;
 
     const newSubItems = targetPreset.items.map(it => {
-      const baseQ = parseFloat(it.qty) || 1;
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+      const baseQ = hasQty ? parseFloat(rawQ) : '';
       const resCode = resolveProductCode(it);
       return {
         ...it,
@@ -2450,7 +2454,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         subPresetId,
         subPresetName,
         baseQty: baseQ,
-        qty: String(baseQ),
+        qty: hasQty ? String(baseQ) : '',
         rate: '0',
         gstRate: it.gstRate || parentGroup.gstRate || '18%',
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || parentGroup.hsn,

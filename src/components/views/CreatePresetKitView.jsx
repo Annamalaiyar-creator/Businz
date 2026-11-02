@@ -67,7 +67,7 @@ export default function CreatePresetKitView({
       return JSON.parse(JSON.stringify(preset.items));
     }
     return [
-      { name: '', qty: '1', uom: 'NOS', category: 'General' }
+      { name: '', qty: '', uom: 'NOS', category: 'General' }
     ];
   });
 
@@ -95,7 +95,7 @@ export default function CreatePresetKitView({
     const newItem = {
       code: product.code || '',
       name: product.name || '',
-      qty: '1',
+      qty: (product.qty !== undefined && product.qty !== null && String(product.qty).trim() !== '' && String(product.qty).trim() !== '0') ? String(product.qty) : '',
       uom: product.uom || 'NOS',
       category: product.material || 'General'
     };
@@ -110,7 +110,7 @@ export default function CreatePresetKitView({
   const handleAddBlankRow = () => {
     setItems(prev => [
       ...prev,
-      { name: '', qty: '1', uom: 'NOS', category: 'General' }
+      { name: '', qty: '', uom: 'NOS', category: 'General' }
     ]);
   };
 
@@ -142,7 +142,13 @@ export default function CreatePresetKitView({
       return;
     }
 
-    const validItems = items.filter(it => it.name && it.name.trim());
+    const validItems = items.filter(it => it.name && it.name.trim()).map(it => {
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      return {
+        ...it,
+        qty: (rawQ === '' || rawQ === '0') ? '' : rawQ
+      };
+    });
     if (validItems.length === 0) {
       alert('⚠️ Please add at least one component to the preset.');
       return;
@@ -572,11 +578,10 @@ export default function CreatePresetKitView({
                     </div>
                   </td>
                   <td style={{ padding: '12px 14px' }}>
-                    <input id={`create-preset-kit-1-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`1_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="1"
-                      type="number"
-                      min="1"
-                      placeholder="1"
-                      value={item.qty}
+                    <input id={`create-preset-kit-1-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`1_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
+                      type="text"
+                      placeholder=""
+                      value={item.qty !== undefined && item.qty !== null && String(item.qty).trim() !== '0' ? item.qty : ''}
                       onChange={(e) => handleUpdateItem(i, 'qty', e.target.value)}
                       style={{
                         width: '100%',

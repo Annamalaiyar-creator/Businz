@@ -1069,11 +1069,13 @@ export default function CreateBomFormPage(props) {
 
                 if (targetPreset && targetPreset.items) {
                   setBomMaterialsList(targetPreset.items.map(it => {
-                    const baseQ = parseFloat(it.qty) || 1;
+                    const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+                    const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+                    const baseQ = hasQty ? parseFloat(rawQ) : '';
                     return {
                       ...it,
                       baseQty: baseQ,
-                      qty: String(baseQ),
+                      qty: hasQty ? String(baseQ) : '',
                       rate: '0',
                       isPresetItem: true
                     };
@@ -1098,11 +1100,13 @@ export default function CreateBomFormPage(props) {
                   const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
                   if (targetPreset && targetPreset.items) {
                     const additionalItems = targetPreset.items.map(it => {
-                      const baseQ = parseFloat(it.qty) || 1;
+                      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+                      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+                      const baseQ = hasQty ? parseFloat(rawQ) : '';
                       return {
                         ...it,
                         baseQty: baseQ,
-                        qty: String(baseQ),
+                        qty: hasQty ? String(baseQ) : '',
                         rate: '0',
                         isPresetItem: true
                       };

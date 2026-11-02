@@ -248,9 +248,12 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
 
   // Helper to determine the exact quantity for BOM printout — decoupled from Set count, strictly matching PI and BOM
   const getItemQty = (item) => {
-    const rawVal = item.qty ?? item.bomQty ?? item.quantity ?? item.targetQty ?? item.orderedQty ?? item.packedQty ?? item.itemQty ?? 0;
+    const rawVal = item.qty !== undefined && item.qty !== null ? item.qty : (item.bomQty !== undefined && item.bomQty !== null ? item.bomQty : (item.quantity !== undefined && item.quantity !== null ? item.quantity : (item.targetQty !== undefined && item.targetQty !== null ? item.targetQty : (item.orderedQty !== undefined && item.orderedQty !== null ? item.orderedQty : (item.packedQty !== undefined && item.packedQty !== null ? item.packedQty : (item.itemQty !== undefined && item.itemQty !== null ? item.itemQty : ''))))));
+    if (rawVal === '' || rawVal === null || rawVal === undefined) return '';
     const cleanVal = typeof rawVal === 'string' ? rawVal.replace(/,/g, '').trim() : rawVal;
-    return parseFloat(cleanVal) || 0;
+    if (cleanVal === '' || cleanVal === '0') return '';
+    const p = parseFloat(cleanVal);
+    return isNaN(p) || p === 0 ? '' : p;
   };
 
   // Extract clean addresses

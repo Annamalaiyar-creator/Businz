@@ -646,13 +646,15 @@ export default function CrmQuotationsView({
     }));
 
     const newItems = targetPreset.items.map(it => {
-      const baseQ = parseFloat(it.qty) || 1;
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+      const baseQ = hasQty ? parseFloat(rawQ) : '';
       return {
         ...it,
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: String(baseQ),
+        qty: hasQty ? String(baseQ) : '',
         rate: '0',
         gstRate: is5PctSolarProduct(it.name, it.category || it.specs) ? '5%' : (it.gstRate || initialGstRate),
         hsn: it.hsn || it.hsn_or_sac || getHsnCode(it),
