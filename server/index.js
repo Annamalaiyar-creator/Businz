@@ -3130,6 +3130,7 @@ app.post('/api/sessions/register', async (req, res) => {
   // Session ID is generated cryptographically on the server (no client session adoption).
   const verifiedSession = createSessionRecord(authResult, { device, browser });
   activeSessionsMap.set(verifiedSession.id, verifiedSession);
+  saveActiveSessionsToDisk();
 
   return res.status(200).json({
     success: true,
@@ -3143,11 +3144,32 @@ app.post('/api/sessions/register', async (req, res) => {
   });
 });
 
-app.post('/api/sessions/heartbeat', (req, res) => {
+app.post('/api/sessions/heartbeat', async (req, res) => {
   const sessionId = req.headers['x-session-id'] || req.body?.sessionId;
-  const callerEmpCode = req.body?.empCode || req.body?.employee_code;
+  const callerEmpCode = req.headers['x-emp-code'] || req.body?.empCode || req.body?.employee_code;
 
-  const result = heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode);
+  let result = heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode);
+  if (!result.success) {
+    // If not found in memory (e.g. server restart / PM2 reload), rehydrate from verified session or disk
+    try {
+      const verified = await getVerifiedUserSession(req);
+      if (verified && verified.valid) {
+        const restored = {
+          id: String(sessionId || verified.sessionId).trim(),
+          user: verified.user,
+          email: verified.email,
+          empCode: verified.empCode,
+          role: verified.role,
+          lastActiveTimestamp: Date.now(),
+          status: 'active'
+        };
+        activeSessionsMap.set(restored.id, restored);
+        saveActiveSessionsToDisk();
+        result = { success: true, status: 'active', lastActiveTimestamp: restored.lastActiveTimestamp };
+      }
+    } catch (_) {}
+  }
+
   if (!result.success) {
     const statusCode = result.status === 'forbidden' ? 403 : 401;
     return res.status(statusCode).json(result);

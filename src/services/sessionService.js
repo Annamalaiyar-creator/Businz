@@ -107,9 +107,13 @@ let isHeartbeatInFlight = false;
  */
 export async function heartbeatActiveSession() {
   const sessionId = localStorage.getItem('controlroom_device_session_id');
-  if (!sessionId) return;
   const isAuthenticated = localStorage.getItem('controlroom_is_authenticated') === 'true';
   if (!isAuthenticated || isHeartbeatInFlight) return;
+
+  const empCode = localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '';
+  const userRole = localStorage.getItem('controlroom_user_role') || '';
+  const userName = localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_logged_user') || '';
+  const userEmail = localStorage.getItem('controlroom_logged_user_email') || '';
 
   isHeartbeatInFlight = true;
   try {
@@ -117,23 +121,30 @@ export async function heartbeatActiveSession() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-session-id': sessionId
+        'x-session-id': sessionId || '',
+        'x-user-role': userRole,
+        'x-emp-code': empCode
       },
-      body: JSON.stringify({ sessionId })
+      body: JSON.stringify({ 
+        sessionId,
+        empCode,
+        role: userRole,
+        userName
+      })
     }).catch(() => null);
 
     if (res && res.status === 401) {
-      const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
-      if ((Date.now() - sessionStartTime) / 1000 > 15) {
-        console.warn('Session is invalid or expired. Logging out.');
-        localStorage.removeItem('controlroom_is_authenticated');
-        localStorage.removeItem('controlroom_user_role');
-        localStorage.removeItem('controlroom_device_session_id');
-        localStorage.removeItem('controlroom_session_start_time');
-        window.location.reload();
-        return;
-      } else {
-        console.warn('[SessionService] Session in initial grace period; skipping 401 logout.');
+      // Server may have restarted (e.g. PM2 reload or update) clearing in-memory sessions.
+      // Re-hydrate session on server rather than logging out the user!
+      console.warn('[SessionService] Session heartbeat returned 401. Re-hydrating session with server...');
+      const reRegistered = await registerActiveSession(
+        userEmail || userName,
+        empCode,
+        userName,
+        userRole
+      );
+      if (reRegistered && reRegistered.id) {
+        console.log('[SessionService] Session successfully re-registered after server reload.');
         return;
       }
     }
@@ -143,7 +154,7 @@ export async function heartbeatActiveSession() {
       if (json && json.status === 'revoked') {
         const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
         if ((Date.now() - sessionStartTime) / 1000 > 30) {
-          console.warn('Session has been revoked remotely. Logging out.');
+          console.warn('Session has been revoked remotely by administrator. Logging out.');
           localStorage.removeItem('controlroom_is_authenticated');
           localStorage.removeItem('controlroom_user_role');
           localStorage.removeItem('controlroom_device_session_id');
