@@ -480,6 +480,14 @@ export default function BomOrdersView(props) {
                        String(uploadPaymentModal.paymentType || '').toLowerCase().includes('net ') ||
                        Number(uploadPaymentModal.creditDays || 0) > 0;
       setPaymentModalTab(isCredit ? 'credit' : 'proof');
+
+      // Initialize Settle Credit fields for this order
+      setSettleCreditAmount(String(uploadPaymentModal.grandTotal || uploadPaymentModal.subTotal || uploadPaymentModal.totalAmount || ''));
+      setSettleCreditDate(new Date().toISOString().split('T')[0]);
+      setSettleCreditMode('NEFT / RTGS (Direct Bank Transfer)');
+      setSettleCreditUtr(uploadPaymentModal.creditSettledUtr || uploadPaymentModal.utr || '');
+      setSettleCreditFile(null);
+      setSettleCreditNotes(uploadPaymentModal.creditSettledNotes || uploadPaymentModal.creditNotes || '');
       const cDays = Number(uploadPaymentModal.creditDays || 30) || 30;
       setModalCreditDays(cDays);
       setModalCreditTerm(uploadPaymentModal.paymentType || 'Net 30 Days');
@@ -8076,6 +8084,174 @@ export default function BomOrdersView(props) {
   // ==========================================
   // RENDER 3: DEFAULT BOM TABLE & PAGINATION
   // ==========================================
+  const handleExecuteSettleCredit = async (targetRow) => {
+    if (!targetRow) return;
+    if (!settleCreditUtr.trim()) {
+      alert('⚠️ Please enter the Bank Reference / UTR Number.');
+      return;
+    }
+    if (!settleCreditFile) {
+      alert('⚠️ Please select or upload the bank payment slip/receipt image.');
+      return;
+    }
+    const paidNum = cleanNum(settleCreditAmount, 0);
+    if (paidNum <= 0) {
+      alert('⚠️ Please enter a valid settled payment amount (₹).');
+      return;
+    }
+
+    try {
+      setIsSettlingCredit(true);
+      const targetCode = targetRow.bomCode || targetRow.code || targetRow.id;
+
+      let docMeta = null;
+      try {
+        const uploaded = await uploadBomDocumentFile({
+          file: settleCreditFile,
+          bomCode: targetCode,
+          category: 'payment-proof'
+        });
+        if (uploaded && uploaded.name) {
+          docMeta = {
+            ...uploaded,
+            originalName: settleCreditFile.name,
+            utr: settleCreditUtr.trim(),
+            settledAmount: paidNum,
+            paymentDate: settleCreditDate,
+            paymentMode: settleCreditMode,
+            notes: settleCreditNotes.trim()
+          };
+        }
+      } catch (uErr) {
+        console.warn('uploadBomDocumentFile non-fatal, falling back to local compressed:', uErr);
+      }
+
+      if (!docMeta) {
+        const compressed = await new Promise((resolve) => {
+          compressAndSaveFile(settleCreditFile, (res) => {
+            resolve(res || {
+              name: settleCreditFile.name,
+              originalName: settleCreditFile.name,
+              type: settleCreditFile.type,
+              size: settleCreditFile.size,
+              dataUrl: null
+            });
+          });
+        });
+
+        docMeta = {
+          name: compressed?.name || settleCreditFile.name,
+          originalName: settleCreditFile.name,
+          type: settleCreditFile.type,
+          size: compressed?.size || settleCreditFile.size,
+          dataUrl: compressed?.dataUrl || null,
+          uploadedAt: new Date().toISOString(),
+          category: 'payment-proof',
+          utr: settleCreditUtr.trim(),
+          settledAmount: paidNum,
+          paymentDate: settleCreditDate,
+          paymentMode: settleCreditMode,
+          notes: settleCreditNotes.trim()
+        };
+
+        if (docMeta.name && compressed?.dataUrl) {
+          saveMediaToCache(docMeta.name, compressed.dataUrl);
+        }
+      }
+
+      const updatedList = (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? {
+        ...b,
+        status: (() => {
+          if (b.status && b.status !== 'Credit Settled (100% Paid)' && b.status !== 'Pending Confirmation') {
+            return b.status;
+          }
+          if (b.invoiceGenerated || (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') || b.taxInvoiceNo) {
+            return 'Invoice Generated';
+          }
+          if (b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified) {
+            return 'Accounts Verified & Passed to Invoice';
+          }
+          if (b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)) {
+            return 'Dispatch Packing Verified - Sent to Accounts';
+          }
+          return b.salesConfirmed ? 'Sales Confirmed - Sent to Dispatch' : 'Accounts Verified & Passed to Invoice';
+        })(),
+        paymentStatus: 'Credit Settled (100% Paid)',
+        creditSettled: true,
+        salesConfirmed: true,
+        dispatchPackingVerified: Boolean(b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0) || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified),
+        accountsVerified: Boolean(b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || b.status?.includes('Accounts Verified') || b.status?.includes('Invoice')),
+        isAccountsDone: Boolean(b.isAccountsDone || b.accountsVerification?.verified || b.accountsVerified || b.status?.includes('Accounts Verified') || b.status?.includes('Invoice')),
+        creditSettledAt: new Date().toISOString(),
+        creditSettledBy: currentUserName || userRole,
+        creditSettledRole: userRole,
+        creditSettledUtr: settleCreditUtr.trim(),
+        creditSettledDate: settleCreditDate,
+        creditSettledAmount: paidNum,
+        creditSettledMode: settleCreditMode,
+        creditSettledNotes: settleCreditNotes.trim(),
+        paymentProofDoc: docMeta,
+        paymentProofDocs: [...(Array.isArray(b.paymentProofDocs) ? b.paymentProofDocs : []), docMeta],
+        accountsVerification: {
+          ...(b.accountsVerification || {}),
+          verified: Boolean(b.accountsVerification?.verified || b.isAccountsDone || b.accountsVerified || true),
+          creditSettled: true,
+          paymentStatus: 'Credit Settled (100% Paid)',
+          settledUtr: settleCreditUtr.trim(),
+          settledDate: settleCreditDate,
+          settledAmount: paidNum,
+          paymentProofDoc: docMeta
+        },
+        payments: {
+          ...b.payments,
+          creditSettled: true,
+          settledUtr: settleCreditUtr.trim(),
+          settledDate: settleCreditDate,
+          proofDoc: docMeta.name,
+          proofDocObj: docMeta,
+          paymentUpdated: true
+        }
+      } : b);
+
+      setBomStore(updatedList);
+      safeSaveBomStoreToLocal(updatedList);
+
+      const targetBom = updatedList.find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
+      if (targetBom) {
+        saveCloudBomRow(targetBom);
+        fetch('/api/boms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+        }).catch(() => {});
+
+        // Send real-time notification to Accounts
+        try {
+          notifyCreditPaymentSettled({
+            bomCode: targetBom.bomCode,
+            customerName: targetBom.customerName || targetBom.companyName || targetBom.c2 || 'Customer',
+            salesPerson: currentUserName || targetBom.salesPerson || 'Sales Executive',
+            amount: paidNum,
+            utrNumber: settleCreditUtr.trim()
+          });
+        } catch (nErr) {
+          console.warn('Failed to send notification to Accounts:', nErr);
+        }
+      }
+
+      // Dispatch events for local real-time sync
+      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
+      window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_bom_store' } }));
+
+      setSettleCreditModal(null);
+      setUploadPaymentModal(null);
+      alert(`✅ Credit payment of ₹ ${paidNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })} for ${targetRow.customerName || targetRow.companyName || 'Customer'} settled successfully!\n\n• Order marked as "Credit Settled (100% Paid)".\n• Customer credit balance cleared.\n• Accounts team notified in real time.`);
+    } catch (err) {
+      alert(`❌ Failed to settle credit: ${err.message}`);
+    } finally {
+      setIsSettlingCredit(false);
+    }
+  };
   const totalPages = Math.ceil(filteredRows.length / rowsPerPage) || 1;
   const indexOfLastRow = currentPage * rowsPerPage;
   const indexOfFirstRow = indexOfLastRow - rowsPerPage;
@@ -10312,133 +10488,148 @@ export default function BomOrdersView(props) {
               </button>
             </div>
 
-            {/* TAB 1: CREDIT PAYMENT VIEW */}
+            {/* TAB 1: CREDIT PAYMENT / SETTLE CREDIT VIEW */}
             {paymentModalTab === 'credit' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* Order Summary Card */}
-                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '12px' }}>
+                {/* Order Overview Summary Card */}
+                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', fontSize: '12px' }}>
                   <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Customer</span>
-                    <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.customerName || uploadPaymentModal.companyName || '—'}</strong>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Customer Name</span>
+                    <strong style={{ color: '#0F172A', fontSize: '13px' }}>{uploadPaymentModal.customerName || uploadPaymentModal.companyName || '—'}</strong>
                   </div>
                   <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Total Amount</span>
-                    <strong style={{ color: '#059669', fontSize: '13px' }}>
-                      ₹ {Number(uploadPaymentModal.grandTotal || uploadPaymentModal.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Agreed Payment Terms</span>
+                    <strong style={{ color: '#2563EB', fontSize: '13px' }}>
+                      {uploadPaymentModal.paymentType || (uploadPaymentModal.creditDays ? `${uploadPaymentModal.creditDays} Days Credit` : 'Credit Payment')}
                     </strong>
                   </div>
                   <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Current Terms</span>
-                    <strong style={{ color: '#0E7490' }}>{uploadPaymentModal.paymentType || 'Credit Payment'}</strong>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Order Total / Credit Due</span>
+                    <strong style={{ color: '#059669', fontSize: '15px', fontWeight: '800' }}>
+                      ₹ {Number(uploadPaymentModal.grandTotal || uploadPaymentModal.subTotal || uploadPaymentModal.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>BOM Ref Number</span>
+                    <strong style={{ color: '#0E7490', fontSize: '13px' }}>{uploadPaymentModal.bomCode || uploadPaymentModal.code || '—'}</strong>
                   </div>
                 </div>
 
-                {/* Credit Configuration Card */}
+                {/* Settle Credit Form Fields */}
                 <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
-                    <Lock size={16} style={{ color: '#0E7490' }} />
+                    <Receipt size={16} style={{ color: '#0E7490' }} />
                     <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                      Configure Customer Credit Approval & Terms
+                      Settle Credit / Record Payment Details
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  {/* Row 1: Payment Date & Settled Amount */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                        Credit Payment Term
-                      </label>
-                      <select
-                        value={modalCreditTerm}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setModalCreditTerm(val);
-                          let days = 30;
-                          if (val.includes('15')) days = 15;
-                          else if (val.includes('30')) days = 30;
-                          else if (val.includes('45')) days = 45;
-                          else if (val.includes('60')) days = 60;
-                          else if (val.includes('7')) days = 7;
-                          setModalCreditDays(days);
-                          const rawDate = uploadPaymentModal.date || uploadPaymentModal.createdAt || new Date();
-                          const baseD = new Date(rawDate);
-                          if (!isNaN(baseD.getTime())) {
-                            baseD.setDate(baseD.getDate() + days);
-                            setModalCreditDueDate(baseD.toISOString().split('T')[0]);
-                          }
-                        }}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', fontWeight: '600', color: '#0F172A', outline: 'none' }}
-                      >
-                        <option value="Net 30 Days">Net 30 Days (Standard Credit)</option>
-                        <option value="Net 15 Days">Net 15 Days</option>
-                        <option value="Net 45 Days">Net 45 Days</option>
-                        <option value="Net 60 Days">Net 60 Days</option>
-                        <option value="Credit Payment">Credit Payment (Custom)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                        Credit Days Limit
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="180"
-                        value={modalCreditDays}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10) || 0;
-                          setModalCreditDays(val);
-                          const rawDate = uploadPaymentModal.date || uploadPaymentModal.createdAt || new Date();
-                          const baseD = new Date(rawDate);
-                          if (!isNaN(baseD.getTime()) && val > 0) {
-                            baseD.setDate(baseD.getDate() + val);
-                            setModalCreditDueDate(baseD.toISOString().split('T')[0]);
-                          }
-                        }}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', fontWeight: '600', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                        placeholder="e.g. 30"
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                        Payment Due Date
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                        Payment Received Date <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input
                         type="date"
-                        value={modalCreditDueDate}
-                        onChange={(e) => setModalCreditDueDate(e.target.value)}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                        value={settleCreditDate}
+                        onChange={(e) => setSettleCreditDate(e.target.value)}
+                        disabled={isSettlingCredit}
+                        style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
                       />
                     </div>
-
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                        Approved By / Authorization
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                        Settled Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input
-                        type="text"
-                        value={modalCreditApprovedBy}
-                        onChange={(e) => setModalCreditApprovedBy(e.target.value)}
-                        placeholder="e.g. MD / Management Approval"
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                        type="number"
+                        value={settleCreditAmount}
+                        onChange={(e) => setSettleCreditAmount(e.target.value)}
+                        placeholder="Enter amount paid"
+                        disabled={isSettlingCredit}
+                        style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
                       />
                     </div>
                   </div>
 
+                  {/* Row 2: Payment Mode & Bank Reference / UTR */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                        Payment Mode <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <select
+                        value={settleCreditMode}
+                        onChange={(e) => setSettleCreditMode(e.target.value)}
+                        disabled={isSettlingCredit}
+                        style={{ width: '100%', height: '40px', padding: '0 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}
+                      >
+                        <option value="NEFT / RTGS (Direct Bank Transfer)">NEFT / RTGS (Direct Bank)</option>
+                        <option value="IMPS Transfer">IMPS Transfer</option>
+                        <option value="UPI Transfer">UPI Transfer</option>
+                        <option value="Cheque / DD">Cheque / Demand Draft</option>
+                        <option value="Cash Deposit">Cash Deposit</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                        Bank Reference / UTR Number <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={settleCreditUtr}
+                        onChange={(e) => setSettleCreditUtr(e.target.value)}
+                        placeholder="e.g. HDFC00012345678"
+                        disabled={isSettlingCredit}
+                        style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Upload Bank Slip / Payment Receipt */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                      Credit Terms Notes & Authorization Reference
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                      Upload Bank Slip / Payment Receipt <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      disabled={isSettlingCredit}
+                      onChange={(e) => {
+                        const f = e.target.files && e.target.files[0];
+                        if (f) setSettleCreditFile(f);
+                      }}
+                      style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                    {settleCreditFile && (
+                      <span style={{ fontSize: '11px', color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
+                        <CheckCircle style={{ width: '13px', height: '13px' }} /> Selected: {settleCreditFile.name} ({Math.round(settleCreditFile.size / 1024)} KB)
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Row 4: Remarks / Notes */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                      Remarks / Notes (Optional)
                     </label>
                     <textarea
                       rows={2}
-                      value={modalCreditNotes}
-                      onChange={(e) => setModalCreditNotes(e.target.value)}
-                      placeholder="Add any specific credit agreement notes, customer PO reference, or payment schedule terms..."
-                      style={{ width: '100%', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '8px 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
+                      value={settleCreditNotes}
+                      onChange={(e) => setSettleCreditNotes(e.target.value)}
+                      placeholder="Enter remarks or payment notes..."
+                      disabled={isSettlingCredit}
+                      style={{ width: '100%', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '8px 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }}
                     />
+                  </div>
+
+                  {/* Notice Banner */}
+                  <div style={{ backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '8px', padding: '10px 12px', fontSize: '11.5px', color: '#065F46', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle style={{ width: '16px', height: '16px', flexShrink: 0, color: '#059669' }} />
+                    <span>
+                      <strong>Instant Clearance:</strong> Credit for this order will be closed immediately, reducing the customer's outstanding credit. The Accounts team will receive an instant real-time notification with the UTR and slip.
+                    </span>
                   </div>
                 </div>
 
@@ -10447,55 +10638,15 @@ export default function BomOrdersView(props) {
                   <button
                     type="button"
                     onClick={() => setUploadPaymentModal(null)}
+                    disabled={isSettlingCredit}
                     style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
                   >
                     Close
                   </button>
                   <button
                     type="button"
-                    disabled={isSavingCredit}
-                    onClick={async () => {
-                      setIsSavingCredit(true);
-                      try {
-                        const cDays = parseInt(modalCreditDays, 10) || 30;
-                        const updatedBomData = {
-                          ...uploadPaymentModal,
-                          paymentType: modalCreditTerm,
-                          paymentTerms: modalCreditTerm,
-                          creditDays: cDays,
-                          creditDueDate: modalCreditDueDate,
-                          creditApprovedBy: modalCreditApprovedBy,
-                          creditNotes: modalCreditNotes,
-                          isCreditOrder: true,
-                          paymentUpdated: true
-                        };
-
-                        const updatedList = (bomStore || []).map(b => (b.bomCode === uploadPaymentModal.bomCode || b.code === uploadPaymentModal.bomCode || b.id === uploadPaymentModal.bomCode) ? {
-                          ...b,
-                          ...updatedBomData
-                        } : b);
-
-                        setBomStore(updatedList);
-                        safeSaveBomStoreToLocal(updatedList);
-
-                        const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode || b.code === uploadPaymentModal.bomCode || b.id === uploadPaymentModal.bomCode);
-                        if (targetBom) {
-                          saveCloudBomRow(targetBom);
-                          fetch('/api/boms', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
-                          }).catch(() => {});
-                        }
-
-                        setUploadPaymentModal(null);
-                        alert(`✅ Credit terms (${modalCreditTerm}, ${cDays} Days) saved successfully for ${uploadPaymentModal.bomCode}!`);
-                      } catch (err) {
-                        alert('Failed to save credit terms: ' + (err.message || 'Unknown error'));
-                      } finally {
-                        setIsSavingCredit(false);
-                      }
-                    }}
+                    disabled={isSettlingCredit}
+                    onClick={() => handleExecuteSettleCredit(uploadPaymentModal)}
                     style={{
                       padding: '9px 22px',
                       borderRadius: '8px',
@@ -10504,23 +10655,23 @@ export default function BomOrdersView(props) {
                       color: 'white',
                       fontSize: '13px',
                       fontWeight: '800',
-                      cursor: isSavingCredit ? 'not-allowed' : 'pointer',
+                      cursor: isSettlingCredit ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
                       boxShadow: '0 2px 4px rgba(14,116,144,0.3)',
-                      opacity: isSavingCredit ? 0.7 : 1
+                      opacity: isSettlingCredit ? 0.7 : 1
                     }}
                   >
-                    {isSavingCredit ? (
+                    {isSettlingCredit ? (
                       <>
                         <RotateCcw style={{ width: '15px', height: '15px', animation: 'spin 0.75s linear infinite' }} />
-                        Saving Credit Terms...
+                        Saving and Updating...
                       </>
                     ) : (
                       <>
                         <Save style={{ width: '15px', height: '15px' }} />
-                        Save Credit Terms
+                        Save and Update
                       </>
                     )}
                   </button>
@@ -11125,172 +11276,7 @@ export default function BomOrdersView(props) {
               <button
                 type="button"
                 disabled={isSettlingCredit}
-                onClick={async () => {
-                  if (!settleCreditUtr.trim()) {
-                    alert('⚠️ Please enter the Bank Reference / UTR Number.');
-                    return;
-                  }
-                  if (!settleCreditFile) {
-                    alert('⚠️ Please select or upload the bank payment slip/receipt image.');
-                    return;
-                  }
-                  const paidNum = cleanNum(settleCreditAmount, 0);
-                  if (paidNum <= 0) {
-                    alert('⚠️ Please enter a valid settled payment amount (₹).');
-                    return;
-                  }
-
-                  try {
-                    setIsSettlingCredit(true);
-                    const targetCode = settleCreditModal.bomCode || settleCreditModal.code || settleCreditModal.id;
-
-                    let docMeta = null;
-                    try {
-                      const uploaded = await uploadBomDocumentFile({
-                        file: settleCreditFile,
-                        bomCode: targetCode,
-                        category: 'payment-proof'
-                      });
-                      if (uploaded && uploaded.name) {
-                        docMeta = {
-                          ...uploaded,
-                          originalName: settleCreditFile.name,
-                          utr: settleCreditUtr.trim(),
-                          settledAmount: paidNum,
-                          paymentDate: settleCreditDate,
-                          paymentMode: settleCreditMode,
-                          notes: settleCreditNotes.trim()
-                        };
-                      }
-                    } catch (uErr) {
-                      console.warn('uploadBomDocumentFile non-fatal, falling back to local compressed:', uErr);
-                    }
-
-                    if (!docMeta) {
-                      const compressed = await new Promise((resolve) => {
-                        compressAndSaveFile(settleCreditFile, (res) => {
-                          resolve(res || {
-                            name: settleCreditFile.name,
-                            originalName: settleCreditFile.name,
-                            type: settleCreditFile.type,
-                            size: settleCreditFile.size,
-                            dataUrl: null
-                          });
-                        });
-                      });
-
-                      docMeta = {
-                        name: compressed?.name || settleCreditFile.name,
-                        originalName: settleCreditFile.name,
-                        type: settleCreditFile.type,
-                        size: compressed?.size || settleCreditFile.size,
-                        dataUrl: compressed?.dataUrl || null,
-                        uploadedAt: new Date().toISOString(),
-                        category: 'payment-proof',
-                        utr: settleCreditUtr.trim(),
-                        settledAmount: paidNum,
-                        paymentDate: settleCreditDate,
-                        paymentMode: settleCreditMode,
-                        notes: settleCreditNotes.trim()
-                      };
-
-                      if (docMeta.name && compressed?.dataUrl) {
-                        saveMediaToCache(docMeta.name, compressed.dataUrl);
-                      }
-                    }
-
-                    const updatedList = (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? {
-                      ...b,
-                      status: (() => {
-                        if (b.status && b.status !== 'Credit Settled (100% Paid)' && b.status !== 'Pending Confirmation') {
-                          return b.status;
-                        }
-                        if (b.invoiceGenerated || (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') || b.taxInvoiceNo) {
-                          return 'Invoice Generated';
-                        }
-                        if (b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified) {
-                          return 'Accounts Verified & Passed to Invoice';
-                        }
-                        if (b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)) {
-                          return 'Dispatch Packing Verified - Sent to Accounts';
-                        }
-                        return b.salesConfirmed ? 'Sales Confirmed - Sent to Dispatch' : 'Accounts Verified & Passed to Invoice';
-                      })(),
-                      paymentStatus: 'Credit Settled (100% Paid)',
-                      creditSettled: true,
-                      salesConfirmed: true,
-                      dispatchPackingVerified: Boolean(b.dispatchPackingVerified || (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0) || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified),
-                      accountsVerified: Boolean(b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || b.status?.includes('Accounts Verified') || b.status?.includes('Invoice')),
-                      isAccountsDone: Boolean(b.isAccountsDone || b.accountsVerification?.verified || b.accountsVerified || b.status?.includes('Accounts Verified') || b.status?.includes('Invoice')),
-                      creditSettledAt: new Date().toISOString(),
-                      creditSettledBy: currentUserName || userRole,
-                      creditSettledRole: userRole,
-                      creditSettledUtr: settleCreditUtr.trim(),
-                      creditSettledDate: settleCreditDate,
-                      creditSettledAmount: paidNum,
-                      creditSettledMode: settleCreditMode,
-                      creditSettledNotes: settleCreditNotes.trim(),
-                      paymentProofDoc: docMeta,
-                      paymentProofDocs: [...(Array.isArray(b.paymentProofDocs) ? b.paymentProofDocs : []), docMeta],
-                      accountsVerification: {
-                        ...(b.accountsVerification || {}),
-                        verified: Boolean(b.accountsVerification?.verified || b.isAccountsDone || b.accountsVerified || true),
-                        creditSettled: true,
-                        paymentStatus: 'Credit Settled (100% Paid)',
-                        settledUtr: settleCreditUtr.trim(),
-                        settledDate: settleCreditDate,
-                        settledAmount: paidNum,
-                        paymentProofDoc: docMeta
-                      },
-                      payments: {
-                        ...b.payments,
-                        creditSettled: true,
-                        settledUtr: settleCreditUtr.trim(),
-                        settledDate: settleCreditDate,
-                        proofDoc: docMeta.name,
-                        proofDocObj: docMeta,
-                        paymentUpdated: true
-                      }
-                    } : b);
-
-                    setBomStore(updatedList);
-                    safeSaveBomStoreToLocal(updatedList);
-
-                    const targetBom = updatedList.find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
-                    if (targetBom) {
-                      saveCloudBomRow(targetBom);
-                      fetch('/api/boms', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
-                      }).catch(() => {});
-
-                      // Send real-time notification to Accounts
-                      try {
-                        notifyCreditPaymentSettled({
-                          bomCode: targetBom.bomCode,
-                          customerName: targetBom.customerName || targetBom.companyName || targetBom.c2 || 'Customer',
-                          salesPerson: currentUserName || targetBom.salesPerson || 'Sales Executive',
-                          amount: paidNum,
-                          utrNumber: settleCreditUtr.trim()
-                        });
-                      } catch (nErr) {
-                        console.warn('Failed to send notification to Accounts:', nErr);
-                      }
-                    }
-
-                    // Dispatch events for local real-time sync
-                    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
-                    window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_bom_store' } }));
-
-                    setSettleCreditModal(null);
-                    alert(`✅ Credit payment of ₹ ${paidNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })} for ${settleCreditModal.customerName || 'Customer'} settled successfully!\n\n• Order marked as "Credit Settled (100% Paid)".\n• Customer credit balance cleared.\n• Accounts team notified in real time.`);
-                  } catch (err) {
-                    alert(`❌ Failed to settle credit: ${err.message}`);
-                  } finally {
-                    setIsSettlingCredit(false);
-                  }
-                }}
+                onClick={() => handleExecuteSettleCredit(settleCreditModal)}
                 style={{
                   padding: '9px 22px',
                   borderRadius: '8px',
