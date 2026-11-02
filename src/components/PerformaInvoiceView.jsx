@@ -345,6 +345,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     userRole &&
     (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support') || userRole === 'Technical Administrator')
   );
+  const isTechSupportLogin = Boolean(
+    userRole &&
+    (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().trim() === 'tech support')
+  );
+  const isStrictTechSupport = Boolean(
+    isTechSupportLogin &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Admin', 'Super Admin'].some(r => (userRole || '').toLowerCase().trim() === r.toLowerCase())
+  );
   const isSalesHead = Boolean(userRole && userRole.toLowerCase().includes('sales head'));
   const canAssignPi = isTechSupport || isCeo || isSalesHead;
 
@@ -467,8 +475,93 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return userRole || 'Sales Executive';
   };
 
+  // Date format helper: strictly DD.MM.YYYY
+  const formatPiDateDot = (dStr) => {
+    if (!dStr) return '—';
+    const clean = String(dStr).trim();
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(clean)) return clean;
+    
+    const isoMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch;
+      return `${d}.${m}.${y}`;
+    }
+    
+    const dt = new Date(clean);
+    if (!isNaN(dt.getTime())) {
+      const d = String(dt.getDate()).padStart(2, '0');
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const y = dt.getFullYear();
+      return `${d}.${m}.${y}`;
+    }
+    return clean;
+  };
+
   const visiblePIList = useMemo(() => {
     const raw = Array.isArray(piList) ? piList.filter(Boolean) : [];
+
+    // Tech Support Isolation: Tech Support users only see PIs created by them
+    if (isStrictTechSupport) {
+      const curCode = (currentEmpId || '').toUpperCase().trim();
+      const curName = (currentEmpName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+      const curEmail = (currentLoggedEmail || '').trim().toLowerCase();
+
+      return raw.filter(pi => {
+        if (!pi) return false;
+        const createdCode = String(pi.createdById || '').toUpperCase().trim();
+        const createdName = String(pi.createdBy || pi.createdByName || pi.author || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+        const createdEmail = String(pi.createdByEmail || '').trim().toLowerCase();
+        const assignedByCode = String(pi.assignedById || '').toUpperCase().trim();
+        const assignedByName = String(pi.assignedBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+
+        // 1. Strict EMP Code matching
+        if (curCode && createdCode && (curCode === createdCode || (curCode === 'TS-VRM001' && createdCode === 'TS-001') || (curCode === 'TS-001' && createdCode === 'TS-VRM001'))) {
+          return true;
+        }
+        if (curCode && assignedByCode && (curCode === assignedByCode)) {
+          return true;
+        }
+
+        // 2. Exact email matching
+        if (curEmail && createdEmail && curEmail === createdEmail) {
+          return true;
+        }
+
+        // 3. Name matching
+        if (curName && createdName) {
+          if (curName === createdName) return true;
+          // Check for distinct numeric identifiers like "Tech Support 1" vs "Tech Support 2"
+          const curNumMatch = curName.match(/\d+/);
+          const createdNumMatch = createdName.match(/\d+/);
+          if (curNumMatch && createdNumMatch && curNumMatch[0] !== createdNumMatch[0]) {
+            return false;
+          }
+          if (createdName.includes(curName) || curName.includes(createdName)) {
+            return true;
+          }
+        }
+        if (curName && assignedByName) {
+          const curNumMatch = curName.match(/\d+/);
+          const assignedNumMatch = assignedByName.match(/\d+/);
+          if (curNumMatch && assignedNumMatch && curNumMatch[0] !== assignedNumMatch[0]) {
+            return false;
+          }
+          if (curName === assignedByName || assignedByName.includes(curName) || curName.includes(assignedByName)) {
+            return true;
+          }
+        }
+
+        // 4. Default fallback for generic TS user and generic TS records
+        const isGenericUser = !curName || curName === 'tech support' || curName === 'tech support specialist';
+        const isGenericRecord = !createdName || createdName === 'tech support' || createdName === 'tech support specialist';
+        if (isGenericUser && isGenericRecord) {
+          return true;
+        }
+
+        return false;
+      });
+    }
+
     if (!isRestrictedSalesUser) return raw;
 
     const curCode = currentEmpId.toUpperCase();
@@ -519,7 +612,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       return false;
     });
-  }, [piList, isRestrictedSalesUser, currentEmpId, currentEmpName, currentLoggedEmail]);
+  }, [piList, isRestrictedSalesUser, isStrictTechSupport, currentEmpId, currentEmpName, currentLoggedEmail]);
 
   const piMetrics = useMemo(() => {
     const list = Array.isArray(visiblePIList) ? visiblePIList : [];
@@ -567,11 +660,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
     const todayConvertedVal = todayConvertedPis.reduce((acc, pi) => acc + cleanNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
 
+    // 3. Assigned to today
+    const todayAssignedPis = list.filter(pi => {
+      if (!pi) return false;
+      const isAssigned = Boolean(
+        pi.assignedSalesperson ||
+        pi.assignedToName ||
+        pi.assignedToId ||
+        (pi.salesPerson && !pi.salesPerson.toLowerCase().includes('support') && !pi.salesPerson.toLowerCase().includes('admin') && !pi.salesPerson.toLowerCase().includes('direct'))
+      );
+      if (!isAssigned) return false;
+      return isToday(pi.assignedAt) || isToday(pi.piDate) || isToday(pi.createdAt);
+    });
+    const todayAssignedVal = todayAssignedPis.reduce((acc, pi) => acc + cleanNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
     return {
       todayPiCount: todayPis.length,
       todayPiValFormatted: formatCurrencyShort(todayPiVal),
       todayConvertedCount: todayConvertedPis.length,
       todayConvertedValFormatted: formatCurrencyShort(todayConvertedVal),
+      todayAssignedCount: todayAssignedPis.length,
+      todayAssignedValFormatted: formatCurrencyShort(todayAssignedVal),
       conversionRate: todayPis.length > 0 
         ? `${((todayConvertedPis.length / todayPis.length) * 100).toFixed(0)}% Converted`
         : '0% Converted'
@@ -2719,12 +2828,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         status: isDraft ? 'Draft' : (isEditing && matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
         statusType: isDraft ? 'draft' : (isEditing && matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
-        salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
-        salesperson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
-        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || currentEmpId || 'SE-004',
+        salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
+        salesperson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
+        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : (currentEmpId || 'SE-004')),
         salesPersonEmail: (isEditing ? matchedExisting?.salesPersonEmail : null) || currentLoggedEmail || '',
-        createdBy: (isEditing ? matchedExisting?.createdBy : null) || getEffectiveSalesPerson(),
-        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || 'SE-004',
+        assignedSalesperson: (isEditing ? matchedExisting?.assignedSalesperson : null) || (isTechSupport ? salesPerson || '' : ''),
+        assignedSalespersonCode: (isEditing ? matchedExisting?.assignedSalespersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : ''),
+        assignedToName: (isEditing ? matchedExisting?.assignedToName : null) || (isTechSupport ? salesPerson || '' : ''),
+        assignedToId: (isEditing ? matchedExisting?.assignedToId : null) || (isTechSupport ? selectedSalespersonCode || '' : ''),
+        assignedAt: (isEditing ? matchedExisting?.assignedAt : null) || (isTechSupport && salesPerson ? new Date().toISOString() : null),
+        assignedBy: (isEditing ? matchedExisting?.assignedBy : null) || (isTechSupport && salesPerson ? (currentEmpName || 'Tech Support') : null),
+        assignedById: (isEditing ? matchedExisting?.assignedById : null) || (isTechSupport && salesPerson ? (currentEmpId || 'TS-001') : null),
+        createdBy: (isEditing ? matchedExisting?.createdBy : null) || currentEmpName || (isTechSupport ? 'Tech Support' : getEffectiveSalesPerson()),
+        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || (isTechSupport ? 'TS-001' : 'SE-004'),
+        createdByRole: (isEditing ? matchedExisting?.createdByRole : null) || userRole || (isTechSupport ? 'Tech Support' : 'Sales Executive'),
+        createdByEmail: (isEditing ? matchedExisting?.createdByEmail : null) || currentLoggedEmail || '',
         zohoSynced: matchedExisting?.zohoSynced || false,
         zohoEstimateId: matchedExisting?.zohoEstimateId || null,
         zohoModule: 'Quotes'
@@ -3488,8 +3606,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               )}
             </div>
 
-            {/* PI OPERATIONS & CONVERSION KPI RIBBON (BUSINZ DESIGN SYSTEM) */}
-            {piMetrics && (
+            {/* PI OPERATIONS & CONVERSION KPI RIBBON (TECH SUPPORT LOGIN ALONE) */}
+            {isTechSupportLogin && piMetrics && (
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -3560,6 +3678,39 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
                     <span>Production handoff </span>
                     <span style={{ color: '#059669', fontWeight: '800' }}>{piMetrics.conversionRate}</span>
+                  </div>
+                </div>
+
+                {/* Tile 3: Assigned to Today */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #EAEFEF',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Assigned to Today
+                    </span>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <UserCheck size={14} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '22px', fontWeight: '900', color: '#2563EB', letterSpacing: '-0.5px' }}>
+                      {piMetrics.todayAssignedCount} Orders
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '6px' }}>
+                      {piMetrics.todayAssignedValFormatted}
+                    </span>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+                    <span>Sales assignment </span>
+                    <span style={{ color: '#2563EB', fontWeight: '800' }}>Handed to Sales Reps</span>
                   </div>
                 </div>
               </div>
@@ -3701,19 +3852,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                          />
                       </th>
-                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
-                      <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
-                      <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
+                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>PI NO.</th>
+                      <th style={{ width: '120px', minWidth: '110px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
+                      {isTechSupportLogin ? (
+                        <>
+                          <th style={{ width: '160px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>Created By</th>
+                          <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Assigned to</th>
+                        </>
+                      ) : (
+                        <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
+                      )}
                       <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
                       <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
-                      <th style={{ width: '160px', minWidth: '140px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tableLoading ? (
                       <>
                         <tr style={{ backgroundColor: '#F0FDFA' }}>
-                          <td colSpan={7} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
+                          <td colSpan={isTechSupportLogin ? 8 : 7} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <div className="businz-spin-ring" />
@@ -3748,6 +3906,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             <td style={{ padding: '12px 14px' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '120px', height: '14px' }} />
                             </td>
+                            {isTechSupportLogin && (
+                              <td style={{ padding: '12px 14px' }}>
+                                <div className="skeleton-shimmer skeleton-text" style={{ width: '120px', height: '14px' }} />
+                              </td>
+                            )}
                             <td style={{ padding: '12px 14px' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
                             </td>
@@ -3762,7 +3925,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </>
                     ) : filteredPIList.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                        <td colSpan={isTechSupportLogin ? 8 : 7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <FileText size={32} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Proforma Invoices found</span>
@@ -3869,62 +4032,199 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 {pi.piNo}
                               </div>
                             </td>
-                            <td style={{ padding: '12px 14px', color: '#64748B', width: '130px', minWidth: '120px', whiteSpace: 'nowrap' }}>
-                              {pi.piDate}
+                            <td style={{ padding: '12px 14px', color: '#64748B', width: '120px', minWidth: '110px', whiteSpace: 'nowrap', fontFamily: isTechSupportLogin ? 'monospace' : 'inherit', fontWeight: isTechSupportLogin ? '600' : 'normal' }}>
+                              {formatPiDateDot(pi.piDate || pi.date || pi.createdAt)}
                             </td>
-                            <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div style={{
-                                  width: '26px',
-                                  height: '26px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#ECFEFF',
-                                  color: '#0E7490',
-                                  border: '1px solid #A5F3FC',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: '11px',
-                                  fontWeight: '800',
-                                  flexShrink: 0
-                                }}>
-                                  {(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'S')[0]?.toUpperCase()}
-                                </div>
-                                <div style={{ minWidth: 0, flex: 1 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                                    <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Direct / Admin'}
+
+                            {/* Tech Support Split: Created By & Assigned to */}
+                            {isTechSupportLogin ? (
+                              <>
+                                {/* Created By (Tech Person name who created PI) */}
+                                <td style={{ padding: '12px 14px', color: '#1E293B', width: '160px', minWidth: '140px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{
+                                      width: '26px',
+                                      height: '26px',
+                                      borderRadius: '50%',
+                                      backgroundColor: '#F3E8FF',
+                                      color: '#9333EA',
+                                      border: '1px solid #E9D5FF',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      flexShrink: 0
+                                    }}>
+                                      {((pi.createdBy || pi.createdByName || pi.author || currentEmpName || 'T')[0] || 'T').toUpperCase()}
                                     </div>
-                                    {canAssignPi && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleOpenAssignModal(pi);
-                                        }}
-                                        title={`Assign/Reassign PI ${pi.piNo || ''} to Sales Executive`}
-                                        style={{ border: 'none', background: '#ECFEFF', cursor: 'pointer', padding: '2px 6px', color: '#0E7490', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#0E7490';
-                                          e.currentTarget.style.color = '#FFFFFF';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#ECFEFF';
-                                          e.currentTarget.style.color = '#0E7490';
-                                        }}
-                                      >
-                                        <UserCheck size={11} /> Assign
-                                      </button>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {pi.createdBy || pi.createdByName || pi.author || currentEmpName || 'Tech Support'}
+                                      </div>
+                                      {pi.createdById && (
+                                        <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                          {pi.createdById}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Assigned to (Sales person name which tech support assigned to) */}
+                                <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
+                                  {(() => {
+                                    const assignedSp = pi.assignedSalesperson || pi.assignedToName || (
+                                      pi.salesPerson && !pi.salesPerson.toLowerCase().includes('support') && !pi.salesPerson.toLowerCase().includes('admin') && !pi.salesPerson.toLowerCase().includes('direct')
+                                        ? pi.salesPerson
+                                        : ''
+                                    );
+                                    const assignedCode = pi.assignedSalespersonCode || pi.assignedToId || (assignedSp ? pi.salesPersonCode : '');
+
+                                    if (assignedSp) {
+                                      return (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <div style={{
+                                            width: '26px',
+                                            height: '26px',
+                                            borderRadius: '50%',
+                                            backgroundColor: '#ECFEFF',
+                                            color: '#0E7490',
+                                            border: '1px solid #A5F3FC',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            flexShrink: 0
+                                          }}>
+                                            {assignedSp[0]?.toUpperCase()}
+                                          </div>
+                                          <div style={{ minWidth: 0, flex: 1 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                              <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {assignedSp}
+                                              </div>
+                                              {canAssignPi && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenAssignModal(pi);
+                                                  }}
+                                                  title={`Reassign PI ${pi.piNo || ''} to Sales Executive`}
+                                                  style={{ border: 'none', background: '#ECFEFF', cursor: 'pointer', padding: '2px 6px', color: '#0E7490', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}
+                                                  onMouseEnter={(e) => {
+                                                    e.currentTarget.style.backgroundColor = '#0E7490';
+                                                    e.currentTarget.style.color = '#FFFFFF';
+                                                  }}
+                                                  onMouseLeave={(e) => {
+                                                    e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                                    e.currentTarget.style.color = '#0E7490';
+                                                  }}
+                                                >
+                                                  <UserCheck size={10} /> Reassign
+                                                </button>
+                                              )}
+                                            </div>
+                                            {assignedCode && (
+                                              <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                                {assignedCode}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '6px' }}>
+                                        <span style={{ fontSize: '12px', color: '#94A3B8', fontStyle: 'italic' }}>
+                                          Not Assigned
+                                        </span>
+                                        {canAssignPi && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenAssignModal(pi);
+                                            }}
+                                            title={`Assign PI ${pi.piNo || ''} to Sales Executive`}
+                                            style={{ border: '1px solid #A5F3FC', background: '#ECFEFF', cursor: 'pointer', padding: '3px 8px', color: '#0E7490', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '700' }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.backgroundColor = '#0E7490';
+                                              e.currentTarget.style.color = '#FFFFFF';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                              e.currentTarget.style.color = '#0E7490';
+                                            }}
+                                          >
+                                            <UserCheck size={11} /> Assign
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                              </>
+                            ) : (
+                              /* Standard Sales Person column for non-Tech-Support logins */
+                              <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{
+                                    width: '26px',
+                                    height: '26px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#ECFEFF',
+                                    color: '#0E7490',
+                                    border: '1px solid #A5F3FC',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    flexShrink: 0
+                                  }}>
+                                    {(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'S')[0]?.toUpperCase()}
+                                  </div>
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                      <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Direct / Admin'}
+                                      </div>
+                                      {canAssignPi && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenAssignModal(pi);
+                                          }}
+                                          title={`Assign/Reassign PI ${pi.piNo || ''} to Sales Executive`}
+                                          style={{ border: 'none', background: '#ECFEFF', cursor: 'pointer', padding: '2px 6px', color: '#0E7490', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#0E7490';
+                                            e.currentTarget.style.color = '#FFFFFF';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                            e.currentTarget.style.color = '#0E7490';
+                                          }}
+                                        >
+                                          <UserCheck size={11} /> Assign
+                                        </button>
+                                      )}
+                                    </div>
+                                    {pi.salesPersonCode && (
+                                      <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                        {pi.salesPersonCode}
+                                      </div>
                                     )}
                                   </div>
-                                  {pi.salesPersonCode && (
-                                    <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
-                                      {pi.salesPersonCode}
-                                    </div>
-                                  )}
                                 </div>
-                              </div>
-                            </td>
+                              </td>
+                            )}
+
                             <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B', minWidth: '220px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.vendor || pi.customerName || 'Direct Customer'}</span>
@@ -3940,14 +4240,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               {pi.amount}
                             </td>
                             
-                            {/* Pill status badge with bullet dot & clickable BOM link */}
-                            <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            {/* Status Column: For Tech Support, strictly badge without BOM buttons */}
+                            <td style={{ padding: '12px 14px', textAlign: 'center', width: isTechSupportLogin ? '150px' : '160px', minWidth: '130px' }}>
                               <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
                                 <span style={{ backgroundColor: statusBg, color: statusFg, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusFg }}></span>
                                   {displayStatus}
                                 </span>
-                                {isConverted && (
+                                {!isTechSupportLogin && isConverted && (
                                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                     {matchedBoms.map((b, bIdx) => {
                                       const bCode = b.bomCode || b.code || b.id;
@@ -4693,16 +4993,56 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label htmlFor="performa-invoice-sales-executive" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Sales Executive
+                    {isTechSupport ? 'Assign to Sales Executive (Optional)' : 'Sales Executive'}
                   </label>
                   <div style={{ position: 'relative' }}>
-                    <input id="performa-invoice-sales-executive" name="salesExecutive" aria-label="Sales Executive"
-                      type="text"
-                      readOnly
-                      disabled
-                      value={salesPerson || getActiveUserName()}
-                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', boxSizing: 'border-box', cursor: 'not-allowed' }}
-                     />
+                    {isTechSupport ? (
+                      <select
+                        id="performa-invoice-sales-executive"
+                        name="salesExecutive"
+                        aria-label="Assign to Sales Executive"
+                        value={selectedSalespersonCode || ''}
+                        onChange={(e) => {
+                          const code = e.target.value;
+                          setSelectedSalespersonCode(code);
+                          const sp = salespersonsList.find(s => s.employee_code === code);
+                          if (sp) {
+                            setSalesPerson(sp.employee_name);
+                          } else {
+                            setSalesPerson('');
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          height: '42px',
+                          borderRadius: '10px',
+                          border: '1.5px solid #0E7490',
+                          padding: '0 14px',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: '#0F172A',
+                          backgroundColor: '#ECFEFF',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="">-- Unassigned (Assign Later) --</option>
+                        {salespersonsList.map(s => (
+                          <option key={s.employee_code} value={s.employee_code}>
+                            {s.employee_name} ({s.employee_code})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input id="performa-invoice-sales-executive" name="salesExecutive" aria-label="Sales Executive"
+                        type="text"
+                        readOnly
+                        disabled
+                        value={salesPerson || getActiveUserName()}
+                        style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', boxSizing: 'border-box', cursor: 'not-allowed' }}
+                       />
+                    )}
                   </div>
                 </div>
               </div>
