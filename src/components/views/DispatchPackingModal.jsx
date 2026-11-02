@@ -198,6 +198,7 @@ export default function DispatchPackingModal({
   const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPartialConfirmModal, setShowPartialConfirmModal] = useState(false);
+  const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
   const [dispatchCameraError, setDispatchCameraError] = useState('');
   const [localActiveMediaPreview, setLocalActiveMediaPreview] = useState(null);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -1073,23 +1074,6 @@ export default function DispatchPackingModal({
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {canCancelBom && !isCancelled && !isAccountsLocked && !isAlreadySentToAccounts && dispatchPackingModal.status !== 'Cancelled & Stock Restored' && (
-            <button
-              onClick={() => handleCancelBomOrder(dispatchPackingModal)}
-              style={{
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                color: '#FEE2E2', height: '42px', padding: '0 18px',
-                borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                cursor: 'pointer', backdropFilter: 'blur(4px)',
-                display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-              title="Cancel BOM and restore blocked stock back into inventory"
-            >
-              <XCircle style={{ width: '15px', height: '15px', color: '#FCA5A5' }} />
-              Cancel BOM
-            </button>
-          )}
           {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
             <button
               type="button"
@@ -1107,7 +1091,7 @@ export default function DispatchPackingModal({
               }}
             >
               <CheckCircle style={{ width: '16px', height: '16px' }} />
-              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed (Send to Accounts)')}
+              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : 'Packing Confirmed'}
             </button>
           )}
         </div>
@@ -1816,26 +1800,6 @@ export default function DispatchPackingModal({
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {canCancelBom && !isCancelled && !isAlreadySentToAccounts && (
-              <button
-                type="button"
-                onClick={() => {
-                  handleCancelBomOrder(dispatchPackingModal);
-                  setDispatchPackingModal(null);
-                }}
-                style={{
-                  border: '1px solid #FCA5A5',
-                  background: '#FEF2F2',
-                  color: '#DC2626', height: '40px', padding: '0 16px',
-                  borderRadius: '10px', fontSize: '12px', fontWeight: '800',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                }}
-                title="Cancel BOM and restore blocked stock back into inventory"
-              >
-                <XCircle style={{ width: '15px', height: '15px', color: '#DC2626' }} />
-                Cancel BOM & Restore Stock
-              </button>
-            )}
             <button
               onClick={() => setDispatchPackingModal(null)}
               style={{
@@ -1873,7 +1837,7 @@ export default function DispatchPackingModal({
             {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
               <button
                 type="button"
-                onClick={handleSaveDraft}
+                onClick={() => setShowSaveDraftModal(true)}
                 disabled={uploadingCount > 0}
                 style={{
                   border: '1.5px solid #0E7490',
@@ -1922,7 +1886,7 @@ export default function DispatchPackingModal({
               </button>
             )}
 
-            {/* Case 2: Partial packing -> Confirm Partial Packing (Send to Accounts) */}
+            {/* Case 2: Partial packing -> Confirm Partial Packing */}
             {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && packedItemsCount > 0 && packedItemsCount < totalItemsCount && (
               <button
                 type="button"
@@ -1948,7 +1912,7 @@ export default function DispatchPackingModal({
                 <CheckCircle style={{ width: '15px', height: '15px' }} />
                 {isPartiallySentToAccounts
                   ? `Update Partial in Accounts (${packedItemsCount}/${totalItemsCount})`
-                  : `Confirm Partial Packing (Send to Accounts)`}
+                  : `Confirm Partial Packing`}
               </button>
             )}
 
@@ -1976,7 +1940,7 @@ export default function DispatchPackingModal({
                 title={needsSalesPaymentProof ? "Confirm packing and notify Sales to attach payment slip" : "Confirm all goods packing and forward to Accounts"}
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : (needsSalesPaymentProof ? 'Confirm Packing (Notify Sales for Payment)' : 'Packing Confirmed'))}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (needsSalesPaymentProof ? 'Confirm Packing (Notify Sales for Payment)' : 'Packing Confirmed')}
               </button>
             )}
           </div>
@@ -2343,6 +2307,76 @@ export default function DispatchPackingModal({
                 }}
               >
                 <CheckCircle size={16} /> Yes, Send Partial to Accounts
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DISPATCH SAVE DRAFT CONFIRMATION POPUP MODAL */}
+      {showSaveDraftModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 999999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: '16px',
+            maxWidth: '480px', width: '100%', padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            display: 'flex', flexDirection: 'column', gap: '18px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px', height: '46px', borderRadius: '12px',
+                backgroundColor: '#ECFEFF', color: '#0E7490',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                <Save size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>
+                  Save Packing Progress as Draft?
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  BOM {dispatchPackingModal.bomCode || dispatchPackingModal.code} • {packedItemsCount} of {totalItemsCount} items checked
+                </p>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              This will save your checked items, quantities, and uploaded media as a draft without moving the order to the next stage.
+              <br /><br />
+              • The order will remain in <strong>Dispatch</strong> for you to resume packing anytime.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setShowSaveDraftModal(false)}
+                style={{
+                  padding: '10px 18px', borderRadius: '8px', border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSaveDraftModal(false);
+                  handleSaveDraft();
+                }}
+                style={{
+                  padding: '10px 22px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#0E7490', color: '#FFFFFF', fontSize: '13px', fontWeight: '800',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                  boxShadow: '0 4px 12px rgba(14,116,144,0.35)'
+                }}
+              >
+                <Save size={16} /> Yes, Save Draft
               </button>
             </div>
           </div>

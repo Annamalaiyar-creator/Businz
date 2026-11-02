@@ -163,7 +163,17 @@ export default function ProductionTableView({
       </div>
 
       {/* 3. STATUS SUB-TABS ROW */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid #e2e8f0',
+        gap: '20px',
+        padding: '4px 0',
+        alignItems: 'center',
+        flexWrap: 'nowrap',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'thin'
+      }}>
         {pageConfig.tabs.map(tab => (
           <button
             key={tab.id}
@@ -179,7 +189,9 @@ export default function ProductionTableView({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              flexShrink: 0,
+              whiteSpace: 'nowrap'
             }}
           >
             {tab.label}
@@ -313,8 +325,8 @@ export default function ProductionTableView({
                               <span
                                 title={
                                   row.dispatchPrintCount > 1
-                                    ? `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd Print: ${row.secondPrintTimeStr || row.dispatchPrintTimeStr}${row.dispatchPrintCount > 2 ? ` (Total Prints: ${row.dispatchPrintCount})` : ''} by ${row.dispatchPrintedBy || 'Dispatch / Production Team'}`
-                                    : `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} on ${row.dispatchPrintedDateStr || ''} by ${row.dispatchPrintedBy || 'Dispatch / Production Team'}`
+                                    ? `Reprinted at ${row.dispatchPrintTimeStr || ''}${row.dispatchPrintedBy ? ` by ${row.dispatchPrintedBy}` : ''}`
+                                    : `Printed at ${row.dispatchPrintTimeStr || ''} on ${row.dispatchPrintedDateStr || ''}${row.dispatchPrintedBy ? ` by ${row.dispatchPrintedBy}` : ''}`
                                 }
                                 style={{
                                   backgroundColor: row.dispatchPrintCount > 1 ? '#EFF6FF' : '#F0FDF4',
@@ -336,15 +348,9 @@ export default function ProductionTableView({
                                 ) : (
                                   <Printer size={10} strokeWidth={2.5} />
                                 )}
-                                <span>{row.dispatchPrintCount > 1 ? `Reprinted ×${row.dispatchPrintCount}` : 'Printed'}</span>
-                                {row.dispatchPrintCount > 1 ? (
-                                  <span style={{ opacity: 0.9, fontWeight: '600', whiteSpace: 'nowrap' }}>
-                                    (1st: {row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd: {row.secondPrintTimeStr || row.dispatchPrintTimeStr})
-                                  </span>
-                                ) : (
-                                  row.dispatchPrintTimeStr && (
-                                    <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
-                                  )
+                                <span>{row.dispatchPrintCount > 1 ? 'Reprinted' : 'Printed'}</span>
+                                {row.dispatchPrintTimeStr && (
+                                  <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
                                 )}
                               </span>
                             ) : (
@@ -1101,9 +1107,9 @@ export default function ProductionTableView({
                   flexShrink: 0,
                   boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
                 }}
-                title="Cancel BOM and restore blocked stock back into inventory"
+                title={activeTab === 'Dispatch Orders' ? "Cancel packing verification and restore blocked stock" : "Cancel BOM and restore blocked stock back into inventory"}
               >
-                <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
+                <XCircle size={14} style={{ color: '#DC2626' }} /> {activeTab === 'Dispatch Orders' ? 'Cancel Verification' : 'Cancel BOM'}
               </button>
             );
           })()}

@@ -1737,6 +1737,20 @@ export default function ProductionViewsEngine(props) {
             const cleanStatus = rStatus.replace(/[^a-z0-9]/g, '');
             const cleanGroup = rTabGroup.replace(/[^a-z0-9]/g, '');
 
+            const isCancelledRecord = Boolean(
+              r.cancelled ||
+              r.status === 'CANCELLED' ||
+              r.status === 'Cancelled' ||
+              r.status === 'Cancelled & Stock Restored' ||
+              cleanStatus.includes('cancel') ||
+              cleanGroup.includes('cancel')
+            );
+
+            // User mandate: Cancelled BOMs must NEVER appear in "All Orders" or other active queues; strictly appear in "Cancelled" tab alone
+            if (isCancelledRecord) {
+              return matchesSearch && matchesDate && cleanSub.includes('cancel');
+            }
+
             const matchesTab = cleanSub === 'all' ||
               cleanSub === 'allboms' ||
               cleanSub === 'allorders' ||
@@ -1751,7 +1765,6 @@ export default function ProductionViewsEngine(props) {
               (cleanSub.includes('loading') && (cleanStatus.includes('loading') || cleanGroup.includes('loading'))) ||
               (cleanSub.includes('lr') && (cleanStatus.includes('lr') || cleanGroup.includes('lr'))) ||
               ((cleanSub.includes('closed') || cleanSub.includes('dispatched')) && (cleanStatus.includes('closed') || cleanStatus.includes('dispatched') || cleanStatus.includes('completed') || cleanGroup.includes('closed') || r.fullyCompleted)) ||
-              (cleanSub.includes('cancel') && (cleanStatus.includes('cancel') || cleanGroup.includes('cancel') || r.cancelled)) ||
               (cleanSub.includes('draft') && cleanStatus.includes('draft')) ||
               (cleanSub.includes('sent') && (cleanStatus.includes('sent') || cleanStatus.includes('confirm') || cleanStatus.includes('production')));
 

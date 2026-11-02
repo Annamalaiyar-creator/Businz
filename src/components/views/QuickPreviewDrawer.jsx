@@ -95,27 +95,15 @@ export default function QuickPreviewDrawer({
             View Full Details
           </button>
 
-          {canCancelBom && activeTab !== 'Accounts Verification' && !String(activeTab || '').toLowerCase().includes('account') && ['Dispatch Orders', 'BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) && quickPreviewRecord.status !== 'Cancelled & Stock Restored' && quickPreviewRecord.status !== 'CANCELLED' && !quickPreviewRecord.cancelled && (() => {
-            if (activeTab === 'Dispatch Orders') {
-              const isSent = Boolean(
-                quickPreviewRecord.status === 'Packed & Awaiting Accounts Verification' ||
-                quickPreviewRecord.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
-                quickPreviewRecord.status === 'Packing Verified - Sent to Accounts' ||
-                quickPreviewRecord.status === 'Accounts Verified & Passed to Invoice' ||
-                quickPreviewRecord.status === 'ACCOUNTS VERIFIED' ||
-                quickPreviewRecord.status === 'Invoice Confirmed' ||
-                quickPreviewRecord.status === 'Awaiting Vehicle Loading & Dispatch' ||
-                quickPreviewRecord.status === 'AWAITING VEHICLE LOADING' ||
-                quickPreviewRecord.status === 'Closed' ||
-                quickPreviewRecord.status === 'Completed' ||
-                quickPreviewRecord.tabGroup === 'Packed' ||
-                quickPreviewRecord.tabGroup === 'AwaitingLoading' ||
-                quickPreviewRecord.tabGroup === 'Closed' ||
-                quickPreviewRecord.accountsVerification?.readyForAccounts ||
-                quickPreviewRecord.accountsVerification?.verified
-              );
-              if (isSent) return null;
-            }
+          {canCancelBom &&
+            activeTab !== 'Accounts Verification' &&
+            activeTab !== 'Dispatch Orders' &&
+            !String(activeTab || '').toLowerCase().includes('account') &&
+            !String(activeTab || '').toLowerCase().includes('dispatch') &&
+            ['BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) &&
+            quickPreviewRecord.status !== 'Cancelled & Stock Restored' &&
+            quickPreviewRecord.status !== 'CANCELLED' &&
+            !quickPreviewRecord.cancelled && (() => {
             return (
               <button
                 onClick={() => {
@@ -451,20 +439,18 @@ export default function QuickPreviewDrawer({
                   <th style={{ padding: '8px 10px' }}>Product Item</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center' }}>UOM</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center' }}>Qty</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Rate (₹)</th>
                 </tr>
               </thead>
               <tbody>
                 {((quickPreviewRecord.items || quickPreviewRecord.materials || []).length > 0
                   ? (quickPreviewRecord.items || quickPreviewRecord.materials)
-                  : [{ name: quickPreviewRecord.productName || quickPreviewRecord.c2 || 'BOM Material Kit', uom: 'NOS', qty: 1, rate: parseFloat(quickPreviewRecord.grandTotal || quickPreviewRecord.value || 0) }]
+                  : [{ name: quickPreviewRecord.productName || quickPreviewRecord.c2 || 'BOM Material Kit', uom: 'NOS', qty: 1 }]
                 ).map((it, idx) => (
                   <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                     <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
                     <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{it.name || '—'}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569' }}>{it.uom || it.unit || 'NOS'}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>{it.qty || 1}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: '#0F172A' }}>₹ {Number(it.rate || 0).toLocaleString('en-IN')}</td>
                   </tr>
                 ))}
               </tbody>

@@ -754,7 +754,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 actionText: '',
                 searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
                 tabs: [
-                  { id: 'All', label: 'All Orders', count: allDispatchBoms.length, bg: '#F1F5F9', fg: '#334155' },
+                  { id: 'All', label: 'All Orders', count: allDispatchBoms.filter(b => !b.cancelled && b.status !== 'Cancelled' && b.status !== 'Cancelled & Stock Restored').length, bg: '#F1F5F9', fg: '#334155' },
                   { id: 'PendingPrint', label: 'Pending Print', count: allDispatchBoms.filter(b => (!b.dispatchPrinted && !b.isPrinted) && !isClosedOrder(b) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Printed', label: 'Print Taken', count: allDispatchBoms.filter(b => (b.dispatchPrinted || b.isPrinted) && !isClosedOrder(b) && !b.cancelled).length, bg: '#DCFCE7', fg: '#166534' },
                   { id: 'PendingPacking', label: 'Pending Packing', count: allDispatchBoms.filter(b => b && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
@@ -765,7 +765,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'Closed', label: 'Closed / Dispatched', count: allDispatchBoms.filter(b => isClosedOrder(b)).length, bg: '#F1F5F9', fg: '#475569' },
                   { id: 'Cancelled', label: 'Cancelled', count: allDispatchBoms.filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
+                headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Dispatch Packing Status'],
                 rows: allDispatchBoms.sort((a, b) => {
                   const parseBomSeq = (code) => {
                     const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
@@ -1050,8 +1050,6 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     salesPersonName: salesPersonName,
                     c4: salesPersonName,
                     paymentType: b.paymentType || b.paymentTerms || '100% Paid',
-                    c5: b.paymentType || b.paymentTerms || '100% Paid',
-                    c6: formattedAmt,
                     totalAmountFormatted: formattedAmt,
                     packingProgressText: packingProgressText,
                     status: statusLabel,
