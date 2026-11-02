@@ -6392,6 +6392,7 @@ export default function BomOrdersView(props) {
                     status: 'Sales Confirmed - Sent to Dispatch',
                     salesConfirmed: true,
                     salesConfirmedAt: new Date().toISOString(),
+                    isSentToDispatch: true,
                     stockBlocked: true,
                     stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
                     stockDeducted: true,

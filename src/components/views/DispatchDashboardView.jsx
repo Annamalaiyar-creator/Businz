@@ -2159,14 +2159,14 @@ export default function DispatchDashboardView(props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {(((bomStore && bomStore.length > 0) ? bomStore : (props.bomStore || [])).filter(b => b && b.status && b.status !== 'Draft')).length === 0 ? (
+                    {(((bomStore && bomStore.length > 0) ? bomStore : (props.bomStore || [])).filter(b => b && b.salesConfirmed && b.status && b.status !== 'Draft' && b.status !== 'Pending Confirmation' && !String(b.status).toLowerCase().includes('pending confirmation'))).length === 0 ? (
                       <tr>
                         <td colSpan="5" style={{ padding: '24px 10px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
                           No delayed dispatch orders. All orders are up to date.
                         </td>
                       </tr>
                     ) : (
-                      ((bomStore && bomStore.length > 0) ? bomStore : (props.bomStore || [])).filter(b => b && b.status && b.status !== 'Draft').slice(0, 5).map((b, i) => (
+                      ((bomStore && bomStore.length > 0) ? bomStore : (props.bomStore || [])).filter(b => b && b.salesConfirmed && b.status && b.status !== 'Draft' && b.status !== 'Pending Confirmation' && !String(b.status).toLowerCase().includes('pending confirmation')).slice(0, 5).map((b, i) => (
                         <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                           <td style={{ padding: '8px 10px', fontWeight: 'bold', color: '#0F172A' }}>{b.bomCode || b.code}</td>
                           <td style={{ padding: '8px 10px', color: '#334155' }}>{b.customerName || b.customer}</td>

@@ -6222,8 +6222,8 @@ app.post('/api/boms', async (req, res) => {
               targetRecordId: finalCode,
               dedupId: `bom_packing_verified_${finalCode}`
             });
-          } else if (persistedBom.status === 'Sales Confirmed - Sent to Dispatch' || persistedBom.salesConfirmed || shouldAssignNewCode || isNew) {
-            // Workflow: Sales -> Dispatch: BOM confirmed by Sales, ready for packing
+          } else if ((persistedBom.status === 'Sales Confirmed - Sent to Dispatch' || persistedBom.salesConfirmed) && persistedBom.status !== 'Draft' && persistedBom.status !== 'Pending Confirmation' && !String(persistedBom.status || '').toLowerCase().includes('pending confirmation')) {
+            // Workflow: Sales -> Dispatch: BOM confirmed by Sales via Reconfirm BOM, ready for packing
             createInternalNotification({
               recipientRole: 'Dispatch Head',
               eventType: 'BOM_SUBMITTED',
@@ -6238,6 +6238,16 @@ app.post('/api/boms', async (req, res) => {
               targetRecordId: finalCode,
               dedupId: `bom_submitted_${finalCode}`
             });
+          } else if (!persistedBom.salesConfirmed || persistedBom.status === 'Pending Confirmation' || persistedBom.status === 'Draft' || String(persistedBom.status || '').toLowerCase().includes('pending confirmation')) {
+            // Safety: Clean up any premature BOM_SUBMITTED dispatch notification for unconfirmed/pending BOM
+            try {
+              if (isDbConnected()) {
+                await query(`
+                  DELETE FROM public.internal_notifications
+                  WHERE document_id = $1 AND event_type = 'BOM_SUBMITTED' AND recipient_role ILIKE '%dispatch%'
+                `, [finalCode]);
+              }
+            } catch (_) {}
           }
         } catch (notifErr) {
           console.warn('[BOM Workflow Notification Notice]:', notifErr.message);

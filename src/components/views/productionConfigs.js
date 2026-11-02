@@ -716,15 +716,16 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 if (!b) return false;
                 const s = String(b.status || '').toLowerCase().trim();
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') {
-                  return Boolean(b.salesConfirmed || b.isSentToDispatch || s.includes('dispatch') || s.includes('packed'));
+                  return Boolean(b.salesConfirmed && (b.isSentToDispatch || s.includes('dispatch') || s.includes('packed')));
                 }
                 // Orders pending sales reconfirmation or drafts must NEVER appear in Dispatch
                 const isDraftOrPending = Boolean(
+                  !b.salesConfirmed ||
                   b.status === 'Draft' || s === 'draft' ||
                   b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
-                  s === 'pending sales confirmation' || !b.salesConfirmed
+                  s === 'pending sales confirmation'
                 );
-                if (isDraftOrPending && !b.salesConfirmed) {
+                if (isDraftOrPending) {
                   return false;
                 }
 

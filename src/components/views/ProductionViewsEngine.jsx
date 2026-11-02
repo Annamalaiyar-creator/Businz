@@ -1683,10 +1683,16 @@ export default function ProductionViewsEngine(props) {
               { id: 'All', label: 'All Entries', count: (bomStore || []).length, bg: '#e2e8f0', fg: '#475569' }
             ],
             headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status'],
-            rows: (bomStore || []).map(b => {
+            rows: (bomStore || []).filter(b => {
+              if (activeTab === 'Dispatch Orders') {
+                const s = String(b?.status || '').toLowerCase();
+                return b && Boolean(b.salesConfirmed) && b.status !== 'Draft' && b.status !== 'Pending Confirmation' && !s.includes('pending confirmation') && !s.includes('draft');
+              }
+              return true;
+            }).map(b => {
               let dispStatus = b.status || 'ACTIVE';
               if (activeTab === 'Dispatch Orders') {
-                if (['Sent to Production', 'Confirmed', 'In Production', 'Pending Confirmation', 'Draft', 'Pending', 'Edited / Pending Confirmation'].includes(b.status) || !b.status) {
+                if (['Sent to Production', 'Confirmed', 'In Production'].includes(b.status) || !b.status) {
                   dispStatus = 'Pending Packing';
                 }
               }

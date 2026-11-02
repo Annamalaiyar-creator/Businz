@@ -105,7 +105,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             const st = String(b.status || '').toLowerCase();
             const isCancelled = st.includes('cancel') || Boolean(b.cancelled);
             const isClosed = st.includes('closed') || st.includes('completed') || st.includes('delivered');
-            return !isCancelled && !isClosed;
+            const isConfirmedForDispatch = Boolean(b.salesConfirmed) && b.status !== 'Pending Confirmation' && !st.includes('pending confirmation') && b.status !== 'Draft' && !st.includes('draft');
+            return isConfirmedForDispatch && !isCancelled && !isClosed;
           });
           setRealPendingDispatchCount(pendingDispatch.length);
 
