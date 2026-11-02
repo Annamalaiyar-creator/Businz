@@ -3350,26 +3350,7 @@ export default function BomOrdersView(props) {
               onClick={() => setBomConfirmModal('cancel')}
               style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: isSubmittingBom ? 'not-allowed' : 'pointer', opacity: isSubmittingBom ? 0.6 : 1, backdropFilter: 'blur(4px)' }}
             >
-              Cancel
-            </button>
-            <button
-              disabled={isSubmittingBom}
-              onClick={() => {
-                if (isSubmittingBom) return;
-                const validation = validateBomForm(true);
-                if (!validation.isValid) {
-                  setValidationErrorModal({
-                    fields: validation.missingList.map(m => typeof m === 'object' ? m.field : m),
-                    firstTargetId: validation.missingList[0]?.targetId
-                  });
-                  return;
-                }
-                setBomConfirmModal('draft');
-              }}
-              style={{ border: 'none', background: '#FFFFFF', color: '#0E7490', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: isSubmittingBom ? 'not-allowed' : 'pointer', opacity: isSubmittingBom ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
-            >
-              <FileText style={{ width: '15px', height: '15px' }} />
-              Save as Draft
+              ← Back
             </button>
             <button
               disabled={isSubmittingBom}
@@ -3388,7 +3369,7 @@ export default function BomOrdersView(props) {
               style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: isSubmittingBom ? 'not-allowed' : 'pointer', opacity: isSubmittingBom ? 0.6 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
               <CheckCircle style={{ width: '16px', height: '16px' }} />
-              Create Order →
+              Complete →
             </button>
           </div>
         </div>
@@ -5292,28 +5273,9 @@ export default function BomOrdersView(props) {
             onClick={() => setBomConfirmModal('cancel')}
             style={{ border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: isSubmittingBom ? 'not-allowed' : 'pointer' }}
           >
-            Cancel
+            ← Back
           </button>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              type="button"
-              disabled={isSubmittingBom}
-              onClick={() => {
-                if (isSubmittingBom) return;
-                const validation = validateBomForm(true);
-                if (!validation.isValid) {
-                  setValidationErrorModal({
-                    fields: validation.missingList.map(m => typeof m === 'object' ? m.field : m),
-                    firstTargetId: validation.missingList[0]?.targetId
-                  });
-                  return;
-                }
-                setBomConfirmModal('draft');
-              }}
-              style={{ border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', color: '#334155', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: isSubmittingBom ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <FileText style={{ width: '15px', height: '15px' }} /> Save as Draft
-            </button>
             <button
               type="button"
               disabled={isSubmittingBom}
@@ -5331,7 +5293,7 @@ export default function BomOrdersView(props) {
               }}
               style={{ border: 'none', background: '#0E7490', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: isSubmittingBom ? 'not-allowed' : 'pointer', opacity: isSubmittingBom ? 0.6 : 1, boxShadow: '0 4px 14px rgba(14,116,144,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <Check style={{ width: '16px', height: '16px' }} /> Create & Send to Dispatch
+              <Check style={{ width: '16px', height: '16px' }} /> Complete Order →
             </button>
           </div>
         </div>
@@ -5346,14 +5308,12 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>
-                    {bomConfirmModal === 'cancel' && 'Discard BOM Form?'}
-                    {bomConfirmModal === 'draft' && 'Save BOM as Draft?'}
-                    {bomConfirmModal === 'create' && 'Confirm & Send to Dispatch?'}
+                    {bomConfirmModal === 'cancel' && 'Go Back?'}
+                    {bomConfirmModal === 'create' && 'Confirm & Complete BOM Order?'}
                   </h3>
                   <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B', lineHeight: '1.4' }}>
-                    {bomConfirmModal === 'cancel' && 'Are you sure you want to cancel? Any unsaved changes entered in this BOM form will be lost.'}
-                    {bomConfirmModal === 'draft' && 'Save this Bill of Materials as a draft order so you can review and update it later?'}
-                    {bomConfirmModal === 'create' && `Are you sure you want to create this BOM order and forward it directly to Dispatch for packing?`}
+                    {bomConfirmModal === 'cancel' && 'Are you sure you want to go back? Any unsaved changes entered in this BOM form will be lost.'}
+                    {bomConfirmModal === 'create' && `Are you sure you want to complete this BOM order and forward it directly to Dispatch for packing?`}
                   </p>
                 </div>
               </div>
@@ -5880,13 +5840,12 @@ export default function BomOrdersView(props) {
                   {isSubmittingBom ? (
                     <>
                       <Loader size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>{bomConfirmModal === 'draft' ? 'Saving Draft...' : 'Creating BOM Order...'}</span>
+                      <span>Creating BOM Order...</span>
                     </>
                   ) : (
                     <>
-                      {bomConfirmModal === 'cancel' && 'Yes, Discard'}
-                      {bomConfirmModal === 'draft' && 'Yes, Save Draft'}
-                      {bomConfirmModal === 'create' && 'Yes, Confirm & Create'}
+                      {bomConfirmModal === 'cancel' && 'Yes, Go Back'}
+                      {bomConfirmModal === 'create' && 'Yes, Complete Order'}
                     </>
                   )}
                 </button>

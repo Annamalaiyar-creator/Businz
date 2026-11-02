@@ -393,28 +393,7 @@ export default function CreateBomFormPage(props) {
             onClick={() => setBomConfirmModal('cancel')}
             style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
           >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => {
-              const validation = validateProductionBomForm(true);
-              if (!validation.isValid) {
-                showCustomAlert({
-                  title: `⚠️ Missing Required Details (${validation.missingList.length} field${validation.missingList.length > 1 ? 's' : ''})`,
-                  message: 'Please complete the highlighted details before saving draft:',
-                  type: 'warning',
-                  details: validation.missingList,
-                  targetFieldId: validation.missingList[0]?.targetId
-                });
-                return;
-              }
-              setBomConfirmModal('draft');
-            }}
-            style={{ border: 'none', background: '#FFFFFF', color: '#4F46E5', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
-          >
-            <FileText style={{ width: '15px', height: '15px' }} />
-            Save as Draft
+            ← Back
           </button>
 
           <button
@@ -435,7 +414,7 @@ export default function CreateBomFormPage(props) {
             style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             <CheckCircle style={{ width: '16px', height: '16px' }} />
-            Create Order →
+            Complete →
           </button>
         </div>
       </div>
@@ -2234,15 +2213,7 @@ export default function CreateBomFormPage(props) {
             onClick={() => setBomConfirmModal('cancel')}
             style={{ border: '1px solid #CBD5E1', background: 'white', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}
           >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => setBomConfirmModal('draft')}
-            style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', color: '#4F46E5', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <FileText style={{ width: '15px', height: '15px' }} />
-            Save as Draft
+            ← Back
           </button>
 
           <button
@@ -2296,7 +2267,8 @@ export default function CreateBomFormPage(props) {
             }}
             style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            Create Order →
+            <CheckCircle style={{ width: '16px', height: '16px' }} />
+            Complete →
           </button>
         </div>
 
@@ -2351,13 +2323,11 @@ export default function CreateBomFormPage(props) {
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0F172A' }}>
-                  {bomConfirmModal === 'cancel' && 'Discard BOM Order?'}
-                  {bomConfirmModal === 'draft' && 'Save BOM as Draft?'}
+                  {bomConfirmModal === 'cancel' && 'Go Back?'}
                   {bomConfirmModal === 'create' && 'Confirm BOM Order Creation?'}
                 </h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B', lineHeight: '1.4' }}>
-                  {bomConfirmModal === 'cancel' && 'Are you sure you want to cancel? Any unsaved changes entered in this BOM form will be lost.'}
-                  {bomConfirmModal === 'draft' && 'Save this Bill of Materials as a draft order so you can review and update it later?'}
+                  {bomConfirmModal === 'cancel' && 'Are you sure you want to go back? Any unsaved changes entered in this BOM form will be lost.'}
                   {bomConfirmModal === 'create' && `Are you sure you want to finalize and create BOM Order (${newBomCode})?`}
                 </p>
               </div>
@@ -2825,9 +2795,8 @@ export default function CreateBomFormPage(props) {
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
-                {bomConfirmModal === 'cancel' && 'Yes, Discard'}
-                {bomConfirmModal === 'draft' && 'Yes, Save Draft'}
-                {bomConfirmModal === 'create' && 'Yes, Confirm & Create'}
+                {bomConfirmModal === 'cancel' && 'Yes, Go Back'}
+                {bomConfirmModal === 'create' && 'Yes, Complete Order'}
               </button>
             </div>
           </div>
