@@ -294,8 +294,19 @@ export default function ProductionTableView({
                         onClick={() => onRowClick(row)}
                         style={{ padding: '14px 16px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
-                        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px' }}>
-                          <span>{row.code}</span>
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '800' }}>{row.code}</span>
+                          {(row.createdDateFormatted || row.date || row.createdAt || row.bomDate) && (
+                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                              {row.createdDateFormatted || (() => {
+                                try {
+                                  const raw = row.date || row.createdAt || row.bomDate;
+                                  const d = new Date(raw);
+                                  return !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : String(raw).slice(0, 10);
+                                } catch (_) { return String(row.date || row.createdAt || '').slice(0, 10); }
+                              })()}
+                            </span>
+                          )}
                           {activeTab === 'Dispatch Orders' && (
                             row.dispatchPrinted ? (
                               <span
@@ -372,19 +383,19 @@ export default function ProductionTableView({
                             <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
                               {row.paymentType || row.c3 || '100% Paid'}
                             </span>
-                            {row.c7 && (
+                            {(row.paymentStatusText || row.c7) && (
                               <span style={{
                                 fontSize: '10.5px',
                                 fontWeight: '700',
-                                color: (row.c7.includes('Received') || row.c7.includes('Settled') || row.c7.includes('100%')) ? '#15803D' : (row.c7.includes('Credit') ? '#1D4ED8' : '#B45309'),
-                                backgroundColor: (row.c7.includes('Received') || row.c7.includes('Settled') || row.c7.includes('100%')) ? '#DCFCE7' : (row.c7.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
-                                border: (row.c7.includes('Received') || row.c7.includes('Settled') || row.c7.includes('100%')) ? '1px solid #BBF7D0' : (row.c7.includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                                color: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '#15803D' : ((row.paymentStatusText || row.c7).includes('Credit') ? '#1D4ED8' : '#B45309'),
+                                backgroundColor: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '#DCFCE7' : ((row.paymentStatusText || row.c7).includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                                border: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '1px solid #BBF7D0' : ((row.paymentStatusText || row.c7).includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
                                 padding: '1px 6px',
                                 borderRadius: '4px',
                                 display: 'inline-block',
                                 width: 'fit-content'
                               }}>
-                                {row.c7}
+                                {row.paymentStatusText || row.c7}
                               </span>
                             )}
                           </div>

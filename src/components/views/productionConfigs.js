@@ -441,7 +441,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Verified', label: 'Verified', count: allAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Credit Amount', 'Payment Status', 'Status'],
+                headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
@@ -450,6 +450,22 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     ? '100% Received (Credit Settled)'
                     : (acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification'));
                   
+                  // Format BOM Created Date for display below BOM Code
+                  const rawCreatedDate = b.date || b.createdAt || b.bomDate || b.salesConfirmedAt;
+                  let createdDateFormatted = '';
+                  if (rawCreatedDate) {
+                    try {
+                      const d = new Date(rawCreatedDate);
+                      if (!isNaN(d.getTime())) {
+                        createdDateFormatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                      } else {
+                        createdDateFormatted = String(rawCreatedDate).slice(0, 10);
+                      }
+                    } catch (_) {
+                      createdDateFormatted = String(rawCreatedDate).slice(0, 10);
+                    }
+                  }
+
                   // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
                   const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
                   let paymentDateFormatted = '—';
@@ -577,12 +593,13 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   return {
                     ...b,
                     code: b.bomCode,
+                    createdDateFormatted: createdDateFormatted,
                     c2: customerDisplayName,
-                    c3: b.paymentType,
+                    c3: b.paymentType || '100% Paid',
                     c4: paymentDateFormatted,
                     c5: totalAmtFormatted,
                     c6: creditAmtFormatted,
-                    c7: payStatus,
+                    paymentStatusText: payStatus,
                     packingProgressText: null,
                     status: statusText,
                     stBg: stBg,
