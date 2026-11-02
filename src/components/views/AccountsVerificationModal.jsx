@@ -981,50 +981,41 @@ export default function AccountsVerificationModal({
 
           {/* Payment Proof Document & Remittance Slip Image Inspection */}
           {(() => {
-            const rawProof = accountsVerificationModal.paymentProofDoc ||
-              accountsVerificationModal.balancePaymentProofDoc ||
-              accountsVerificationModal.balanceProofDoc ||
-              accountsVerificationModal.payments?.proofDocObj ||
-              accountsVerificationModal.payments?.balanceProofDocObj ||
-              accountsVerificationModal.payments?.proofDoc ||
-              accountsVerificationModal.payments?.balanceProofDoc ||
-              accountsVerificationModal.proofDoc ||
-              accountsVerificationModal.salesPoDetails?.proofDocObj ||
-              accountsVerificationModal.salesPoDetails?.balanceProofDocObj;
-            
-            let docName = null;
-            if (rawProof) {
-              if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
-                docName = rawProof;
-              } else if (rawProof.name) {
-                docName = rawProof.name;
-              } else if (rawProof.originalName) {
-                docName = rawProof.originalName;
+            const allPaymentDocs = (() => {
+              if (Array.isArray(accountsVerificationModal.paymentProofDocs) && accountsVerificationModal.paymentProofDocs.length > 0) {
+                return accountsVerificationModal.paymentProofDocs;
               }
-            }
-            if (!docName && accountsVerificationModal.paymentProofDocName) {
-              docName = accountsVerificationModal.paymentProofDocName;
-            }
-            if (!docName && accountsVerificationModal.payments?.proofDoc) {
-              docName = accountsVerificationModal.payments.proofDoc;
-            }
-            if (!docName && accountsVerificationModal.payments?.balanceProofDoc) {
-              docName = accountsVerificationModal.payments.balanceProofDoc;
-            }
+              if (Array.isArray(accountsVerificationModal.uploadedDocuments) && accountsVerificationModal.uploadedDocuments.length > 0) {
+                const pDocs = accountsVerificationModal.uploadedDocuments.filter(d => 
+                  (d.category && d.category.includes('payment')) ||
+                  (d.type && d.type.includes('payment')) ||
+                  (d.name && d.name.toLowerCase().includes('payment'))
+                );
+                if (pDocs.length > 0) return pDocs;
+              }
+              if (Array.isArray(accountsVerificationModal.payments?.proofDocObjs) && accountsVerificationModal.payments.proofDocObjs.length > 0) {
+                return accountsVerificationModal.payments.proofDocObjs;
+              }
+              if (Array.isArray(accountsVerificationModal.payments?.proofDocs) && accountsVerificationModal.payments.proofDocs.length > 0) {
+                return accountsVerificationModal.payments.proofDocs;
+              }
+              const single = accountsVerificationModal.paymentProofDoc ||
+                accountsVerificationModal.balancePaymentProofDoc ||
+                accountsVerificationModal.balanceProofDoc ||
+                accountsVerificationModal.payments?.proofDocObj ||
+                accountsVerificationModal.payments?.balanceProofDocObj ||
+                accountsVerificationModal.payments?.proofDoc ||
+                accountsVerificationModal.payments?.balanceProofDoc ||
+                accountsVerificationModal.proofDoc ||
+                accountsVerificationModal.salesPoDetails?.proofDocObj ||
+                accountsVerificationModal.salesPoDetails?.balanceProofDocObj;
+              if (single) {
+                return [typeof single === 'object' ? single : { name: single }];
+              }
+              return [];
+            })();
 
-            let pDocDataUrl = resolvedProofDataUrl || ((typeof rawProof === 'string' && rawProof.startsWith('data:'))
-              ? rawProof
-              : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || accountsVerificationModal.proofDocData || accountsVerificationModal.payments?.proofDocData || null));
-            
-            if (!pDocDataUrl && docName) {
-              pDocDataUrl = getMediaFromCache(docName);
-            }
-
-            const isDocPdf = Boolean(
-              (docName && docName.toLowerCase().endsWith('.pdf')) ||
-              (rawProof && (rawProof.type === 'application/pdf' || rawProof.mimeType === 'application/pdf')) ||
-              (pDocDataUrl && (pDocDataUrl.toLowerCase().includes('.pdf') || pDocDataUrl.startsWith('data:application/pdf')))
-            );
+            const hasAnyPaymentProof = allPaymentDocs.length > 0 || hasUploadedPaymentProof;
 
             return (
               <div style={{
@@ -1034,150 +1025,170 @@ export default function AccountsVerificationModal({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                   <label style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                    <Image size={15} style={{ color: '#2563EB' }} /> Payment Proof Document & Remittance Slip
+                    <Image size={15} style={{ color: '#2563EB' }} /> Payment Proof Documents & Remittance Slips ({allPaymentDocs.length})
                   </label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => setViewingProofDocModal({
-                        ...accountsVerificationModal,
-                        targetDoc: rawProof,
-                        targetDocUrl: pDocDataUrl,
-                        targetDocName: docName,
-                        docTitle: 'Payment Proof Document & Remittance Slip'
-                      })}
-                      style={{
-                        backgroundColor: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#1D4ED8',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        padding: '4px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <Eye size={12} /> View Document
-                    </button>
-                    {(pDocDataUrl || docName) && (
-                      <a
-                        href={pDocDataUrl || (docName ? `/api/uploads/${encodeURIComponent(docName)}` : '#')}
-                        download={docName || 'payment_proof.jpg'}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          backgroundColor: '#F8FAFC',
-                          border: '1px solid #CBD5E1',
-                          color: '#334155',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          textDecoration: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Download size={12} /> Download
-                      </a>
-                    )}
-                  </div>
+                  {allPaymentDocs.length > 0 && (
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
+                      ✓ Verified & Attached by Sales ({allPaymentDocs.length} {allPaymentDocs.length > 1 ? 'Files' : 'File'})
+                    </span>
+                  )}
                 </div>
 
-                {(pDocDataUrl || hasUploadedPaymentProof) ? (
+                {hasAnyPaymentProof ? (
                   <div style={{
                     backgroundColor: '#F8FAFC',
                     border: '1.5px dashed #CBD5E1',
                     borderRadius: '12px',
                     padding: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    flexWrap: 'wrap'
+                    display: 'grid',
+                    gridTemplateColumns: allPaymentDocs.length > 1 ? 'repeat(auto-fill, minmax(180px, 1fr))' : '1fr',
+                    gap: '12px'
                   }}>
-                    <div
-                      onClick={() => setViewingProofDocModal({
-                        ...accountsVerificationModal,
-                        targetDoc: rawProof,
-                        targetDocUrl: pDocDataUrl,
-                        targetDocName: docName,
-                        docTitle: 'Payment Proof Document & Remittance Slip'
-                      })}
-                      style={{
-                        cursor: 'pointer',
-                        width: '140px',
-                        height: '95px',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                        flexShrink: 0,
-                        padding: '4px'
-                      }}
-                      title="Click to view full payment slip"
-                    >
-                      {isDocPdf ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
-                          <FileText size={32} />
-                          <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
-                          <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
-                        </div>
-                      ) : pDocDataUrl ? (
-                        <img
-                          src={pDocDataUrl}
-                          alt="Payment Proof"
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          onError={(e) => {
-                            if (docName) {
-                              const cleanName = encodeURIComponent(docName);
-                              if (!e.currentTarget.src.includes(`/api/uploads/${cleanName}`)) {
-                                e.currentTarget.src = `/api/uploads/${cleanName}`;
-                                return;
-                              }
-                            }
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : !isResolvingProof ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#2563EB', textAlign: 'center', padding: '4px' }}>
-                          <FileText size={28} />
-                          <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {docName || 'Payment Slip'}
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#2563EB', fontWeight: '700' }}>Click to View</span>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#0E7490' }}>
-                          <Loader2 className="animate-spin" size={20} />
-                          <span style={{ fontSize: '10px', fontWeight: '700' }}>Loading Slip...</span>
-                        </div>
-                      )}
-                    </div>
+                    {allPaymentDocs.map((docItem, dIdx) => {
+                      const docName = typeof docItem === 'string' ? docItem : (docItem?.originalName || docItem?.name || `Payment_Proof_${dIdx + 1}`);
+                      const directUrl = (typeof docItem === 'string' && docItem.startsWith('data:'))
+                        ? docItem
+                        : (docItem?.dataUrl || docItem?.fileData || docItem?.url || null);
+                      const pDocDataUrl = directUrl || getMediaFromCache(docName) || resolveDocumentUrl(docItem);
+                      const isDocPdf = Boolean(
+                        (docName && docName.toLowerCase().endsWith('.pdf')) ||
+                        (docItem && (docItem.type === 'application/pdf' || docItem.mimeType === 'application/pdf')) ||
+                        (pDocDataUrl && (pDocDataUrl.toLowerCase().includes('.pdf') || pDocDataUrl.startsWith('data:application/pdf')))
+                      );
 
-                    <div style={{ flex: 1, minWidth: '220px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span>{docName || 'Payment Advice Slip'}</span>
-                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
-                          ✓ Attached by Sales
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', lineHeight: '1.4' }}>
-                        Official payment proof document submitted by sales team. Click thumbnail or "View Document" to inspect the transaction reference number, remittance amount, and bank stamp.
-                      </div>
-                      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#475569' }}>
-                        <span><strong>Payment Terms:</strong> {payTypeText}</span>
-                        <span>•</span>
-                        <span><strong>BOM Reference:</strong> {bomCodeText}</span>
-                      </div>
-                    </div>
+                      return (
+                        <div key={dIdx} style={{
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
+                        }}>
+                          <div
+                            onClick={() => setViewingProofDocModal({
+                              ...accountsVerificationModal,
+                              targetDoc: docItem,
+                              targetDocUrl: pDocDataUrl,
+                              targetDocName: docName,
+                              docTitle: `Payment Proof #${dIdx + 1}: ${docName}`
+                            })}
+                            style={{
+                              cursor: 'pointer',
+                              width: '100%',
+                              height: '110px',
+                              borderRadius: '6px',
+                              overflow: 'hidden',
+                              backgroundColor: '#F8FAFC',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: '1px solid #F1F5F9'
+                            }}
+                            title="Click to view full payment slip"
+                          >
+                            {isDocPdf ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
+                                <FileText size={30} />
+                                <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
+                                <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
+                              </div>
+                            ) : pDocDataUrl ? (
+                              <img
+                                src={pDocDataUrl}
+                                alt={docName}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                onError={(e) => {
+                                  if (docName) {
+                                    const cleanName = encodeURIComponent(docName);
+                                    if (!e.currentTarget.src.includes(`/api/uploads/${cleanName}`)) {
+                                      e.currentTarget.src = `/api/uploads/${cleanName}`;
+                                      return;
+                                    }
+                                  }
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#2563EB', textAlign: 'center', padding: '4px' }}>
+                                <FileText size={26} />
+                                <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {docName}
+                                </span>
+                                <span style={{ fontSize: '9px', color: '#2563EB', fontWeight: '700' }}>Click to View</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '11.5px', fontWeight: '800', color: '#0F172A', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={docName}>
+                              {docName}
+                            </div>
+                            {docItem?.size && (
+                              <span style={{ fontSize: '10px', color: '#64748B' }}>
+                                {(docItem.size / 1024).toFixed(0)} KB • Verified Slip
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '6px', marginTop: 'auto' }}>
+                            <button
+                              type="button"
+                              onClick={() => setViewingProofDocModal({
+                                ...accountsVerificationModal,
+                                targetDoc: docItem,
+                                targetDocUrl: pDocDataUrl,
+                                targetDocName: docName,
+                                docTitle: `Payment Proof #${dIdx + 1}: ${docName}`
+                              })}
+                              style={{
+                                flex: 1,
+                                backgroundColor: '#EFF6FF',
+                                border: '1px solid #BFDBFE',
+                                color: '#1D4ED8',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              <Eye size={11} /> View
+                            </button>
+                            {(pDocDataUrl || docName) && (
+                              <a
+                                href={pDocDataUrl || `/api/uploads/${encodeURIComponent(docName)}`}
+                                download={docName}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  backgroundColor: '#F8FAFC',
+                                  border: '1px solid #CBD5E1',
+                                  color: '#334155',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  textDecoration: 'none',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '3px'
+                                }}
+                              >
+                                <Download size={11} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (isWhileDispatch && !hasUploadedPaymentProof) ? (
                   <div
