@@ -59,6 +59,8 @@ export function toConsumerPi(row) {
     salesperson: row.sales_person || row.created_by || 'sales',
     salesPersonCode: row.sales_person_code || row.created_by_id || '',
     salesPersonEmail: row.sales_person_email || '',
+    assignedSalesperson: row.sales_person || '',
+    assignedSalespersonCode: row.sales_person_code || '',
     createdBy: row.created_by || row.sales_person || 'sales',
     createdById: row.created_by_id || row.sales_person_code || '',
     unitValue: parseFloat(row.unit_value || subTotal),
@@ -594,4 +596,60 @@ export async function updatePiZohoSyncStatus(piNo, zohoStatus, pool = defaultPoo
     console.error(`[updatePiZohoSyncStatus Error for ${piNo}]:`, err.message);
   }
   return null;
+}
+
+/**
+ * Assigns or reassigns a Proforma Invoice to a sales representative.
+ * Updates public.proforma_invoices (1 targeted row UPDATE) and syncs single record to stores.
+ */
+export async function assignProformaInvoiceInDatabase(piNo, assigneeData, pool = defaultPool) {
+  if (!piNo || !assigneeData) return null;
+  const cleanPiNo = String(piNo).trim();
+  const { assignedToId, assignedToName, assignedToEmail, assignedBy, assignedByRole, reason } = assigneeData;
+
+  try {
+    const res = await pool.query(`
+      UPDATE public.proforma_invoices
+      SET sales_person = $1,
+          sales_person_code = $2,
+          sales_person_email = COALESCE($3, sales_person_email),
+          updated_at = NOW()
+      WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($4)) OR LOWER(TRIM(id)) = LOWER(TRIM($4))
+      RETURNING *;
+    `, [
+      assignedToName,
+      assignedToId,
+      assignedToEmail || null,
+      cleanPiNo
+    ]);
+
+    let updatedPi = null;
+    if (res.rows.length > 0) {
+      updatedPi = toConsumerPi(res.rows[0]);
+    }
+
+    const assignmentMeta = {
+      salesPerson: assignedToName,
+      salesperson: assignedToName,
+      salesRep: assignedToName,
+      salesPersonCode: assignedToId,
+      salesPersonEmail: assignedToEmail || (updatedPi ? updatedPi.salesPersonEmail : ''),
+      assignedSalesperson: assignedToName,
+      assignedSalespersonCode: assignedToId,
+      assignedBy: assignedBy || 'Tech Support',
+      assignedByRole: assignedByRole || 'Tech Support',
+      assignedAt: new Date().toISOString(),
+      assignmentReason: reason || 'Assigned by Tech Support'
+    };
+
+    if (updatedPi) {
+      updatedPi = { ...updatedPi, ...assignmentMeta };
+    }
+
+    await syncSinglePiToControlroomStore(updatedPi || { piNo: cleanPiNo, id: cleanPiNo, ...assignmentMeta }, pool);
+    return updatedPi;
+  } catch (err) {
+    console.error(`[assignProformaInvoiceInDatabase Error for ${piNo}]:`, err.message);
+    return null;
+  }
 }

@@ -481,11 +481,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return raw.filter(pi => {
       if (!pi) return false;
       const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
+      const assignedCode = String(pi.assignedSalespersonCode || pi.assignedToCode || pi.assignedToId || '').trim().toUpperCase();
       const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
       const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+      const assignedName = String(pi.assignedSalesperson || pi.assignedToName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+
+      // 0. Direct match on assigned salesperson code or assigned name (from Tech Support or Management assignment)
+      if (curCode && assignedCode && (assignedCode === curCode || (curCode === 'SE-1000' && assignedCode === 'SE-001') || (curCode === 'SE-001' && assignedCode === 'SE-1000'))) {
+        return true;
+      }
+      if (curName && assignedName && (curName === assignedName || assignedName.includes(curName) || curName.includes(assignedName))) {
+        return true;
+      }
 
       // 1. Strict EMP Code matching
-      if (curCode && spCode && spCode === curCode) {
+      if (curCode && spCode && (spCode === curCode || (curCode === 'SE-1000' && spCode === 'SE-001') || (curCode === 'SE-001' && spCode === 'SE-1000'))) {
         return true;
       }
 
@@ -502,8 +512,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         }
       }
 
-      // If record belongs to a distinct and different salesperson code, exclude
-      if (curCode && spCode && !isGenericCode && spCode !== curCode) {
+      // If record belongs to a distinct and different salesperson code and not assigned to this user, exclude
+      if (curCode && spCode && !isGenericCode && spCode !== curCode && assignedCode !== curCode) {
         return false;
       }
 

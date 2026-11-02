@@ -912,11 +912,11 @@ export default function BomOrdersView(props) {
             return pNo === String(sPiNo).trim().toLowerCase();
           });
           if (targetPi) {
-            const piCodes = [targetPi.salesPersonCode, targetPi.createdById, targetPi.sales_person_code, targetPi.created_by_id].filter(Boolean);
+            const piCodes = [targetPi.salesPersonCode, targetPi.createdById, targetPi.sales_person_code, targetPi.created_by_id, targetPi.assignedSalespersonCode, targetPi.assignedToCode, targetPi.assignedToId].filter(Boolean);
             if (piCodes.some(isCodeMatch)) return true;
             const piEmails = [targetPi.salesPersonEmail, targetPi.email].filter(Boolean).map(e => String(e).trim().toLowerCase());
             if (curEmail && piEmails.some(e => e === curEmail || userAliases.has(e))) return true;
-            const piNames = [targetPi.salesPerson, targetPi.createdBy, targetPi.salesperson].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+            const piNames = [targetPi.salesPerson, targetPi.createdBy, targetPi.salesperson, targetPi.assignedSalesperson, targetPi.assignedToName].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
             if (piNames.some(n => userAliases.has(n) || (cleanCurNorm && normA(n) === cleanCurNorm))) return true;
           }
         } catch (_) {}

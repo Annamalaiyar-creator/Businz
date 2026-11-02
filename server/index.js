@@ -23,6 +23,7 @@ import {
   loadDatabaseProformaInvoices,
   getNextDatabasePiNumber,
   updatePiZohoSyncStatus,
+  assignProformaInvoiceInDatabase,
   toConsumerPi
 } from './piPersistence.js';
 import * as vrmDataModule from '../src/utils/vrmProductsData.js';
@@ -7062,6 +7063,17 @@ app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
               if (!existingMap.has(k)) {
                 existingMap.set(k, item);
                 combinedEstimates.push(item);
+              } else {
+                const existing = existingMap.get(k);
+                if (item.assignedSalespersonCode || item.assignedSalesperson) {
+                  existing.assignedSalespersonCode = item.assignedSalespersonCode || existing.assignedSalespersonCode;
+                  existing.assignedSalesperson = item.assignedSalesperson || existing.assignedSalesperson;
+                  existing.assignedToId = item.assignedToId || item.assignedSalespersonCode || existing.assignedToId;
+                  existing.assignedToName = item.assignedToName || item.assignedSalesperson || existing.assignedToName;
+                  existing.salesPersonCode = item.salesPersonCode || existing.salesPersonCode;
+                  existing.salesPerson = item.salesPerson || existing.salesPerson;
+                  existing.salesperson = item.salesperson || existing.salesperson;
+                }
               }
             }
           }
@@ -7084,6 +7096,41 @@ app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
       }
     });
   }
+
+  // 3. Authoritative PI Assignment Reconciliation: Cross-reference notifications & heal unassigned/misassigned PIs
+  try {
+    const notifsFile = path.join(process.cwd(), 'server', 'notifications_store.json');
+    let notifs = [];
+    if (fs.existsSync(notifsFile)) {
+      try {
+        notifs = JSON.parse(fs.readFileSync(notifsFile, 'utf8'));
+      } catch (_) {}
+    }
+    if (Array.isArray(notifs)) {
+      for (const n of notifs) {
+        if (n && n.event_type === 'PI_ASSIGNED' && n.document_id) {
+          const k = String(n.document_id).trim().toLowerCase();
+          const target = existingMap.get(k);
+          if (target && n.recipient_emp_code) {
+            target.assignedSalespersonCode = n.recipient_emp_code;
+            target.assignedToId = n.recipient_emp_code;
+            target.salesPersonCode = n.recipient_emp_code;
+            if (target.salesPerson === 'Tech Support Specialist' || !target.salesPerson) {
+              target.salesPerson = 'Sales Executive';
+              target.salesperson = 'Sales Executive';
+            }
+            if (pool) {
+              pool.query(`
+                UPDATE public.proforma_invoices
+                SET sales_person_code = $1, sales_person = $2, updated_at = NOW()
+                WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($3)) AND (sales_person_code != $1 OR sales_person_code IS NULL)
+              `, [n.recipient_emp_code, target.salesPerson, n.document_id]).catch(() => {});
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {}
 
   res.json(combinedEstimates);
 });
@@ -9908,7 +9955,22 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
     const assignedTimestamp = new Date().toISOString();
     let updatedPi = null;
 
-    // 1. Update sales_pi_store
+    // 1. Authoritative Relational Database Update (public.proforma_invoices)
+    try {
+      updatedPi = await assignProformaInvoiceInDatabase(cleanPiNo, {
+        assignedToId,
+        assignedToName,
+        assignedToRole,
+        assignedToEmail,
+        assignedBy: assignerUser.employee_name,
+        assignedByRole: assignerUser.role,
+        reason
+      });
+    } catch (dbErr) {
+      console.warn('[PI Database Assign Warning]:', dbErr.message);
+    }
+
+    // 2. Update sales_pi_store on disk and memory
     const pSales = getStoreFilePath('sales_pi_store.json');
     let localSales = [];
     if (fs.existsSync(pSales)) {
@@ -9920,10 +9982,26 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
       localSales = [...supabaseMemoryStore['sales_pi_store']];
     }
 
+    const assignmentMeta = {
+      salesPerson: assignedToName,
+      salesperson: assignedToName,
+      salesRep: assignedToName,
+      salesPersonCode: assignedToId,
+      salesPersonEmail: assignedToEmail || (updatedPi ? updatedPi.salesPersonEmail : ''),
+      assignedSalesperson: assignedToName,
+      assignedSalespersonCode: assignedToId,
+      assignedBy: assignerUser.employee_name,
+      assignedByRole: assignerUser.role,
+      assignedAt: assignedTimestamp,
+      assignmentReason: reason || 'Assigned by Tech Support'
+    };
+
     if (Array.isArray(localSales)) {
+      let foundInSales = false;
       localSales = localSales.map(p => {
         const match = String(p.piNo || p.id || '').trim().toLowerCase() === cleanPiNo.toLowerCase();
         if (match) {
+          foundInSales = true;
           const prevHistory = Array.isArray(p.assignmentHistory) ? p.assignmentHistory : [];
           const newHistoryItem = {
             assigned_to_name: assignedToName,
@@ -9935,56 +10013,48 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
             assigned_at: assignedTimestamp,
             reason: reason || 'Assigned by Tech Support'
           };
-          updatedPi = {
-            ...p,
-            salesPerson: assignedToName,
-            salesperson: assignedToName,
-            salesRep: assignedToName,
-            salesPersonCode: assignedToId,
-            salesPersonEmail: assignedToEmail || p.salesPersonEmail || '',
-            assignedSalesperson: assignedToName,
-            assignedSalespersonCode: assignedToId,
-            assignedBy: assignerUser.employee_name,
-            assignedByRole: assignerUser.role,
-            assignedAt: assignedTimestamp,
-            assignmentReason: reason || 'Assigned by Tech Support',
+          const merged = {
+            ...(updatedPi || p),
+            ...assignmentMeta,
             assignmentHistory: [...prevHistory, newHistoryItem]
           };
-          return updatedPi;
+          if (!updatedPi) updatedPi = merged;
+          return merged;
         }
         return p;
       });
+
+      if (!foundInSales && updatedPi) {
+        localSales = [updatedPi, ...localSales];
+      }
 
       fs.writeFileSync(pSales, JSON.stringify(localSales, null, 2), 'utf8');
       supabaseMemoryStore['sales_pi_store'] = localSales;
       pushStoreToSupabase('sales_pi_store', localSales).catch(() => {});
     }
 
-    // 2. Also update proforma_invoice_store
+    // 3. Also update proforma_invoice_store on disk and memory
     const pProforma = getStoreFilePath('proforma_invoice_store.json');
     if (fs.existsSync(pProforma)) {
       try {
         let localProforma = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
         if (Array.isArray(localProforma)) {
+          let foundInProforma = false;
           localProforma = localProforma.map(p => {
             if (String(p.piNo || p.id || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) {
-              return updatedPi || {
-                ...p,
-                salesPerson: assignedToName,
-                salesperson: assignedToName,
-                salesRep: assignedToName,
-                salesPersonCode: assignedToId,
-                salesPersonEmail: assignedToEmail || p.salesPersonEmail || '',
-                assignedSalesperson: assignedToName,
-                assignedSalespersonCode: assignedToId,
-                assignedBy: assignerUser.employee_name,
-                assignedByRole: assignerUser.role,
-                assignedAt: assignedTimestamp,
-                assignmentReason: reason || 'Assigned by Tech Support'
+              foundInProforma = true;
+              const merged = {
+                ...(updatedPi || p),
+                ...assignmentMeta
               };
+              if (!updatedPi) updatedPi = merged;
+              return merged;
             }
             return p;
           });
+          if (!foundInProforma && updatedPi) {
+            localProforma = [updatedPi, ...localProforma];
+          }
           fs.writeFileSync(pProforma, JSON.stringify(localProforma, null, 2), 'utf8');
           supabaseMemoryStore['proforma_invoice_store'] = localProforma;
           pushStoreToSupabase('proforma_invoice_store', localProforma).catch(() => {});
