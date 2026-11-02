@@ -188,8 +188,27 @@ export const initRealtimeSync = () => {
           }
 
           // 7. Proforma Invoices & Invoices
-          else if (type === 'pi_created' || type === 'pi_updated' || type === 'invoice_updated' || (type === 'store_updated' && (payload?.key === 'sales_pi_store' || payload?.key === 'proforma_invoice_store' || payload?.key === 'invoice_store'))) {
+          else if (type === 'pi_created' || type === 'pi_updated' || type === 'sales_pi_assigned' || type === 'invoice_updated' || (type === 'store_updated' && (payload?.key === 'sales_pi_store' || payload?.key === 'proforma_invoice_store' || payload?.key === 'invoice_store'))) {
+            const updatedPi = payload?.updatedPi || payload?.pi;
+            if (updatedPi && (updatedPi.piNo || updatedPi.id)) {
+              const k = String(updatedPi.piNo || updatedPi.id).trim().toLowerCase();
+              for (const storeKey of ['controlroom_sales_pi_store', 'controlroom_proforma_invoice_store', 'controlroom_procurement_pi_store']) {
+                try {
+                  const existing = JSON.parse(localStorage.getItem(storeKey) || '[]');
+                  if (Array.isArray(existing)) {
+                    const idx = existing.findIndex(p => p && (String(p.piNo || p.id).trim().toLowerCase() === k));
+                    if (idx !== -1) {
+                      existing[idx] = { ...existing[idx], ...updatedPi };
+                    } else {
+                      existing.unshift(updatedPi);
+                    }
+                    localStorage.setItem(storeKey, JSON.stringify(existing));
+                  }
+                } catch (_) {}
+              }
+            }
             window.dispatchEvent(new CustomEvent('controlroom_pi_updated', { detail: payload }));
+            window.dispatchEvent(new CustomEvent('controlroom_sales_pi_assigned', { detail: payload }));
             window.dispatchEvent(new CustomEvent('controlroom_invoice_updated', { detail: payload }));
           }
 

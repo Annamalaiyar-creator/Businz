@@ -215,6 +215,17 @@ class RealtimeNotificationService {
     // Trigger local DOM event for toast popup
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('businz_notification_received', { detail: notif }));
+
+      if (notif.event_type === 'PI_ASSIGNED' && notif.document_id) {
+        window.dispatchEvent(new CustomEvent('controlroom_sales_pi_assigned', {
+          detail: {
+            piNo: notif.document_id,
+            documentId: notif.document_id,
+            assignedToId: notif.recipient_emp_code,
+            recipientEmpCode: notif.recipient_emp_code
+          }
+        }));
+      }
     }
   }
 

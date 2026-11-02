@@ -10062,7 +10062,8 @@ app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:pi
       } catch (_) {}
     }
 
-    broadcastRealtimeEvent('sales_pi_assigned', { piNo: cleanPiNo, assignedToId, assignedToName, updatedPi });
+    broadcastRealtimeEvent('sales_pi_assigned', { piNo: cleanPiNo, assignedToId, assignedToName, updatedPi, pi: updatedPi });
+    broadcastRealtimeEvent('pi_updated', { action: 'assign', piNo: cleanPiNo, assignedToId, assignedToName, updatedPi, pi: updatedPi });
 
     // Send real-time internal notification to the assigned salesperson
     try {

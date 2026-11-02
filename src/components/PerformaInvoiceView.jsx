@@ -708,8 +708,72 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     });
 
+    // ⚡ Native Server-Sent Event (SSE) & Real-Time Single-Record Delta Listeners
+    const handlePiRealtimeEvent = (e) => {
+      const detail = e?.detail || {};
+      const incomingPi = detail?.updatedPi || detail?.pi;
+      const targetPiNo = String(detail?.piNo || detail?.documentId || incomingPi?.piNo || incomingPi?.id || '').trim();
+
+      if (incomingPi && (incomingPi.piNo || incomingPi.id)) {
+        const norm = normalizePiRecord(incomingPi);
+        setPiList(prevList => {
+          const list = Array.isArray(prevList) ? prevList : [];
+          const cleanKey = String(norm.piNo || norm.id).trim().toLowerCase();
+          const idx = list.findIndex(p => p && String(p.piNo || p.id).trim().toLowerCase() === cleanKey);
+          let next;
+          if (idx !== -1) {
+            next = [...list];
+            next[idx] = { ...list[idx], ...norm };
+          } else {
+            next = [norm, ...list];
+          }
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(next));
+            localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(next));
+          } catch (_) {}
+          return next;
+        });
+      } else if (targetPiNo) {
+        fetch('/api/proforma-invoices')
+          .then(r => r.json())
+          .then(allPis => {
+            if (Array.isArray(allPis)) {
+              const matched = allPis.find(p => p && String(p.piNo || p.id).trim().toLowerCase() === targetPiNo.toLowerCase());
+              if (matched) {
+                const normMatched = normalizePiRecord(matched);
+                setPiList(prevList => {
+                  const list = Array.isArray(prevList) ? prevList : [];
+                  const cleanKey = targetPiNo.toLowerCase();
+                  const idx = list.findIndex(p => p && String(p.piNo || p.id).trim().toLowerCase() === cleanKey);
+                  let next;
+                  if (idx !== -1) {
+                    next = [...list];
+                    next[idx] = { ...list[idx], ...normMatched };
+                  } else {
+                    next = [normMatched, ...list];
+                  }
+                  try {
+                    localStorage.setItem(storageKey, JSON.stringify(next));
+                    localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(next));
+                  } catch (_) {}
+                  return next;
+                });
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener('controlroom_pi_updated', handlePiRealtimeEvent);
+    window.addEventListener('controlroom_sales_pi_assigned', handlePiRealtimeEvent);
+    window.addEventListener('controlroom_pi_store_updated', handlePiRealtimeEvent);
+
     return () => {
       if (sub && sub.unsubscribe) sub.unsubscribe();
+      window.removeEventListener('controlroom_pi_updated', handlePiRealtimeEvent);
+      window.removeEventListener('controlroom_sales_pi_assigned', handlePiRealtimeEvent);
+      window.removeEventListener('controlroom_pi_store_updated', handlePiRealtimeEvent);
     };
   }, [storageKey, isSalesRole]);
 
