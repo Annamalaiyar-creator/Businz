@@ -82,6 +82,8 @@ export function getVoiceAnnouncementText(notif) {
   switch (eventType) {
     case 'PI_SAVED':
       return 'Proforma Invoice saved successfully';
+    case 'PI_ASSIGNED':
+      return 'Proforma Invoice assigned to you';
     case 'BOM_SUBMITTED':
       return 'New BOM submitted from Sales';
     case 'PACKING_VERIFIED':

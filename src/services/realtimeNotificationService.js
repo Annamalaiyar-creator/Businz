@@ -210,6 +210,7 @@ class RealtimeNotificationService {
     // Voice announcement (Text-to-Speech) for instant hands-free alert
     try {
       speakNotificationVoice(notif);
+      notif._voiced = true;
     } catch (_) {}
 
     // Trigger local DOM event for toast popup

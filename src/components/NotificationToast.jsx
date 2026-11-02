@@ -54,6 +54,7 @@ export default function NotificationToast({ alert, onClose, onNavigate }) {
 
   // Play voice and sound announcement on toast mount
   useEffect(() => {
+    if (alertObj?._voiced) return;
     try {
       speakNotificationVoice(alertObj);
     } catch (_) {}
