@@ -8914,20 +8914,41 @@ app.put('/api/items/:id', async (req, res) => {
       error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
     });
   }
-  if (!hasAnyUserRole(session.role, ['procurement', 'purchase', 'production'])) {
+  if (!hasAnyUserRole(session.role, ['procurement', 'purchase', 'production', 'admin', 'ceo'])) {
     return res.status(403).json({
       success: false,
       error: `Forbidden: Role "${session.role}" is not authorized to update items.`
     });
   }
-  const targetId = req.params.id;
+  const rawId = req.params.id;
+  const targetId = String(rawId || '').trim();
+  if (!targetId || targetId === 'undefined' || targetId === 'null') {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid request: Target item ID or SKU cannot be empty or undefined.'
+    });
+  }
+
   const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
 
   let updatedItem = null;
   try {
     const localItems = loadLocalItems();
     const updated = localItems.map(it => {
-      if (String(it.itemId || it.id) === String(targetId) || String(it.sku) === String(targetId)) {
+      if (!it) return it;
+      const itItemId = it.itemId ? String(it.itemId).trim() : null;
+      const itId = it.id ? String(it.id).trim() : null;
+      const itSku = it.sku ? String(it.sku).trim() : null;
+      const itCode = it.code ? String(it.code).trim() : null;
+
+      const isMatch = (
+        (itItemId && itItemId === targetId) ||
+        (itId && itId === targetId) ||
+        (itSku && itSku.toLowerCase() === targetId.toLowerCase()) ||
+        (itCode && itCode.toLowerCase() === targetId.toLowerCase())
+      );
+
+      if (isMatch) {
         updatedItem = {
           ...it,
           ...req.body,

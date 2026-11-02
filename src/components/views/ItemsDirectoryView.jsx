@@ -1296,7 +1296,10 @@ export default function ItemsDirectoryView(props) {
           const c = String(item?.sku || item?.code || item?.itemId || '').trim();
           const n = String(item?.name || '').trim();
           return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
-        });
+        }).map(item => ({
+          ...item,
+          itemId: item.itemId || item.id || item.code || item.sku
+        }));
         setItemsList(cleaned);
       }
     } catch (err) {
@@ -1469,6 +1472,12 @@ export default function ItemsDirectoryView(props) {
 
   const handleSaveItem = async () => {
     if (!editingItem) return;
+    const targetKey = editingItem._originalKey || editingItem.itemId || editingItem.id || editingItem.sku || editingItem.code;
+    if (!targetKey) {
+      alert('Cannot update item: Unique identifier is missing.');
+      return;
+    }
+
     try {
       setIsSavingItem(true);
       setItemSaveStatus(null);
@@ -1485,7 +1494,7 @@ export default function ItemsDirectoryView(props) {
         status: targetStatus
       };
 
-      const res = await fetch(`/api/items/${editingItem.itemId}`, {
+      const res = await fetch(`/api/items/${encodeURIComponent(targetKey)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1494,17 +1503,20 @@ export default function ItemsDirectoryView(props) {
       if (res.ok) {
         setItemSaveStatus({ type: 'success', text: 'Item updated successfully!' });
       } else {
-        setItemSaveStatus({ type: 'warning', text: 'Saved locally in Control Room.' });
+        const errJson = await res.json().catch(() => ({}));
+        setItemSaveStatus({ type: 'warning', text: errJson.error || 'Saved locally in Control Room.' });
       }
 
       setItemsList(prev => {
-        const updated = (prev || []).map(it => (it.itemId === editingItem.itemId || it.id === editingItem.itemId) ? { ...it, ...editingItem, ...payload } : it);
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
+        const updated = (prev || []).map(it => {
+          const itKey = it.itemId || it.id || it.sku || it.code;
+          const isMatch = Boolean(
+            (targetKey && itKey === targetKey) ||
+            (editingItem._originalSku && it.sku === editingItem._originalSku) ||
+            (editingItem._originalCode && it.code === editingItem._originalCode)
+          );
+          return isMatch ? { ...it, ...editingItem, ...payload, itemId: it.itemId || targetKey } : it;
+        });
         return updated;
       });
 
@@ -1515,16 +1527,18 @@ export default function ItemsDirectoryView(props) {
     } catch (err) {
       console.error("Error updating item:", err);
       setItemsList(prev => {
-        const updated = (prev || []).map(it => (it.itemId === editingItem.itemId || it.id === editingItem.itemId) ? editingItem : it);
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
+        const updated = (prev || []).map(it => {
+          const itKey = it.itemId || it.id || it.sku || it.code;
+          const isMatch = Boolean(
+            (targetKey && itKey === targetKey) ||
+            (editingItem._originalSku && it.sku === editingItem._originalSku) ||
+            (editingItem._originalCode && it.code === editingItem._originalCode)
+          );
+          return isMatch ? { ...it, ...editingItem, itemId: it.itemId || targetKey } : it;
+        });
         return updated;
       });
-      setItemSaveStatus({ type: 'success', text: 'Item saved locally.' });
+      setItemSaveStatus({ type: 'warning', text: 'Saved locally in Control Room.' });
       setTimeout(() => {
         setEditingItem(null);
         setItemSaveStatus(null);
@@ -2767,7 +2781,10 @@ export default function ItemsDirectoryView(props) {
                               const indexOfLastItemRow = itemsCurrentPage * itemsRowsPerPage;
                               const indexOfFirstItemRow = indexOfLastItemRow - itemsRowsPerPage;
                               const currentItemRows = filtered.slice(indexOfFirstItemRow, indexOfLastItemRow);
-                              return currentItemRows.length > 0 && currentItemRows.every(item => selectedItems.includes(item.itemId));
+                              return currentItemRows.length > 0 && currentItemRows.every(item => {
+                                const k = item?.itemId || item?.id || item?.sku || item?.code;
+                                return Boolean(k && selectedItems.includes(k));
+                              });
                             })()}
                             onChange={(e) => {
                               const query = itemSearchQuery.toLowerCase().trim();
@@ -2792,13 +2809,14 @@ export default function ItemsDirectoryView(props) {
                               if (e.target.checked) {
                                 const newSelected = [...selectedItems];
                                 currentItemRows.forEach(item => {
-                                  if (!newSelected.includes(item.itemId)) {
-                                    newSelected.push(item.itemId);
+                                  const k = item?.itemId || item?.id || item?.sku || item?.code;
+                                  if (k && !newSelected.includes(k)) {
+                                    newSelected.push(k);
                                   }
                                 });
                                 setSelectedItems(newSelected);
                               } else {
-                                setSelectedItems(selectedItems.filter(id => !currentItemRows.some(row => row.itemId === id)));
+                                setSelectedItems(selectedItems.filter(id => !currentItemRows.some(row => (row?.itemId || row?.id || row?.sku || row?.code) === id)));
                               }
                             }}
                             style={{ accentColor: '#0E7490', width: '16px', height: '16px', cursor: 'pointer' }}
@@ -2866,10 +2884,11 @@ export default function ItemsDirectoryView(props) {
 
                         return currentItemRows.length > 0 ? (
                           currentItemRows.map((item, idx) => {
-                            const isSelected = selectedItems.includes(item.itemId);
+                            const itemKey = item.itemId || item.id || item.sku || item.code || `idx-${idx}`;
+                            const isSelected = Boolean(itemKey && selectedItems.includes(itemKey));
                             return (
                               <tr
-                                key={item.itemId || idx}
+                                key={itemKey}
                                 className="table-row-hover"
                                 style={{
                                   backgroundColor: isSelected ? '#ECFEFF' : 'transparent',
@@ -2882,14 +2901,14 @@ export default function ItemsDirectoryView(props) {
                                   textAlign: 'center',
                                   borderLeft: isSelected ? '4px solid #0E7490' : '4px solid transparent'
                                 }}>
-                                  <input id={`items-directory-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                                  <input id={`items-directory-checkbox-${idx}`} name={`checkbox_${idx}`} aria-label="Checkbox"
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => {
                                       if (isSelected) {
-                                        setSelectedItems(selectedItems.filter(id => id !== item.itemId));
+                                        setSelectedItems(selectedItems.filter(id => id !== itemKey));
                                       } else {
-                                        setSelectedItems([...selectedItems, item.itemId]);
+                                        setSelectedItems([...selectedItems, itemKey]);
                                       }
                                     }}
                                     style={{ accentColor: '#0E7490', width: '16px', height: '16px', cursor: 'pointer' }}
@@ -2971,9 +2990,21 @@ export default function ItemsDirectoryView(props) {
 
                     <button
                       onClick={() => {
-                        const firstItem = itemsList.find(i => selectedItems.includes(i.itemId));
+                        const firstItem = itemsList.find(i => {
+                          const k = i.itemId || i.id || i.sku || i.code;
+                          return k && selectedItems.includes(k);
+                        });
                         setSelectedItems([]);
-                        if (firstItem) setEditingItem(firstItem);
+                        if (firstItem) {
+                          const origKey = firstItem.itemId || firstItem.id || firstItem.sku || firstItem.code;
+                          setEditingItem({
+                            ...firstItem,
+                            itemId: origKey,
+                            _originalKey: origKey,
+                            _originalSku: firstItem.sku,
+                            _originalCode: firstItem.code
+                          });
+                        }
                       }}
                       style={{
                         backgroundColor: '#FFFFFF',
@@ -2996,7 +3027,10 @@ export default function ItemsDirectoryView(props) {
                       onClick={async () => {
                         if (window.confirm(`Are you sure you want to delete ${selectedItems.length} selected product(s)?`)) {
                           const toDelete = [...selectedItems];
-                          setItemsList(prev => prev.filter(i => !toDelete.includes(i.itemId)));
+                          setItemsList(prev => prev.filter(i => {
+                            const k = i.itemId || i.id || i.sku || i.code;
+                            return !toDelete.includes(k);
+                          }));
                           setSelectedItems([]);
 
                           try {
@@ -3230,8 +3264,11 @@ export default function ItemsDirectoryView(props) {
                   </button>
                   <button
                     onClick={() => {
-                      const targetId = deleteConfirmItem.itemId || deleteConfirmItem.id || deleteConfirmItem.sku || deleteConfirmItem.name;
-                      setItemsList(prev => prev.filter(it => it.itemId !== deleteConfirmItem.itemId));
+                      const targetId = deleteConfirmItem.itemId || deleteConfirmItem.id || deleteConfirmItem.sku || deleteConfirmItem.code || deleteConfirmItem.name;
+                      setItemsList(prev => prev.filter(it => {
+                        const itKey = it.itemId || it.id || it.sku || it.code || it.name;
+                        return itKey !== targetId;
+                      }));
                       setDeleteConfirmItem(null);
 
                       if (targetId) {
