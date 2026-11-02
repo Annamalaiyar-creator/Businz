@@ -790,6 +790,7 @@ export default function BomOrdersView(props) {
   const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '').trim();
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
+  const currentUserName = props.currentUserName || props.userName || props.currentUser?.name || currentEmpName || defaultSalesPersonName || userRole;
 
   // Role check: Only individual Sales personnel are isolated to their own BOMs.
   // Management & Fulfillment roles (Dispatch Head, Dispatch, Production Head, Floor Supervisor, Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Procurement Head, Billing) see all BOMs.
