@@ -15,7 +15,8 @@ import { notifyPiCreated } from '../services/notificationService';
 import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../services/customerService';
 import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 import { getNextSequence } from '../utils/sequenceGenerator';
-import { getHsnCode } from '../utils/hsnCodeService';
+import { getHsnCode, is5PctSolarProduct } from '../utils/hsnCodeService';
+export { is5PctSolarProduct };
 
 const defaultSalesPIs = [];
 
@@ -31,27 +32,6 @@ export const PRESET_THEMES = [
 
 export const getPresetTheme = (groupIndex) => {
   return PRESET_THEMES[groupIndex % PRESET_THEMES.length] || PRESET_THEMES[0];
-};
-
-export const is5PctSolarProduct = (name = '', cat = '') => {
-  const text = `${name} ${cat}`.toLowerCase();
-  return (
-    text.includes('inverter') ||
-    text.includes('solar panel') ||
-    text.includes('solar module') ||
-    text.includes('pv module') ||
-    text.includes('panel') ||
-    text.includes('module') ||
-    text.includes('topcon') ||
-    text.includes('bifacial') ||
-    text.includes('monocrystalline') ||
-    text.includes('polycrystalline') ||
-    text.includes('dcr') ||
-    text.includes('ongrid') ||
-    text.includes('offgrid') ||
-    text.includes('hybrid inverter') ||
-    text.includes('waaree')
-  );
 };
 
 const normalizePiRecord = (item) => {
@@ -5541,15 +5521,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     onChange={(val, matched) => {
                                       if (!matched) {
                                         const dynamicHsn = getHsnCode({ name: val, category: item.category });
-                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val, hsn: dynamicHsn } : mat));
+                                        const isSolar5 = is5PctSolarProduct(val, item.category, dynamicHsn);
+                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? {
+                                          ...mat,
+                                          name: val,
+                                          hsn: dynamicHsn,
+                                          gstRate: isSolar5 ? '5%' : mat.gstRate
+                                        } : mat));
                                         return;
                                       }
                                       const pName = matched.name;
                                       const pCat = matched.category || matched.description || item.category;
                                       const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
                                       const pHsn = matched.hsn || matched.hsn_or_sac || getHsnCode(matched || { name: pName, category: pCat });
-                                      const isSolar5 = is5PctSolarProduct(pName, pCat);
-                                      let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
+                                      const isSolar5 = is5PctSolarProduct(pName, pCat, pHsn);
+                                      let rawUom = matched.uom || matched.unit || item.uom || 'NOS';
                                       const u = String(rawUom).trim().toUpperCase();
                                       let resolvedUom = 'NOS';
                                       if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';

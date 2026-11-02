@@ -85,55 +85,87 @@ class CentralInventoryStore {
       return (c && delCodes.includes(c)) || (n && delCodes.includes(n));
     };
 
-    // 1. Load Item Master with localStorage and Supabase Cloud Database fallback
-    let seeded = [...INITIAL_CENTRAL_ITEMS].filter(it => !isDeletedItem(it));
-    try {
-      const savedItems = localStorage.getItem(this.storageKeyItems);
-      if (savedItems) {
-        const parsed = JSON.parse(savedItems);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          seeded = parsed.filter(item => {
-            const c = String(item?.code || item?.sku || item?.itemId || '').trim();
-            const n = String(item?.name || '').trim();
-            if (isDeletedItem(item)) return false;
-            return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
-          });
-        }
-      }
-    } catch (_) {}
-
-    // Ingest any newly created products from item_store / controlroom_item_store
+    // 1. Authoritative Item Master derived strictly from Item Directory
+    let authoritativeItems = [];
     try {
       const customStoreRaw = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
       if (customStoreRaw) {
         const parsedCustom = JSON.parse(customStoreRaw);
         if (Array.isArray(parsedCustom) && parsedCustom.length > 0) {
-          const seededCodeMap = new Set(seeded.map(s => String(s.code || s.sku || s.name).toUpperCase().trim()));
-          parsedCustom.forEach(ci => {
-            const codeKey = String(ci?.code || ci?.sku || ci?.itemId || ci?.name || '').toUpperCase().trim();
-            if (codeKey && !seededCodeMap.has(codeKey) && !isDeletedItem(ci) && !/^\d{10,}$/.test(codeKey)) {
-              seeded.push({
-                code: ci.code || ci.sku || ci.itemId || ci.name,
-                sku: ci.sku || ci.code || '',
-                name: ci.name,
-                cat: ci.category || ci.cat || (ci.productType === 'service' ? 'Services' : 'Finished Goods'),
-                type: ci.productType === 'service' ? 'Service' : 'Finished Product',
-                uom: ci.uom || ci.unit || 'NOS',
-                unitRate: Number(ci.rate || ci.price || 0),
-                openingStock: Number(ci.openingStock !== undefined ? ci.openingStock : (ci.stock || 0)),
-                physicalStock: Number(ci.physicalStock !== undefined ? ci.physicalStock : (ci.stock || 0)),
-                stock: Number(ci.stock || 0),
-                available: Number(ci.available !== undefined ? ci.available : (ci.stock || 0)),
-                availableStock: Number(ci.availableStock !== undefined ? ci.availableStock : (ci.stock || 0)),
-                onHand: Number(ci.onHand !== undefined ? ci.onHand : (ci.stock || 0)),
-                reserved: 0
-              });
-              seededCodeMap.add(codeKey);
-            }
+          authoritativeItems = parsedCustom.filter(ci => {
+            const c = String(ci?.code || ci?.sku || ci?.itemId || ci?.name || '').trim();
+            return c && !/^\d{10,}$/.test(c) && !isDeletedItem(ci);
           });
         }
       }
     } catch (_) {}
+
+    let seeded = [];
+    if (authoritativeItems.length > 0) {
+      const authMap = new Map();
+      authoritativeItems.forEach(ci => {
+        const c = String(ci.code || ci.sku || ci.itemId || ci.name).toUpperCase().trim();
+        authMap.set(c, {
+          code: ci.code || ci.sku || ci.itemId || ci.name,
+          sku: ci.sku || ci.code || '',
+          name: ci.name,
+          cat: ci.category || ci.cat || (ci.productType === 'service' ? 'Services' : 'Finished Goods'),
+          type: ci.productType === 'service' ? 'Service' : 'Finished Product',
+          uom: ci.uom || ci.unit || 'NOS',
+          unitRate: Number(ci.rate || ci.price || 0),
+          openingStock: Number(ci.openingStock !== undefined ? ci.openingStock : (ci.stock || 0)),
+          physicalStock: Number(ci.physicalStock !== undefined ? ci.physicalStock : (ci.stock || 0)),
+          stock: Number(ci.stock || 0),
+          available: Number(ci.available !== undefined ? ci.available : (ci.stock || 0)),
+          availableStock: Number(ci.availableStock !== undefined ? ci.availableStock : (ci.stock || 0)),
+          onHand: Number(ci.onHand !== undefined ? ci.onHand : (ci.stock || 0)),
+          reserved: 0
+        });
+      });
+
+      // Overlay saved items from storageKeyItems ONLY for matching authoritative items
+      try {
+        const savedItems = localStorage.getItem(this.storageKeyItems);
+        if (savedItems) {
+          const parsed = JSON.parse(savedItems);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsed.forEach(item => {
+              const c = String(item?.code || item?.sku || item?.itemId || item?.name || '').toUpperCase().trim();
+              if (authMap.has(c)) {
+                const ex = authMap.get(c);
+                authMap.set(c, {
+                  ...ex,
+                  ...item,
+                  code: ex.code,
+                  name: ex.name,
+                  cat: ex.cat,
+                  type: ex.type
+                });
+              }
+            });
+          }
+        }
+      } catch (_) {}
+
+      seeded = Array.from(authMap.values());
+    } else {
+      // Fallback only when Item Directory is not yet populated
+      seeded = [...INITIAL_CENTRAL_ITEMS].filter(it => !isDeletedItem(it));
+      try {
+        const savedItems = localStorage.getItem(this.storageKeyItems);
+        if (savedItems) {
+          const parsed = JSON.parse(savedItems);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            seeded = parsed.filter(item => {
+              const c = String(item?.code || item?.sku || item?.itemId || '').trim();
+              const n = String(item?.name || '').trim();
+              if (isDeletedItem(item)) return false;
+              return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+            });
+          }
+        }
+      } catch (_) {}
+    }
 
     const sanitizeInventoryItems = (list) => {
       let bomAllocMap = new Map();

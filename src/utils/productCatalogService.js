@@ -1,6 +1,6 @@
 import { resolveProductCode, wordFingerprint, normalizeProductName } from './vrmProductsData.js';
 import { centralInventoryStore } from './centralInventoryStore.js';
-import { getHsnCode } from './hsnCodeService.js';
+import { getHsnCode, is5PctSolarProduct } from './hsnCodeService.js';
 
 const getDeletedCodes = () => {
   try {
@@ -234,7 +234,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       unit: ci.unit || ci.uom || 'NOS',
       rate: String(ci.rate || ci.price || '0'),
       price: String(ci.price || ci.rate || '0'),
-      gstRate: ci.gstRate || ci.gst || '18%',
+      gstRate: is5PctSolarProduct(rawName, ci.category || ci.cat || '', ci.hsn || ci.hsn_or_sac || ci.hsnCode || '') ? '5%' : (ci.gstRate || ci.gst || '18%'),
       hsn: ci.hsn || ci.hsn_or_sac || ci.hsnCode || getHsnCode(ci),
       stock: realStock,
       availableStock: realStock,

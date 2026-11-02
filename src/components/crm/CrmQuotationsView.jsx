@@ -24,7 +24,8 @@ import {
   getWhatsAppStatus,
   sendDirectWhatsApp
 } from '../../utils/whatsappDispatchService';
-import { getHsnCode } from '../../utils/hsnCodeService';
+import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
+export { is5PctSolarProduct };
 
 const QUOTATION_TERMS_PRESETS = [
   {
@@ -167,27 +168,6 @@ Best regards,
 VRM Structures India Pvt Ltd`
   }
 ];
-
-export const is5PctSolarProduct = (name = '', cat = '') => {
-  const text = `${name} ${cat}`.toLowerCase();
-  return (
-    text.includes('inverter') ||
-    text.includes('solar panel') ||
-    text.includes('solar module') ||
-    text.includes('pv module') ||
-    text.includes('panel') ||
-    text.includes('module') ||
-    text.includes('topcon') ||
-    text.includes('bifacial') ||
-    text.includes('monocrystalline') ||
-    text.includes('polycrystalline') ||
-    text.includes('dcr') ||
-    text.includes('ongrid') ||
-    text.includes('offgrid') ||
-    text.includes('hybrid inverter') ||
-    text.includes('waaree')
-  );
-};
 
 export default function CrmQuotationsView({
   quotations = [],
@@ -2095,13 +2075,19 @@ export default function CrmQuotationsView({
                                 onChange={(val, matched) => {
                                   if (!matched) {
                                     const dynamicHsn = getHsnCode({ name: val, category: item.category });
-                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val, hsn: dynamicHsn } : mat));
+                                    const isSolar5 = is5PctSolarProduct(val, item.category, dynamicHsn);
+                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? {
+                                      ...mat,
+                                      name: val,
+                                      hsn: dynamicHsn,
+                                      gstRate: isSolar5 ? '5%' : mat.gstRate
+                                    } : mat));
                                     return;
                                   }
                                   const pName = matched.name;
                                   const pCat = matched.category || matched.description || item.category;
                                   const pHsn = matched.hsn || matched.hsn_or_sac || getHsnCode(matched || { name: pName, category: pCat });
-                                  const isSolar5 = is5PctSolarProduct(pName, pCat);
+                                  const isSolar5 = is5PctSolarProduct(pName, pCat, pHsn);
                                   setQuoteItems(prev => prev.map((mat, idx) => idx === i ? {
                                     ...mat,
                                     name: pName,

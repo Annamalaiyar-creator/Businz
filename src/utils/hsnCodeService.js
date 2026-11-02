@@ -49,6 +49,61 @@ Object.entries(VARIANT_MAP).forEach(([k, v]) => {
   CLEAN_MAP.set(k.toLowerCase().replace(/[^a-z0-9]/g, ''), v);
 });
 
+export function is5PctSolarProduct(itemOrName, cat = '', hsn = '') {
+  let name = '';
+  let category = cat || '';
+  let hsnCode = hsn || '';
+
+  if (typeof itemOrName === 'string') {
+    name = itemOrName;
+  } else if (itemOrName && typeof itemOrName === 'object') {
+    name = itemOrName.name || itemOrName.itemName || itemOrName.productName || itemOrName.title || '';
+    if (!category) category = itemOrName.category || itemOrName.cat || itemOrName.description || '';
+    if (!hsnCode) hsnCode = itemOrName.hsn || itemOrName.hsn_or_sac || itemOrName.hsnCode || '';
+  }
+
+  const hsnClean = String(hsnCode || '').trim();
+  if (hsnClean.startsWith('8504') || hsnClean.startsWith('8541')) {
+    return true;
+  }
+
+  const text = `${name} ${category}`.toLowerCase();
+
+  // Exclude structural hardware, clamps, and brackets that mention panel/module
+  if (text.includes('panel clamp') || text.includes('module clamp') || text.includes('end clamp') || text.includes('mid clamp') || text.includes('bracket') || text.includes('rail') || text.includes('structure')) {
+    if (!text.includes('inverter') && !text.includes('solar panel') && !text.includes('solar module') && !text.includes('pv module')) {
+      return false;
+    }
+  }
+
+  return (
+    text.includes('inverter') ||
+    text.includes('solar panel') ||
+    text.includes('solar module') ||
+    text.includes('pv module') ||
+    text.includes('solar cell') ||
+    text.includes('bifacial') ||
+    text.includes('monocrystalline') ||
+    text.includes('polycrystalline') ||
+    text.includes('topcon') ||
+    text.includes('dcr') ||
+    text.includes('ongrid') ||
+    text.includes('offgrid') ||
+    text.includes('hybrid inverter') ||
+    text.includes('microinverter') ||
+    text.includes('micro inverter') ||
+    text.includes('waaree') ||
+    text.includes('deye') ||
+    text.includes('growatt') ||
+    text.includes('sungrow') ||
+    text.includes('solis') ||
+    text.includes('goodwe') ||
+    text.includes('luminous') ||
+    (text.includes('panel') && !text.includes('panel clamp')) ||
+    (text.includes('module') && !text.includes('module clamp'))
+  );
+}
+
 /**
  * Resolves the accurate HSN code for any product or line item.
  * Never returns a single hardcoded code for all items.
