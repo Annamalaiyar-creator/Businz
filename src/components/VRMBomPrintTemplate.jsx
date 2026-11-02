@@ -723,7 +723,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
       }}>
         <thead>
           <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
-            <th style={{ padding: '8px 6px', width: '38px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>#</th>
+            <th style={{ padding: '8px 6px', width: '45px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>S.No</th>
             <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Product / Material Name</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{hasAnyKits && kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set'}</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
@@ -770,21 +770,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                backgroundColor: kitColor,
-                                color: '#FFFFFF',
-                                padding: '3px 10px',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                fontWeight: '900',
-                                letterSpacing: '0.4px',
-                                textTransform: 'uppercase'
-                              }}
-                            >
-                              KIT {kIdx + 1}
-                            </span>
                             <span style={{ color: '#0F172A', fontSize: '14px', fontWeight: '800' }}>
                               {kg.presetName}
                             </span>
@@ -838,14 +823,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                             {hasMultipleKits ? `${kIdx + 1}.${itemIdx + 1}` : itemIdx + 1}
                           </td>
                           <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', wordBreak: 'break-word' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                              <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
-                              {hasMultipleKits && (
-                                <span style={{ fontSize: '10.5px', padding: '1px 6px', borderRadius: '4px', backgroundColor: kitBg, color: kitColor, fontWeight: '800', border: `1px solid ${kitBorder}` }}>
-                                  Kit {kIdx + 1}
-                                </span>
-                              )}
-                            </div>
+                            <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
                           </td>
 
                           {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside */}
@@ -1050,21 +1028,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             })
           )}
         </tbody>
-        {items.length > 0 && (
-          <tfoot style={{ display: 'table-row-group' }}>
-            <tr style={{ backgroundColor: '#F1F5F9', borderTop: '2px solid #0E7490', fontWeight: '800', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-              <td colSpan={4} style={{ padding: '8px 12px', textAlign: 'right', color: '#475569', fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Total Quantity:
-              </td>
-              <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900', borderRight: '1px solid #CBD5E1' }}>
-                {totalQuantity}
-              </td>
-              <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900' }}>
-                {totalQuantityTaken > 0 ? totalQuantityTaken : ''}
-              </td>
-            </tr>
-          </tfoot>
-        )}
       </table>
 
       {/* 5. PACKAGING CONTAINERS (NO. OF BOXES, NO. OF BUNDLES, NO. OF BAGS) */}
