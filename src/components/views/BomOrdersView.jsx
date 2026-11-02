@@ -10285,7 +10285,7 @@ export default function BomOrdersView(props) {
                   transition: 'all 0.15s ease'
                 }}
               >
-                <Receipt size={14} /> Payment Proof (While Dispatch / Partial)
+                <Receipt size={14} /> Payment Proof
               </button>
               <button
                 type="button"
@@ -10565,15 +10565,20 @@ export default function BomOrdersView(props) {
                     </div>
                   </div>
 
-                  {/* SECTION 1: Adding Payment Proof (for Payment While Dispatch & Partially Paid) */}
-                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                  {/* UNIFIED PAYMENT PROOF SECTION (Single section for Payment while Dispatch / Partial) */}
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
                       <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Receipt size={16} /> Section 1: Add Payment Proof ({isWhileDispatch ? 'Payment While Dispatch' : (isPartial ? 'Partially Paid' : 'Advance Payment')})
+                        <Receipt size={16} /> Payment Proof
                       </span>
                       {isWhileDispatch && (
                         <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #FDE68A' }}>
                           Payment While Dispatch
+                        </span>
+                      )}
+                      {isPartial && (
+                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#0D9488', backgroundColor: '#CCFBF1', padding: '2px 8px', borderRadius: '6px', border: '1px solid #99F6E4' }}>
+                          Partially Paid
                         </span>
                       )}
                     </div>
@@ -10611,6 +10616,91 @@ export default function BomOrdersView(props) {
                       </div>
                     )}
 
+                    {/* Existing Payment Proof on File (Compact box without raw thumbnail) */}
+                    {existingPaymentDocsList.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CheckCircle size={14} style={{ color: '#16A34A' }} /> Existing Payment Proof on File ({existingPaymentDocsList.length}):
+                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {existingPaymentDocsList.map((doc, idx) => {
+                            const dName = doc.name || doc.originalName || `Payment_Proof_${idx + 1}.jpg`;
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '8px 12px',
+                                  backgroundColor: '#F8FAFC',
+                                  border: '1px solid #E2E8F0',
+                                  borderRadius: '8px',
+                                  gap: '10px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                  <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <FileText size={16} />
+                                  </div>
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={dName}>
+                                      {dName}
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#64748B' }}>
+                                      Payment Slip #{idx + 1} {doc.size ? `• ${(doc.size / 1024).toFixed(0)} KB` : ''}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewDocModal({ title: `Payment Proof #${idx + 1}: ${dName}`, doc, bomCode: uploadPaymentModal.bomCode })}
+                                    style={{
+                                      padding: '4px 10px',
+                                      fontSize: '11px',
+                                      fontWeight: '700',
+                                      color: '#0E7490',
+                                      backgroundColor: '#ECFEFF',
+                                      border: '1px solid #A5F3FC',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                  >
+                                    <Eye size={12} /> View
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExistingPaymentDocsList(prev => prev.filter((_, i) => i !== idx))}
+                                    style={{
+                                      padding: '4px 8px',
+                                      fontSize: '11px',
+                                      fontWeight: '700',
+                                      color: '#DC2626',
+                                      backgroundColor: '#FEF2F2',
+                                      border: '1px solid #FECACA',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px'
+                                    }}
+                                    title="Remove this image"
+                                  >
+                                    <Trash2 size={12} /> Remove
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* File Dropzone */}
                     <div style={{
                       border: '2px dashed #0E7490',
@@ -10629,7 +10719,7 @@ export default function BomOrdersView(props) {
                       </span>
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 4px rgba(14,116,144,0.25)' }}>
                         <Upload style={{ width: '13px', height: '13px' }} />
-                        {paymentProofFiles.length > 0 ? '+ Add More Images' : 'Browse Files'}
+                        {paymentProofFiles.length > 0 || existingPaymentDocsList.length > 0 ? '+ Add More Images' : 'Browse Files'}
                         <input
                           type="file"
                           multiple
@@ -10696,117 +10786,6 @@ export default function BomOrdersView(props) {
                             </button>
                           </div>
                         ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* SECTION 2: Existing Payment Proof on File (Compact box without raw thumbnail) */}
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <CheckCircle size={15} style={{ color: '#16A34A' }} />
-                        Section 2: Existing Payment Proof on File ({existingPaymentDocsList.length})
-                      </span>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
-                        <Plus size={12} /> Add / Replace Image
-                        <input
-                          type="file"
-                          multiple
-                          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-                          style={{ display: 'none' }}
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files.length > 0) {
-                              const newFiles = Array.from(e.target.files).filter(f => {
-                                try { validateClientFile(f); return true; } catch (err) { alert(err.message); return false; }
-                              });
-                              setPaymentProofFiles(prev => [...prev, ...newFiles]);
-                              e.target.value = '';
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-
-                    {existingPaymentDocsList.length === 0 ? (
-                      <div style={{ padding: '12px', textAlign: 'center', fontSize: '11.5px', color: '#64748B', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
-                        No payment proof previously uploaded by sales. Use Section 1 above to attach payment proof.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {existingPaymentDocsList.map((doc, idx) => {
-                          const dName = doc.name || doc.originalName || `Payment_Proof_${idx + 1}.jpg`;
-                          return (
-                            <div
-                              key={idx}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '8px 12px',
-                                backgroundColor: '#FFFFFF',
-                                border: '1px solid #E2E8F0',
-                                borderRadius: '8px',
-                                gap: '10px'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-                                <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <FileText size={16} />
-                                </div>
-                                <div style={{ minWidth: 0, flex: 1 }}>
-                                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={dName}>
-                                    {dName}
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: '#64748B' }}>
-                                    Payment Slip #{idx + 1} {doc.size ? `• ${(doc.size / 1024).toFixed(0)} KB` : ''}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewDocModal({ title: `Payment Proof #${idx + 1}: ${dName}`, doc, bomCode: uploadPaymentModal.bomCode })}
-                                  style={{
-                                    padding: '4px 10px',
-                                    fontSize: '11px',
-                                    fontWeight: '700',
-                                    color: '#0E7490',
-                                    backgroundColor: '#ECFEFF',
-                                    border: '1px solid #A5F3FC',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                  }}
-                                >
-                                  <Eye size={12} /> View
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setExistingPaymentDocsList(prev => prev.filter((_, i) => i !== idx))}
-                                  style={{
-                                    padding: '4px 8px',
-                                    fontSize: '11px',
-                                    fontWeight: '700',
-                                    color: '#DC2626',
-                                    backgroundColor: '#FEF2F2',
-                                    border: '1px solid #FECACA',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '2px'
-                                  }}
-                                  title="Remove this image"
-                                >
-                                  <Trash2 size={12} /> Remove
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
                       </div>
                     )}
                   </div>
@@ -10954,12 +10933,12 @@ export default function BomOrdersView(props) {
                         {uploadingPayment ? (
                           <>
                             <RotateCcw style={{ width: '15px', height: '15px', animation: 'spin 0.75s linear infinite' }} />
-                            Uploading Proofs...
+                            Saving and Updating...
                           </>
                         ) : (
                           <>
                             <Save style={{ width: '15px', height: '15px' }} />
-                            Save & Update Payment Proof
+                            Save and Update
                           </>
                         )}
                       </button>
