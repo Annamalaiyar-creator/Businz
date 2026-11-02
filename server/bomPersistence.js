@@ -1014,7 +1014,7 @@ export async function persistBomsTransactionSafe({
         // 1. Authoritative: Query PostgreSQL directly for VRM-BOM sequence in current FY
         const vrmRes = await client.query(`
           SELECT bom_code FROM public.bom_orders
-          WHERE bom_code ~ '^VRM-BOM-(?:[0-9]{4}-)?[0-9]+$'
+          WHERE bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
         `);
         if (vrmRes?.rows && vrmRes.rows.length > 0) {
           const dbMax = extractMaxSequence('BOM', fy, vrmRes.rows);

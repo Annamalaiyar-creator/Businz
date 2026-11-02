@@ -63,13 +63,13 @@ export default function InvoiceDetailModal({
       bCode === inv.invNo ||
       bCode === rawBomRefText ||
       (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
-      (invNum && (invNum.endsWith(bCode.replace('BOM-', '')) || invNum.endsWith(bCode.replace(/^VRM-BOM-(?:\d{4}-)?/i, ''))))
+      (invNum && (invNum.endsWith(bCode.replace('BOM-', '')) || invNum.endsWith(bCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
     )) return true;
 
     if (bInv && invNum && bInv === invNum) return true;
 
     const invDigits = invNum.match(/(?:VRM-INV-\d{4}-|INV-)(\d+)/i)?.[1];
-    const bomDigits = bCode.match(/(?:VRM-BOM-(?:\d{4}-)?|BOM-)(\d+)/i)?.[1];
+    const bomDigits = bCode.match(/(?:VRM-BOM-\d{4}-|BOM-)(\d+)/i)?.[1];
     if (invDigits && bomDigits && parseInt(invDigits, 10) === parseInt(bomDigits, 10)) return true;
 
     if (custName && bCust && custName === bCust && !['customer', 'customer order', 'pending'].includes(custName)) return true;
@@ -77,7 +77,7 @@ export default function InvoiceDetailModal({
     return false;
   });
 
-  const targetBomRef = matchingBom?.bomCode || matchingBom?.code || rawBomRefText || 'VRM-BOM-01';
+  const targetBomRef = matchingBom?.bomCode || matchingBom?.code || rawBomRefText || 'VRM-BOM-2026-01';
   const bomRefText = targetBomRef;
 
   useEffect(() => {
@@ -157,7 +157,7 @@ export default function InvoiceDetailModal({
         b.bomCode === targetCode ||
         b.salesOrderNo === targetCode ||
         b.code === targetCode ||
-        (inv.invNo && b.bomCode && (inv.invNo.endsWith(b.bomCode.replace('BOM-', '')) || inv.invNo.endsWith(b.bomCode.replace(/^VRM-BOM-(?:\d{4}-)?/i, ''))))
+        (inv.invNo && b.bomCode && (inv.invNo.endsWith(b.bomCode.replace('BOM-', '')) || inv.invNo.endsWith(b.bomCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
       ) ? {
         ...b,
         status: 'Invoice Cancelled',

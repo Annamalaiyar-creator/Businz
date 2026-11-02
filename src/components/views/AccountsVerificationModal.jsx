@@ -363,10 +363,8 @@ export default function AccountsVerificationModal({
     }
     if (!finalInvNo || isTaken(finalInvNo)) {
       const bCode = accountsVerificationModal.bomCode || accountsVerificationModal.code || '';
-      const matchSeq = bCode.match(/VRM-BOM-(?:(\d{4})-)?(\d+)/i);
-      const fyCandidate = matchSeq?.[1] || new Date().getFullYear();
-      const seqCandidate = matchSeq?.[2];
-      const candidate = seqCandidate ? `VRM-INV-${fyCandidate}-${seqCandidate}` : '';
+      const matchSeq = bCode.match(/VRM-BOM-(\d{4})-(\d+)/i);
+      const candidate = matchSeq ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : '';
       finalInvNo = (!candidate || isTaken(candidate)) ? `VRM-INV-2026-${Date.now().toString().slice(-4)}` : candidate;
     }
 
