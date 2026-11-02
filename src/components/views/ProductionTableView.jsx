@@ -940,108 +940,110 @@ export default function ProductionTableView({
             </button>
           )}
 
-          {/* Export and Print */}
-          <button
-            onClick={() => {
-              if (activeTab === 'Invoice Management') {
-                const targetCode = selectedRows[0];
-                const rec = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode || r.invNo === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id || b.invNo) === targetCode);
-                if (onPrintTaxInvoice) {
-                  onPrintTaxInvoice(rec || { invNo: targetCode });
+          {/* Export and Print - Excluded for Accounts Verification & Document Control */}
+          {activeTab !== 'Accounts Verification' && pageConfig?.title !== 'Accounts Verification & Document Control' && !String(pageConfig?.title || '').toLowerCase().includes('accounts verification') && (
+            <button
+              onClick={() => {
+                if (activeTab === 'Invoice Management') {
+                  const targetCode = selectedRows[0];
+                  const rec = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode || r.invNo === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id || b.invNo) === targetCode);
+                  if (onPrintTaxInvoice) {
+                    onPrintTaxInvoice(rec || { invNo: targetCode });
+                  } else {
+                    window.print();
+                  }
                 } else {
-                  window.print();
-                }
-              } else {
-                const targetCode = selectedRows[0];
-                const fullBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.piNo === targetCode));
-                const rowRec = (filteredRows || []).find(r => r && (r.code === targetCode || r.id === targetCode || r.bomCode === targetCode));
+                  const targetCode = selectedRows[0];
+                  const fullBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.piNo === targetCode));
+                  const rowRec = (filteredRows || []).find(r => r && (r.code === targetCode || r.id === targetCode || r.bomCode === targetCode));
 
-                const resolvedCustomerName = (() => {
-                  const list = [rowRec?.customerName, fullBom?.customerName, rowRec?.companyName, fullBom?.companyName, rowRec?.c2];
-                  return list.find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(s.trim())) || rowRec?.customerName || fullBom?.customerName || 'Valued Customer';
-                })();
+                  const resolvedCustomerName = (() => {
+                    const list = [rowRec?.customerName, fullBom?.customerName, rowRec?.companyName, fullBom?.companyName, rowRec?.c2];
+                    return list.find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(s.trim())) || rowRec?.customerName || fullBom?.customerName || 'Valued Customer';
+                  })();
 
-                const resolvedSalesPerson = (() => {
-                  const isDisp = (s) => {
-                    const l = String(s || '').toLowerCase();
-                    return l === 'anu' || l.includes('dispatch') || l.includes('fulfillment');
+                  const resolvedSalesPerson = (() => {
+                    const isDisp = (s) => {
+                      const l = String(s || '').toLowerCase();
+                      return l === 'anu' || l.includes('dispatch') || l.includes('fulfillment');
+                    };
+                    const list = [rowRec?.salesPerson, fullBom?.salesPerson, rowRec?.c4, rowRec?.createdBy, fullBom?.createdBy];
+                    return list.find(s => s && typeof s === 'string' && s.trim() && !['Sales Department', 'Sales', '—', '-'].includes(s.trim()) && !isDisp(s)) || rowRec?.salesPerson || fullBom?.salesPerson || 'Annamalaiyar';
+                  })();
+
+                  const resolvedTransporterName = (() => {
+                    const list = [
+                      rowRec?.transporterName,
+                      fullBom?.transporterName,
+                      rowRec?.transporter,
+                      fullBom?.transporter,
+                      fullBom?.transporter_name,
+                      fullBom?.vehicleLoading?.transporter,
+                      fullBom?.vehicleLoading?.transporterName,
+                      fullBom?.vehicleLoadingData?.transporter,
+                      fullBom?.transportMode,
+                      rowRec?.transportMode
+                    ];
+                    return list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase())) || '';
+                  })();
+
+                  const targetRow = {
+                    ...(fullBom || {}),
+                    ...(rowRec || {}),
+                    customerName: resolvedCustomerName,
+                    companyName: resolvedCustomerName,
+                    salesPerson: resolvedSalesPerson,
+                    transporterName: resolvedTransporterName || fullBom?.transporterName || rowRec?.transporterName || '',
+                    transporter: resolvedTransporterName || fullBom?.transporter || rowRec?.transporter || '',
+                    items: (Array.isArray(fullBom?.items) && fullBom.items.length > 0)
+                      ? fullBom.items
+                      : (Array.isArray(rowRec?.items) && rowRec.items.length > 0)
+                        ? rowRec.items
+                        : (Array.isArray(fullBom?.lineItems) && fullBom.lineItems.length > 0)
+                          ? fullBom.lineItems
+                          : (Array.isArray(fullBom?.materials) && fullBom.materials.length > 0)
+                            ? fullBom.materials
+                            : (Array.isArray(fullBom?.dispatchPacking) && fullBom.dispatchPacking.length > 0)
+                              ? fullBom.dispatchPacking
+                              : (rowRec?.dispatchPacking || []),
+                    presetGroups: (Array.isArray(fullBom?.presetGroups) && fullBom.presetGroups.length > 0)
+                      ? fullBom.presetGroups
+                      : (rowRec?.presetGroups || []),
+                    presetName: fullBom?.presetName || rowRec?.presetName || '',
+                    presetSetCount: fullBom?.presetSetCount || rowRec?.presetSetCount || null
                   };
-                  const list = [rowRec?.salesPerson, fullBom?.salesPerson, rowRec?.c4, rowRec?.createdBy, fullBom?.createdBy];
-                  return list.find(s => s && typeof s === 'string' && s.trim() && !['Sales Department', 'Sales', '—', '-'].includes(s.trim()) && !isDisp(s)) || rowRec?.salesPerson || fullBom?.salesPerson || 'Annamalaiyar';
-                })();
 
-                const resolvedTransporterName = (() => {
-                  const list = [
-                    rowRec?.transporterName,
-                    fullBom?.transporterName,
-                    rowRec?.transporter,
-                    fullBom?.transporter,
-                    fullBom?.transporter_name,
-                    fullBom?.vehicleLoading?.transporter,
-                    fullBom?.vehicleLoading?.transporterName,
-                    fullBom?.vehicleLoadingData?.transporter,
-                    fullBom?.transportMode,
-                    rowRec?.transportMode
-                  ];
-                  return list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase())) || '';
-                })();
-
-                const targetRow = {
-                  ...(fullBom || {}),
-                  ...(rowRec || {}),
-                  customerName: resolvedCustomerName,
-                  companyName: resolvedCustomerName,
-                  salesPerson: resolvedSalesPerson,
-                  transporterName: resolvedTransporterName || fullBom?.transporterName || rowRec?.transporterName || '',
-                  transporter: resolvedTransporterName || fullBom?.transporter || rowRec?.transporter || '',
-                  items: (Array.isArray(fullBom?.items) && fullBom.items.length > 0)
-                    ? fullBom.items
-                    : (Array.isArray(rowRec?.items) && rowRec.items.length > 0)
-                      ? rowRec.items
-                      : (Array.isArray(fullBom?.lineItems) && fullBom.lineItems.length > 0)
-                        ? fullBom.lineItems
-                        : (Array.isArray(fullBom?.materials) && fullBom.materials.length > 0)
-                          ? fullBom.materials
-                          : (Array.isArray(fullBom?.dispatchPacking) && fullBom.dispatchPacking.length > 0)
-                            ? fullBom.dispatchPacking
-                            : (rowRec?.dispatchPacking || []),
-                  presetGroups: (Array.isArray(fullBom?.presetGroups) && fullBom.presetGroups.length > 0)
-                    ? fullBom.presetGroups
-                    : (rowRec?.presetGroups || []),
-                  presetName: fullBom?.presetName || rowRec?.presetName || '',
-                  presetSetCount: fullBom?.presetSetCount || rowRec?.presetSetCount || null
-                };
-
-                setSelectedRows([]);
-                if (onPrintBom) {
-                  onPrintBom(targetRow);
-                } else {
-                  window.print();
+                  setSelectedRows([]);
+                  if (onPrintBom) {
+                    onPrintBom(targetRow);
+                  } else {
+                    window.print();
+                  }
                 }
-              }
-            }}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <Printer size={14} style={{ color: '#059669' }} /> Export &amp; Print
-          </button>
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#1E293B',
+                borderRadius: '10px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+            >
+              <Printer size={14} style={{ color: '#059669' }} /> Export &amp; Print
+            </button>
+          )}
 
           {/* Cancel BOM Order Button - Excluded for Delivery Challans */}
           {canCancelBom && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (() => {
