@@ -290,10 +290,38 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   const rawBomDate = b.date || b.bomDate || b.piDate || b.salesConfirmedAt || (b.createdAt ? String(b.createdAt).substring(0, 10) : new Date().toISOString().split('T')[0]);
   const orderDateFormatted = formatDateDDMMYYYY(rawBomDate);
 
-  const rawTransportMode = b.transportMode || b.transport_mode || 'Transport';
-  const transporterName = b.transporterName || b.transporter_name || '';
-  const transportDisplay = transporterName && !rawTransportMode.toLowerCase().includes(transporterName.toLowerCase())
-    ? `${rawTransportMode} (${transporterName})`
+  const rawTransportMode = b.transportMode || b.transport_mode || 'By Road';
+  const resolvedTransporterName = (() => {
+    const list = [
+      b.transporterName,
+      b.transporter,
+      b.transporter_name,
+      b.vehicleLoading?.transporter,
+      b.vehicleLoading?.transporterName,
+      b.vehicleLoadingData?.transporter,
+      matchedPi?.transporterName,
+      matchedPi?.transporter,
+      matchedPi?.transporter_name
+    ];
+    const found = list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'to be arranged', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase()));
+    return found ? found.trim() : (b.transportMode || 'To be arranged');
+  })();
+
+  const resolvedVehicleNo = (() => {
+    const list = [
+      b.vehicleNo,
+      b.vehicle_no,
+      b.vehicleNumber,
+      b.vehicleLoading?.vehicleNo,
+      b.vehicleLoading?.vehicle_no,
+      matchedPi?.vehicleNo
+    ];
+    const found = list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase()));
+    return found ? found.trim() : '';
+  })();
+
+  const transportDisplay = resolvedTransporterName && !rawTransportMode.toLowerCase().includes(resolvedTransporterName.toLowerCase())
+    ? `${rawTransportMode} (${resolvedTransporterName})`
     : rawTransportMode;
 
   const destinationDisplay = (b.destination && String(b.destination).trim() && !['—', '-'].includes(String(b.destination).trim()))
@@ -551,7 +579,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
       {/* 2. DEDICATED METADATA BAR (NEVER OVERLAPS) */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1.2fr 1fr 1.2fr 1.2fr 1.1fr',
+        gridTemplateColumns: '1.1fr 0.95fr 1fr 1.35fr 1.05fr 1.05fr',
         border: '1px solid #CBD5E1',
         borderRadius: '5px',
         backgroundColor: '#F8FAFC',
@@ -562,25 +590,31 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         pageBreakInside: 'avoid',
         breakInside: 'avoid'
       }}>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Number</span>
-          <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '12px' }}>{bomNumber}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Number</span>
+          <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '11.5px' }}>{bomNumber}</span>
         </div>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Date</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{orderDateFormatted}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Date</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{orderDateFormatted}</span>
         </div>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Transport Mode</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{transportDisplay}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Transport Mode</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{rawTransportMode}</span>
         </div>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Destination</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{destinationDisplay}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Transporter Name</span>
+          <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '11.5px', wordBreak: 'break-word' }}>
+            {resolvedTransporterName}{resolvedVehicleNo ? ` (${resolvedVehicleNo})` : ''}
+          </span>
         </div>
-        <div style={{ padding: '6px 10px' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sales Person</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{salesPersonName}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Destination</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{destinationDisplay}</span>
+        </div>
+        <div style={{ padding: '6px 8px' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sales Person</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{salesPersonName}</span>
         </div>
       </div>
 
@@ -666,11 +700,14 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                 <div key={idx} style={{ lineHeight: '1.3' }}>{line}</div>
               ))}
             </div>
-            {(b.siteContact || b.contactPerson || b.mobile) && (b.siteContact !== '—' && b.mobile !== '—') && (
-              <div style={{ marginTop: '2px', fontSize: '11px', color: '#334155' }}>
-                <strong>Site Contact:</strong> {b.siteContact || b.contactPerson || b.mobile}
-              </div>
-            )}
+            <div style={{ marginTop: '4px', fontSize: '11px', color: '#0F172A', display: 'flex', flexWrap: 'wrap', gap: '10px', borderTop: '1px dashed #E2E8F0', paddingTop: '4px' }}>
+              {(b.siteContact || b.contactPerson || b.mobile) && (b.siteContact !== '—' && b.mobile !== '—') && (
+                <div><strong>Site Contact:</strong> {b.siteContact || b.contactPerson || b.mobile}</div>
+              )}
+              {resolvedTransporterName && resolvedTransporterName !== 'To be arranged' && (
+                <div><strong>Transporter:</strong> <span style={{ color: '#0E7490', fontWeight: '800' }}>{resolvedTransporterName}</span></div>
+              )}
+            </div>
           </div>
         </div>
       </div>

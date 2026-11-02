@@ -999,12 +999,29 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const secondPrintTime = b.secondPrintTimeStr || (b.dispatchPrintHistory?.[1]?.time || (printCount >= 2 ? printTime : ''));
                   const printHistory = Array.isArray(b.dispatchPrintHistory) ? b.dispatchPrintHistory : [];
 
+                  const resolvedTransporter = (() => {
+                    const list = [
+                      b.transporterName,
+                      b.transporter,
+                      b.transporter_name,
+                      b.vehicleLoading?.transporter,
+                      b.vehicleLoading?.transporterName,
+                      b.vehicleLoadingData?.transporter,
+                      matchedPi?.transporterName,
+                      matchedPi?.transporter
+                    ];
+                    const found = list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase()));
+                    return found ? found.trim() : (b.transportMode || 'To be arranged');
+                  })();
+
                   const rowObj = {
                     ...b,
                     code: b.bomCode || b.code || b.id,
                     customerName: customerDisplayName,
                     companyName: customerDisplayName,
                     c2: customerDisplayName,
+                    transporterName: resolvedTransporter,
+                    transporter: resolvedTransporter,
                     dateTimeObj: dt,
                     dateTime: dt.combined,
                     c3: dt.combined,

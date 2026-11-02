@@ -880,12 +880,30 @@ export default function ProductionTableView({
                   return list.find(s => s && typeof s === 'string' && s.trim() && !['Sales Department', 'Sales', '—', '-'].includes(s.trim()) && !isDisp(s)) || rowRec?.salesPerson || fullBom?.salesPerson || 'Annamalaiyar';
                 })();
 
+                const resolvedTransporterName = (() => {
+                  const list = [
+                    rowRec?.transporterName,
+                    fullBom?.transporterName,
+                    rowRec?.transporter,
+                    fullBom?.transporter,
+                    fullBom?.transporter_name,
+                    fullBom?.vehicleLoading?.transporter,
+                    fullBom?.vehicleLoading?.transporterName,
+                    fullBom?.vehicleLoadingData?.transporter,
+                    fullBom?.transportMode,
+                    rowRec?.transportMode
+                  ];
+                  return list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase())) || '';
+                })();
+
                 const targetRow = {
                   ...(fullBom || {}),
                   ...(rowRec || {}),
                   customerName: resolvedCustomerName,
                   companyName: resolvedCustomerName,
                   salesPerson: resolvedSalesPerson,
+                  transporterName: resolvedTransporterName || fullBom?.transporterName || rowRec?.transporterName || '',
+                  transporter: resolvedTransporterName || fullBom?.transporter || rowRec?.transporter || '',
                   items: (Array.isArray(fullBom?.items) && fullBom.items.length > 0)
                     ? fullBom.items
                     : (Array.isArray(rowRec?.items) && rowRec.items.length > 0)
