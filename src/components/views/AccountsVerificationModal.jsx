@@ -238,9 +238,8 @@ export default function AccountsVerificationModal({
   };
   const salesPaymentStatus = normalizePaymentTerm(accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3) || '100% Paid';
 
-  const currentPayStatus = accVerif.paymentStatus 
-    ? normalizePaymentTerm(accVerif.paymentStatus)
-    : salesPaymentStatus;
+  // Customer Payment Status is strictly determined by Sales BOM and cannot be altered by Accounts
+  const currentPayStatus = salesPaymentStatus;
   const hardCopy = isAlreadyCompleted ? true : Boolean(accVerif.hardCopyReceived);
   const bomCodeText = (accountsVerificationModal && (accountsVerificationModal.bomCode || accountsVerificationModal.code)) || 'BOM-2026';
   const custNameText = (() => {
@@ -329,10 +328,6 @@ export default function AccountsVerificationModal({
   const completeVerification = async () => {
     if (isWhileDispatch && !hasUploadedPaymentProof) {
       alert('⛔ CANNOT APPROVE — PAYMENT ATTACHMENT REQUIRED\n\nThis order has payment terms "Payment While Dispatch". The payment proof image/slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order must remain on HOLD in the Accounts team until the Sales person attaches the payment proof receipt.');
-      return;
-    }
-    if (!currentPayStatus) {
-      alert('⚠️ Please select the Customer Payment Status before completing accounts verification.');
       return;
     }
     if (!currentPayDate) {
@@ -830,8 +825,8 @@ export default function AccountsVerificationModal({
             <Receipt style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
           </div>
           <div>
-            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Payment Details & Verification</h3>
-            <p style={{ fontSize: '11px', color: '#64748B', margin: 0 }}>Confirm & record customer payment receipt date, total amount, and terms</p>
+            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Payment Details &amp; Verification</h3>
+            <p style={{ fontSize: '11px', color: '#64748B', margin: 0 }}>Confirm &amp; record customer payment receipt date and verified total amount</p>
           </div>
         </div>
 
@@ -894,55 +889,6 @@ export default function AccountsVerificationModal({
                   boxSizing: 'border-box'
                 }}
                />
-            </div>
-          </div>
-
-          {/* Payment status dropdown */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'center' }}>
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '8px' }}>
-                Customer Payment Status {isAlreadyCompleted && <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700' }}>(Verified • Read Only)</span>}
-              </label>
-              <select id="accounts-verification-select-1" name="select1" aria-label="Select 1"
-                disabled={isAlreadyCompleted}
-                value={currentPayStatus || '100% Paid'}
-                onChange={(e) => {
-                  if (isAlreadyCompleted) return;
-                  const val = e.target.value;
-                  setAccountsVerificationModal(prev => prev ? ({
-                    ...prev,
-                    accountsVerification: { ...(prev.accountsVerification || {}), paymentStatus: val }
-                  }) : null);
-                }}
-                style={{
-                  width: '100%', height: '42px', borderRadius: '10px',
-                  border: '1px solid #CBD5E1', padding: '0 14px',
-                  fontSize: '13px', fontWeight: '600', color: '#0F172A',
-                  outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
-                  cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
-                  opacity: isAlreadyCompleted ? 0.9 : 1
-                }}
-              >
-                <option value="100% Paid">100% Paid</option>
-                <option value="Partial Paid">Partial Paid</option>
-                <option value="Payment While Dispatch">Payment While Dispatch</option>
-                <option value="Credit Payment">Credit Payment</option>
-              </select>
-            </div>
-
-            {/* Current payment status badge matching standard StatusBadge design */}
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '8px' }}>
-                Current Status
-              </label>
-              <div style={{
-                height: '44px',
-                display: 'flex',
-                alignItems: 'center',
-                boxSizing: 'border-box'
-              }}>
-                <StatusBadge status={currentPayConfig.label} size="md" />
-              </div>
             </div>
           </div>
 
@@ -2030,7 +1976,7 @@ export default function AccountsVerificationModal({
           display: 'flex', justifyContent: 'space-between', alignItems: 'center'
         }}>
           <span style={{ fontSize: '13px', color: '#64748B' }}>
-            Confirm payment date, total amount, and customer payment status to complete accounts clearance.
+            Confirm verified payment date and total amount to complete accounts clearance.
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
