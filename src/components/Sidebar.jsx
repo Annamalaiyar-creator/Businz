@@ -356,6 +356,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SUPPORT CHANNELS & CRM',
           items: [
             { label: 'Leads Directory', targetTab: 'Leads', icon: Users },
+            { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
             { label: 'Mail Inbox', icon: Mail },
             { label: 'Facebook & Meta', icon: Share2 }

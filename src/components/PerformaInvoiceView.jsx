@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock, GitBranch } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, UserCheck, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock, GitBranch } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
@@ -339,6 +339,115 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
     !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
   );
+
+  // Tech Support & Management PI Assignment Privileges
+  const isTechSupport = Boolean(
+    userRole &&
+    (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support') || userRole === 'Technical Administrator')
+  );
+  const isSalesHead = Boolean(userRole && userRole.toLowerCase().includes('sales head'));
+  const canAssignPi = isTechSupport || isCeo || isSalesHead;
+
+  // PI Assignment Modal State
+  const [showAssignPiModal, setShowAssignPiModal] = useState(false);
+  const [assignPiTarget, setAssignPiTarget] = useState(null);
+  const [salespersonsList, setSalespersonsList] = useState([]);
+  const [selectedSalespersonCode, setSelectedSalespersonCode] = useState('');
+  const [assignReason, setAssignReason] = useState('');
+  const [isAssigningPi, setIsAssigningPi] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/crm/salespersons')
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.success && Array.isArray(d.salespersons)) {
+          setSalespersonsList(d.salespersons);
+        }
+      })
+      .catch(err => console.warn('Could not load salespersons list:', err.message));
+  }, []);
+
+  const handleOpenAssignModal = (pi) => {
+    if (!pi) return;
+    setAssignPiTarget(pi);
+    const existingCode = pi.salesPersonCode || '';
+    setSelectedSalespersonCode(existingCode);
+    setAssignReason('');
+    setShowAssignPiModal(true);
+  };
+
+  const handleConfirmAssignPi = async () => {
+    if (!assignPiTarget || !selectedSalespersonCode) {
+      alert('Please select a sales representative to assign this Proforma Invoice to.');
+      return;
+    }
+
+    const targetSp = salespersonsList.find(s => s.employee_code === selectedSalespersonCode);
+    if (!targetSp) {
+      alert('Selected salesperson is invalid.');
+      return;
+    }
+
+    const cleanPiNo = String(assignPiTarget.piNo || assignPiTarget.id || '').trim();
+    setIsAssigningPi(true);
+
+    try {
+      const res = await fetch(`/api/crm/proforma-invoices/${encodeURIComponent(cleanPiNo)}/assign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-emp-id': currentEmpId || 'TS-001',
+          'x-user-name': currentEmpName || userRole || 'Tech Support',
+          'x-user-role': userRole || 'Tech Support'
+        },
+        body: JSON.stringify({
+          assignedToId: targetSp.employee_code,
+          assignedToName: targetSp.employee_name,
+          assignedToRole: targetSp.role || 'Sales Executive',
+          assignedToEmail: targetSp.email || '',
+          reason: assignReason || `Assigned by ${currentEmpName || userRole || 'Tech Support'}`
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to assign Proforma Invoice');
+      }
+
+      const nowIso = new Date().toISOString();
+      const updatedItem = json.pi || {
+        ...assignPiTarget,
+        salesPerson: targetSp.employee_name,
+        salesperson: targetSp.employee_name,
+        salesRep: targetSp.employee_name,
+        salesPersonCode: targetSp.employee_code,
+        salesPersonEmail: targetSp.email || '',
+        assignedSalesperson: targetSp.employee_name,
+        assignedSalespersonCode: targetSp.employee_code,
+        assignedBy: currentEmpName || userRole || 'Tech Support',
+        assignedByRole: userRole || 'Tech Support',
+        assignedAt: nowIso,
+        assignmentReason: assignReason || `Assigned by ${currentEmpName || userRole || 'Tech Support'}`
+      };
+
+      const nextList = (piList || []).map(p =>
+        String(p.piNo || p.id).trim().toLowerCase() === cleanPiNo.toLowerCase() ? updatedItem : p
+      );
+      updatePiList(nextList);
+
+      if (selectedPi && String(selectedPi.piNo || selectedPi.id).trim().toLowerCase() === cleanPiNo.toLowerCase()) {
+        setSelectedPi(updatedItem);
+      }
+
+      setShowAssignPiModal(false);
+      setAssignPiTarget(null);
+      showTopToast(`✅ Proforma Invoice ${cleanPiNo} successfully assigned to ${targetSp.employee_name}!`, 'success', 5000);
+    } catch (err) {
+      alert(`Assignment failed: ${err.message}`);
+    } finally {
+      setIsAssigningPi(false);
+    }
+  };
 
   const getEffectiveSalesPerson = () => {
     if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && currentEmpName.toLowerCase() !== 'vijay') return currentEmpName;
@@ -3707,9 +3816,32 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 }}>
                                   {(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'S')[0]?.toUpperCase()}
                                 </div>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Direct / Admin'}
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                    <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Direct / Admin'}
+                                    </div>
+                                    {canAssignPi && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenAssignModal(pi);
+                                        }}
+                                        title={`Assign/Reassign PI ${pi.piNo || ''} to Sales Executive`}
+                                        style={{ border: 'none', background: '#ECFEFF', cursor: 'pointer', padding: '2px 6px', color: '#0E7490', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#0E7490';
+                                          e.currentTarget.style.color = '#FFFFFF';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                          e.currentTarget.style.color = '#0E7490';
+                                        }}
+                                      >
+                                        <UserCheck size={11} /> Assign
+                                      </button>
+                                    )}
                                   </div>
                                   {pi.salesPersonCode && (
                                     <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
@@ -4260,6 +4392,48 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   >
                     <Copy size={14} style={{ color: '#0E7490' }} />
                     Clone PI
+                  </button>
+                )}
+
+                {/* Assign to Sales Rep (Tech Support / CEO / Sales Head) */}
+                {selectedPIs.length === 1 && canAssignPi && (
+                  <button
+                    onClick={() => {
+                      const targetPiNo = selectedPIs[0];
+                      const targetPi = targetPiNo ? piList.find(p => p.piNo === targetPiNo) : null;
+                      if (targetPi) {
+                        handleOpenAssignModal(targetPi);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#ECFEFF',
+                      border: '1px solid #A5F3FC',
+                      color: '#0E7490',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: '0 1px 2px rgba(14,116,144,0.1)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#0E7490';
+                      e.currentTarget.style.color = '#FFFFFF';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#ECFEFF';
+                      e.currentTarget.style.color = '#0E7490';
+                    }}
+                    title="Assign this Proforma Invoice to a Sales Representative"
+                  >
+                    <UserCheck size={14} />
+                    Assign to Sales Rep
                   </button>
                 )}
 
@@ -6725,7 +6899,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <strong style={{ fontSize: '13px', color: '#0E7490', fontFamily: 'monospace' }}>{selectedPi.gstNo || 'Unregistered'}</strong>
                     </div>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Sales Executive / Code</span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Sales Executive / Code</span>
+                        {canAssignPi && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAssignModal(selectedPi)}
+                            style={{
+                              border: 'none',
+                              background: '#ECFEFF',
+                              color: '#0E7490',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <UserCheck size={12} /> Assign / Reassign
+                          </button>
+                        )}
+                      </div>
                       <strong style={{ fontSize: '13px', color: '#334155' }}>
                         {selectedPi.salesPerson || '—'} {selectedPi.salesPersonCode ? `(${selectedPi.salesPersonCode})` : ''}
                       </strong>
@@ -8260,6 +8457,200 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== ASSIGN / REASSIGN PROFORMA INVOICE MODAL ==================== */}
+      {showAssignPiModal && assignPiTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '16px'
+          }}
+          onClick={() => {
+            if (!isAssigningPi) {
+              setShowAssignPiModal(false);
+              setAssignPiTarget(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserCheck size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    Assign Proforma Invoice
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>
+                    {assignPiTarget.piNo || assignPiTarget.id} · {assignPiTarget.vendor || assignPiTarget.customerName || 'Customer'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAssigningPi) {
+                    setShowAssignPiModal(false);
+                    setAssignPiTarget(null);
+                  }
+                }}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Order Summary Strip */}
+              <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: '12px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '12px' }}>
+                <div>
+                  <span style={{ color: '#0F766E', display: 'block', fontSize: '11px', fontWeight: '700' }}>Current Assigned Rep</span>
+                  <strong style={{ color: '#0F172A' }}>
+                    {assignPiTarget.salesPerson || assignPiTarget.salesperson || assignPiTarget.createdBy || 'Unassigned / Direct'}
+                  </strong>
+                  {assignPiTarget.salesPersonCode && (
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10.5px' }}>({assignPiTarget.salesPersonCode})</span>
+                  )}
+                </div>
+                <div>
+                  <span style={{ color: '#0F766E', display: 'block', fontSize: '11px', fontWeight: '700' }}>PI Grand Total</span>
+                  <strong style={{ color: '#0E7490', fontSize: '14px' }}>
+                    ₹ {Number(assignPiTarget.grandTotal || assignPiTarget.totalAmount || assignPiTarget.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Target Salesperson Select */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Assign To Sales Executive <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <select
+                  value={selectedSalespersonCode}
+                  onChange={(e) => setSelectedSalespersonCode(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    padding: '0 12px',
+                    fontSize: '13px',
+                    color: '#0F172A',
+                    fontWeight: '600',
+                    outline: 'none',
+                    backgroundColor: '#FFFFFF'
+                  }}
+                >
+                  <option value="">— Select Sales Executive —</option>
+                  {salespersonsList.map((sp) => (
+                    <option key={sp.employee_code} value={sp.employee_code}>
+                      {sp.employee_name} ({sp.employee_code}) — {sp.role || 'Sales Executive'}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                  The selected sales executive will immediately see this PI in their Sales login and can convert it to a BOM Order.
+                </span>
+              </div>
+
+              {/* Reason / Notes */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Assignment Note / Instructions (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={assignReason}
+                  onChange={(e) => setAssignReason(e.target.value)}
+                  placeholder="e.g. Lead inquiry verified by Tech Support, kindly follow up with client and convert to BOM..."
+                  style={{
+                    width: '100%',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    padding: '10px 12px',
+                    fontSize: '12.5px',
+                    color: '#0F172A',
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Audit trail indicator */}
+              <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', color: '#64748B', lineHeight: '1.5' }}>
+                <span style={{ fontWeight: '700', color: '#0F172A' }}>Permanent Audit Rule:</span> Your name (<strong>{currentEmpName || userRole || 'Tech Support'}</strong>) will be recorded permanently in the Proforma Invoice history.
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'flex-end', gap: '10px', backgroundColor: '#F8FAFC' }}>
+              <button
+                type="button"
+                disabled={isAssigningPi}
+                onClick={() => {
+                  setShowAssignPiModal(false);
+                  setAssignPiTarget(null);
+                }}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: isAssigningPi ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isAssigningPi || !selectedSalespersonCode}
+                onClick={handleConfirmAssignPi}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: (!isAssigningPi && selectedSalespersonCode) ? '#0E7490' : '#94A3B8',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: (!isAssigningPi && selectedSalespersonCode) ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: (!isAssigningPi && selectedSalespersonCode) ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
+                }}
+              >
+                {isAssigningPi ? 'Assigning...' : 'Confirm Assignment'}
+              </button>
             </div>
           </div>
         </div>

@@ -133,8 +133,16 @@ export async function uploadBomDocumentFile({ file, bomCode, category }) {
     if (res.ok) {
       const resJson = await res.json();
       if (resJson && resJson.success && resJson.metadata) {
+        const canonicalUrl = resJson.metadata.url || `/api/uploads/${resJson.metadata.storageBucket || 'bom-documents'}/${resJson.metadata.storagePath}`;
+        if (file && file.name && canonicalUrl) {
+          saveMediaToCache(file.name, canonicalUrl);
+        }
+        if (resJson.metadata.storagePath && canonicalUrl) {
+          saveMediaToCache(resJson.metadata.storagePath, canonicalUrl);
+        }
         return {
           ...resJson.metadata,
+          url: canonicalUrl,
           dataUrl,
           previewUrl: typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null
         };
@@ -154,9 +162,14 @@ export async function uploadBomDocumentFile({ file, bomCode, category }) {
         .upload(storagePath, file, { upsert: true });
 
       if (!upError && upData) {
+        const canonicalUrl = `/api/uploads/bom-documents/${upData.path || storagePath}`;
+        if (file.name && canonicalUrl) {
+          saveMediaToCache(file.name, canonicalUrl);
+        }
         return {
           storageBucket: 'bom-documents',
           storagePath: upData.path || storagePath,
+          url: canonicalUrl,
           name: file.name,
           originalName: file.name,
           type: mime,

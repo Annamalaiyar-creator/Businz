@@ -6955,9 +6955,10 @@ export default function BomOrdersView(props) {
                 {hasMedia ? (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '4px' }}>
                     {packPhotos.map((ph, pIdx) => {
+                      const directStorageUrl = ph.storagePath ? `/api/uploads/${ph.storageBucket || 'bom-documents'}/${ph.storagePath}` : '';
                       const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
                         ? ph.url
-                        : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
+                        : (directStorageUrl || (ph.dataUrl && !ph.dataUrl.startsWith('blob:') ? ph.dataUrl : '') || (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${encodeURIComponent(ph.name)}` : '')));
                       return (
                         <div
                           key={pIdx}
@@ -9817,9 +9818,10 @@ export default function BomOrdersView(props) {
                   {hasMedia ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                       {packPhotos.map((ph, pIdx) => {
+                        const directStorageUrl = ph.storagePath ? `/api/uploads/${ph.storageBucket || 'bom-documents'}/${ph.storagePath}` : '';
                         const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
                           ? ph.url
-                          : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
+                          : (directStorageUrl || (ph.dataUrl && !ph.dataUrl.startsWith('blob:') ? ph.dataUrl : '') || (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${encodeURIComponent(ph.name)}` : '')));
                         return (
                           <div
                             key={pIdx}

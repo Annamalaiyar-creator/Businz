@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, RotateCcw,
-  CreditCard, AlertCircle, Loader2, Clock
+  CreditCard, AlertCircle, Loader2, Clock, UploadCloud, Upload, Trash2
 } from "lucide-react";
 import { saveMediaToCache, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
@@ -9,6 +9,7 @@ import { uploadBomDocumentFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
 export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore }) {
+  const [paymentProofFiles, setPaymentProofFiles] = useState([]);
   const [paymentProofFile, setPaymentProofFile] = useState(null);
   const [paymentStageType, setPaymentStageType] = useState('100% Paid');
   const [balanceProofFile, setBalanceProofFile] = useState(null);
@@ -140,7 +141,20 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
               ) : (
                 /* IF NO PROOF DOCUMENT HAS BEEN UPLOADED YET */
                 <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#B45309' }}>Upload Payment Proof File:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
+                      Upload Payment Proof Document(s) & Slips (At least 4 images supported):
+                    </span>
+                    {paymentProofFiles.length >= 4 ? (
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #BBF7D0' }}>
+                        ✓ {paymentProofFiles.length} Images Selected (Target Met)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #FDE68A' }}>
+                        {paymentProofFiles.length} / 4 Images Selected
+                      </span>
+                    )}
+                  </div>
                   <div>
                     <label htmlFor="payment-and-proof-modals-payment-stage" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Payment Stage</label>
                     <select id="payment-and-proof-modals-payment-stage" name="paymentStage" aria-label="Payment Stage"
@@ -168,22 +182,104 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                     </select>
                   </div>
 
-                  <input id="payment-and-proof-modals-input-1" name="input1" aria-label="Input 1"
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    disabled={isUploading}
-                    onChange={(e) => {
-                      const f = e.target.files && e.target.files[0];
-                      if (f) {
-                        setPaymentProofFile(f);
+                  {/* Multi-Image Drag & Drop / File Browser */}
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        const newFiles = Array.from(e.dataTransfer.files);
+                        setPaymentProofFiles(prev => [...prev, ...newFiles]);
+                        if (!paymentProofFile && newFiles[0]) setPaymentProofFile(newFiles[0]);
                       }
                     }}
-                    style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
-                   />
-                  {paymentProofFile && (
-                    <span style={{ fontSize: '11px', color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
-                      <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {paymentProofFile.name} ({Math.round(paymentProofFile.size / 1024)} KB)
+                    style={{
+                      border: '2px dashed #0E7490',
+                      backgroundColor: '#F0FDFA',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <UploadCloud style={{ width: '28px', height: '28px', color: '#0E7490' }} />
+                    <span style={{ fontSize: '12px', color: '#334155', fontWeight: '700' }}>
+                      Drag & drop or select multiple payment proof images / bank slips
                     </span>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '8px 18px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 4px rgba(14,116,144,0.3)' }}>
+                      <Upload style={{ width: '14px', height: '14px' }} />
+                      {paymentProofFiles.length > 0 ? '+ Add More Images' : 'Browse Files (Multi-Select 4+ Images)'}
+                      <input
+                        id="payment-and-proof-modals-input-multi"
+                        name="inputMulti"
+                        aria-label="Select Payment Proof Attachments"
+                        type="file"
+                        multiple
+                        accept=".pdf,.jpg,.jpeg,.png,.webp"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            const newFiles = Array.from(e.target.files);
+                            setPaymentProofFiles(prev => [...prev, ...newFiles]);
+                            if (!paymentProofFile && newFiles[0]) setPaymentProofFile(newFiles[0]);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+                    <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                      Supported: JPG, PNG, WEBP, PDF (Attach 4 or more receipts, slips, or cheques)
+                    </span>
+                  </div>
+
+                  {/* Previews of Selected Staged Files */}
+                  {paymentProofFiles.length > 0 && (
+                    <div style={{ marginTop: '4px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#0E7490', display: 'block', marginBottom: '8px' }}>
+                        Selected Images ({paymentProofFiles.length}):
+                      </span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
+                        {paymentProofFiles.map((file, fIdx) => {
+                          const isImg = file.type && file.type.startsWith('image/');
+                          const previewUrl = isImg ? URL.createObjectURL(file) : null;
+                          return (
+                            <div key={fIdx} style={{ border: '1px solid #99F6E4', borderRadius: '8px', padding: '6px', backgroundColor: '#FFFFFF', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '100%', height: '65px', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {isImg && previewUrl ? (
+                                  <img src={previewUrl} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <FileText size={24} style={{ color: '#0E7490' }} />
+                                )}
+                              </div>
+                              <span style={{ fontSize: '10px', fontWeight: '700', color: '#0F172A', width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'center' }} title={file.name}>
+                                {file.name}
+                              </span>
+                              <span style={{ fontSize: '9px', color: '#64748B' }}>
+                                {(file.size / 1024).toFixed(0)} KB
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentProofFiles(prev => {
+                                    const next = prev.filter((_, i) => i !== fIdx);
+                                    if (next.length > 0) setPaymentProofFile(next[0]);
+                                    else setPaymentProofFile(null);
+                                    return next;
+                                  });
+                                }}
+                                style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', borderRadius: '50%', border: 'none', backgroundColor: '#EF4444', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                title="Remove image"
+                              >
+                                <X size={10} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -339,28 +435,37 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
               <button
                 disabled={isUploading}
                 onClick={async () => {
-                  if (!paymentProofFile) {
-                    alert('Please attach or select payment proof file!');
+                  const filesToUpload = paymentProofFiles.length > 0 ? paymentProofFiles : (paymentProofFile ? [paymentProofFile] : []);
+                  if (filesToUpload.length === 0) {
+                    alert('Please attach or select at least 1 payment proof image/file!');
                     return;
                   }
                   try {
                     setIsUploading(true);
                     const bomCode = uploadPaymentModal.bomCode || uploadPaymentModal.id;
-                    const metadata = await uploadBomDocumentFile({
-                      file: paymentProofFile,
-                      bomCode,
-                      category: 'payment-proof'
-                    });
+                    const uploadedMetas = [];
+                    for (const file of filesToUpload) {
+                      const meta = await uploadBomDocumentFile({
+                        file,
+                        bomCode,
+                        category: 'payment-proof'
+                      });
+                      if (meta) uploadedMetas.push(meta);
+                    }
+                    const primaryMeta = uploadedMetas[0] || null;
                     setBomStore(prev => {
                       const updated = prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
                         ...b,
                         status: 'Payment Uploaded & Verified',
-                        paymentProofDoc: metadata,
+                        paymentProofDoc: primaryMeta,
+                        paymentProofDocs: [...(b.paymentProofDocs || []), ...uploadedMetas],
+                        paymentDocs: [...(b.paymentDocs || []), ...uploadedMetas],
                         pendingSalesDispatchPayment: false,
                         payments: {
                           ...b.payments,
-                          proofDoc: metadata.name,
-                          proofDocObj: metadata,
+                          proofDoc: primaryMeta?.name,
+                          proofDocObj: primaryMeta,
+                          paymentProofDocs: [...(b.payments?.paymentProofDocs || []), ...uploadedMetas],
                           dispatchPaymentUploaded: paymentStageType === 'Payment While Dispatch' || b.payments?.dispatchPaymentUploaded,
                           advance100Uploaded: paymentStageType === '100% Paid' || paymentStageType === '100% Advance',
                           advance50Uploaded: paymentStageType === '50% Advance' || paymentStageType === 'Partial Advance' || b.payments?.advance50Uploaded,
@@ -373,7 +478,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                       return updated;
                     });
                     onClose();
-                    alert(`Payment details for (${paymentStageType}) uploaded to secure storage!`);
+                    alert(`✅ ${uploadedMetas.length} payment proof image(s) for (${paymentStageType}) uploaded to secure storage!`);
                   } catch (err) {
                     alert(`❌ Upload failed: ${err.message}`);
                   } finally {

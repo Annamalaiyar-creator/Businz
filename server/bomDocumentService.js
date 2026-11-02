@@ -183,6 +183,7 @@ export async function uploadBomDocument({ bomCode, category, fileBuffer, fileNam
   const canonicalMetadata = {
     storageBucket: BUCKET_NAME,
     storagePath: storagePath,
+    url: `/api/uploads/${BUCKET_NAME}/${storagePath}`,
     name: safeName,
     originalName: safeName,
     type: cleanMime,

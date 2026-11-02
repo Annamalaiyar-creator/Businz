@@ -1988,13 +1988,19 @@ app.post('/api/maintenance/toggle', async (req, res) => {
 
 // 📁 STATIC MEDIA UPLOADS & STREAMING DIRECTORY (Supports byte-range video streaming)
 const uploadsDir = getUploadsDir();
+const bomDocsDir = getBomDocumentsDir();
 try {
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
+  if (!fs.existsSync(bomDocsDir)) {
+    fs.mkdirSync(bomDocsDir, { recursive: true });
+  }
 } catch (err) {
   console.warn('[Uploads Directory Warning]:', err.message);
 }
+app.use('/uploads/bom-documents', express.static(bomDocsDir, { acceptRanges: true }));
+app.use('/api/uploads/bom-documents', express.static(bomDocsDir, { acceptRanges: true }));
 app.use('/uploads', express.static(uploadsDir, { acceptRanges: true }));
 app.use('/api/uploads', express.static(uploadsDir, { acceptRanges: true }));
 
@@ -9861,6 +9867,145 @@ app.post(['/api/crm/leads/:id/assign', '/api/leads/:id/assign'], async (req, res
     res.json({ success: true, message: `Lead assigned to ${assignedToName}`, lead: updated, data: updated });
   } catch (err) {
     res.status(err.message.includes('Unauthorized') ? 403 : 500).json({ success: false, error: err.message });
+  }
+});
+
+// 🎯 Assign / Reassign Proforma Invoice (PI) to Sales Executive (Used by Tech Support, CEO, Sales Head)
+app.post(['/api/crm/proforma-invoices/:piNo/assign', '/api/proforma-invoices/:piNo/assign', '/api/crm/sales-pis/:piNo/assign'], async (req, res) => {
+  try {
+    const { piNo } = req.params;
+    const { assignedToId, assignedToName, assignedToRole, assignedToEmail, reason } = req.body;
+
+    if (!assignedToId || !assignedToName) {
+      return res.status(400).json({ success: false, error: 'Target assignee employee ID and Name are required.' });
+    }
+
+    const assignerUser = {
+      employee_code: req.headers['x-user-emp-id'] || req.body.assignerEmpId || 'TS-001',
+      employee_name: req.headers['x-user-name'] || req.body.assignerName || 'Tech Support',
+      role: req.headers['x-user-role'] || req.body.assignerRole || 'Tech Support'
+    };
+
+    const cleanPiNo = String(piNo || '').trim();
+    const assignedTimestamp = new Date().toISOString();
+    let updatedPi = null;
+
+    // 1. Update sales_pi_store
+    const pSales = getStoreFilePath('sales_pi_store.json');
+    let localSales = [];
+    if (fs.existsSync(pSales)) {
+      try {
+        localSales = JSON.parse(fs.readFileSync(pSales, 'utf8'));
+      } catch (_) {}
+    }
+    if (!Array.isArray(localSales) && Array.isArray(supabaseMemoryStore['sales_pi_store'])) {
+      localSales = [...supabaseMemoryStore['sales_pi_store']];
+    }
+
+    if (Array.isArray(localSales)) {
+      localSales = localSales.map(p => {
+        const match = String(p.piNo || p.id || '').trim().toLowerCase() === cleanPiNo.toLowerCase();
+        if (match) {
+          const prevHistory = Array.isArray(p.assignmentHistory) ? p.assignmentHistory : [];
+          const newHistoryItem = {
+            assigned_to_name: assignedToName,
+            assigned_to_code: assignedToId,
+            assigned_to_role: assignedToRole || 'Sales Executive',
+            assigned_by_name: assignerUser.employee_name,
+            assigned_by_code: assignerUser.employee_code,
+            assigned_by_role: assignerUser.role,
+            assigned_at: assignedTimestamp,
+            reason: reason || 'Assigned by Tech Support'
+          };
+          updatedPi = {
+            ...p,
+            salesPerson: assignedToName,
+            salesperson: assignedToName,
+            salesRep: assignedToName,
+            salesPersonCode: assignedToId,
+            salesPersonEmail: assignedToEmail || p.salesPersonEmail || '',
+            assignedSalesperson: assignedToName,
+            assignedSalespersonCode: assignedToId,
+            assignedBy: assignerUser.employee_name,
+            assignedByRole: assignerUser.role,
+            assignedAt: assignedTimestamp,
+            assignmentReason: reason || 'Assigned by Tech Support',
+            assignmentHistory: [...prevHistory, newHistoryItem]
+          };
+          return updatedPi;
+        }
+        return p;
+      });
+
+      fs.writeFileSync(pSales, JSON.stringify(localSales, null, 2), 'utf8');
+      supabaseMemoryStore['sales_pi_store'] = localSales;
+      pushStoreToSupabase('sales_pi_store', localSales).catch(() => {});
+    }
+
+    // 2. Also update proforma_invoice_store
+    const pProforma = getStoreFilePath('proforma_invoice_store.json');
+    if (fs.existsSync(pProforma)) {
+      try {
+        let localProforma = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
+        if (Array.isArray(localProforma)) {
+          localProforma = localProforma.map(p => {
+            if (String(p.piNo || p.id || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) {
+              return updatedPi || {
+                ...p,
+                salesPerson: assignedToName,
+                salesperson: assignedToName,
+                salesRep: assignedToName,
+                salesPersonCode: assignedToId,
+                salesPersonEmail: assignedToEmail || p.salesPersonEmail || '',
+                assignedSalesperson: assignedToName,
+                assignedSalespersonCode: assignedToId,
+                assignedBy: assignerUser.employee_name,
+                assignedByRole: assignerUser.role,
+                assignedAt: assignedTimestamp,
+                assignmentReason: reason || 'Assigned by Tech Support'
+              };
+            }
+            return p;
+          });
+          fs.writeFileSync(pProforma, JSON.stringify(localProforma, null, 2), 'utf8');
+          supabaseMemoryStore['proforma_invoice_store'] = localProforma;
+          pushStoreToSupabase('proforma_invoice_store', localProforma).catch(() => {});
+        }
+      } catch (_) {}
+    }
+
+    broadcastRealtimeEvent('sales_pi_assigned', { piNo: cleanPiNo, assignedToId, assignedToName, updatedPi });
+
+    // Send real-time internal notification to the assigned salesperson
+    try {
+      await createInternalNotification({
+        recipientEmpCode: assignedToId,
+        recipientRole: assignedToRole || 'Sales Executive',
+        eventType: 'PI_ASSIGNED',
+        documentType: 'proforma_invoice',
+        documentId: cleanPiNo,
+        title: `📄 Proforma Invoice Assigned: ${cleanPiNo}`,
+        message: `Proforma Invoice #${cleanPiNo} (${(updatedPi && (updatedPi.vendor || updatedPi.customerName)) || 'Customer'}) has been assigned to you by ${assignerUser.employee_name}. You can convert it to a BOM Order.`,
+        actorEmpCode: assignerUser.employee_code,
+        actorName: assignerUser.employee_name,
+        actorRole: assignerUser.role,
+        targetTab: 'Proforma Invoice',
+        targetRecordId: cleanPiNo,
+        dedupId: `pi_assigned_${cleanPiNo}_${assignedToId}_${Date.now()}`
+      });
+    } catch (notifErr) {
+      console.warn('[PI Notification Warning]:', notifErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: `Proforma Invoice ${cleanPiNo} assigned to ${assignedToName}`,
+      pi: updatedPi,
+      data: updatedPi
+    });
+  } catch (err) {
+    console.error('[POST /api/crm/proforma-invoices/:piNo/assign error]:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

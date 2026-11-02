@@ -1099,7 +1099,8 @@ export default function ConfirmingBomModal({
               {hasMedia ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '4px' }}>
                   {packPhotos.map((ph, pIdx) => {
-                    const photoUrl = (ph.url && !ph.url.startsWith('blob:')) ? ph.url : (ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '') || ph.url || '');
+                    const directStorageUrl = ph.storagePath ? `/api/uploads/${ph.storageBucket || 'bom-documents'}/${ph.storagePath}` : '';
+                    const photoUrl = (ph.url && !ph.url.startsWith('blob:')) ? ph.url : (directStorageUrl || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${encodeURIComponent(ph.name)}` : '') || ph.url || '');
                     return (
                       <div
                         key={ph.id || pIdx}

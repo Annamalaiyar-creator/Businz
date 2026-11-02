@@ -58,7 +58,18 @@ function DispatchPhotoThumbnail({ ph, phIdx, bomCode, onPreview, onRemove, canRe
     setLoading(true);
 
     const resolveUrl = async () => {
-      // 1. If it has storageBucket/storagePath, ask documentResolver for signed URL
+      // 1. If it has storageBucket/storagePath, construct the direct static URL immediately
+      if (ph.storagePath) {
+        const directUrl = `/api/uploads/${ph.storageBucket || 'bom-documents'}/${ph.storagePath}`;
+        if (active) {
+          setSrc(directUrl);
+          setLoading(false);
+          setLoadError(false);
+          return;
+        }
+      }
+
+      // 2. Try documentResolver for signed URL if needed
       if (ph.storageBucket || ph.storagePath) {
         try {
           const signedUrl = await resolveDocumentUrlAsync(ph, bomCode);
@@ -561,10 +572,11 @@ export default function DispatchPackingModal({
     const rawMedia = dispatchPackingModal.dispatchPackingMedia;
     const cleanMedia = rawMedia ? {
       photos: (rawMedia.photos || []).map(p => {
+        const directStorageUrl = p.storagePath ? `/api/uploads/${p.storageBucket || 'bom-documents'}/${p.storagePath}` : '';
         const bestUrl = (p.url && !p.url.startsWith('blob:'))
           ? p.url
-          : (getMediaFromCache(p.id) || getMediaFromCache(p.name) || (p.dataUrl && !p.dataUrl.startsWith('blob:') ? p.dataUrl : (p.name ? `/api/uploads/${p.name}` : '')));
-        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : undefined;
+          : (directStorageUrl || getMediaFromCache(p.id) || getMediaFromCache(p.name) || (p.dataUrl && !p.dataUrl.startsWith('blob:') ? p.dataUrl : (p.name ? `/api/uploads/${encodeURIComponent(p.name)}` : '')));
+        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : (directStorageUrl || undefined);
         return {
           ...p,
           url: cleanBestUrl,
@@ -572,10 +584,11 @@ export default function DispatchPackingModal({
         };
       }),
       videos: (rawMedia.videos || []).map(v => {
+        const directStorageUrl = v.storagePath ? `/api/uploads/${v.storageBucket || 'bom-documents'}/${v.storagePath}` : '';
         const bestUrl = (v.url && !v.url.startsWith('blob:'))
           ? v.url
-          : (getMediaFromCache(v.id) || getMediaFromCache(v.name) || (v.dataUrl && !v.dataUrl.startsWith('blob:') ? v.dataUrl : (v.name ? `/api/uploads/${v.name}` : '')));
-        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : undefined;
+          : (directStorageUrl || getMediaFromCache(v.id) || getMediaFromCache(v.name) || (v.dataUrl && !v.dataUrl.startsWith('blob:') ? v.dataUrl : (v.name ? `/api/uploads/${encodeURIComponent(v.name)}` : '')));
+        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : (directStorageUrl || undefined);
         return {
           ...v,
           url: cleanBestUrl,
