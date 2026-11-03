@@ -803,12 +803,18 @@ export default function BomOrdersView(props) {
     }
 
     // 5. Payment Proof for 100% Paid / Partial Paid Orders (Mandatory per policy, unless DC)
+    const isDc = Boolean(
+      newBomDocType === 'DC' ||
+      newBomDocType === 'Delivery Challan' ||
+      String(newBomDocType || '').toUpperCase().includes('DC') ||
+      String(newBomDocType || '').toUpperCase().includes('CHALLAN')
+    );
     const isPaidOrder = newBomPaymentType === '100% Paid' || newBomPaymentType === '100% Advance';
     const isPartialOrder = newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment';
     const currentPaymentDocs = Array.isArray(newBomPaymentProofDoc)
       ? newBomPaymentProofDoc
       : (newBomPaymentProofDoc ? [newBomPaymentProofDoc] : []);
-    if (!isDraft && newBomDocType !== 'DC' && (isPaidOrder || isPartialOrder)) {
+    if (!isDraft && !isDc && (isPaidOrder || isPartialOrder)) {
       if (currentPaymentDocs.length === 0) {
         errors.paymentProof = 'Payment Attachment / Slip is mandatory';
         missingList.push({
@@ -5285,7 +5291,7 @@ export default function BomOrdersView(props) {
                 )}
 
                 {/* 2. Payment Proof Upload (Shows if 100% or Partial Paid, but NOT for DC) */}
-                {isPaidOrder && newBomDocType !== 'DC' && (
+                {isPaidOrder && !(String(newBomDocType || '').toUpperCase().includes('DC') || String(newBomDocType || '').toUpperCase().includes('CHALLAN')) && (
                   <div style={{
                     padding: '18px 20px',
                     backgroundColor: '#F0FDF4',
@@ -6343,6 +6349,17 @@ export default function BomOrdersView(props) {
                     return;
                   }
 
+                  const isDcOrder = Boolean(
+                    confirmingBomModal.docType === 'DC' ||
+                    confirmingBomModal.docType === 'Delivery Challan' ||
+                    confirmingBomModal.documentType === 'DC' ||
+                    confirmingBomModal.invoiceType === 'DC' ||
+                    String(confirmingBomModal.docType || '').toUpperCase().includes('DC') ||
+                    String(confirmingBomModal.docType || '').toUpperCase().includes('CHALLAN') ||
+                    String(confirmingBomModal.documentType || '').toUpperCase().includes('DC') ||
+                    String(confirmingBomModal.documentType || '').toUpperCase().includes('CHALLAN')
+                  );
+
                   const currentPayType = confirmingBomModal.paymentType;
                   const is100OrPartial = currentPayType === '100% Paid' || currentPayType === '100% Advance' || currentPayType === 'Partial Paid' || currentPayType === 'Partial Payment';
                   const hasProof = Boolean(
@@ -6352,7 +6369,7 @@ export default function BomOrdersView(props) {
                     confirmingBomModal.proofDoc ||
                     confirmingBomModal.proofDocData
                   );
-                  if (is100OrPartial && !hasProof) {
+                  if (!isDcOrder && is100OrPartial && !hasProof) {
                     alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${currentPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
                     return;
                   }
@@ -6380,6 +6397,7 @@ export default function BomOrdersView(props) {
                   const updatedBomData = {
                     ...confirmingBomModal,
                     companyName: confirmingBomModal.companyName,
+                    docType: confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'),
                     paymentType: confirmingBomModal.paymentType,
                     billingAddress: bStr,
                     billingAddressObj: bObj,

@@ -866,7 +866,14 @@ export default function ProductionViewsEngine(props) {
       String(newBomPaymentType || '').toLowerCase().includes('partial')
     );
 
-    if (!isDraft && newBomDocType !== 'DC' && isPaymentProofRequired) {
+    const isDcDocType = Boolean(
+      newBomDocType === 'DC' ||
+      newBomDocType === 'Delivery Challan' ||
+      String(newBomDocType || '').toUpperCase().includes('DC') ||
+      String(newBomDocType || '').toUpperCase().includes('CHALLAN')
+    );
+
+    if (!isDraft && !isDcDocType && isPaymentProofRequired) {
       const hasPaymentProof = Array.isArray(newBomPaymentProofDoc)
         ? newBomPaymentProofDoc.length > 0
         : Boolean(newBomPaymentProofDoc);

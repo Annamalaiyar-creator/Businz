@@ -2077,7 +2077,7 @@ export default function CreateBomFormPage(props) {
               )}
 
               {/* 2. Payment Proof Upload (Shows if 100% or Partial Paid, but NOT for DC) */}
-              {isPaidOrder && newBomDocType !== 'DC' && (
+              {isPaidOrder && !(String(newBomDocType || '').toUpperCase().includes('DC') || String(newBomDocType || '').toUpperCase().includes('CHALLAN')) && (
                 <div style={{
                   padding: '18px 20px',
                   backgroundColor: '#F0FDF4',
@@ -2278,7 +2278,13 @@ export default function CreateBomFormPage(props) {
                 String(newBomPaymentType || '').toLowerCase().includes('advance') ||
                 String(newBomPaymentType || '').toLowerCase().includes('partial')
               );
-              if (newBomDocType !== 'DC' && isPaidOrder && paymentDocs.length === 0) {
+              const isDcOrder = Boolean(
+                newBomDocType === 'DC' ||
+                newBomDocType === 'Delivery Challan' ||
+                String(newBomDocType || '').toUpperCase().includes('DC') ||
+                String(newBomDocType || '').toUpperCase().includes('CHALLAN')
+              );
+              if (!isDcOrder && isPaidOrder && paymentDocs.length === 0) {
                 alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${newBomPaymentType}" orders. Please attach the payment proof slip in the Document Attachments section below.`);
                 return;
               }
