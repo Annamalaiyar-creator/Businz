@@ -1692,8 +1692,31 @@ export default function ProductionViewsEngine(props) {
             headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status'],
             rows: (bomStore || []).filter(b => {
               if (activeTab === 'Dispatch Orders') {
-                const s = String(b?.status || '').toLowerCase();
-                return b && Boolean(b.salesConfirmed) && b.status !== 'Draft' && b.status !== 'Pending Confirmation' && !s.includes('pending confirmation') && !s.includes('draft');
+                if (!b) return false;
+                const s = String(b?.status || '').toLowerCase().trim();
+                const isDraftOrPending = Boolean(
+                  (b.status === 'Draft' || s === 'draft' ||
+                   b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
+                   s === 'pending sales confirmation') &&
+                  !b.isSentToDispatch &&
+                  !s.includes('sent to dispatch') &&
+                  !s.includes('packed') &&
+                  !s.includes('completed')
+                );
+                if (isDraftOrPending) return false;
+                return Boolean(
+                  b.salesConfirmed ||
+                  b.isSentToDispatch ||
+                  s.includes('dispatch') ||
+                  s.includes('production') ||
+                  s.includes('confirmed') ||
+                  s.includes('packed') ||
+                  s.includes('accounts') ||
+                  s.includes('invoice') ||
+                  s.includes('loading') ||
+                  s.includes('completed') ||
+                  s.includes('closed')
+                );
               }
               return true;
             }).map(b => {

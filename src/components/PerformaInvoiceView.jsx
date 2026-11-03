@@ -74,6 +74,20 @@ export const GST_STATE_MAP = {
   '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry', '36': 'Telangana', '37': 'Andhra Pradesh'
 };
 
+export const canonicalizeSalespersonCode = (rawCode, name) => {
+  const c = String(rawCode || '').trim().toUpperCase();
+  if (c === 'SE-015' || (c === 'SE-VRM002' && String(name || '').toLowerCase().includes('mohith'))) return 'SE-004';
+  if (c === 'SH-001' || c === 'SH-VRM001') return 'SE-001';
+  if (c === 'SE-020') return 'SE-006';
+  if (c === 'SE-010') return 'SE-008';
+  if (c === 'SE-VRM090') return 'SE-009';
+  if (String(name || '').toLowerCase().includes('mohith')) return 'SE-004';
+  if (String(name || '').toLowerCase().includes('sanjai') || String(name || '').toLowerCase().includes('sanjay')) return 'SE-002';
+  if (String(name || '').toLowerCase().includes('manoj')) return 'SE-001';
+  if (String(name || '').toLowerCase().includes('vasanth')) return 'SE-003';
+  return c || '';
+};
+
 export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procurement Head', onNavigateTab, targetPiNo, clearTargetPi }) {
   const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || (typeof window !== 'undefined' && localStorage.getItem('controlroom_user_role') === 'CEO');
   const isSalesRole = userRole === 'Sales' || userRole === 'Sales Head' || userRole === 'Sales Executive';
@@ -4288,7 +4302,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     </div>
                                     {pi.salesPersonCode && (
                                       <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
-                                        {pi.salesPersonCode}
+                                        {canonicalizeSalespersonCode(pi.salesPersonCode, pi.salesPerson || pi.createdBy)}
                                       </div>
                                     )}
                                   </div>
@@ -7414,7 +7428,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         )}
                       </div>
                       <strong style={{ fontSize: '13px', color: '#334155' }}>
-                        {selectedPi.salesPerson || '—'} {selectedPi.salesPersonCode ? `(${selectedPi.salesPersonCode})` : ''}
+                        {selectedPi.salesPerson || '—'} {selectedPi.salesPersonCode ? `(${canonicalizeSalespersonCode(selectedPi.salesPersonCode, selectedPi.salesPerson)})` : ''}
                       </strong>
                       {selectedPi.salesPersonEmail && (
                         <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{selectedPi.salesPersonEmail}</div>
@@ -9065,7 +9079,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     {assignPiTarget.salesPerson || assignPiTarget.salesperson || assignPiTarget.createdBy || 'Unassigned / Direct'}
                   </strong>
                   {assignPiTarget.salesPersonCode && (
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '10.5px' }}>({assignPiTarget.salesPersonCode})</span>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10.5px' }}>({canonicalizeSalespersonCode(assignPiTarget.salesPersonCode, assignPiTarget.salesPerson)})</span>
                   )}
                 </div>
                 <div>
