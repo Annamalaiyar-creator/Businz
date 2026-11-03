@@ -3514,6 +3514,26 @@ app.get('/api/store/:key', async (req, res) => {
   }
 });
 
+// Alias for employees directory
+app.get(['/api/employees', '/api/team/members'], async (req, res) => {
+  try {
+    const data = await getDatabaseStore('employees_store');
+    return res.json({ success: true, data: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Opportunities list endpoint
+app.get(['/api/crm/opportunities', '/api/opportunities'], async (req, res) => {
+  try {
+    const data = await loadDatabaseOpportunities();
+    return res.json({ success: true, data: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Dedicated employee registration endpoint with atomic uniqueness check
 app.post('/api/auth/register-employee', async (req, res) => {
   try {
