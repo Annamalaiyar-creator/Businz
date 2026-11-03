@@ -1269,10 +1269,11 @@ export function VRMProformaInvoicePrintSheet({
                       </td>
                     </tr>
                   )}
-                  <tr style={{ backgroundColor: it.isPresetItem ? '#FCFDFE' : 'transparent' }}>
+                  <tr style={{ backgroundColor: 'transparent' }}>
                     <td style={{
                       padding: '7px 10px',
                       verticalAlign: 'top',
+                      backgroundColor: it.isPresetItem ? '#FCFDFE' : 'transparent',
                       borderBottom: (it.isPresetItem && it.isLastInGroup) ? '1px solid #CBD5E1' : '1px solid #E2E8F0'
                     }}>
                       <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px' }}>{it.name}</div>
@@ -1287,6 +1288,7 @@ export function VRMProformaInvoicePrintSheet({
                       textAlign: 'center',
                       verticalAlign: 'top',
                       color: '#0F172A',
+                      backgroundColor: it.isPresetItem ? '#FCFDFE' : 'transparent',
                       borderBottom: (it.isPresetItem && it.isLastInGroup) ? '1px solid #CBD5E1' : '1px solid #E2E8F0'
                     }}>
                       {it.qty} {it.uom || 'NOS'}
@@ -1306,7 +1308,9 @@ export function VRMProformaInvoicePrintSheet({
                             color: '#0F172A',
                             borderLeft: '1px solid #E2E8F0',
                             borderRight: '1px solid #E2E8F0',
-                            borderBottom: '1px solid #CBD5E1'
+                            borderBottom: '1px solid #CBD5E1',
+                            position: 'relative',
+                            zIndex: 10
                           }}
                         >
                           <div>{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
@@ -1334,7 +1338,9 @@ export function VRMProformaInvoicePrintSheet({
                             fontWeight: '700',
                             color: '#0F172A',
                             borderRight: '1px solid #E2E8F0',
-                            borderBottom: '1px solid #CBD5E1'
+                            borderBottom: '1px solid #CBD5E1',
+                            position: 'relative',
+                            zIndex: 10
                           }}
                         >
                           {Number(it.groupTaxable || it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1359,7 +1365,9 @@ export function VRMProformaInvoicePrintSheet({
                                 verticalAlign: 'middle',
                                 backgroundColor: '#F8FAFC',
                                 borderRight: '1px solid #E2E8F0',
-                                borderBottom: '1px solid #CBD5E1'
+                                borderBottom: '1px solid #CBD5E1',
+                                position: 'relative',
+                                zIndex: 10
                               }}
                             >
                               <div style={{ color: '#475569', fontSize: '8.5px' }}>
@@ -1377,7 +1385,9 @@ export function VRMProformaInvoicePrintSheet({
                                 verticalAlign: 'middle',
                                 backgroundColor: '#F8FAFC',
                                 borderRight: '1px solid #E2E8F0',
-                                borderBottom: '1px solid #CBD5E1'
+                                borderBottom: '1px solid #CBD5E1',
+                                position: 'relative',
+                                zIndex: 10
                               }}
                             >
                               <div style={{ color: '#475569', fontSize: '8.5px' }}>
@@ -1416,7 +1426,9 @@ export function VRMProformaInvoicePrintSheet({
                               verticalAlign: 'middle',
                               backgroundColor: '#F8FAFC',
                               borderRight: '1px solid #E2E8F0',
-                              borderBottom: '1px solid #CBD5E1'
+                              borderBottom: '1px solid #CBD5E1',
+                              position: 'relative',
+                              zIndex: 10
                             }}
                           >
                             <div style={{ color: '#475569', fontSize: '8.5px' }}>
@@ -1449,7 +1461,9 @@ export function VRMProformaInvoicePrintSheet({
                             backgroundColor: '#F8FAFC',
                             fontWeight: '800',
                             color: '#0F172A',
-                            borderBottom: '1px solid #CBD5E1'
+                            borderBottom: '1px solid #CBD5E1',
+                            position: 'relative',
+                            zIndex: 10
                           }}
                         >
                           {Number(it.groupLineTotal || ((it.groupTaxable || 0) + (it.groupGst || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

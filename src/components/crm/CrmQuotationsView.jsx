@@ -3825,8 +3825,8 @@ export default function CrmQuotationsView({
                       const isFirstInGroup = gInfo && gInfo.firstIndex === idx;
 
                       return (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isPreset ? '#FBFDFF' : 'transparent' }}>
-                          <td style={{ padding: '10px', color: '#0F172A', fontWeight: isPreset ? '500' : '600' }}>
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: 'transparent' }}>
+                          <td style={{ padding: '10px', color: '#0F172A', fontWeight: isPreset ? '500' : '600', backgroundColor: isPreset ? '#FBFDFF' : 'transparent' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {isPreset && (
                                 <span style={{ fontSize: '10px', backgroundColor: '#E0F2FE', color: '#0369A1', fontWeight: '700', padding: '1px 6px', borderRadius: '4px' }}>
@@ -3836,7 +3836,7 @@ export default function CrmQuotationsView({
                               <span>{it.name || it.description}</span>
                             </div>
                           </td>
-                          <td style={{ padding: '10px', textAlign: 'right', color: '#334155' }}>
+                          <td style={{ padding: '10px', textAlign: 'right', color: '#334155', backgroundColor: isPreset ? '#FBFDFF' : 'transparent' }}>
                             {itQty} {it.uom || it.unit || 'NOS'}
                           </td>
                           {isPreset ? (
