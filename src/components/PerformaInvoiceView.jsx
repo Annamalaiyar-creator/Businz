@@ -41,8 +41,7 @@ const normalizePiRecord = (item) => {
     normalized.status = 'Issued';
     normalized.statusType = 'issued';
   }
-  // Strict 1-to-1 Safeguard: PI-00061 is the sole owner of BOM-659.
-  // Any other PIs (PI-00063, PI-00064, PI-00065, PI-00066) with accidental BOM-659 must be sanitized to Issued.
+  // Strict 1-to-1 Safeguards against accidental BOM cross-contamination:
   const pNo = String(normalized.piNo || normalized.id || '').trim().toUpperCase();
   const bomCode = String(
     normalized.convertedBomCode || 
@@ -50,6 +49,20 @@ const normalizePiRecord = (item) => {
     normalized.converted_bom_code || 
     normalized.converted_bom_no || ''
   ).trim().toUpperCase();
+
+  // 1. PI 495 must never link to BOM 381 (different customer/order)
+  if (pNo.includes('495') && bomCode.includes('381')) {
+    normalized.status = 'Issued';
+    normalized.statusType = 'issued';
+    normalized.convertedToBom = false;
+    normalized.isConverted = false;
+    normalized.convertedBomCode = null;
+    normalized.convertedBomNo = null;
+    normalized.converted_bom_code = null;
+    normalized.converted_bom_no = null;
+  }
+
+  // 2. BOM-659 belongs strictly and exclusively to PI-00061.
   if ((bomCode === 'BOM-659' || bomCode === '659') && pNo !== 'PI-00061') {
     normalized.status = 'Issued';
     normalized.statusType = 'issued';
@@ -239,17 +252,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         return false;
       }
 
-      // 1. Authoritative 1-to-1 match by explicit converted BOM code on the PI
+      // STRICT HARD BARRIER: PI 495 does not belong to BOM 381.
+      if (piNum.includes('495') && bCode.includes('381')) {
+        return false;
+      }
+
+      const piCust = String(pi.customerName || pi.vendor || pi.companyName || '').trim().toLowerCase();
+      const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
+      const custMatches = (!piCust || !bCust || piCust.includes(bCust) || bCust.includes(piCust));
+
+      // 1. Authoritative 1-to-1 match by explicit converted BOM code on the PI:
+      // If the BOM explicitly has a sourcePiNo pointing to a DIFFERENT PI, it belongs to that other PI!
       if (explicitCode && (bCode === explicitCode || bId === explicitCode)) {
+        if (sPi && sPi !== piNum) {
+          return false; // BOM belongs to its original source PI, not this PI
+        }
+        if (!custMatches) {
+          return false; // Different customer entirely
+        }
         return true;
       }
 
       // 2. Strict 1-to-1 match by source PI number on the BOM:
-      // Must ensure customer matches or neither is specified, so a fresh PI doesn't accidentally bind to a legacy BOM
       if (sPi && sPi === piNum) {
-        const piCust = String(pi.customerName || pi.vendor || pi.companyName || '').trim().toLowerCase();
-        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
-        if (piCust && bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
+        if (!custMatches) {
           return false;
         }
         return true;
@@ -2928,6 +2954,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || (isTechSupport ? 'TS-001' : 'SE-004'),
         createdByRole: (isEditing ? matchedExisting?.createdByRole : null) || userRole || (isTechSupport ? 'Tech Support' : 'Sales Executive'),
         createdByEmail: (isEditing ? matchedExisting?.createdByEmail : null) || currentLoggedEmail || '',
+        convertedBomCode: isEditing ? (matchedExisting?.convertedBomCode || null) : null,
+        convertedBomNo: isEditing ? (matchedExisting?.convertedBomNo || null) : null,
+        convertedToBom: isEditing ? Boolean(matchedExisting?.convertedToBom) : false,
+        isConverted: isEditing ? Boolean(matchedExisting?.isConverted) : false,
         zohoSynced: matchedExisting?.zohoSynced || false,
         zohoEstimateId: matchedExisting?.zohoEstimateId || null,
         zohoModule: 'Quotes'
