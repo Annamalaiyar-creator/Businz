@@ -71,7 +71,18 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && (e.role === userRole || (userRole.includes('Supervisor') && String(e.role).includes('Supervisor')) || (userRole.includes('Dispatch') && String(e.role).includes('Dispatch'))));
+      const storedEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+      const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
+      let match = null;
+      if (storedEmpId || storedEmail) {
+        match = allEmps.find(e => e && (
+          (storedEmpId && (e.employee_code === storedEmpId || e.code === storedEmpId)) ||
+          (storedEmail && (e.email || '').toLowerCase() === storedEmail)
+        ));
+      }
+      if (!match) {
+        match = allEmps.find(e => e && (e.role === userRole || (userRole.includes('Supervisor') && String(e.role).includes('Supervisor')) || (userRole.includes('Dispatch') && String(e.role).includes('Dispatch'))));
+      }
       if (match && (match.employee_name || match.name)) {
         userName = match.employee_name || match.name;
       }

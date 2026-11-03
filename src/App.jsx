@@ -350,45 +350,50 @@ function App() {
     };
   }, []);
 
+  const handleLoginSuccess = (roleName) => {
+    setUserRole(roleName);
+    setIsAuthenticated(true);
+    const defaultTab = 'Dashboard';
+    setActiveTab(defaultTab);
+    localStorage.setItem('controlroom_active_tab', defaultTab);
+    try {
+      realtimeNotificationService.start(true);
+    } catch (_) {}
+  };
+
   const handleRoleSwitch = (newRole) => {
     setUserRole(newRole);
     localStorage.setItem('controlroom_user_role', newRole);
     localStorage.setItem('controlroom_is_authenticated', 'true');
     setIsAuthenticated(true);
 
-    const norm = (newRole || '').toLowerCase();
-    if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
-      localStorage.setItem('controlroom_logged_emp_id', 'CEO-001');
-      let ceoName = 'Velmurugan Rathinam';
-      try {
-        const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-        const ceoEmp = storedEmps.find(e => e && ((e.employee_code || '').toUpperCase().startsWith('CEO') || e.role === 'CEO' || e.role === 'Managing Director'));
-        if (ceoEmp && (ceoEmp.employee_name || ceoEmp.name)) {
-          ceoName = ceoEmp.employee_name || ceoEmp.name;
-        }
-      } catch (_) {}
-      localStorage.setItem('controlroom_logged_user_name', ceoName);
-    } else if (norm.includes('tech support') || norm.includes('technical support')) {
-      localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
-      localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');
-    } else if (norm.includes('sales')) {
-      let salesCode = 'SE-1000';
-      let salesName = 'Annamalaiyar';
-      try {
-        const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-        const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-        const sEmp = allEmps.find(e => e && ((e.role || '').toLowerCase().includes('sales') || (e.department || '').toLowerCase().includes('sales')));
-        if (sEmp) {
-          salesCode = sEmp.employee_code || sEmp.code || salesCode;
-          salesName = sEmp.employee_name || sEmp.name || salesName;
-        }
-      } catch (_) {}
-      localStorage.setItem('controlroom_logged_emp_id', salesCode);
-      localStorage.setItem('controlroom_logged_user_name', salesName);
-    } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
-      localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
-      localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
+    // If an authenticated employee is already logged in, do NOT overwrite their personal credentials
+    const currentEmpId = localStorage.getItem('controlroom_logged_emp_id');
+    const currentUserName = localStorage.getItem('controlroom_logged_user_name');
+
+    if (!currentEmpId || !currentUserName) {
+      const norm = (newRole || '').toLowerCase();
+      if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'CEO-001');
+        let ceoName = 'Velmurugan Rathinam';
+        try {
+          const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+          const ceoEmp = storedEmps.find(e => e && ((e.employee_code || '').toUpperCase().startsWith('CEO') || e.role === 'CEO' || e.role === 'Managing Director'));
+          if (ceoEmp && (ceoEmp.employee_name || ceoEmp.name)) {
+            ceoName = ceoEmp.employee_name || ceoEmp.name;
+          }
+        } catch (_) {}
+        localStorage.setItem('controlroom_logged_user_name', ceoName);
+      } else if (norm.includes('tech support') || norm.includes('technical support')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
+        localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');
+      } else if (norm.includes('sales')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'SE-1000');
+        localStorage.setItem('controlroom_logged_user_name', 'Annamalaiyar');
+      } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
+        localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
+      }
     }
 
     // Reconnect notification socket immediately with the new role & credentials
@@ -661,7 +666,7 @@ function App() {
   }, []);
 
   if (!isAuthenticated || !userRole) {
-    return <LoginScreen onLoginSuccess={(role) => handleRoleSwitch(role)} />;
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
 
