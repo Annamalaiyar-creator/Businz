@@ -6812,11 +6812,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>Current Account Number</div>
-                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleCopyBankDetail('50200031629', 'Account Number')}
+                      onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
                       title="Copy Account Number"
                       style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                     >
@@ -6842,7 +6842,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 {/* Branch Location */}
                 <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span><strong>Branch:</strong> VINAYAGAPURAM</span>
+                  <span><strong>Branch:</strong> VINAYAGAPURAM BRANCH</span>
                   <span style={{ color: '#0E7490', fontSize: '10px', fontWeight: '700' }}>Settlement: INR (₹)</span>
                 </div>
               </div>

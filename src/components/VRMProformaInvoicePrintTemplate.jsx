@@ -135,9 +135,9 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   bankHeading: 'Account Details:',
   bankBeneficiary: 'VRM Structures India Private Limited',
   bankName: 'HDFC Bank',
-  bankAccountNo: '50200031629',
+  bankAccountNo: '50200031629272',
   bankIfsc: 'HDFC0007315',
-  bankBranch: 'VINAYAGAPURAM',
+  bankBranch: 'VINAYAGAPURAM BRANCH',
   bankAccountType: 'Current Account',
 
   // Terms & Conditions
@@ -1527,20 +1527,19 @@ export function VRMProformaInvoicePrintSheet({
               marginBottom: '14px'
             }}>
               <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
-                BANK DETAILS
+                {cfg.bankHeading || 'Account Details:'}
               </div>
-              <div style={{ fontSize: '9px', color: '#475569' }}>Beneficiary:</div>
-              <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
-                VRM Structures India Private Limited
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                Beneficiary: <strong>{cfg.bankBeneficiary || 'VRM Structures India Private Limited'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                A/c No: <strong>{cfg.bankAccountNo || '50200031629272'}</strong>
               </div>
               <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
                 Bank: <strong>{cfg.bankName || 'HDFC Bank'}</strong>
               </div>
               <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
-                Branch: <strong>{cfg.bankBranch || 'VINAYAGAPURAM'}</strong>
-              </div>
-              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
-                A/c No.: <strong>{cfg.bankAccountNo || '50200031629'}</strong>
+                Branch: <strong>{cfg.bankBranch || 'VINAYAGAPURAM BRANCH'}</strong>
               </div>
               <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
                 IFSC: <strong>{cfg.bankIfsc || 'HDFC0007315'}</strong>
@@ -2901,8 +2900,8 @@ export function VRMProformaInvoicePrintSheet({
               <div style={{ padding: '8px 14px', borderBottom: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: '9px', fontWeight: '700', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
                   <EditableText
-                    value={cfg.bankHeading || 'Bank & Payment Details'}
-                    fallback="Bank & Payment Details"
+                    value={cfg.bankHeading || 'Account Details:'}
+                    fallback="Account Details:"
                     onSave={(v) => onUpdateSetting?.({ bankHeading: v })}
                   />
                 </div>
@@ -2913,7 +2912,7 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>A/c No: </span>
-                    <EditableText value={cfg.bankAccountNo || '50200031629'} fallback="50200031629" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
+                    <EditableText value={cfg.bankAccountNo || '50200031629272'} fallback="50200031629272" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>Bank: </span>
@@ -2921,7 +2920,7 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>Branch: </span>
-                    <EditableText value={cfg.bankBranch || 'VINAYAGAPURAM'} fallback="VINAYAGAPURAM" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
+                    <EditableText value={cfg.bankBranch || 'VINAYAGAPURAM BRANCH'} fallback="VINAYAGAPURAM BRANCH" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>IFSC: </span>
@@ -4204,10 +4203,12 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         if (parsed.companyTagline === 'Engineered Solar Mounting Structures & Solutions') parsed.companyTagline = '';
         if (parsed.companyCin === 'U28112TN2020PTC135489') parsed.companyCin = '';
         if (parsed.signatureMode === 'vector' && !parsed.customSignatureUrl) parsed.signatureMode = 'none';
-        if (parsed.bankIfsc === 'HDFC0000574' || parsed.bankIfsc === 'HDFC0001234') parsed.bankIfsc = 'HDFC0007315';
-        if (parsed.bankBranch === 'Kodambakkam, Chennai' || parsed.bankBranch === 'Kodambakkam' || parsed.bankBranch?.includes('Ambattur') || parsed.bankBranch === 'Vinayagapuram Branch') parsed.bankBranch = 'VINAYAGAPURAM';
-        if (parsed.bankAccountNo === '50200088912456' || parsed.bankAccountNo === '50200031629272') parsed.bankAccountNo = '50200031629';
-        if (parsed.bankName === 'HDFC Bank Ltd.' || parsed.bankName === 'HDFC Bank Ltd') parsed.bankName = 'HDFC Bank';
+        if (parsed.bankIfsc === 'HDFC0000574' || parsed.bankIfsc === 'HDFC0001234' || !parsed.bankIfsc) parsed.bankIfsc = 'HDFC0007315';
+        if (parsed.bankBranch === 'Kodambakkam, Chennai' || parsed.bankBranch === 'Kodambakkam' || parsed.bankBranch?.includes('Ambattur') || parsed.bankBranch === 'Vinayagapuram Branch' || parsed.bankBranch === 'VINAYAGAPURAM' || !parsed.bankBranch) parsed.bankBranch = 'VINAYAGAPURAM BRANCH';
+        if (parsed.bankAccountNo === '50200088912456' || parsed.bankAccountNo === '50200031629' || !parsed.bankAccountNo) parsed.bankAccountNo = '50200031629272';
+        if (parsed.bankName === 'HDFC Bank Ltd.' || parsed.bankName === 'HDFC Bank Ltd' || !parsed.bankName) parsed.bankName = 'HDFC Bank';
+        if (parsed.bankBeneficiary === 'VRM Structures India Pvt Ltd' || !parsed.bankBeneficiary) parsed.bankBeneficiary = 'VRM Structures India Private Limited';
+        if (!parsed.bankHeading || parsed.bankHeading === 'BANK DETAILS' || parsed.bankHeading === 'Bank & Payment Details') parsed.bankHeading = 'Account Details:';
         parsed.showCompanyName = true;
         parsed.showCompanyTagline = false;
         parsed.companyUdyam = '';
@@ -4220,6 +4221,12 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         }
         initial = { ...initial, ...parsed };
       }
+      initial.bankBeneficiary = 'VRM Structures India Private Limited';
+      initial.bankAccountNo = '50200031629272';
+      initial.bankName = 'HDFC Bank';
+      initial.bankBranch = 'VINAYAGAPURAM BRANCH';
+      initial.bankIfsc = 'HDFC0007315';
+      initial.bankHeading = 'Account Details:';
       initial.companyName = initial.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED';
       initial.showCompanyName = true;
       if (!initial.accentColor || initial.accentColor === '#0E7490') {
