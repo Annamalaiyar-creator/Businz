@@ -8208,9 +8208,20 @@ export default function BomOrdersView(props) {
       const targetBom = updatedList.find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
       if (targetBom) {
         saveCloudBomRow(targetBom);
+        const sesId = typeof window !== 'undefined' && window.localStorage
+          ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+          : null;
+        const curRole = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_user_role') || 'Sales') : 'Sales';
+        const curEmp = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001') : 'SE-001';
+
         fetch('/api/boms', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sesId ? { 'x-session-id': sesId } : {}),
+            'x-user-role': curRole,
+            'x-employee-code': curEmp
+          },
           body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
         }).catch(() => {});
 
@@ -11052,9 +11063,20 @@ export default function BomOrdersView(props) {
                             const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
                             if (targetBom) {
                               saveCloudBomRow(targetBom);
+                              const sesId = typeof window !== 'undefined' && window.localStorage
+                                ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+                                : null;
+                              const curRole = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_user_role') || 'Sales') : 'Sales';
+                              const curEmp = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001') : 'SE-001';
+
                               fetch('/api/boms', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  ...(sesId ? { 'x-session-id': sesId } : {}),
+                                  'x-user-role': curRole,
+                                  'x-employee-code': curEmp
+                                },
                                 body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
                               }).catch(() => {});
 
