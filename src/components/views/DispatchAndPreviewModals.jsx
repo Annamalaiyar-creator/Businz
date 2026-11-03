@@ -498,12 +498,13 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
   return (() => {
         const bRef = viewingProofDocModal.bomCode || viewingProofDocModal.code || viewingProofDocModal.poNo;
         const matchedBom = bomStore.find(b => b.bomCode === bRef || b.code === bRef || (b.salesOrderNo && b.salesOrderNo === bRef));
-        const rawProof = viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.payments?.proofDoc || viewingProofDocModal.proofDoc || viewingProofDocModal.salesPoDetails?.proofDocObj;
-        const docName = typeof rawProof === 'string' ? rawProof : rawProof?.name || viewingProofDocModal.paymentProofDocName || 'Payment_Proof';
-        const salesPaymentProof = viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.salesPoDetails?.proofDocObj;
-        let pDocDataUrl = (typeof salesPaymentProof === 'string' && salesPaymentProof.startsWith('data:'))
+        const docTarget = viewingProofDocModal.targetDoc || viewingProofDocModal.doc;
+        const rawProof = docTarget || viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.payments?.proofDoc || viewingProofDocModal.proofDoc || viewingProofDocModal.salesPoDetails?.proofDocObj;
+        const docName = viewingProofDocModal.targetDocName || (typeof rawProof === 'string' ? rawProof : rawProof?.name || rawProof?.originalName || viewingProofDocModal.paymentProofDocName || 'Payment_Proof');
+        const salesPaymentProof = docTarget || viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.salesPoDetails?.proofDocObj;
+        let pDocDataUrl = viewingProofDocModal.targetDocUrl || ((typeof salesPaymentProof === 'string' && salesPaymentProof.startsWith('data:'))
           ? salesPaymentProof
-          : (salesPaymentProof?.dataUrl || salesPaymentProof?.fileData || salesPaymentProof?.url || (typeof rawProof === 'string' && rawProof.startsWith('data:') ? rawProof : null) || rawProof?.dataUrl || rawProof?.fileData || rawProof?.url);
+          : (salesPaymentProof?.dataUrl || salesPaymentProof?.fileData || salesPaymentProof?.url || (typeof rawProof === 'string' && rawProof.startsWith('data:') ? rawProof : null) || rawProof?.dataUrl || rawProof?.fileData || rawProof?.url));
         if (!pDocDataUrl && docName) {
           pDocDataUrl = getMediaFromCache(docName);
         }

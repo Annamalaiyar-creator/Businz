@@ -9,7 +9,8 @@ import SidebarRightColumn from './components/SidebarRightColumn';
 import MaterialReorderAlerts from './components/MaterialReorderAlerts';
 import LoginScreen from './components/LoginScreen';
 import NotificationToast from './components/NotificationToast';
-import WorkflowNotificationBanner from './components/WorkflowNotificationBanner';
+import realtimeNotificationService from './services/realtimeNotificationService';
+
 
 // Route/View-Level Code Splitting via React.lazy() (Preserves all behavior, isolates bundle weight)
 const PerformaInvoiceView = lazy(() => import('./components/PerformaInvoiceView'));
@@ -24,10 +25,11 @@ const AccountsFinanceDashboard = lazy(() => import('./components/views/AccountsF
 const BillingDashboardView = lazy(() => import('./components/views/BillingDashboardView'));
 const CeoExecutiveDashboardView = lazy(() => import('./components/views/CeoExecutiveDashboardView'));
 const TechSupportDashboardView = lazy(() => import('./components/views/TechSupportDashboardView'));
+const TechnicalAdminDashboardView = lazy(() => import('./components/views/TechnicalAdminDashboardView'));
 const DeveloperPortalView = lazy(() => import('./components/DeveloperPortalView'));
 
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
-import { heartbeatActiveSession, registerActiveSession, revokeSession } from './services/sessionService';
+import { heartbeatActiveSession, revokeSession } from './services/sessionService';
 import { getPurchaseOrders, getItems } from './services/businzDataService';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
@@ -81,6 +83,15 @@ class AppErrorBoundary extends Component {
   }
   componentDidCatch(error, errorInfo) {
     console.error('App render error caught by boundary:', error, errorInfo);
+    if (error?.message && (error.message.includes('dynamically imported module') || error.message.includes('Failed to fetch dynamically imported module'))) {
+      const reloadKey = 'businz_chunk_reload_ts';
+      const lastReload = Number(sessionStorage.getItem(reloadKey) || 0);
+      if (Date.now() - lastReload > 8000) {
+        sessionStorage.setItem(reloadKey, String(Date.now()));
+        console.warn('[BUSINZ] Dynamic chunk missing (deployment update). Auto-refreshing...');
+        window.location.reload();
+      }
+    }
   }
   render() {
     if (this.state.hasError) {
@@ -293,6 +304,7 @@ function App() {
   const [targetPoTab, setTargetPoTab] = useState(null);
   const [targetBomCode, setTargetBomCode] = useState(null);
   const [targetPiNo, setTargetPiNo] = useState(null);
+  const [targetCustomerCode, setTargetCustomerCode] = useState(null);
   const [convertingPiData, setConvertingPiData] = useState(null);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [itemsList, setItemsList] = useState([]);
@@ -306,23 +318,89 @@ function App() {
       if (typeof e.detail === 'string') {
         handleTabChange(e.detail);
       } else if (typeof e.detail === 'object') {
-        const { tab, targetPo, targetBom, targetPi, poTabTarget } = e.detail;
+        const { tab, targetPo, targetBom, targetPi, poTabTarget, searchCustomer, targetCustomer } = e.detail;
         if (targetPo) setTargetPoNo(targetPo);
         if (targetBom) setTargetBomCode(targetBom);
         if (targetPi) setTargetPiNo(targetPi);
         if (poTabTarget) setTargetPoTab(poTabTarget);
-        if (tab) handleTabChange(tab, targetPo, poTabTarget);
+        const resolvedCustomer = searchCustomer || targetCustomer;
+        if (resolvedCustomer) setTargetCustomerCode(resolvedCustomer);
+        if (tab) handleTabChange(tab, targetPo, poTabTarget, resolvedCustomer);
       }
     };
     window.addEventListener('controlroom_navigate_tab', handleCustomNavigate);
     return () => window.removeEventListener('controlroom_navigate_tab', handleCustomNavigate);
   }, []);
 
+  // Always keep real-time workflow & lead notification stream active across the entire app
+  useEffect(() => {
+    realtimeNotificationService.start();
+
+    const handleIncomingToast = (e) => {
+      if (!e || !e.detail) return;
+      setToastAlert(e.detail);
+    };
+
+    window.addEventListener('businz_notification_received', handleIncomingToast);
+    window.addEventListener('businz_show_toast', handleIncomingToast);
+
+    return () => {
+      window.removeEventListener('businz_notification_received', handleIncomingToast);
+      window.removeEventListener('businz_show_toast', handleIncomingToast);
+    };
+  }, []);
+
+  const handleLoginSuccess = (roleName) => {
+    setUserRole(roleName);
+    setIsAuthenticated(true);
+    const defaultTab = 'Dashboard';
+    setActiveTab(defaultTab);
+    localStorage.setItem('controlroom_active_tab', defaultTab);
+    try {
+      realtimeNotificationService.start(true);
+    } catch (_) {}
+  };
+
   const handleRoleSwitch = (newRole) => {
     setUserRole(newRole);
     localStorage.setItem('controlroom_user_role', newRole);
     localStorage.setItem('controlroom_is_authenticated', 'true');
     setIsAuthenticated(true);
+
+    // If an authenticated employee is already logged in, do NOT overwrite their personal credentials
+    const currentEmpId = localStorage.getItem('controlroom_logged_emp_id');
+    const currentUserName = localStorage.getItem('controlroom_logged_user_name');
+
+    if (!currentEmpId || !currentUserName) {
+      const norm = (newRole || '').toLowerCase();
+      if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'CEO-001');
+        let ceoName = 'Velmurugan Rathinam';
+        try {
+          const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+          const ceoEmp = storedEmps.find(e => e && ((e.employee_code || '').toUpperCase().startsWith('CEO') || e.role === 'CEO' || e.role === 'Managing Director'));
+          if (ceoEmp && (ceoEmp.employee_name || ceoEmp.name)) {
+            ceoName = ceoEmp.employee_name || ceoEmp.name;
+          }
+        } catch (_) {}
+        localStorage.setItem('controlroom_logged_user_name', ceoName);
+      } else if (norm.includes('tech support') || norm.includes('technical support')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
+        localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');
+      } else if (norm.includes('sales')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'SE-1000');
+        localStorage.setItem('controlroom_logged_user_name', 'Annamalaiyar');
+      } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
+        localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
+      }
+    }
+
+    // Reconnect notification socket immediately with the new role & credentials
+    try {
+      realtimeNotificationService.start(true);
+    } catch (_) {}
+
     const defaultTab = 'Dashboard';
     setActiveTab(defaultTab);
     localStorage.setItem('controlroom_active_tab', defaultTab);
@@ -348,12 +426,20 @@ function App() {
     setShowLoginModal(false);
   };
 
-  const handleTabChange = (tab, targetPo = null, poTabTarget = null) => {
+  const handleTabChange = (tab, targetPo = null, poTabTarget = null, targetCustomer = null) => {
     if (targetPo) {
-      setTargetPoNo(targetPo);
+      if (typeof targetPo === 'object' && (targetPo.searchCustomer || targetPo.targetCustomer)) {
+        setTargetCustomerCode(targetPo.searchCustomer || targetPo.targetCustomer);
+      } else {
+        setTargetPoNo(targetPo);
+      }
     }
     if (poTabTarget) {
       setTargetPoTab(poTabTarget);
+    }
+    if (targetCustomer) {
+      const resolvedCust = typeof targetCustomer === 'object' ? (targetCustomer.searchCustomer || targetCustomer.targetCustomer) : targetCustomer;
+      if (resolvedCust) setTargetCustomerCode(resolvedCust);
     }
     setActiveTab(tab);
     try {
@@ -398,14 +484,6 @@ function App() {
   // Heartbeat & session verification interval (checks every 25 seconds)
   useEffect(() => {
     if (isAuthenticated) {
-      const email = localStorage.getItem('controlroom_logged_user');
-      const empCode = localStorage.getItem('controlroom_logged_emp_id');
-      const name = localStorage.getItem('controlroom_logged_user_name');
-      const role = localStorage.getItem('controlroom_user_role');
-      if (email) {
-        registerActiveSession(email, empCode, name, role);
-      }
-
       heartbeatActiveSession();
       const interval = setInterval(() => {
         heartbeatActiveSession();
@@ -588,41 +666,10 @@ function App() {
   }, []);
 
   if (!isAuthenticated || !userRole) {
-    return <LoginScreen onLoginSuccess={(role) => handleRoleSwitch(role)} />;
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
 
-
-  // Developer / Technical Admin Portal Dedicated Fullscreen Console
-  const isDevRole = userRole === 'Technical Administrator' || userRole === 'Developer' || (userRole || '').startsWith('TA') || activeTab === 'Developer Console' || activeTab === 'Developer Portal';
-  
-  if (isDevRole && devViewMode === 'console') {
-    return (
-      <>
-        <Suspense fallback={<AppViewLoadingFallback activeTab="Developer Console" />}>
-          <DeveloperPortalView 
-            userRole={userRole} 
-            onSignOut={handleSignOut} 
-            showCustomAlert={showCustomAlert} 
-            onSwitchToErp={() => {
-              setDevViewMode('erp');
-              localStorage.setItem('controlroom_dev_view_mode', 'erp');
-            }}
-          />
-        </Suspense>
-        {toastAlert && (
-          <NotificationToast 
-            alert={toastAlert} 
-            onClose={() => setToastAlert(null)} 
-          />
-        )}
-        <WorkflowNotificationBanner 
-          userRole={userRole} 
-          onNavigate={handleTabChange} 
-        />
-      </>
-    );
-  }
 
   return (
     <div className="app-container">
@@ -653,48 +700,6 @@ function App() {
 
       {/* Main View Wrapper */}
       <main className="main-wrapper">
-        {/* Technical Administrator ERP Mode Banner */}
-        {isDevRole && (
-          <div style={{
-            backgroundColor: '#0F172A',
-            color: '#38BDF8',
-            padding: '8px 20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '12px',
-            fontWeight: '800',
-            borderBottom: '1px solid #1E293B',
-            zIndex: 999
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#38BDF8', boxShadow: '0 0 8px #38BDF8' }} />
-              <span>Technical Administrator Session — Businz CRM Active (TA Integration Permissions Live)</span>
-            </div>
-            <button
-              onClick={() => {
-                setDevViewMode('console');
-                localStorage.setItem('controlroom_dev_view_mode', 'console');
-              }}
-              style={{
-                backgroundColor: '#0284C7',
-                border: 'none',
-                color: '#FFFFFF',
-                padding: '4px 12px',
-                borderRadius: '6px',
-                fontSize: '11.5px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              « Return to Dev Console
-            </button>
-          </div>
-        )}
-
         {/* Top Header Card */}
         <Header 
           activeTab={activeTab} 
@@ -708,7 +713,9 @@ function App() {
         {/* Scrollable Center Content Pane */}
         <div className={`content-pane ${(!activeTab.includes('Dashboard')) ? 'procurement-layout' : ''} ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''} ${(activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') ? 'dashboard-view-pane' : ''}`}>
           <Suspense fallback={<AppViewLoadingFallback activeTab={activeTab} />}>
-            {(activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
+            {(((userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer') && (activeTab === 'Dashboard' || activeTab === 'Admin Dashboard' || activeTab === 'Developer Console' || activeTab === 'Developer Portal')) || (['User Management', 'System Health', 'Active Sessions', 'Backup Vault', 'Developer Console', 'Developer Portal'].includes(activeTab) && (userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer' || userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Admin' || userRole === 'Super Admin'))) ? (
+              <TechnicalAdminDashboardView userRole={userRole} activeTab={activeTab} onNavigateTab={handleTabChange} />
+            ) : (activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch' || userRole === 'Dispatch Head' || userRole.includes('Dispatch') || userRole === 'Floor Employee' || userRole === 'Floor Executive' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
               <ProductionAdminView activeTab={activeTab} userRole={userRole} />
             ) : (activeTab === 'Performa Invoice' || activeTab === 'Proforma Invoice') ? (
               <PerformaInvoiceView 
@@ -740,7 +747,7 @@ function App() {
               />
             ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
               <InventoryAutoConversion />
-            ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
+            ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales' || userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
               <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard' && activeTab !== 'Billing Dashboard' && activeTab !== 'Tech Support Dashboard') ? (
               ((userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) && (activeTab === 'BOM Orders' || activeTab === 'BOM' || activeTab === 'Sales BOM' || activeTab === 'BOM / Routing')) ? (
@@ -755,13 +762,15 @@ function App() {
                   targetBomCode={targetBomCode}
                   clearTargetBom={() => setTargetBomCode(null)}
                   targetPiNo={targetPiNo}
+                  targetCustomerCode={targetCustomerCode}
+                  clearTargetCustomer={() => setTargetCustomerCode(null)}
                   itemsList={itemsList}
                   purchaseOrders={purchaseOrders}
                 />
               )
             ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
               <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-            ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts'))) ? (
+            ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts' || userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts' || (userRole || '').toLowerCase().includes('account')))) ? (
               <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
             ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
               <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
@@ -820,11 +829,14 @@ function App() {
         </div>
       )}
 
-      {/* Real-Time Interactive Workflow Notification Banner with Audio Chime & Deep Link */}
-      <WorkflowNotificationBanner 
-        userRole={userRole} 
-        onNavigate={handleTabChange} 
+      {/* Modern WhatsApp / SaaS Real-Time Notification Card */}
+      <NotificationToast 
+        alert={toastAlert} 
+        onClose={() => setToastAlert(null)} 
+        onNavigate={(tab, extra) => handleTabChange(tab, extra)} 
       />
+
+      {/* Sidebar Navigation */}
     </div>
   );
 }

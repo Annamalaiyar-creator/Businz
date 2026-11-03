@@ -60,7 +60,8 @@ async function runLeadManagementVerification() {
   });
 
   let testLead = null;
-  if (createRes.ok && createRes.data?.lead?.lead_number?.startsWith('VRM-LEAD-')) {
+  const leadNum = createRes.data?.lead?.lead_number || '';
+  if (createRes.ok && (leadNum.startsWith('VRM-LEAD-') || leadNum.startsWith('VRM-LD-'))) {
     testLead = createRes.data.lead;
     console.log(`   ✅ Lead created: ${testLead.lead_number} for "${testLead.company_name}"`);
     results.push({ test: 'Lead Creation & Auto-Sequencing', pass: true });

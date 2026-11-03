@@ -81,6 +81,21 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
   }
 
   if (
+    raw === 'packed — awaiting sales payment proof' ||
+    raw === 'packed - awaiting sales payment proof' ||
+    raw === 'partially packed — awaiting sales payment proof' ||
+    raw.includes('awaiting sales payment proof')
+  ) {
+    return {
+      label: customLabel || 'Packed — Awaiting Sales Payment Proof',
+      bg: '#fef3c7',
+      color: '#b45309',
+      border: '1.5px solid #f59e0b',
+      Icon: IconAlert
+    };
+  }
+
+  if (
     raw === 'packed & ready for dispatch' ||
     raw === 'packed' ||
     raw === 'packing verified' ||
@@ -323,11 +338,13 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
     raw === 'invoice confirmed' ||
     raw === 'confirmed' ||
     raw === 'invoice_confirmed' ||
-    raw.includes('confirmed')
+    raw.includes('confirmed') ||
+    raw.includes('settled')
   ) {
     let display = customLabel || 'Completed';
     if (!customLabel) {
-      if (raw.includes('confirmed')) display = 'Invoice Confirmed';
+      if (raw.includes('credit settled') || raw.includes('settled')) display = 'Credit Settled';
+      else if (raw.includes('confirmed')) display = 'Invoice Confirmed';
       else if (raw === 'approved') display = 'Approved';
       else if (raw === 'scheduled') display = 'Scheduled';
       else if (raw.includes('closed')) display = 'Closed';

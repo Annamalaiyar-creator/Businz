@@ -1,15 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import makeWASocket, {
+  useMultiFileAuthState,
+  DisconnectReason,
+  Browsers,
+  makeCacheableSignalKeyStore,
+  extractMessageContent
+} from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
-import { getWaSessionsDir } from './runtimePaths.js';
+import { getWaSessionsDir, isMaintenanceModeActive } from './runtimePaths.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SESSIONS_BASE_DIR = getWaSessionsDir();
+const getSessionsBaseDir = () => getWaSessionsDir();
 
 const silentLogger = pino({ level: 'silent' });
 
@@ -32,9 +39,93 @@ export function formatPhoneNumberToJid(phone) {
   return `${digits}@s.whatsapp.net`;
 }
 
+// Helper to reliably extract text content from any WhatsApp message type
+export function extractWhatsAppMessageText(msg) {
+  if (!msg || !msg.message) return '';
+
+  let m = (typeof extractMessageContent === 'function' ? extractMessageContent(msg.message) : msg.message) || msg.message;
+  // Unwrap nested ephemeral, view-once, and caption wrappers
+  while (
+    m?.ephemeralMessage?.message ||
+    m?.viewOnceMessage?.message ||
+    m?.viewOnceMessageV2?.message ||
+    m?.viewOnceMessageV2Extension?.message ||
+    m?.documentWithCaptionMessage?.message
+  ) {
+    m = m.ephemeralMessage?.message ||
+        m.viewOnceMessage?.message ||
+        m.viewOnceMessageV2?.message ||
+        m.viewOnceMessageV2Extension?.message ||
+        m.documentWithCaptionMessage?.message;
+  }
+
+  if (!m) return '';
+
+  // 1. Standard text conversation
+  if (m.conversation) return m.conversation;
+
+  // 2. Extended text message (links, quotes, mentions)
+  if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
+
+  // 3. Images with caption or fallback tag
+  if (m.imageMessage) {
+    return m.imageMessage.caption ? `📷 ${m.imageMessage.caption}` : '📷 [Photo]';
+  }
+
+  // 4. Documents & PDFs with filename and caption
+  if (m.documentMessage) {
+    const fn = m.documentMessage.fileName || 'Document.pdf';
+    const cap = m.documentMessage.caption ? ` - ${m.documentMessage.caption}` : '';
+    return `📄 [Document: ${fn}${cap}]`;
+  }
+
+  // 5. Video message
+  if (m.videoMessage) {
+    return m.videoMessage.caption ? `🎥 ${m.videoMessage.caption}` : '🎥 [Video]';
+  }
+
+  // 6. Voice note / Audio
+  if (m.audioMessage) {
+    const isPtt = m.audioMessage.ptt;
+    const sec = m.audioMessage.seconds ? ` (${m.audioMessage.seconds}s)` : '';
+    return isPtt ? `🎤 [Voice Note${sec}]` : `🎵 [Audio Clip${sec}]`;
+  }
+
+  // 7. Sticker
+  if (m.stickerMessage) return '🏷️ [Sticker]';
+
+  // 8. Contact card
+  if (m.contactMessage) {
+    return `👤 [Contact: ${m.contactMessage.displayName || 'Card'}]`;
+  }
+  if (m.contactsArrayMessage) {
+    return `👥 [${m.contactsArrayMessage.contacts?.length || 2} Contacts]`;
+  }
+
+  // 9. Location
+  if (m.locationMessage) {
+    const name = m.locationMessage.name || m.locationMessage.address || '';
+    return `📍 [Location: ${name || 'Shared Location'}]`;
+  }
+  if (m.liveLocationMessage) return '📍 [Live Location]';
+
+  // 10. Interactive & Template responses
+  if (m.buttonsResponseMessage?.selectedDisplayText) return m.buttonsResponseMessage.selectedDisplayText;
+  if (m.templateButtonReplyMessage?.selectedDisplayText) return m.templateButtonReplyMessage.selectedDisplayText;
+  if (m.listResponseMessage?.title) return m.listResponseMessage.title;
+
+  // 11. Polls
+  if (m.pollCreationMessage || m.pollCreationMessageV3) {
+    const p = m.pollCreationMessage || m.pollCreationMessageV3;
+    return `📊 [Poll: ${p.name || 'Poll'}]`;
+  }
+
+  return '';
+}
+
 // Helper to get session chat cache file path
 function getChatsCachePath(userId) {
-  return path.join(SESSIONS_BASE_DIR, `user_${userId}`, 'chats_cache.json');
+  return path.join(getSessionsBaseDir(), `user_${userId}`, 'chats_cache.json');
 }
 
 function loadUserChatsFromDisk(userId) {
@@ -51,6 +142,9 @@ function loadUserChatsFromDisk(userId) {
 }
 
 function saveUserChatsToDisk(userId, chatsMap) {
+  if (isMaintenanceModeActive()) {
+    return;
+  }
   try {
     const p = getChatsCachePath(userId);
     const obj = Object.fromEntries(chatsMap);
@@ -122,7 +216,7 @@ export function getUserSessionStatus(rawUserId) {
   const session = activeSessions.get(userId);
 
   if (!session) {
-    const sessionDir = path.join(SESSIONS_BASE_DIR, `user_${userId}`);
+    const sessionDir = path.join(getSessionsBaseDir(), `user_${userId}`);
     const hasCreds = fs.existsSync(path.join(sessionDir, 'creds.json'));
     return {
       userId,
@@ -166,17 +260,36 @@ export function getAllUserSessions() {
  */
 export async function initUserSession(rawUserId, options = {}) {
   const userId = sanitizeUserId(rawUserId);
+
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] WhatsApp session initialization is blocked in optimization test mode.'));
+  }
+
   const { onMessageReceived, onStatusChange, onChatsUpdated } = options;
 
-  const sessionDir = path.join(SESSIONS_BASE_DIR, `user_${userId}`);
+  const sessionDir = path.join(getSessionsBaseDir(), `user_${userId}`);
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
   }
 
-  // If already connected, return existing session
+  // If already active or connected, return current status
   const existing = activeSessions.get(userId);
-  if (existing && existing.status === 'CONNECTED' && existing.sock) {
+  if (existing && existing.sock && (existing.status === 'CONNECTED' || existing.status === 'SCAN_QR')) {
+    if (onMessageReceived) existing.onMessageReceived = onMessageReceived;
+    if (onStatusChange) existing.onStatusChange = onStatusChange;
+    if (onChatsUpdated) existing.onChatsUpdated = onChatsUpdated;
     return getUserSessionStatus(userId);
+  }
+
+  // Cleanly close prior socket if any before reconnecting
+  if (existing && existing.sock) {
+    try {
+      existing.sock.ev.removeAllListeners();
+    } catch (_) {}
+    try {
+      existing.sock.end(undefined);
+    } catch (_) {}
+    existing.sock = null;
   }
 
   // Setup session tracking object
@@ -195,17 +308,39 @@ export async function initUserSession(rawUserId, options = {}) {
   };
   sessionObj.chats = sessionObj.chats || loadUserChatsFromDisk(userId);
   sessionObj.contacts = sessionObj.contacts || new Map();
+  if (onMessageReceived) sessionObj.onMessageReceived = onMessageReceived;
+  if (onStatusChange) sessionObj.onStatusChange = onStatusChange;
+  if (onChatsUpdated) sessionObj.onChatsUpdated = onChatsUpdated;
   activeSessions.set(userId, sessionObj);
 
   try {
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
     const sock = makeWASocket({
-      auth: state,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, silentLogger)
+      },
       logger: silentLogger,
       printQRInTerminal: false,
-      browser: ['BUSINZ CRM', 'Chrome', '1.0.0'],
-      syncFullHistory: true
+      browser: Browsers.ubuntu('Chrome'),
+      syncFullHistory: false,
+      defaultQueryTimeoutMs: 120000,
+      keepAliveIntervalMs: 25000,
+      markOnlineOnConnect: false,
+      generateHighQualityLinkPreview: false,
+      shouldIgnoreJid: (jid) => jid?.endsWith('@broadcast') || jid?.includes('status@broadcast'),
+      getMessage: async (key) => {
+        try {
+          const cleanPhone = key.remoteJid?.split('@')[0];
+          const chat = sessionObj.chats?.get(cleanPhone);
+          const found = chat?.messages?.find(m => m.id === key.id);
+          if (found) {
+            return { conversation: found.text };
+          }
+        } catch (_) {}
+        return undefined;
+      }
     });
 
     sessionObj.sock = sock;
@@ -252,7 +387,10 @@ export async function initUserSession(rawUserId, options = {}) {
           sessionObj.status = 'DISCONNECTED';
           sessionObj.qrCode = null;
           sessionObj.phoneNumber = null;
-          sessionObj.sock = null;
+          if (sessionObj.sock) {
+            try { sessionObj.sock.ev.removeAllListeners(); } catch (_) {}
+            sessionObj.sock = null;
+          }
           activeSessions.delete(userId);
           try {
             fs.rmSync(sessionDir, { recursive: true, force: true });
@@ -262,17 +400,27 @@ export async function initUserSession(rawUserId, options = {}) {
           sessionObj.status = 'CONNECTING';
           sessionObj.qrCode = null;
           if (sessionObj.onStatusChange) sessionObj.onStatusChange(getUserSessionStatus(userId));
-          // Auto reconnect after brief pause
-          setTimeout(() => {
-            initUserSession(userId, options).catch(() => {});
-          }, 3500);
+
+          // Clean up old socket listeners to prevent memory leaks and duplicate handlers
+          try {
+            sock.ev.removeAllListeners();
+          } catch (_) {}
+
+          // For restartRequired (515), reconnect immediately; otherwise debounced retry
+          const delay = (statusCode === DisconnectReason.restartRequired) ? 500 : 3500;
+          clearTimeout(sessionObj.reconnectTimer);
+          sessionObj.reconnectTimer = setTimeout(() => {
+            initUserSession(userId, options).catch((e) => {
+              console.warn(`[WhatsApp MultiService] Auto-reconnect failed for ${userId}:`, e.message);
+            });
+          }, delay);
         }
       }
     });
 
-    // 1. Initial WhatsApp History Sync (Chats, Contacts, Messages)
-    sock.ev.on('messaging-history.set', ({ chats = [], contacts = [], messages = [] }) => {
-      console.log(`[WhatsApp MultiService] Synced history for '${userId}': ${chats.length} chats, ${contacts.length} contacts, ${messages.length} messages`);
+    // 1. WhatsApp History Sync (Entire conversations, contacts, and recent messages)
+    sock.ev.on('messaging-history.set', ({ chats = [], contacts = [], messages = [], isLatest, syncType }) => {
+      console.log(`[WhatsApp MultiService] Synced history for '${userId}': ${chats.length} chats, ${contacts.length} contacts, ${messages.length} messages (syncType: ${syncType || 'standard'})`);
 
       // Store contacts
       for (const c of contacts) {
@@ -295,23 +443,18 @@ export async function initUserSession(rawUserId, options = {}) {
           customerName: contactName || ch.name || existing.customerName || `WhatsApp Contact (+${cleanPhone})`,
           companyName: ch.id.includes('@g.us') ? 'WhatsApp Group' : 'WhatsApp Contact',
           isGroup: ch.id.includes('@g.us'),
-          unreadCount: ch.unreadCount || 0,
+          unreadCount: ch.unreadCount !== undefined ? ch.unreadCount : (existing.unreadCount || 0),
           timestamp: ch.conversationTimestamp ? new Date(Number(ch.conversationTimestamp) * 1000).toISOString() : (existing.timestamp || new Date().toISOString()),
           messages: existing.messages || []
         });
       }
 
-      // Store recent messages
+      // Store conversation messages
       for (const msg of messages) {
         const senderJid = msg.key.remoteJid || '';
-        if (!senderJid || senderJid.includes('status@broadcast')) continue;
+        if (!senderJid || senderJid.includes('status@broadcast') || senderJid.includes('@broadcast')) continue;
         const cleanPhone = senderJid.split('@')[0];
-        const text = msg.message?.conversation ||
-                     msg.message?.extendedTextMessage?.text ||
-                     msg.message?.imageMessage?.caption ||
-                     msg.message?.documentMessage?.caption ||
-                     (msg.message?.documentMessage ? 'Attached Document' : '') ||
-                     (msg.message?.imageMessage ? 'Attached Photo' : '');
+        const text = extractWhatsAppMessageText(msg);
 
         if (!text) continue;
 
@@ -338,12 +481,25 @@ export async function initUserSession(rawUserId, options = {}) {
           chat.messages.push({
             id: msgId,
             sender: msg.key.fromMe ? 'agent' : 'customer',
-            senderName: msg.key.fromMe ? (sessionObj.userName || 'Sales Representative') : (chat.customerName),
+            senderName: msg.key.fromMe ? (sessionObj.userName || 'Sales Representative') : (chat.customerName || msg.pushName || `Customer +${cleanPhone}`),
             text: text,
             timestamp: msgTime,
-            status: 'delivered'
+            status: msg.status === 4 ? 'read' : (msg.status === 3 ? 'delivered' : 'sent')
           });
-          chat.timestamp = msgTime;
+        }
+      }
+
+      // Sort every conversation's messages chronologically and align chat timestamp
+      for (const chat of sessionObj.chats.values()) {
+        if (chat.messages && chat.messages.length > 0) {
+          chat.messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+          if (chat.messages.length > 100) {
+            chat.messages = chat.messages.slice(-100);
+          }
+          const latestMsg = chat.messages[chat.messages.length - 1];
+          if (latestMsg?.timestamp) {
+            chat.timestamp = latestMsg.timestamp;
+          }
         }
       }
 
@@ -389,6 +545,7 @@ export async function initUserSession(rawUserId, options = {}) {
         });
       }
       saveUserChatsToDisk(userId, sessionObj.chats);
+      if (sessionObj.onChatsUpdated) sessionObj.onChatsUpdated(getUserChats(userId));
     });
 
     // 4. Listen for incoming live messages
@@ -397,15 +554,10 @@ export async function initUserSession(rawUserId, options = {}) {
         if (m.type === 'notify' && m.messages && m.messages.length > 0) {
           for (const msg of m.messages) {
             const senderJid = msg.key.remoteJid || '';
-            if (!senderJid || senderJid.includes('status@broadcast')) continue;
+            if (!senderJid || senderJid.includes('status@broadcast') || senderJid.includes('@broadcast')) continue;
 
             const senderPhone = senderJid.split('@')[0];
-            const text = msg.message?.conversation ||
-                         msg.message?.extendedTextMessage?.text ||
-                         msg.message?.imageMessage?.caption ||
-                         msg.message?.documentMessage?.caption ||
-                         (msg.message?.documentMessage ? 'Attached Document' : '') ||
-                         (msg.message?.imageMessage ? 'Attached Photo' : '');
+            const text = extractWhatsAppMessageText(msg);
 
             if (!text) continue;
 
@@ -438,6 +590,10 @@ export async function initUserSession(rawUserId, options = {}) {
                 timestamp: msgTime,
                 status: 'delivered'
               });
+              chat.messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+              if (chat.messages.length > 100) {
+                chat.messages = chat.messages.slice(-100);
+              }
               chat.timestamp = msgTime;
               if (!msg.key.fromMe) chat.unreadCount = (chat.unreadCount || 0) + 1;
             }
@@ -455,6 +611,10 @@ export async function initUserSession(rawUserId, options = {}) {
                 msgId,
                 timestamp: msgTime
               });
+            }
+
+            if (sessionObj.onChatsUpdated) {
+              sessionObj.onChatsUpdated(getUserChats(userId));
             }
           }
         }
@@ -477,6 +637,11 @@ export async function initUserSession(rawUserId, options = {}) {
  */
 export async function sendUserWhatsAppMessage(rawUserId, { to, text = '', document = null, fileName = 'Document.pdf', mimetype = 'application/pdf', caption = '' }) {
   const userId = sanitizeUserId(rawUserId);
+
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] Outbound WhatsApp messages are blocked in optimization test mode.'));
+  }
+
   const session = activeSessions.get(userId);
 
   if (!session || session.status !== 'CONNECTED' || !session.sock) {
@@ -538,8 +703,12 @@ export async function sendUserWhatsAppMessage(rawUserId, { to, text = '', docume
         timestamp: new Date().toISOString(),
         status: 'sent'
       });
+      chat.messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
       chat.timestamp = new Date().toISOString();
       saveUserChatsToDisk(userId, session.chats);
+      if (session.onChatsUpdated) {
+        session.onChatsUpdated(getUserChats(userId));
+      }
     }
 
     return {
@@ -578,8 +747,12 @@ export async function sendUserWhatsAppMessage(rawUserId, { to, text = '', docume
       timestamp: new Date().toISOString(),
       status: 'sent'
     });
+    chat.messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
     chat.timestamp = new Date().toISOString();
     saveUserChatsToDisk(userId, session.chats);
+    if (session.onChatsUpdated) {
+      session.onChatsUpdated(getUserChats(userId));
+    }
   }
 
   return {
@@ -608,7 +781,7 @@ export async function logoutUserSession(rawUserId) {
 
   activeSessions.delete(userId);
 
-  const sessionDir = path.join(SESSIONS_BASE_DIR, `user_${userId}`);
+  const sessionDir = path.join(getSessionsBaseDir(), `user_${userId}`);
   if (fs.existsSync(sessionDir)) {
     try {
       fs.rmSync(sessionDir, { recursive: true, force: true });
@@ -624,13 +797,18 @@ export async function logoutUserSession(rawUserId) {
  * Auto-restore all saved sessions on server startup
  */
 export async function autoRestoreAllSavedSessions(options = {}) {
-  if (!fs.existsSync(SESSIONS_BASE_DIR)) return;
+  if (isOptimizationTestMode()) {
+    console.log('🛡️ [WhatsApp MultiService] Test mode active: auto-restoration of WhatsApp sessions is disabled.');
+    return;
+  }
+  const sessionsBaseDir = getSessionsBaseDir();
+  if (!fs.existsSync(sessionsBaseDir)) return;
 
-  const entries = fs.readdirSync(SESSIONS_BASE_DIR, { withFileTypes: true });
+  const entries = fs.readdirSync(sessionsBaseDir, { withFileTypes: true });
   for (const ent of entries) {
     if (ent.isDirectory() && ent.name.startsWith('user_')) {
       const userId = ent.name.replace('user_', '');
-      const credsPath = path.join(SESSIONS_BASE_DIR, ent.name, 'creds.json');
+      const credsPath = path.join(sessionsBaseDir, ent.name, 'creds.json');
       if (fs.existsSync(credsPath)) {
         console.log(`[WhatsApp MultiService] Auto-restoring session for sales rep: ${userId}...`);
         initUserSession(userId, options).catch((err) => {

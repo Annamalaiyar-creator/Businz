@@ -456,7 +456,7 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
             value: '100% Synced',
             trend: 'Live & Clean',
             trendUp: true,
-            bottomPrefix: 'Supabase node ',
+            bottomPrefix: 'Hostinger VPS ',
             bottomHighlight: 'Zero latency'
           }
         ].map((kpi, kIdx) => (

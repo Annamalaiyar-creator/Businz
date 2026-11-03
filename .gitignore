@@ -48,3 +48,5 @@ server/uploads/
 .vercel/
 android/
 businz_mobile/
+.playwright-mcp/
+storage/

@@ -30,8 +30,23 @@ const C = {
   amberSoft: '#FFFBEB'
 };
 
+const parseCurrency = (val) => {
+  if (typeof val === 'number') {
+    return Number.isFinite(val) ? val : 0;
+  }
+  if (!val) return 0;
+  const cleaned = String(val).replace(/[^0-9.-]/g, '');
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatCurrency = (val) => {
+  const num = parseCurrency(val);
+  return `₹ ${num.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+};
+
 const formatINR = (n) => {
-  const num = Number(n) || 0;
+  const num = parseCurrency(n);
   if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
   if (num >= 100000) return `₹ ${(num / 100000).toFixed(1)} L`;
   return `₹ ${Math.round(num).toLocaleString('en-IN')}`;
@@ -339,9 +354,12 @@ export default function Customer360PageView({
   const repName = customer.assignedSalesperson || customer.salesPerson || '';
   const contactName = customer.primaryContact?.name || customer.customerName || customer.companyName || '';
   const isLinked = customer.source === 'Zoho Books' || !!customer.zohoContactId || !!customer.customerCode;
-  const quoteAmount = (q) => Number(q.totalAmount || q.amount || q.grandTotal || 0);
+  const quoteAmount = (q) => {
+    if (!q) return 0;
+    return parseCurrency(q.totalAmount ?? q.grandTotal ?? q.grand_total ?? q.amount ?? q.total ?? 0);
+  };
   const openDeals = custDeals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
-  const pipelineValue = openDeals.reduce((s, d) => s + (Number(d.dealValue) || 0), 0);
+  const pipelineValue = openDeals.reduce((s, d) => s + parseCurrency(d.dealValue), 0);
   const quotationsValue = custQuotations.reduce((s, q) => s + quoteAmount(q), 0);
   const pendingTasks = currentTasks.filter(t => !t.completed).length;
   const locationText = [customer.city, customer.state].filter(Boolean).join(', ') || '—';
@@ -882,7 +900,7 @@ export default function Customer360PageView({
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: '900', color: C.ink }}>₹ {quoteAmount(q).toLocaleString()}</span>
+                          <span style={{ fontSize: '14px', fontWeight: '900', color: C.ink }}>{formatCurrency(quoteAmount(q))}</span>
                           <span style={{ fontSize: '11px', backgroundColor: '#DCFCE7', color: C.green, padding: '2px 10px', borderRadius: '50px', fontWeight: '800' }}>{q.status || 'Active'}</span>
                           <button
                             type="button"

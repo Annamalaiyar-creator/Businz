@@ -38,8 +38,12 @@ export function getDeviceInfo() {
  */
 export function createNewSessionId() {
   const sesId = 'SES-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-  localStorage.setItem('controlroom_device_session_id', sesId);
-  localStorage.setItem('controlroom_session_start_time', String(Date.now()));
+  try {
+    localStorage.setItem('controlroom_device_session_id', sesId);
+    localStorage.setItem('controlroom_session_start_time', String(Date.now()));
+  } catch (e) {
+    console.warn('[sessionService] Failed to persist session to localStorage:', e);
+  }
   return sesId;
 }
 
@@ -56,33 +60,39 @@ export function getOrCreateSessionId() {
 
 /**
  * Register or update active session in backend session registry
+ * Server verifies credentials and issues cryptographic session ID (sess_...)
  */
-export async function registerActiveSession(userEmail, empCode, displayName, userRole) {
-  if (!userEmail) return null;
-  const sessionId = getOrCreateSessionId();
+export async function registerActiveSession(userEmail, empCode, displayName, userRole, password = null) {
+  if (!userEmail && !empCode) return null;
   const { device, browser } = getDeviceInfo();
 
   const sessionPayload = {
-    id: sessionId,
-    email: userEmail.toLowerCase().trim(),
+    email: (userEmail || '').toLowerCase().trim(),
     empCode: empCode || 'EMP',
     user: displayName || userEmail,
     role: userRole || 'Employee',
+    ...(password ? { password: String(password) } : {}),
     device: device,
-    browser: browser,
-    ip: 'Live Client',
-    location: 'India',
-    loginTime: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    lastActiveTimestamp: Date.now(),
-    lastActive: 'Just now'
+    browser: browser
   };
 
   try {
-    await fetch('/api/sessions/register', {
+    const res = await fetch('/api/sessions/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify(sessionPayload)
     }).catch(() => null);
+
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.success && data.session?.id) {
+        localStorage.setItem('controlroom_device_session_id', data.session.id);
+        localStorage.setItem('controlroom_session_start_time', String(Date.now()));
+        return data.session;
+      }
+    }
   } catch (err) {
     console.warn('[SessionService] Register notice:', err);
   }
@@ -97,24 +107,54 @@ let isHeartbeatInFlight = false;
  */
 export async function heartbeatActiveSession() {
   const sessionId = localStorage.getItem('controlroom_device_session_id');
-  if (!sessionId) return;
   const isAuthenticated = localStorage.getItem('controlroom_is_authenticated') === 'true';
   if (!isAuthenticated || isHeartbeatInFlight) return;
+
+  const empCode = localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '';
+  const userRole = localStorage.getItem('controlroom_user_role') || '';
+  const userName = localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_logged_user') || '';
+  const userEmail = localStorage.getItem('controlroom_logged_user_email') || '';
 
   isHeartbeatInFlight = true;
   try {
     const res = await fetch('/api/sessions/heartbeat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId })
+      headers: {
+        'Content-Type': 'application/json',
+        'x-session-id': sessionId || '',
+        'x-user-role': userRole,
+        'x-emp-code': empCode
+      },
+      body: JSON.stringify({ 
+        sessionId,
+        empCode,
+        role: userRole,
+        userName
+      })
     }).catch(() => null);
+
+    if (res && res.status === 401) {
+      // Server may have restarted (e.g. PM2 reload or update) clearing in-memory sessions.
+      // Re-hydrate session on server rather than logging out the user!
+      console.warn('[SessionService] Session heartbeat returned 401. Re-hydrating session with server...');
+      const reRegistered = await registerActiveSession(
+        userEmail || userName,
+        empCode,
+        userName,
+        userRole
+      );
+      if (reRegistered && reRegistered.id) {
+        console.log('[SessionService] Session successfully re-registered after server reload.');
+        return;
+      }
+    }
 
     if (res && res.ok) {
       const json = await res.json().catch(() => null);
       if (json && json.status === 'revoked') {
         const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
         if ((Date.now() - sessionStartTime) / 1000 > 30) {
-          console.warn('Session has been revoked remotely. Logging out.');
+          console.warn('Session has been revoked remotely by administrator. Logging out.');
           localStorage.removeItem('controlroom_is_authenticated');
           localStorage.removeItem('controlroom_user_role');
           localStorage.removeItem('controlroom_device_session_id');

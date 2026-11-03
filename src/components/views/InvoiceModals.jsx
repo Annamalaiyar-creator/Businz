@@ -58,7 +58,7 @@ export function CloseInvoiceReasonModal({ closeInvoiceReasonModal, onClose, setI
                   pay: 'Closed (No Pending)'
                 } : invItem));
               }
-              alert(`✅ Invoice ${closeInvoiceReasonModal.invNo || closeInvoiceReasonModal.code} successfully CLOSED with reason recorded.`);
+              alert(`Invoice ${closeInvoiceReasonModal.invNo || closeInvoiceReasonModal.code} successfully CLOSED with reason recorded.`);
               onClose();
             }}
             style={{

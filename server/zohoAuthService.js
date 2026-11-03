@@ -5,11 +5,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { query, isDbConnected } from './db.js';
 import { getStoreFilePath } from './runtimePaths.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const TOKEN_CACHE_FILE = getStoreFilePath('zoho_token_cache.json');
-const CONFIG_FILE = getStoreFilePath('zoho_config.json');
+const getTokenCacheFilePath = () => getStoreFilePath('zoho_token_cache.json');
+const getConfigFilePath = () => getStoreFilePath('zoho_config.json');
 const SAFETY_BUFFER_MS = 5 * 60 * 1000; // 5-minute safety buffer
 
 // Metrics / Counters for Audit & Verification
@@ -28,13 +29,13 @@ let tokenExpiresAt = 0;
 let tokenUpdatedAt = 0;
 let refreshPromise = null;
 
-// Default Credentials fallback
+// Default Credentials fallback (Environment variables only; zero hardcoded operational secrets)
 const DEFAULT_CONFIG = {
-  companyName: 'VRM Structures India Private Limited',
-  orgId: process.env.ZOHO_ORG_ID || '60082137608',
-  clientId: process.env.ZOHO_CLIENT_ID || '1000.9U5BAN338075M5HBI3U8K1VBNKUU8K',
-  clientSecret: process.env.ZOHO_CLIENT_SECRET || 'e82079a5165e3b2e75fdc602f3e08fd38489d75f13',
-  refreshToken: process.env.ZOHO_REFRESH_TOKEN || '1000.dbba41673c1e444e90955ea2acac3067.99dacc15c2ef094541e7cc913d41d831',
+  companyName: process.env.ZOHO_COMPANY_NAME || '',
+  orgId: process.env.ZOHO_ORG_ID || '',
+  clientId: process.env.ZOHO_CLIENT_ID || '',
+  clientSecret: process.env.ZOHO_CLIENT_SECRET || '',
+  refreshToken: process.env.ZOHO_REFRESH_TOKEN || '',
   apiDomain: process.env.ZOHO_API_DOMAIN || 'https://www.zohoapis.in',
   accountsDomain: process.env.ZOHO_ACCOUNTS_DOMAIN || 'https://accounts.zoho.in',
   lastVerifiedAt: null,
@@ -44,11 +45,15 @@ const DEFAULT_CONFIG = {
 // Active configuration state
 let activeConfig = { ...DEFAULT_CONFIG };
 
-// Load config from disk / DB on module startup
+// Load config from disk / DB on module startup (strictly disabled in test mode)
 (function initZohoConfig() {
+  if (isOptimizationTestMode()) {
+    return;
+  }
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const data = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const configFile = getConfigFilePath();
+    if (fs.existsSync(configFile)) {
+      const data = JSON.parse(fs.readFileSync(configFile, 'utf8'));
       if (data && typeof data === 'object') {
         activeConfig = { ...DEFAULT_CONFIG, ...data };
         console.log(`[Zoho Auth] Loaded Zoho configuration for "${activeConfig.companyName || activeConfig.orgId}" from disk.`);
@@ -56,28 +61,32 @@ let activeConfig = { ...DEFAULT_CONFIG };
       }
     }
     // If not on disk, seed initial default config file
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8');
+    fs.writeFileSync(configFile, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8');
   } catch (err) {
     console.warn('[Zoho Auth] Failed to read/seed zoho_config.json:', err.message);
   }
 })();
 
-// Dynamic reference to zoho credentials
+// Dynamic reference to zoho credentials (strictly env/activeConfig; zero hardcoded operational secrets)
 const getCredentials = () => ({
-  orgId: activeConfig.orgId || process.env.ZOHO_ORG_ID || '60082137608',
-  clientId: activeConfig.clientId || process.env.ZOHO_CLIENT_ID || '1000.9U5BAN338075M5HBI3U8K1VBNKUU8K',
-  clientSecret: activeConfig.clientSecret || process.env.ZOHO_CLIENT_SECRET || 'e82079a5165e3b2e75fdc602f3e08fd38489d75f13',
-  refreshToken: activeConfig.refreshToken || process.env.ZOHO_REFRESH_TOKEN || '1000.dbba41673c1e444e90955ea2acac3067.99dacc15c2ef094541e7cc913d41d831',
+  orgId: activeConfig.orgId || process.env.ZOHO_ORG_ID || '',
+  clientId: activeConfig.clientId || process.env.ZOHO_CLIENT_ID || '',
+  clientSecret: activeConfig.clientSecret || process.env.ZOHO_CLIENT_SECRET || '',
+  refreshToken: activeConfig.refreshToken || process.env.ZOHO_REFRESH_TOKEN || '',
   apiDomain: activeConfig.apiDomain || process.env.ZOHO_API_DOMAIN || 'https://www.zohoapis.in',
   accountsDomain: activeConfig.accountsDomain || process.env.ZOHO_ACCOUNTS_DOMAIN || 'https://accounts.zoho.in',
-  companyName: activeConfig.companyName || 'VRM Structures India Private Limited'
+  companyName: activeConfig.companyName || process.env.ZOHO_COMPANY_NAME || ''
 });
 
-// Load cached token on module startup
+// Load cached token on module startup (strictly disabled in test mode)
 (function initTokenCache() {
+  if (isOptimizationTestMode()) {
+    return;
+  }
   try {
-    if (fs.existsSync(TOKEN_CACHE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf8'));
+    const tokenCacheFile = getTokenCacheFilePath();
+    if (fs.existsSync(tokenCacheFile)) {
+      const data = JSON.parse(fs.readFileSync(tokenCacheFile, 'utf8'));
       if (data && data.accessToken && data.expiresAt > Date.now() + SAFETY_BUFFER_MS) {
         cachedAccessToken = data.accessToken;
         tokenExpiresAt = data.expiresAt;
@@ -91,6 +100,9 @@ const getCredentials = () => ({
 })();
 
 async function persistToken(token, expiresInSeconds) {
+  if (isOptimizationTestMode()) {
+    return;
+  }
   cachedAccessToken = token;
   tokenExpiresAt = Date.now() + (expiresInSeconds * 1000);
   tokenUpdatedAt = Date.now();
@@ -102,7 +114,7 @@ async function persistToken(token, expiresInSeconds) {
   };
 
   try {
-    fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(cachePayload, null, 2), 'utf8');
+    fs.writeFileSync(getTokenCacheFilePath(), JSON.stringify(cachePayload, null, 2), 'utf8');
   } catch (err) {
     console.warn('[Zoho Auth] Disk token cache write failed:', err.message);
   }
@@ -124,9 +136,14 @@ export async function invalidateZohoAccessToken() {
   tokenExpiresAt = 0;
   tokenUpdatedAt = 0;
 
+  if (isOptimizationTestMode()) {
+    return;
+  }
+
   try {
-    if (fs.existsSync(TOKEN_CACHE_FILE)) {
-      fs.unlinkSync(TOKEN_CACHE_FILE);
+    const tokenCacheFile = getTokenCacheFilePath();
+    if (fs.existsSync(tokenCacheFile)) {
+      fs.unlinkSync(tokenCacheFile);
     }
   } catch (_) {}
 
@@ -161,6 +178,10 @@ export function getZohoConfigInfo(includeSecrets = true) {
  * Updates Zoho company credentials, saves to disk & DB, and purges previous cached tokens.
  */
 export async function updateZohoConfig(newConfig = {}) {
+  if (isOptimizationTestMode()) {
+    throw new Error('[FAIL-CLOSED] External Zoho configuration updates are blocked in optimization test mode.');
+  }
+
   activeConfig = {
     ...activeConfig,
     companyName: (newConfig.companyName !== undefined ? newConfig.companyName : activeConfig.companyName || '').trim(),
@@ -177,8 +198,8 @@ export async function updateZohoConfig(newConfig = {}) {
 
   // Persist to disk
   try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(activeConfig, null, 2), 'utf8');
-    console.log(`[Zoho Auth] Successfully persisted updated credentials for "${activeConfig.companyName}" to ${CONFIG_FILE}`);
+    fs.writeFileSync(getConfigFilePath(), JSON.stringify(activeConfig, null, 2), 'utf8');
+    console.log(`[Zoho Auth] Successfully persisted updated credentials for "${activeConfig.companyName}" to ${getConfigFilePath()}`);
   } catch (err) {
     console.warn('[Zoho Auth] Disk config write failed:', err.message);
   }
@@ -205,6 +226,10 @@ export async function updateZohoConfig(newConfig = {}) {
  * Centralized Access Token Getter with Concurrency Lock (Mutex) and 5-min safety buffer.
  */
 export function getZohoAccessToken(forceRefresh = false) {
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] External Zoho OAuth authentication is blocked in optimization test mode.'));
+  }
+
   const now = Date.now();
 
   if (!forceRefresh && cachedAccessToken && tokenExpiresAt > now + SAFETY_BUFFER_MS) {
@@ -298,6 +323,10 @@ export function getZohoAccessToken(forceRefresh = false) {
  * Standardized HTTP caller for Zoho Books with automatic 401 retry and 429 backoff handling.
  */
 export async function zohoRequest(requestOptions, postPayload = null, retryCount = 0) {
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] External Zoho Books API requests are blocked in optimization test mode.'));
+  }
+
   stats.apiRequestsCount++;
   const token = await getZohoAccessToken();
   const creds = getCredentials();
@@ -418,6 +447,15 @@ export async function zohoRequest(requestOptions, postPayload = null, retryCount
  * Tests connection to Zoho Books OAuth & API using provided custom creds or currently saved creds.
  */
 export async function testZohoConnection(customCreds = null) {
+  if (isOptimizationTestMode()) {
+    return {
+      success: false,
+      connected: false,
+      testMode: true,
+      error: '[FAIL-CLOSED] External Zoho connection tests are blocked in optimization test mode.'
+    };
+  }
+
   const creds = customCreds ? {
     orgId: String(customCreds.orgId || '').trim(),
     clientId: String(customCreds.clientId || '').trim(),
@@ -558,7 +596,7 @@ export async function testZohoConnection(customCreds = null) {
         activeConfig.lastVerifiedAt = new Date().toISOString();
         activeConfig.lastVerifiedOrgName = verifiedInfo.name;
         try {
-          fs.writeFileSync(CONFIG_FILE, JSON.stringify(activeConfig, null, 2), 'utf8');
+          fs.writeFileSync(getConfigFilePath(), JSON.stringify(activeConfig, null, 2), 'utf8');
         } catch (_) {}
       }
 
@@ -600,6 +638,10 @@ export function getZohoAuthStats() {
  * Exchanges a temporary grant token (authorization code from Self Client) for a permanent Refresh Token.
  */
 export async function exchangeAuthorizationCode({ code, clientId, clientSecret, orgId, apiDomain, accountsDomain, companyName }) {
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] External Zoho authorization code exchange is blocked in optimization test mode.'));
+  }
+
   const cId = (clientId || activeConfig.clientId || '').trim();
   const cSec = (clientSecret || activeConfig.clientSecret || '').trim();
   const oId = (orgId || activeConfig.orgId || '').trim();

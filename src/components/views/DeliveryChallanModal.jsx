@@ -5,6 +5,7 @@ import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { resolveProductCode, normalizeProductName, CANONICAL_PRODUCT_ALIASES, VRM_PRODUCTS } from "../../utils/vrmProductsData";
 import { notifyDispatchCompletedToSales } from "../../services/notificationService";
 import { getNextSequence } from "../../utils/sequenceGenerator";
+import { getHsnCode } from "../../utils/hsnCodeService";
 
 export default function DeliveryChallanModal({
   pendingDcModal,
@@ -273,7 +274,7 @@ export default function DeliveryChallanModal({
         dcQty: 1,
         rate: 0,
         liveStock: 0,
-        hsn: '76109090'
+        hsn: getHsnCode('Custom Item')
       }
     ]);
     setSelectedItems(prev => [...prev, newIdx]);
@@ -305,6 +306,9 @@ export default function DeliveryChallanModal({
           updated.code = match.code;
           updated.uom = match.uom || 'Nos';
           updated.liveStock = getItemWarehouseStock(match);
+          updated.hsn = match.hsn || getHsnCode(match);
+        } else {
+          updated.hsn = getHsnCode(value);
         }
       } else if (field === 'code') {
         const match = (VRM_PRODUCTS || []).find(p => p.code.toLowerCase() === String(value).toLowerCase());
@@ -312,6 +316,7 @@ export default function DeliveryChallanModal({
           updated.name = match.name;
           updated.uom = match.uom || 'Nos';
           updated.liveStock = getItemWarehouseStock(match);
+          updated.hsn = match.hsn || getHsnCode(match);
         } else {
           updated.liveStock = getItemWarehouseStock({ code: value, name: updated.name });
         }
@@ -387,7 +392,7 @@ export default function DeliveryChallanModal({
         qty: it.dcQty || 1,
         dcQty: it.dcQty || 1,
         rate: it.rate || 0,
-        hsn: it.hsn || '76109090'
+        hsn: it.hsn || getHsnCode(it)
       })),
       createdAt: new Date().toISOString()
     };

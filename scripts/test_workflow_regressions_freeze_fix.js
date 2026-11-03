@@ -159,3 +159,4 @@ test('5. End-to-End Order-to-Dispatch Lifecycle Status Transitions', () => {
 console.log('\n===============================================================');
 console.log(`🎉 ALL ${passCount} REGRESSION TESTS PASSED SUCCESSFULLY!`);
 console.log('===============================================================\n');
+process.exit(0);

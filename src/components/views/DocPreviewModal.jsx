@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Download, X, FileText, Upload, AlertTriangle } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
-import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { validateClientFile } from "../../utils/bomStorageClient";
 
 export default function DocPreviewModal({ previewDocModal, onClose }) {
@@ -19,8 +19,10 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
       }
       return getMediaFromCache(rawDoc);
     } else if (rawDoc && typeof rawDoc === 'object') {
-      const immediate = rawDoc.previewUrl || rawDoc.url || rawDoc.dataUrl || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
-      if (immediate) return immediate;
+      const immediate = rawDoc.previewUrl || rawDoc.url || rawDoc.dataUrl || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null) || resolveDocumentUrl(rawDoc);
+      if (immediate) {
+        return (typeof immediate === 'string' && immediate.startsWith('/uploads/')) ? `/api${immediate}` : immediate;
+      }
       if (rawDoc._rawFile && (rawDoc._rawFile instanceof Blob || rawDoc._rawFile instanceof File)) {
         try { return URL.createObjectURL(rawDoc._rawFile); } catch (_) { }
       }
@@ -288,6 +290,26 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
             <img
               src={resolvedData}
               alt={docName}
+              onError={(e) => {
+                if (!e.currentTarget.dataset.retried && docName) {
+                  e.currentTarget.dataset.retried = 'true';
+                  fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data?.found && data?.url) {
+                        const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                        saveMediaToCache(docName, cleanUrl);
+                        setResolvedData(cleanUrl);
+                      } else if (!e.currentTarget.src.includes('/api/uploads/')) {
+                        e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                      }
+                    }).catch(() => {
+                      if (!e.currentTarget.src.includes('/api/uploads/')) {
+                        e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                      }
+                    });
+                }
+              }}
               style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
             />
           ) : isVid ? (

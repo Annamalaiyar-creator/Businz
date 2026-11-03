@@ -675,6 +675,35 @@ return (
             }}>
               {invNo}
             </span>
+            {bom?.docType === 'DC' ? (
+              <span style={{
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                color: '#92400E', padding: '3px 12px',
+                borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                letterSpacing: '0.5px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+                <Truck size={13} strokeWidth={2.2} />
+                <span>DC (DELIVERY CHALLAN)</span>
+              </span>
+            ) : (
+              <span style={{
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1E40AF', padding: '3px 12px',
+                borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                letterSpacing: '0.5px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+                <FileText size={13} strokeWidth={2.2} />
+                <span>TAX INVOICE</span>
+              </span>
+            )}
             <span style={{
               backgroundColor: '#DCFCE7',
               color: '#166534',

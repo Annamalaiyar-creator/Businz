@@ -105,7 +105,9 @@ export function validateCategory(category) {
   if (!category || typeof category !== 'string') {
     return 'general';
   }
-  const clean = category.trim().toLowerCase();
+  let clean = category.trim().toLowerCase();
+  if (clean.startsWith('payment-proof')) clean = 'payment-proof';
+  if (clean.startsWith('delivery-proof')) clean = 'delivery-proof';
   if (!ALLOWED_CATEGORIES.has(clean)) {
     throw new Error(`Invalid category "${clean}". Allowed: ${Array.from(ALLOWED_CATEGORIES).join(', ')}`);
   }
@@ -181,6 +183,7 @@ export async function uploadBomDocument({ bomCode, category, fileBuffer, fileNam
   const canonicalMetadata = {
     storageBucket: BUCKET_NAME,
     storagePath: storagePath,
+    url: `/api/uploads/${BUCKET_NAME}/${storagePath}`,
     name: safeName,
     originalName: safeName,
     type: cleanMime,
@@ -276,8 +279,7 @@ export async function validateBusinzSession(sessionId) {
       .maybeSingle();
 
     if (error || !sessionRow) {
-      // In local environment or before session registry sync, allow formatted session ID
-      return { valid: true, sessionId: cleanId, user: 'Active Staff', role: 'Employee' };
+      return { valid: false, error: 'Session not found in persistent registry' };
     }
 
     if (sessionRow.status && sessionRow.status !== 'active') {
@@ -294,9 +296,10 @@ export async function validateBusinzSession(sessionId) {
       sessionId: cleanId,
       user: parsed.user || 'User',
       email: parsed.email,
+      empCode: parsed.empCode || parsed.employee_code,
       role: parsed.role || 'Employee'
     };
   } catch (err) {
-    return { valid: true, sessionId: cleanId, user: 'Active Staff', role: 'Employee' };
+    return { valid: false, error: err.message || 'Session verification error' };
   }
 }

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchMasterBranding, getCachedBranding, saveCompanyBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { isTamilNaduIntra } from '../utils/gstHelper';
+import { getHsnCode } from '../utils/hsnCodeService';
 import {
   Printer,
   Download,
@@ -43,9 +44,9 @@ import {
 // Default Template Configuration Settings
 export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   // Theme & Identity
-  accentColor: '#0E7490', // Default VRM Teal
+  accentColor: '#1E2F5B', // Official VRM Blue (from VRM Logo)
   documentTitle: 'Proforma Invoice',
-  companyName: 'VRM Structures India Pvt Ltd.',
+  companyName: 'VRM STRUCTURES INDIA PRIVATE LIMITED',
   companyTagline: '',
   showLogo: true,
   customLogoUrl: VRM_OFFICIAL_LOGO, // Official VRM Logo base64
@@ -59,11 +60,11 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   showCompanyWebsite: false,
 
   // Company Address & Reg Details
-  companyAddressLine1: '1427, GNT Road, Nagappa Industrial Estate,',
-  companyAddressLine2: 'Puzhal,\nChennai, Tamil Nadu 600066\nIndia',
+  companyAddressLine1: '1427, GNT Road, Nagappa Industrial Estate, Puzhal,',
+  companyAddressLine2: 'Chennai, Tamil Nadu 600066\nIndia',
   companyGstin: '33AAGCV4262N1ZZ',
   companyCin: '',
-  companyUdyam: 'MSME/Udyam No',
+  companyUdyam: '',
   companyPhone: '+91 98847 20789',
   companyEmail: 'sales@vrmstructures.com',
   companyWebsite: 'www.vrmstructures.com',
@@ -134,9 +135,9 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   bankHeading: 'Account Details:',
   bankBeneficiary: 'VRM Structures India Private Limited',
   bankName: 'HDFC Bank',
-  bankAccountNo: '50200031629272',
-  bankIfsc: 'HDFC0000574',
-  bankBranch: 'Kodambakkam',
+  bankAccountNo: '50200031629',
+  bankIfsc: 'HDFC0007315',
+  bankBranch: 'VINAYAGAPURAM',
   bankAccountType: 'Current Account',
 
   // Terms & Conditions
@@ -169,7 +170,7 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
 };
 
 const COLOR_PRESETS = [
-  { name: 'VRM Teal', hex: '#0E7490' },
+  { name: 'VRM Blue', hex: '#1E2F5B' },
   { name: 'Royal Navy', hex: '#1E3A8A' },
   { name: 'Tech Cobalt', hex: '#2563EB' },
   { name: 'Emerald Forest', hex: '#059669' },
@@ -248,7 +249,7 @@ function numberToWordsINR(num) {
 
   const integerPart = Math.floor(Math.abs(num));
   const words = convert(integerPart);
-  return `Indian Rupee ${words} Only`;
+  return `Indian Rupees ${words} Only`;
 }
 
 // Format date nicely (DD-MM-YYYY to match official format)
@@ -261,6 +262,22 @@ function formatDate(dateStr) {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     return `${day}-${month}-${year}`;
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+// Format date in official long document format (e.g. "29 October 2026") matching redesigned PI template
+function formatDocumentDate(dateStr) {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const day = d.getDate();
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
   } catch (e) {
     return dateStr;
   }
@@ -307,7 +324,26 @@ export function VRMProformaInvoicePrintSheet({
       showSubtotalSummary: false
     } : {})
   };
-  const accent = cfg.accentColor || '#0E7490';
+
+  // Ensure company address is strictly formatted into 3 lines:
+  // Line 1: 1427, GNT Road, Nagappa Industrial Estate, Puzhal,
+  // Line 2: Chennai, Tamil Nadu 600066
+  // Line 3: India
+  if (
+    cfg.companyAddressLine1 === '1427, GNT Road, Nagappa Industrial Estate,' ||
+    cfg.companyAddressLine2?.startsWith('Puzhal,\n') ||
+    cfg.companyAddressLine2?.startsWith('Puzhal,')
+  ) {
+    cfg.companyAddressLine1 = '1427, GNT Road, Nagappa Industrial Estate, Puzhal,';
+    cfg.companyAddressLine2 = (cfg.companyAddressLine2 || '')
+      .replace(/^Puzhal,\s*\n?/i, '')
+      .trim();
+    if (!cfg.companyAddressLine2) {
+      cfg.companyAddressLine2 = 'Chennai, Tamil Nadu 600066\nIndia';
+    }
+  }
+
+  const accent = cfg.accentColor || '#1E2F5B';
 
   // Inline Click-to-Edit & Quick-Remove Helper Component
   const EditableText = ({
@@ -638,7 +674,7 @@ export function VRMProformaInvoicePrintSheet({
     {
       name: pi.productName || 'Solar Mounting Structures & Fasteners',
       description: pi.productDescription || (pi.productName ? `Supply of ${pi.productName} as per technical specifications` : 'Standard VRM Solar Structure & Accessories Kit'),
-      hsn: pi.hsn || '73089090',
+      hsn: pi.hsn || getHsnCode(pi.productName || 'Solar Mounting Structures & Fasteners'),
       qty: pi.quantity || 1,
       uom: pi.uom || 'Nos',
       rate: Number(pi.unitValue || (typeof pi.amount === 'string' ? parseFloat(pi.amount.replace(/[^0-9.]/g, '')) : pi.amount) || 0),
@@ -742,7 +778,8 @@ export function VRMProformaInvoicePrintSheet({
     Object.keys(presetGroups).forEach(grpId => {
       const grp = presetGroups[grpId];
       const uPrice = parseFloat(grp.kitPrice) || 0;
-      const sCount = parseInt(grp.setCount) || 1;
+      const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 1;
+      const pUnit = grp.unit || 'Sets';
       const grpSub = uPrice * sCount;
       const gItems = rawItems.filter(it => (it.presetGroupId || 'legacy_default') === grpId);
       const tQty = gItems.reduce((s, it) => s + (parseFloat(it.qty) || 1), 0);
@@ -750,11 +787,15 @@ export function VRMProformaInvoicePrintSheet({
       if (tQty > 0) {
         gItems.forEach(it => {
           const itShare = grpSub * ((parseFloat(it.qty) || 1) / tQty);
-          const itRate = parseFloat(String(it.gstRate || grp.gstRate || '18%').replace('%', '')) || 0;
+          const rawItRate = it.gstRate ?? grp.gstRate ?? '18%';
+          const cleanedItRate = String(rawItRate).replace('%', '').trim();
+          const itRate = isNaN(parseFloat(cleanedItRate)) ? 18 : parseFloat(cleanedItRate);
           grpGst += itShare * (itRate / 100);
         });
       } else {
-        const rPct = parseFloat(String(grp.gstRate || '18%').replace('%', '')) || 18;
+        const rawGrpRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18%';
+        const cleanedGrpRate = String(rawGrpRate).replace('%', '').trim();
+        const rPct = isNaN(parseFloat(cleanedGrpRate)) ? 18 : parseFloat(cleanedGrpRate);
         grpGst = grpSub * (rPct / 100);
       }
       groupMetaMap[grpId] = {
@@ -763,6 +804,7 @@ export function VRMProformaInvoicePrintSheet({
         kitPrice: uPrice,
         taxable: grpSub,
         setCount: sCount,
+        unit: pUnit,
         groupSubtotal: grpSub,
         groupGst: grpGst,
         groupTotal: grpSub + grpGst,
@@ -781,7 +823,9 @@ export function VRMProformaInvoicePrintSheet({
     let grpGst = 0;
     rawItems.forEach(it => {
       const itShare = grpSub * ((parseFloat(it.qty) || 1) / (tQty || 1));
-      const itRate = parseFloat(String(it.gstRate || '18%').replace('%', '')) || 18;
+      const rawItRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18%';
+      const cleanedItRate = String(rawItRate).replace('%', '').trim();
+      const itRate = isNaN(parseFloat(cleanedItRate)) ? 18 : parseFloat(cleanedItRate);
       grpGst += itShare * (itRate / 100);
     });
     groupMetaMap['implicit_preset_1'] = {
@@ -886,7 +930,9 @@ export function VRMProformaInvoicePrintSheet({
     const discPct = parseFloat(it.discountPct || it.discount) || 0;
     const discAmt = gross * (discPct / 100);
     const taxable = isPreset ? 0 : (gross - discAmt);
-    const gRate = parseFloat(String(it.gstRate || grpMeta?.gstRateStr || '18%').replace('%', '')) || 18;
+    const rawGRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : (grpMeta?.gstRateStr || '18%');
+    const cleanedGRate = String(rawGRate).replace('%', '').trim();
+    const gRate = isNaN(parseFloat(cleanedGRate)) ? 18 : parseFloat(cleanedGRate);
     const gstAmt = isPreset ? 0 : (taxable * (gRate / 100));
     const lineTotal = taxable + gstAmt;
 
@@ -900,7 +946,7 @@ export function VRMProformaInvoicePrintSheet({
       totalPresetsCount: distinctPrintGroupIds.length,
       name: it.name || it.productName || 'Item',
       description: it.description || it.specifications || '',
-      hsn: it.hsn || '73089090',
+      hsn: it.hsn || getHsnCode(it),
       qty: q,
       uom: it.uom || it.unit || 'Nos',
       rate: r,
@@ -915,6 +961,7 @@ export function VRMProformaInvoicePrintSheet({
       groupCount,
       presetName: grpMeta?.presetName || grpMeta?.name || '',
       setCount: grpMeta?.setCount || 1,
+      unit: grpMeta?.unit || 'Sets',
       groupPrice: grpMeta?.kitPrice || grpMeta?.groupSubtotal || 0,
       groupTaxable: grpMeta?.groupSubtotal || grpMeta?.taxable || 0,
       groupGst: grpMeta?.groupGst || 0,
@@ -926,11 +973,11 @@ export function VRMProformaInvoicePrintSheet({
   const presetSubtotalSum = Object.values(groupMetaMap).reduce((s, g) => s + g.groupSubtotal, 0);
   const presetGstSum = Object.values(groupMetaMap).reduce((s, g) => s + g.groupGst, 0);
 
-  const customSubtotal = items.filter(it => !it.isPresetItem).reduce((sum, item) => sum + item.taxable, 0);
-  const customGst = items.filter(it => !it.isPresetItem).reduce((sum, item) => sum + item.gstAmt, 0);
+  const customSubtotal = items.filter(it => !it.isPresetItem && !it.presetGroupId).reduce((sum, item) => sum + item.taxable, 0);
+  const customGst = items.filter(it => !it.isPresetItem && !it.presetGroupId).reduce((sum, item) => sum + item.gstAmt, 0);
 
   const subTotal = (presetSubtotalSum + customSubtotal) || (Number(pi.unitValue) || 0);
-  const totalGst = (presetGstSum + customGst) || (subTotal * 0.18);
+  const totalGst = presetGstSum + customGst;
   const grandTotal = subTotal + totalGst;
 
   // Group GST by rate tier (e.g. 5%, 18%)
@@ -938,27 +985,27 @@ export function VRMProformaInvoicePrintSheet({
 
   // From preset groups
   Object.values(groupMetaMap).forEach(grp => {
-    const rate = parseFloat(String(grp.gstRateStr || grp.gstRate || '18').replace('%', '')) || 18;
+    const rawRate = grp.gstRateStr || grp.gstRate || '18';
+    const cleanedRate = String(rawRate).replace('%', '').trim();
+    const rate = isNaN(parseFloat(cleanedRate)) ? 18 : parseFloat(cleanedRate);
     if (!gstTiersMap[rate]) gstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
     gstTiersMap[rate].taxable += (grp.groupSubtotal || 0);
     gstTiersMap[rate].gstAmt += (grp.groupGst || 0);
   });
 
   // From custom non-preset line items
-  items.filter(it => !it.isPresetItem).forEach(it => {
-    const rate = it.gRate || 18;
+  items.filter(it => !it.isPresetItem && !it.presetGroupId).forEach(it => {
+    const rate = it.gRate !== undefined && !isNaN(it.gRate) ? it.gRate : 18;
     if (!gstTiersMap[rate]) gstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
     gstTiersMap[rate].taxable += (it.taxable || 0);
     gstTiersMap[rate].gstAmt += (it.gstAmt || 0);
   });
 
   const rawGstTiers = Object.values(gstTiersMap)
-    .filter(t => t.gstAmt > 0 || t.taxable > 0)
+    .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
     .sort((a, b) => a.rate - b.rate);
 
-  const gstTiers = rawGstTiers.length > 0
-    ? rawGstTiers
-    : (totalGst > 0 ? [{ rate: 18, taxable: subTotal, gstAmt: totalGst }] : []);
+  const gstTiers = rawGstTiers;
 
   const piGst = pi.gstNo || pi.gstin || pi.gst || pi.customerGst || '';
   const piState = (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress?.state : pi.deliveryState) ||
@@ -1015,6 +1062,443 @@ export function VRMProformaInvoicePrintSheet({
   ];
 
   const hiddenElements = ALL_ELEMENTS.filter(item => cfg[item.key] === false);
+
+  const renderRedesignedProformaInvoice = () => {
+    try {
+      const phoneVal = (pi.phone || pi.contactPhone || pi.customerPhone || pi.mobileNumber || pi.mobile || '').toString().replace(/[()]/g, '').trim();
+      const roundOffVal = Math.round(grandTotal) - grandTotal;
+      const hasRoundOff = Math.abs(roundOffVal) > 0.001;
+      const repName = pi.salesPerson || pi.salesperson || pi.sales_person_name || pi.createdByName || 'Sanjai Kumar';
+      const docDateStr = formatDocumentDate(pi.piDate || pi.date);
+      const docNoStr = pi.piNo || pi.proformaInvoiceNo || pi.invoiceNo || 'VRM-PI-2026-288';
+      const primaryTitle = (cfg.documentTitle || 'PROFORMA INVOICE').toUpperCase();
+
+    return (
+      <div
+        className="vrm-print-outer-box redesigned-pi-sheet"
+        style={{
+          backgroundColor: '#FFFFFF',
+          padding: '24px 28px',
+          color: '#0F172A',
+          fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+          position: 'relative'
+        }}
+      >
+        {/* 1. TOP HEADER (LOGO + COMPANY on Left | TITLE + META on Right) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
+          {/* LEFT: COMPANY LOGO & DETAILS */}
+          <div style={{ flex: '1 1 auto' }}>
+            <div style={{ height: '44px', maxWidth: '200px', display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
+              <img
+                src={getSafePrintImageUrl(cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')), VRM_OFFICIAL_LOGO)}
+                alt="VRM Structures"
+                style={{ maxHeight: '42px', maxWidth: '190px', width: 'auto', height: 'auto', display: 'block' }}
+                onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_LOGO; }}
+              />
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F3D6E', letterSpacing: '0.2px', textTransform: 'uppercase', marginBottom: '2px' }}>
+              <EditableText
+                value={cfg.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED'}
+                fallback="VRM STRUCTURES INDIA PRIVATE LIMITED"
+                onSave={(v) => onUpdateSetting?.({ companyName: v })}
+              />
+            </div>
+            <div style={{ fontSize: '9.5px', color: '#334155', lineHeight: '1.45' }}>
+              <div>1427, GNT Road, Nagappa Industrial Estate, Puzhal,</div>
+              <div>Chennai, Tamil Nadu 600066, India</div>
+              <div style={{ marginTop: '2px' }}>
+                <strong style={{ color: '#0F172A' }}>GSTIN: </strong>
+                <EditableText
+                  value={cfg.companyGstin || '33AAGCV4262N1ZZ'}
+                  fallback="33AAGCV4262N1ZZ"
+                  onSave={(v) => onUpdateSetting?.({ companyGstin: v })}
+                  style={{ fontWeight: '700', color: '#0F172A' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: DOCUMENT TITLE + PI NO + DATE + SALES EXECUTIVE */}
+          <div style={{ textAlign: 'right', flex: '0 0 auto', paddingTop: '2px' }}>
+            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F3D6E', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+              <EditableText
+                value={primaryTitle}
+                fallback="PROFORMA INVOICE"
+                onSave={(v) => onUpdateSetting?.({ documentTitle: v })}
+              />
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#334155', marginTop: '3px' }}>
+              <EditableText
+                value={docNoStr}
+                fallback="VRM-PI-2026-288"
+                onSave={(v) => onUpdatePiData?.({ piNo: v })}
+                style={{ fontWeight: '700', color: '#0F172A' }}
+              />
+              {' | '}
+              <EditableText
+                value={docDateStr}
+                fallback="29 October 2026"
+                onSave={(v) => onUpdatePiData?.({ piDate: v })}
+              />
+            </div>
+            <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
+              Sales Executive: <EditableText
+                value={repName}
+                fallback="Sanjai Kumar"
+                onSave={(v) => onUpdatePiData?.({ salesPerson: v, salesperson: v })}
+                style={{ color: '#334155', fontWeight: '500' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 2. GOLD / OCHRE ACCENT DIVIDER */}
+        <div style={{ height: '2.5px', backgroundColor: '#D97706', margin: '14px 0 16px 0', width: '100%' }} />
+
+        {/* 3. BILL TO & SHIP TO SECTION (CLEAN 2-COLUMN TEXT) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '36px', marginBottom: '16px', fontSize: '10px', lineHeight: '1.45' }}>
+          {/* BILL TO */}
+          <div>
+            <div style={{ fontSize: '10.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+              BILL TO
+            </div>
+            <div style={{ fontSize: '11.5px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '2px' }}>
+              <EditableText
+                value={customerName}
+                fallback="VEL SYSTEMS"
+                onSave={(v) => onUpdatePiData?.({ customerName: v, vendor: v, vendorName: v })}
+              />
+            </div>
+            {bStreet ? <div>{bStreet}</div> : null}
+            <div>
+              {`${bCity ? bCity + ', ' : ''}${bState ? bState + ' ' : ''}${bPincode ? bPincode + ', ' : ''}India`}
+            </div>
+            {pi.gstNo ? (
+              <div style={{ marginTop: '2px' }}>
+                <strong style={{ color: '#0F172A' }}>GSTIN: </strong>
+                <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.gstNo}</span>
+              </div>
+            ) : null}
+            {phoneVal ? (
+              <div style={{ color: '#334155', marginTop: '1px' }}>
+                Customer Mobile: {phoneVal}
+              </div>
+            ) : null}
+          </div>
+
+          {/* SHIP TO */}
+          <div>
+            <div style={{ fontSize: '10.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+              SHIP TO
+            </div>
+            <div style={{ color: '#334155', whiteSpace: 'pre-line' }}>
+              {sameAsBilling
+                ? `${bStreet ? bStreet + '\n' : ''}${bCity ? bCity + ', ' : ''}${bState ? bState + ' ' : ''}${bPincode ? bPincode + ', ' : ''}India`
+                : `${dStreet ? dStreet + '\n' : ''}${dCity ? dCity + ', ' : ''}${dState ? dState + ' ' : ''}${dPincode ? dPincode + ', ' : ''}India`}
+            </div>
+          </div>
+        </div>
+
+        {/* 4. LINE ITEMS TABLE (NAVY BLUE HEADER + STACKED GST RATES/AMTS) */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px', marginBottom: '12px' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#0B3B60', color: '#FFFFFF', fontWeight: '700', fontSize: '9px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+              <th style={{ padding: '8px 10px', textAlign: 'left' }}>ITEM & DESCRIPTION</th>
+              <th style={{ padding: '8px 6px', textAlign: 'center', width: '60px' }}>QTY</th>
+              <th style={{ padding: '8px 8px', textAlign: 'right', width: '80px' }}>RATE (₹)</th>
+              <th style={{ padding: '8px 8px', textAlign: 'right', width: '90px' }}>TAXABLE (₹)</th>
+              {isIntra ? (
+                <>
+                  <th style={{ padding: '5px 6px', textAlign: 'right', width: '75px' }}>
+                    <div>CGST</div>
+                    <div style={{ fontSize: '7.5px', fontWeight: '500', opacity: 0.9 }}>Rate / Amt (₹)</div>
+                  </th>
+                  <th style={{ padding: '5px 6px', textAlign: 'right', width: '75px' }}>
+                    <div>SGST</div>
+                    <div style={{ fontSize: '7.5px', fontWeight: '500', opacity: 0.9 }}>Rate / Amt (₹)</div>
+                  </th>
+                </>
+              ) : (
+                <th style={{ padding: '5px 6px', textAlign: 'right', width: '85px' }}>
+                  <div>IGST</div>
+                  <div style={{ fontSize: '7.5px', fontWeight: '500', opacity: 0.9 }}>Rate / Amt (₹)</div>
+                </th>
+              )}
+              <th style={{ padding: '8px 8px', textAlign: 'right', width: '95px' }}>INCL. GST (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, idx) => {
+              const halfRate = (it.gRate / 2).toFixed(1).replace(/\.0$/, '');
+              const halfAmt = it.gstAmt / 2;
+              return (
+                <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                  <td style={{ padding: '8px 10px', verticalAlign: 'top' }}>
+                    <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px' }}>{it.name}</div>
+                    {it.description ? (
+                      <div style={{ color: '#64748B', fontSize: '8.5px', marginTop: '1px', lineHeight: '1.3' }}>
+                        {it.description}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'top', color: '#0F172A' }}>
+                    {it.qty} {it.unit || it.uom || 'Nos'}
+                  </td>
+                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
+                    {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
+                    {it.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  {isIntra ? (
+                    <>
+                      <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
+                        <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
+                        <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                          {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
+                        <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
+                        <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                          {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
+                      <div style={{ color: '#475569', fontSize: '8.5px' }}>{it.gRate}%</div>
+                      <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                        {it.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </td>
+                  )}
+                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
+                    {it.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* 5. GST SUMMARY BY RATE TABLE */}
+        {gstTiers && gstTiers.length > 0 && (
+          <div style={{ margin: '14px 0 16px 0' }}>
+            <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+              GST SUMMARY BY RATE
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700', fontSize: '8.5px', textTransform: 'uppercase' }}>
+                  <th style={{ padding: '6px 8px', textAlign: 'left' }}>GST RATE</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right' }}>TAXABLE VALUE</th>
+                  {isIntra ? (
+                    <>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>CGST</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>SGST</th>
+                    </>
+                  ) : (
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>IGST</th>
+                  )}
+                  <th style={{ padding: '6px 8px', textAlign: 'right' }}>TOTAL GST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gstTiers.map((t) => {
+                  const halfRate = (t.rate / 2).toFixed(1).replace(/\.0$/, '');
+                  const halfAmt = t.gstAmt / 2;
+                  return (
+                    <tr key={t.rate} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '5px 8px', color: '#0F172A' }}>{t.rate}%</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#0F172A' }}>
+                        ₹{t.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      {isIntra ? (
+                        <>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: '#475569' }}>
+                            ₹{halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({halfRate}%)
+                          </td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: '#475569' }}>
+                            ₹{halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({halfRate}%)
+                          </td>
+                        </>
+                      ) : (
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: '#475569' }}>
+                          ₹{t.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({t.rate}%)
+                        </td>
+                      )}
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#0F172A' }}>
+                        ₹{t.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 6. BOTTOM SECTION: BANK & TERMS (LEFT) | TOTALS + GRAND TOTAL + WORDS + STAMP (RIGHT) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '54% 46%', columnGap: '28px', marginTop: '10px', fontSize: '9.5px' }}>
+          {/* LEFT: BANK DETAILS & TERMS */}
+          <div>
+            {/* BANK DETAILS */}
+            <div style={{
+              backgroundColor: '#F0F7FF',
+              border: '1px solid #E0F2FE',
+              borderRadius: '4px',
+              padding: '10px 14px',
+              marginBottom: '14px'
+            }}>
+              <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                BANK DETAILS
+              </div>
+              <div style={{ fontSize: '9px', color: '#475569' }}>Beneficiary:</div>
+              <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
+                VRM Structures India Private Limited
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                Bank: <strong>{cfg.bankName || 'HDFC Bank'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                Branch: <strong>{cfg.bankBranch || 'VINAYAGAPURAM'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                A/c No.: <strong>{cfg.bankAccountNo || '50200031629'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                IFSC: <strong>{cfg.bankIfsc || 'HDFC0007315'}</strong>
+              </div>
+            </div>
+
+            {/* TERMS & CONDITIONS */}
+            <div>
+              <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+                TERMS & CONDITIONS
+              </div>
+              <div style={{ fontSize: '9px', color: '#334155', lineHeight: '1.55' }}>
+                <div>1. Tax: Included in grand total.</div>
+                <div>2. Transport: At actuals.</div>
+                <div>3. Payment: 100% along with the Purchase Order.</div>
+                <div>4. Delivery: Immediate Dispatch.</div>
+                <div>5. Validity: 3 days.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: TOTALS LIST + GRAND TOTAL + WORDS + STAMP */}
+          <div>
+            {/* TOTALS LIST */}
+            <div style={{ fontSize: '10px', lineHeight: '1.6', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                <span>Total taxable value</span>
+                <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                  ₹{subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              {isIntra ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                    <span>Total CGST</span>
+                    <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                      ₹{(totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                    <span>Total SGST</span>
+                    <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                      ₹{(totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                  <span>Total IGST</span>
+                  <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                    ₹{totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              {hasRoundOff && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                  <span>Round-off</span>
+                  <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                    ₹{roundOffVal.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* GRAND TOTAL BAR */}
+            <div style={{
+              backgroundColor: '#0F3D6E',
+              color: '#FFFFFF',
+              padding: '8px 12px',
+              borderRadius: '3px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '10px'
+            }}>
+              <span style={{ fontSize: '11px', fontWeight: '800', letterSpacing: '0.5px' }}>GRAND TOTAL</span>
+              <span style={{ fontSize: '16px', fontWeight: '900' }}>
+                ₹{Math.round(grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* AMOUNT IN WORDS */}
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '8.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                AMOUNT IN WORDS
+              </div>
+              <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', marginTop: '2px', lineHeight: '1.35' }}>
+                {numberToWordsINR(grandTotal)}
+              </div>
+            </div>
+
+            {/* SIGNATURE & STAMP */}
+            <div style={{ textAlign: 'center', marginTop: '8px' }}>
+              <div style={{ display: 'inline-block', position: 'relative' }}>
+                <img
+                  src={getSafePrintImageUrl(cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')), VRM_OFFICIAL_STAMP)}
+                  alt="Authorized Signatory Stamp"
+                  style={{ height: '95px', width: '95px', objectFit: 'contain' }}
+                  onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_STAMP; }}
+                />
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#64748B', marginTop: '3px' }}>Authorized Signatory</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 7. FOOTER */}
+        <div style={{
+          borderTop: '1px solid #E2E8F0',
+          paddingTop: '8px',
+          marginTop: '16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: '8.5px',
+          color: '#64748B'
+        }}>
+          <div>VRM Structures India Private Limited | Chennai, Tamil Nadu, India</div>
+          <div>Page 1 of 1</div>
+        </div>
+      </div>
+    );
+    } catch (err) {
+      console.warn('[VRMProformaInvoicePrintTemplate] Graceful render catch:', err);
+      return (
+        <div style={{ padding: '24px', backgroundColor: '#FFFFFF', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0F3D6E' }}>Proforma Invoice</div>
+          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px' }}>
+            {pi?.piNo || 'VRM-PI'} | {pi?.customerName || pi?.vendor || 'Customer'}
+          </div>
+        </div>
+      );
+    }
+  };
 
   return (
     <div
@@ -1281,7 +1765,11 @@ export function VRMProformaInvoicePrintSheet({
       )}
 
       {/* OUTER BORDER CONTAINER */}
-      <div className="vrm-print-outer-box" style={{ border: '1px solid #CBD5E1', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+      {!isBomDocument ? (
+        renderRedesignedProformaInvoice()
+      ) : (
+        <>
+          <div className="vrm-print-outer-box" style={{ border: '1px solid #CBD5E1', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
 
         {/* 1. HEADER SECTION (LOGO + COMPANY DETAILS on Left | DOCUMENT TITLE on Right) */}
         <div style={{ padding: '12px 18px', borderBottom: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}>
@@ -1314,11 +1802,12 @@ export function VRMProformaInvoicePrintSheet({
                 </RemovableBlock>
               )}
               <div>
-                {cfg.showCompanyName && cfg.companyName && (
-                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.3px', marginBottom: '3px' }}>
+                {cfg.showCompanyName !== false && (
+                  <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.2px', marginBottom: '3px', whiteSpace: 'nowrap' }}>
                     <EditableText
-                      value={cfg.companyName}
-                      fallback="VRM Structures India Pvt Ltd."
+                      value={cfg.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED'}
+                      fallback="VRM STRUCTURES INDIA PRIVATE LIMITED"
+                      style={{ whiteSpace: 'nowrap' }}
                       onSave={(v) => onUpdateSetting?.({ companyName: v })}
                       onRemove={() => {
                         onUpdateSetting?.({ showCompanyName: false, companyName: '' });
@@ -1339,14 +1828,14 @@ export function VRMProformaInvoicePrintSheet({
                         <div style={{ whiteSpace: 'pre-line' }}>
                           <EditableText
                             value={cfg.companyAddressLine1}
-                            fallback="1427, GNT Road, Nagappa Industrial Estate,"
+                            fallback="1427, GNT Road, Nagappa Industrial Estate, Puzhal,"
                             onSave={(v) => onUpdateSetting?.({ companyAddressLine1: v })}
                           />
                         </div>
                         <div style={{ whiteSpace: 'pre-line' }}>
                           <EditableText
                             value={cfg.companyAddressLine2}
-                            fallback={"Puzhal,\nChennai, Tamil Nadu 600066\nIndia"}
+                            fallback={"Chennai, Tamil Nadu 600066\nIndia"}
                             multiline={true}
                             onSave={(v) => onUpdateSetting?.({ companyAddressLine2: v })}
                           />
@@ -1368,15 +1857,6 @@ export function VRMProformaInvoicePrintSheet({
                             style={{ fontFamily: 'inherit', fontWeight: '700', color: '#0F172A' }}
                           />
                         </div>
-                        {cfg.companyUdyam ? (
-                          <div>
-                            <EditableText
-                              value={cfg.companyUdyam}
-                              fallback="MSME/Udyam No"
-                              onSave={(v) => onUpdateSetting?.({ companyUdyam: v })}
-                            />
-                          </div>
-                        ) : null}
                       </RemovableBlock>
                     )}
                   </div>
@@ -1454,6 +1934,28 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                 </>
               )}
+              {(() => {
+                const phoneVal = (pi.phone || pi.contactPhone || pi.customerPhone || pi.mobileNumber || pi.mobile || '').toString().replace(/[()]/g, '').trim();
+                return (
+                  <>
+                    <div style={{ color: '#64748B', fontWeight: '500' }}>
+                      <EditableText
+                        value={cfg.phoneLabel || 'Mobile No.'}
+                        fallback="Mobile No."
+                        onSave={(v) => onUpdateSetting?.({ phoneLabel: v })}
+                      />
+                    </div>
+                    <div style={{ color: '#94A3B8' }}>:</div>
+                    <div style={{ fontWeight: '600', color: '#0F172A' }}>
+                      <EditableText
+                        value={phoneVal}
+                        fallback="98847 20789"
+                        onSave={(v) => onUpdatePiData?.({ phone: v.replace(/[()]/g, '').trim() })}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -1531,7 +2033,7 @@ export function VRMProformaInvoicePrintSheet({
         }}>
           {/* BILL TO */}
           <div style={{ borderRight: '1px solid #CBD5E1' }}>
-            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#0E7490', backgroundColor: '#F0FDFA' }}>
+            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: accent, backgroundColor: '#EFF6FF' }}>
               <EditableText
                 value={cfg.billToLabel || 'Bill To'}
                 fallback="Bill To"
@@ -1595,7 +2097,7 @@ export function VRMProformaInvoicePrintSheet({
 
           {/* SHIP TO */}
           <div>
-            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#0E7490', backgroundColor: '#F0FDFA' }}>
+            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: accent, backgroundColor: '#EFF6FF' }}>
               <EditableText
                 value={cfg.shipToLabel || 'Ship To'}
                 fallback="Ship To"
@@ -1603,31 +2105,13 @@ export function VRMProformaInvoicePrintSheet({
               />
             </div>
             <div style={{ padding: '8px 14px', lineHeight: '1.4', color: '#334155', fontSize: '10.5px' }}>
-              <div style={{ fontWeight: '700', color: '#0F172A', marginBottom: '2px' }}>
+              <div>
                 <EditableText
-                  value={pi.shippingName || pi.contactPerson || customerName}
-                  fallback="V N Vigneshwar"
-                  onSave={(v) => onUpdatePiData?.({ shippingName: v })}
+                  value={dStreet}
+                  fallback="8/90, 4th Street,"
+                  onSave={(v) => onUpdatePiData?.({ deliveryStreet: v, deliveryAddress: { ...(pi.deliveryAddress || {}), street: v } })}
                 />
               </div>
-              {(pi.phone || pi.contactPhone) && (
-                <div>
-                  <EditableText
-                    value={`(${pi.phone || pi.contactPhone})`}
-                    fallback="(9341 5621 2461)"
-                    onSave={(v) => onUpdatePiData?.({ phone: v.replace(/[()]/g, '') })}
-                  />
-                </div>
-              )}
-              {dStreet ? (
-                <div>
-                  <EditableText
-                    value={dStreet}
-                    fallback="8/90, 4th Street,"
-                    onSave={(v) => onUpdatePiData?.({ deliveryStreet: v, deliveryAddress: { ...(pi.deliveryAddress || {}), street: v } })}
-                  />
-                </div>
-              ) : null}
               {dCity && !dStreetHasCity ? (
                 <div>
                   <EditableText
@@ -1664,7 +2148,7 @@ export function VRMProformaInvoicePrintSheet({
             const hasHsn = cfg.showHsn !== false;
             const hasQty = cfg.showQty !== false;
             const hasRate = cfg.showRateCol !== false;
-            const hasGst = cfg.showGstCol !== false;
+            const hasGst = cfg.showGstCol !== false && (totalGst > 0 || (gstTiers && gstTiers.length > 0));
             const hasAmt = cfg.showTotalCol !== false;
 
             const computedColSpan = (hasSno ? 1 : 0) +
@@ -1698,9 +2182,9 @@ export function VRMProformaInvoicePrintSheet({
             return (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', color: '#334155', fontWeight: '700', textAlign: 'center', fontSize: '9px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+                  <tr style={{ backgroundColor: '#0B3B60', color: '#FFFFFF', fontWeight: '800', textAlign: 'center', fontSize: '9px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
                     {hasSno && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '6px 3px', width: '32px', position: 'relative' }}>
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '32px', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <EditableText
                             value={cfg.colHeaderSno || '#'}
@@ -1723,7 +2207,7 @@ export function VRMProformaInvoicePrintSheet({
                       </th>
                     )}
                     {hasDesc && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '6px 8px', textAlign: 'left', position: 'relative' }}>
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 8px', textAlign: 'left', position: 'relative' }}>
                         <EditableText
                           value={cfg.itemColLabel || 'Item & Description'}
                           fallback="Item & Description"
@@ -1732,7 +2216,7 @@ export function VRMProformaInvoicePrintSheet({
                       </th>
                     )}
                     {hasHsn && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '6px 4px', width: '70px', position: 'relative' }}>
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '70px', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <EditableText
                             value={cfg.hsnColLabel || 'HSN/SAC'}
@@ -1755,7 +2239,7 @@ export function VRMProformaInvoicePrintSheet({
                       </th>
                     )}
                     {hasQty && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '6px 4px', width: '52px', position: 'relative' }}>
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '52px', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <EditableText
                             value={cfg.qtyColLabel || 'Qty'}
@@ -1778,7 +2262,7 @@ export function VRMProformaInvoicePrintSheet({
                       </th>
                     )}
                     {hasRate && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '6px 6px', width: '75px', textAlign: 'right', position: 'relative' }}>
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 6px', width: '75px', textAlign: 'right', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                           <EditableText
                             value={cfg.rateColLabel || 'Rate'}
@@ -1803,7 +2287,7 @@ export function VRMProformaInvoicePrintSheet({
                     {hasGst && (
                       isIntra ? (
                         <>
-                          <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 4px', position: 'relative' }}>
+                          <th colSpan={2} style={{ border: '1px solid #1E4E79', padding: '5px 4px', position: 'relative' }}>
                             CGST
                             {isEditable && (
                               <button
@@ -1818,10 +2302,10 @@ export function VRMProformaInvoicePrintSheet({
                               >×</button>
                             )}
                           </th>
-                          <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 4px' }}>SGST</th>
+                          <th colSpan={2} style={{ border: '1px solid #1E4E79', padding: '5px 4px' }}>SGST</th>
                         </>
                       ) : (
-                        <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 4px', position: 'relative' }}>
+                        <th colSpan={2} style={{ border: '1px solid #1E4E79', padding: '5px 4px', position: 'relative' }}>
                           IGST
                           {isEditable && (
                             <button
@@ -1839,7 +2323,7 @@ export function VRMProformaInvoicePrintSheet({
                       )
                     )}
                     {hasAmt && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '6px 6px', width: '80px', textAlign: 'right' }}>
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 6px', width: '80px', textAlign: 'right' }}>
                         <EditableText
                           value={cfg.amountColLabel || 'Amount'}
                           fallback="Amount"
@@ -1849,18 +2333,18 @@ export function VRMProformaInvoicePrintSheet({
                     )}
                   </tr>
                   {hasGst && (
-                    <tr style={{ backgroundColor: '#F1F5F9', color: '#475569', fontWeight: '700', textAlign: 'center', fontSize: '8.5px' }}>
+                    <tr style={{ backgroundColor: '#072C49', color: '#E2E8F0', fontWeight: '700', textAlign: 'center', fontSize: '8.5px' }}>
                       {isIntra ? (
                         <>
-                          <th style={{ border: '1px solid #CBD5E1', padding: '3px 3px', width: '40px' }}>%</th>
-                          <th style={{ border: '1px solid #CBD5E1', padding: '3px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
-                          <th style={{ border: '1px solid #CBD5E1', padding: '3px 3px', width: '40px' }}>%</th>
-                          <th style={{ border: '1px solid #CBD5E1', padding: '3px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
+                          <th style={{ border: '1px solid #1E4E79', padding: '3px 3px', width: '40px' }}>%</th>
+                          <th style={{ border: '1px solid #1E4E79', padding: '3px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
+                          <th style={{ border: '1px solid #1E4E79', padding: '3px 3px', width: '40px' }}>%</th>
+                          <th style={{ border: '1px solid #1E4E79', padding: '3px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
                         </>
                       ) : (
                         <>
-                          <th style={{ border: '1px solid #CBD5E1', padding: '3px 3px', width: '40px' }}>%</th>
-                          <th style={{ border: '1px solid #CBD5E1', padding: '3px 5px', width: '70px', textAlign: 'right' }}>Amt</th>
+                          <th style={{ border: '1px solid #1E4E79', padding: '3px 3px', width: '40px' }}>%</th>
+                          <th style={{ border: '1px solid #1E4E79', padding: '3px 5px', width: '70px', textAlign: 'right' }}>Amt</th>
                         </>
                       )}
                     </tr>
@@ -1885,13 +2369,12 @@ export function VRMProformaInvoicePrintSheet({
                             style={{
                               border: '1px solid #CBD5E1',
                               padding: '3px 8px',
-                              backgroundColor: it.presetGroupNum % 2 === 1 ? '#F0FDFA' : '#EEF2FF',
-                              borderTop: `2px solid ${it.presetGroupNum % 2 === 1 ? '#0E7490' : '#6366F1'}`
+                              backgroundColor: '#EFF6FF',
+                              borderTop: `2px solid ${cfg.accentColor || '#1E2F5B'}`
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span style={{ fontWeight: '800', color: it.presetGroupNum % 2 === 1 ? '#0E7490' : '#4338CA', fontSize: '10px' }}>
-                                PRESET {it.presetGroupNum}:{' '}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                              <span style={{ fontWeight: '800', color: cfg.accentColor || '#1E2F5B', fontSize: '10px' }}>
                                 <EditableText
                                   value={it.presetName}
                                   fallback="Solar Structure MMS Kit"
@@ -1899,10 +2382,7 @@ export function VRMProformaInvoicePrintSheet({
                                     if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
                                   }}
                                 />
-                                {' '}(Total Quantity: {it.setCount || 1} Set{(it.setCount || 1) > 1 ? 's' : ''} — {it.groupCount} Components)
-                              </span>
-                              <span style={{ fontSize: '9px', color: '#475569', fontWeight: '700' }}>
-                                Kit Subtotal: ₹{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {' '}({it.unit === 'kW' ? `Total Capacity: ${it.setCount || 1} kW` : `Total Quantity: ${it.setCount || 1} Set${(it.setCount || 1) > 1 ? 's' : ''}`} — {it.groupCount} Components)
                               </span>
                             </div>
                           </td>
@@ -1956,8 +2436,8 @@ export function VRMProformaInvoicePrintSheet({
                         {hasHsn && (
                           <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
                             <EditableText
-                              value={it.hsn || '73089090'}
-                              fallback="73089090"
+                              value={it.hsn || getHsnCode(it)}
+                              fallback={getHsnCode(it)}
                               onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { hsn: v })}
                             />
                           </td>
@@ -1984,7 +2464,7 @@ export function VRMProformaInvoicePrintSheet({
                           </td>
                         )}
 
-                        {/* RATE COLUMN: Merged vertically at top for Preset Kit */}
+                        {/* RATE COLUMN: Merged vertically in middle for Preset Kit */}
                         {hasRate && (
                           it.isPresetItem ? (
                             it.isFirstInGroup ? (
@@ -1995,7 +2475,7 @@ export function VRMProformaInvoicePrintSheet({
                                   padding: '6px 6px',
                                   textAlign: 'right',
                                   fontSize: '10.5px',
-                                  verticalAlign: 'top',
+                                  verticalAlign: 'middle',
                                   backgroundColor: '#F8FAFC',
                                   fontWeight: '700'
                                 }}
@@ -2007,13 +2487,13 @@ export function VRMProformaInvoicePrintSheet({
                                     onSave={(v) => {
                                       const num = parseFloat(v.replace(/[^0-9.]/g, ''));
                                       if (!isNaN(num) && it.grpId) {
-                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num / (it.setCount || 1) });
+                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num });
                                       }
                                     }}
                                   />
                                 </div>
                                 <div style={{ fontSize: '8px', color: '#64748B', fontWeight: '500', marginTop: '2px' }}>
-                                  per set
+                                  {it.unit === 'kW' ? 'per kW' : 'per set'}
                                 </div>
                               </td>
                             ) : null
@@ -2031,7 +2511,7 @@ export function VRMProformaInvoicePrintSheet({
                           )
                         )}
 
-                        {/* TAX COLUMNS: Merged vertically at top for Preset Kit */}
+                        {/* TAX COLUMNS: Merged vertically in middle for Preset Kit */}
                         {hasGst && (
                           isIntra ? (
                             it.isPresetItem ? (
@@ -2039,25 +2519,25 @@ export function VRMProformaInvoicePrintSheet({
                                 <>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'top', backgroundColor: '#F8FAFC' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
                                   >
                                     {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'top', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
                                   >
                                     {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'top', backgroundColor: '#F8FAFC' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
                                   >
                                     {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'top', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
                                   >
                                     {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
@@ -2085,13 +2565,13 @@ export function VRMProformaInvoicePrintSheet({
                                 <>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'top', backgroundColor: '#F8FAFC' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
                                   >
                                     {it.gRate ? `${it.gRate}%` : '18%'}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'top', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
                                   >
                                     {(it.groupGst || (it.groupTaxable * (it.gRate / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
@@ -2110,7 +2590,7 @@ export function VRMProformaInvoicePrintSheet({
                           )
                         )}
 
-                        {/* AMOUNT COLUMN: Merged vertically at top for Preset Kit */}
+                        {/* AMOUNT COLUMN: Merged vertically in middle for Preset Kit */}
                         {hasAmt && (
                           it.isPresetItem ? (
                             it.isFirstInGroup ? (
@@ -2123,7 +2603,7 @@ export function VRMProformaInvoicePrintSheet({
                                   fontWeight: '800',
                                   color: '#0F172A',
                                   fontSize: '10.5px',
-                                  verticalAlign: 'top',
+                                  verticalAlign: 'middle',
                                   backgroundColor: '#F8FAFC'
                                 }}
                               >
@@ -2171,6 +2651,53 @@ export function VRMProformaInvoicePrintSheet({
           </div>
         )}
 
+        {/* GST SUMMARY BY RATE TABLE (Matching Redesigned PI Format) */}
+        {!isBomDocument && gstTiers && gstTiers.length > 0 && (
+          <div style={{ margin: '8px 14px', border: '1px solid #CBD5E1', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ backgroundColor: '#F1F5F9', padding: '5px 10px', fontSize: '9.5px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              GST SUMMARY BY RATE
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '8.5px', fontWeight: '700', color: '#475569', textTransform: 'uppercase' }}>
+                  <th style={{ padding: '5px 8px', textAlign: 'left', borderRight: '1px solid #E2E8F0' }}>GST RATE</th>
+                  <th style={{ padding: '5px 8px', textAlign: 'right', borderRight: '1px solid #E2E8F0' }}>TAXABLE VALUE</th>
+                  {isIntra ? (
+                    <>
+                      <th style={{ padding: '5px 8px', textAlign: 'right', borderRight: '1px solid #E2E8F0' }}>CGST</th>
+                      <th style={{ padding: '5px 8px', textAlign: 'right', borderRight: '1px solid #E2E8F0' }}>SGST</th>
+                    </>
+                  ) : (
+                    <th style={{ padding: '5px 8px', textAlign: 'right', borderRight: '1px solid #E2E8F0' }}>IGST</th>
+                  )}
+                  <th style={{ padding: '5px 8px', textAlign: 'right' }}>TOTAL GST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gstTiers.map((t) => {
+                  const halfRate = (t.rate / 2).toFixed(1).replace(/\.0$/, '');
+                  const halfAmt = t.gstAmt / 2;
+                  return (
+                    <tr key={t.rate} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '4px 8px', fontWeight: '700', color: '#0F172A', borderRight: '1px solid #F1F5F9' }}>{t.rate}%</td>
+                      <td style={{ padding: '4px 8px', textAlign: 'right', color: '#0F172A', borderRight: '1px solid #F1F5F9' }}>₹{t.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      {isIntra ? (
+                        <>
+                          <td style={{ padding: '4px 8px', textAlign: 'right', color: '#475569', borderRight: '1px solid #F1F5F9' }}>₹{halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({halfRate}%)</td>
+                          <td style={{ padding: '4px 8px', textAlign: 'right', color: '#475569', borderRight: '1px solid #F1F5F9' }}>₹{halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({halfRate}%)</td>
+                        </>
+                      ) : (
+                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#475569', borderRight: '1px solid #F1F5F9' }}>₹{t.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({t.rate}%)</td>
+                      )}
+                      <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>₹{t.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* 5. BOTTOM SECTION: WORDS + NOTES + TERMS ON LEFT | TOTALS + STAMP ON RIGHT */}
         {isBomDocument ? (
           <div className="avoid-break" style={{ borderTop: '1.5px solid #334155', paddingTop: '16px', marginTop: '28px', display: 'flex', justifyContent: 'flex-end' }}>
@@ -2198,33 +2725,33 @@ export function VRMProformaInvoicePrintSheet({
 
               {/* NOTES / ACCOUNT DETAILS */}
               <div style={{ padding: '8px 14px', borderBottom: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '9px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
                   <EditableText
                     value={cfg.bankHeading || 'Bank & Payment Details'}
                     fallback="Bank & Payment Details"
                     onSave={(v) => onUpdateSetting?.({ bankHeading: v })}
                   />
                 </div>
-                <div style={{ fontSize: '10px', color: '#334155', lineHeight: '1.45' }}>
+                <div style={{ fontSize: '10px', color: '#0F172A', lineHeight: '1.5', fontWeight: '700' }}>
                   <div>
-                    <span style={{ color: '#64748B' }}>Beneficiary: </span>
-                    <EditableText value={cfg.bankBeneficiary || 'VRM Structures India Private Limited'} fallback="VRM Structures India Private Limited" onSave={(v) => onUpdateSetting?.({ bankBeneficiary: v })} style={{ fontWeight: '600', color: '#0F172A' }} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>Beneficiary: </span>
+                    <EditableText value={cfg.bankBeneficiary || 'VRM Structures India Private Limited'} fallback="VRM Structures India Private Limited" onSave={(v) => onUpdateSetting?.({ bankBeneficiary: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>A/c No: </span>
-                    <EditableText value={cfg.bankAccountNo || '50200031629272'} fallback="50200031629272" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '700', color: '#0F172A' }} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>A/c No: </span>
+                    <EditableText value={cfg.bankAccountNo || '50200031629'} fallback="50200031629" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>Bank: </span>
-                    <EditableText value={cfg.bankName || 'HDFC Bank'} fallback="HDFC Bank" onSave={(v) => onUpdateSetting?.({ bankName: v })} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>Bank: </span>
+                    <EditableText value={cfg.bankName || 'HDFC Bank'} fallback="HDFC Bank" onSave={(v) => onUpdateSetting?.({ bankName: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>Branch: </span>
-                    <EditableText value={cfg.bankBranch || 'Kodambakkam'} fallback="Kodambakkam" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>Branch: </span>
+                    <EditableText value={cfg.bankBranch || 'VINAYAGAPURAM'} fallback="VINAYAGAPURAM" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>IFSC: </span>
-                    <EditableText value={cfg.bankIfsc || 'HDFC0000574'} fallback="HDFC0000574" onSave={(v) => onUpdateSetting?.({ bankIfsc: v })} style={{ fontWeight: '700', color: '#0F172A' }} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>IFSC: </span>
+                    <EditableText value={cfg.bankIfsc || 'HDFC0007315'} fallback="HDFC0007315" onSave={(v) => onUpdateSetting?.({ bankIfsc: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                 </div>
               </div>
@@ -2232,7 +2759,7 @@ export function VRMProformaInvoicePrintSheet({
               {/* TERMS & CONDITIONS */}
               {cfg.showTerms && (
                 <div style={{ padding: '8px 14px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
+                  <div style={{ fontSize: '9px', fontWeight: '700', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
                     <EditableText
                       value={cfg.termsHeading || 'Terms & Conditions'}
                       fallback="Terms & Conditions"
@@ -2303,9 +2830,9 @@ export function VRMProformaInvoicePrintSheet({
                       </td>
                     </tr>
                   )}
-                  <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2px solid #0E7490', fontWeight: '800' }}>
+                  <tr style={{ backgroundColor: '#EFF6FF', borderTop: `2px solid ${accent}`, fontWeight: '800' }}>
                     <td style={{ padding: '8px 14px', color: '#0F172A', fontSize: '11px' }}>Total</td>
-                    <td style={{ padding: '8px 14px', textAlign: 'right', color: '#0E7490', fontSize: '12.5px' }}>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: accent, fontSize: '12.5px' }}>
                       ₹{Math.round(grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -2369,30 +2896,32 @@ export function VRMProformaInvoicePrintSheet({
 
       </div>
 
-      {/* PAGE NUMBER (BOTTOM RIGHT) */}
-      <div style={{ textAlign: 'right', fontSize: '9px', color: '#64748B', marginTop: '4px', paddingRight: '2px' }}>
-        1
-      </div>
+          {/* PAGE NUMBER (BOTTOM RIGHT) */}
+          <div style={{ textAlign: 'right', fontSize: '9px', color: '#64748B', marginTop: '4px', paddingRight: '2px' }}>
+            1
+          </div>
 
-      {/* FOOTER NOTICE */}
-      {cfg.showFooterNote !== false && cfg.footerNote && (
-        <RemovableBlock
-          visible={cfg.showFooterNote !== false}
-          settingKey="showFooterNote"
-          title="Footer Note"
-          style={{ marginTop: '10px', textAlign: 'center', fontSize: '9.5px', color: '#64748B' }}
-        >
-          <EditableText
-            value={cfg.footerNote}
-            fallback="This is a Computer Generated Proforma Invoice and does not require physical signature unless requested."
-            onSave={(v) => onUpdateSetting?.({ footerNote: v })}
-            onRemove={() => {
-              onUpdateSetting?.({ showFooterNote: false });
-              onElementRemoved?.('showFooterNote', 'Footer Note');
-            }}
-            removeLabel="Footer Note"
-          />
-        </RemovableBlock>
+          {/* FOOTER NOTICE */}
+          {cfg.showFooterNote !== false && cfg.footerNote && (
+            <RemovableBlock
+              visible={cfg.showFooterNote !== false}
+              settingKey="showFooterNote"
+              title="Footer Note"
+              style={{ marginTop: '10px', textAlign: 'center', fontSize: '9.5px', color: '#64748B' }}
+            >
+              <EditableText
+                value={cfg.footerNote}
+                fallback="This is a Computer Generated Proforma Invoice and does not require physical signature unless requested."
+                onSave={(v) => onUpdateSetting?.({ footerNote: v })}
+                onRemove={() => {
+                  onUpdateSetting?.({ showFooterNote: false });
+                  onElementRemoved?.('showFooterNote', 'Footer Note');
+                }}
+                removeLabel="Footer Note"
+              />
+            </RemovableBlock>
+          )}
+        </>
       )}
     </div>
   );
@@ -3495,17 +4024,32 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
       let initial = { ...DEFAULT_PI_TEMPLATE_SETTINGS };
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.companyName === 'VRM Structures India Pvt Ltd') parsed.companyName = '';
+        if (!parsed.companyName || parsed.companyName === 'VRM Structures India Pvt Ltd' || parsed.companyName === 'VRM Structures India Pvt Ltd.') {
+          parsed.companyName = 'VRM STRUCTURES INDIA PRIVATE LIMITED';
+        }
         if (parsed.companyTagline === 'Engineered Solar Mounting Structures & Solutions') parsed.companyTagline = '';
         if (parsed.companyCin === 'U28112TN2020PTC135489') parsed.companyCin = '';
         if (parsed.signatureMode === 'vector' && !parsed.customSignatureUrl) parsed.signatureMode = 'none';
         if (parsed.bankIfsc === 'HDFC0000574' || parsed.bankIfsc === 'HDFC0001234') parsed.bankIfsc = 'HDFC0007315';
-        if (parsed.bankBranch === 'Kodambakkam, Chennai' || parsed.bankBranch === 'Kodambakkam' || parsed.bankBranch?.includes('Ambattur')) parsed.bankBranch = 'Vinayagapuram Branch';
-        if (parsed.bankAccountNo === '50200088912456') parsed.bankAccountNo = '50200031629272';
+        if (parsed.bankBranch === 'Kodambakkam, Chennai' || parsed.bankBranch === 'Kodambakkam' || parsed.bankBranch?.includes('Ambattur') || parsed.bankBranch === 'Vinayagapuram Branch') parsed.bankBranch = 'VINAYAGAPURAM';
+        if (parsed.bankAccountNo === '50200088912456' || parsed.bankAccountNo === '50200031629272') parsed.bankAccountNo = '50200031629';
         if (parsed.bankName === 'HDFC Bank Ltd.' || parsed.bankName === 'HDFC Bank Ltd') parsed.bankName = 'HDFC Bank';
-        parsed.showCompanyName = false;
+        parsed.showCompanyName = true;
         parsed.showCompanyTagline = false;
+        parsed.companyUdyam = '';
+        if (parsed.companyAddressLine1 === '1427, GNT Road, Nagappa Industrial Estate,' || parsed.companyAddressLine2?.startsWith('Puzhal,') || parsed.companyAddressLine2?.startsWith('Puzhal,\n')) {
+          parsed.companyAddressLine1 = '1427, GNT Road, Nagappa Industrial Estate, Puzhal,';
+          parsed.companyAddressLine2 = (parsed.companyAddressLine2 || '').replace(/^Puzhal,\s*\n?/i, '').trim() || 'Chennai, Tamil Nadu 600066\nIndia';
+        }
+        if (!parsed.accentColor || parsed.accentColor === '#0E7490') {
+          parsed.accentColor = '#1E2F5B';
+        }
         initial = { ...initial, ...parsed };
+      }
+      initial.companyName = initial.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED';
+      initial.showCompanyName = true;
+      if (!initial.accentColor || initial.accentColor === '#0E7490') {
+        initial.accentColor = '#1E2F5B';
       }
 
       // Merge master company branding (logo, stamp, signatory details)
@@ -3914,54 +4458,95 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         style={{
           width: '100%',
           maxWidth: showCustomizer ? '1260px' : '850px',
-          backgroundColor: '#0F172A',
-          borderRadius: '10px 10px 0 0',
-          padding: '12px 20px',
+          background: 'linear-gradient(180deg, #1E293B 0%, #0F172A 100%)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderBottom: '1px solid rgba(15, 23, 42, 0.9)',
+          borderRadius: '12px 12px 0 0',
+          padding: '10px 18px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           color: '#FFFFFF',
           boxSizing: 'border-box',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-          transition: 'max-width 0.2s ease-in-out'
+          boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+          transition: 'max-width 0.2s ease-in-out',
+          gap: '12px',
+          flexWrap: 'wrap'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <FileText size={18} style={{ color: '#38BDF8' }} />
-          <span style={{ fontWeight: '800', fontSize: '14px' }}>
-            {templateSettings.documentTitle} — {piData.piNo || 'SPI-2025'}
-          </span>
-          <span style={{
-            fontSize: '11px',
-            backgroundColor: templateSettings.accentColor || '#0E7490',
-            color: '#FFFFFF',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            fontWeight: '700'
+        {/* LEFT: ICON, TITLE, NUMBER & STATUS BADGE */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flexShrink: 1 }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: 'linear-gradient(135deg, rgba(14, 116, 144, 0.35) 0%, rgba(56, 189, 248, 0.15) 100%)',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
           }}>
-            Official PDF
-          </span>
+            <FileText size={15} style={{ color: '#38BDF8' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: '700', fontSize: '13.5px', color: '#F1F5F9', letterSpacing: '-0.2px' }}>
+              {templateSettings.documentTitle || 'Proforma Invoice'}
+            </span>
+            <span style={{
+              fontSize: '12px',
+              fontWeight: '700',
+              color: '#38BDF8',
+              background: 'rgba(56, 189, 248, 0.08)',
+              border: '1px solid rgba(56, 189, 248, 0.22)',
+              padding: '2px 8px',
+              borderRadius: '6px',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace'
+            }}>
+              {piData.piNo || 'SPI-2025'}
+            </span>
+            <span style={{
+              fontSize: '10.5px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              background: 'linear-gradient(135deg, rgba(14, 116, 144, 0.25) 0%, rgba(14, 116, 144, 0.1) 100%)',
+              color: '#67E8F9',
+              border: '1px solid rgba(14, 116, 144, 0.45)',
+              padding: '3px 9px',
+              borderRadius: '20px',
+              fontWeight: '700',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+              <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#22D3EE', boxShadow: '0 0 6px #22D3EE' }} />
+              Official PDF
+            </span>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        {/* RIGHT: ACTION CONTROLS */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
           {/* CUSTOMIZE TOGGLE BUTTON */}
           <button
             onClick={() => setShowCustomizer(!showCustomizer)}
             style={{
-              backgroundColor: showCustomizer ? '#334155' : 'transparent',
-              color: '#FFFFFF',
-              border: '1px solid #475569',
-              borderRadius: '6px',
-              padding: '7px 14px',
-              fontSize: '12.5px',
-              fontWeight: '700',
+              background: showCustomizer ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+              color: showCustomizer ? '#38BDF8' : '#CBD5E1',
+              border: showCustomizer ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 12px',
+              fontSize: '12px',
+              fontWeight: '600',
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Sliders size={14} style={{ color: '#38BDF8' }} />
+            <Sliders size={13} style={{ color: showCustomizer ? '#38BDF8' : '#94A3B8' }} />
             {showCustomizer ? 'Hide Customizer' : 'Customize Template'}
           </button>
 
@@ -3971,45 +4556,58 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
             disabled={isSavingPi}
             title={hasUnsavedChanges ? 'Click to save your edits to the database' : 'All changes are permanently saved'}
             style={{
-              backgroundColor: hasUnsavedChanges ? '#0E7490' : '#1E293B',
-              color: '#FFFFFF',
-              border: hasUnsavedChanges ? '1px solid #38BDF8' : '1px solid #334155',
-              borderRadius: '6px',
-              padding: '7px 14px',
-              fontSize: '12.5px',
-              fontWeight: '700',
+              background: hasUnsavedChanges
+                ? 'linear-gradient(135deg, #0284C7 0%, #0E7490 100%)'
+                : 'rgba(255, 255, 255, 0.04)',
+              color: hasUnsavedChanges ? '#FFFFFF' : '#94A3B8',
+              border: hasUnsavedChanges ? '1px solid #38BDF8' : '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 12px',
+              fontSize: '12px',
+              fontWeight: '600',
               cursor: isSavingPi ? 'wait' : 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: hasUnsavedChanges ? '0 0 12px rgba(14, 116, 144, 0.5)' : 'none',
-              transition: 'all 0.2s ease-in-out'
+              boxShadow: hasUnsavedChanges ? '0 0 14px rgba(56, 189, 248, 0.45)' : 'none',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Save size={14} style={{ color: hasUnsavedChanges ? '#38BDF8' : '#94A3B8' }} />
+            {hasUnsavedChanges ? (
+              <Save size={13} style={{ color: '#FFFFFF' }} />
+            ) : (
+              <CheckCircle size={13} style={{ color: '#10B981' }} />
+            )}
             {isSavingPi ? 'Saving...' : (hasUnsavedChanges ? 'Save Changes' : (lastSavedNotice || 'Saved ✓'))}
           </button>
+
+          {/* DIVIDER */}
+          <div style={{ width: '1px', height: '18px', backgroundColor: 'rgba(255, 255, 255, 0.12)', margin: '0 2px' }} />
 
           {/* DOWNLOAD PDF */}
           <button
             onClick={handleDownloadPdf}
             disabled={isExporting}
             style={{
-              backgroundColor: '#059669',
+              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
               color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 16px',
-              fontSize: '12.5px',
+              border: '1px solid rgba(52, 211, 153, 0.35)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 13px',
+              fontSize: '12px',
               fontWeight: '700',
               cursor: isExporting ? 'wait' : 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              opacity: isExporting ? 0.7 : 1
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.28)',
+              opacity: isExporting ? 0.7 : 1,
+              transition: 'all 0.15s ease'
             }}
           >
-            <Download size={14} /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
+            <Download size={13} /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
           </button>
 
           {/* SEND VIA WHATSAPP (1-CLICK) */}
@@ -4017,42 +4615,47 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
             onClick={handleOpenWhatsAppModal}
             disabled={isSendingWhatsApp}
             style={{
-              backgroundColor: '#16A34A',
+              background: 'linear-gradient(135deg, #22C55E 0%, #15803D 100%)',
               color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 16px',
-              fontSize: '12.5px',
+              border: '1px solid rgba(134, 239, 172, 0.4)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 13px',
+              fontSize: '12px',
               fontWeight: '700',
               cursor: isSendingWhatsApp ? 'wait' : 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: '0 2px 6px rgba(22,163,74,0.3)',
-              opacity: isSendingWhatsApp ? 0.7 : 1
+              boxShadow: '0 2px 8px rgba(34, 197, 94, 0.28)',
+              opacity: isSendingWhatsApp ? 0.7 : 1,
+              transition: 'all 0.15s ease'
             }}
           >
-            <MessageSquare size={14} /> {isSendingWhatsApp ? 'Sending...' : 'Send PI via WhatsApp'}
+            <MessageSquare size={13} /> {isSendingWhatsApp ? 'Sending...' : 'Send PI via WhatsApp'}
           </button>
 
           {/* NATIVE PRINT */}
           <button
             onClick={handlePrint}
             style={{
-              backgroundColor: templateSettings.accentColor || '#0E7490',
+              background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)',
               color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 16px',
-              fontSize: '12.5px',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 13px',
+              fontSize: '12px',
               fontWeight: '700',
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              boxShadow: '0 2px 8px rgba(14, 116, 144, 0.28)',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Printer size={14} /> Print
+            <Printer size={13} /> Print
           </button>
 
           {/* CLOSE */}
@@ -4060,18 +4663,20 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
             onClick={handleClose}
             title="Close Preview"
             style={{
-              backgroundColor: '#334155',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 10px',
+              background: 'rgba(255, 255, 255, 0.06)',
+              color: '#CBD5E1',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '8px',
+              width: '32px',
+              height: '32px',
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              transition: 'all 0.15s ease'
             }}
           >
-            <X size={17} />
+            <X size={16} />
           </button>
         </div>
       </div>

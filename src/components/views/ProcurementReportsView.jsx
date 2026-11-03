@@ -1,1985 +1,1287 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Plus, Check, Trash2, Eye, FileText, Search, PlusCircle, AlertCircle, AlertTriangle, X,
-  TrendingUp, Users, CheckCircle, Clock, ShieldAlert, Award,
-  MapPin, Phone, Mail, FileCheck, CheckSquare, XCircle, ArrowRight, ArrowLeft,
-  TrendingDown, DollarSign, Calendar, Edit3, SlidersHorizontal, Filter,
-  ChevronLeft, ChevronRight, MoreVertical, RotateCcw, UploadCloud, ChevronDown, ChevronUp, ExternalLink,
-  Truck, Shield, Package, Star, Download, HelpCircle, Info, ShoppingCart, Upload, Printer, Maximize2,
-  ShieldCheck, Layers, Factory, Cpu, Receipt, IndianRupee, Smartphone, Camera, Image, RefreshCw,
-  CreditCard, Bell, Video, Play, Pause, Film, Sparkles, MoreHorizontal, Copy, Hourglass, Boxes, Send
+  FileBarChart, ShoppingCart, FileCheck, Building2, Calendar, Search,
+  Download, RefreshCw, Layers, ArrowUpRight, Filter, ChevronLeft, ChevronRight,
+  TrendingUp, CheckCircle, Clock, AlertTriangle, Boxes, Tag, ShieldCheck, MapPin
 } from 'lucide-react';
-import TopSpendingCategories from '../TopSpendingCategories';
-import POTrendChart from '../POTrendChart';
-import { getVendors, getItems } from '../../services/businzDataService';
-import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
-import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
-
-
-export default function ProcurementReportsView(props) {
-  const {
-    activeTab,
-    onChangeTab,
-    userRole = 'Sales Executive',
-    convertingPiData = null,
-    onClearConvertingPiData
-  } = props;
-
-  // Common states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [showCreateGRN, setShowCreateGRN] = useState(false);
-  const [grnItems, setGrnItems] = useState([]);
-  const [selectedGRNPo, setSelectedGRNPo] = useState('');
-  const [selectedGRNVendor, setSelectedGRNVendor] = useState('');
-  const [grnChallanNo, setGrnChallanNo] = useState('');
-  const [selectedRows, setSelectedRows] = useState([]);
-  const [grnDocs, setGrnDocs] = useState([]);
-  const [livePOs, setLivePOs] = useState([]);
-  const [poReceivingHistory, setPoReceivingHistory] = useState([]);
-  const [selectedPOForDetail, setSelectedPOForDetail] = useState(null);
-  const [poDetailData, setPoDetailData] = useState(null);
-
-  const [grnToDelete, setGrnToDelete] = useState(null);
-  const [isViewOnlyMode, setIsViewOnlyMode] = useState(false);
-  const [editingGrnId, setEditingGrnId] = useState(null);
-  const [deleteDocConfirmIdx, setDeleteDocConfirmIdx] = useState(null);
-  const [activeDocPreviewModal, setActiveDocPreviewModal] = useState(null);
-
-  const [grnReceivedBy, setGrnReceivedBy] = useState('');
-  const [grnInspectorName, setGrnInspectorName] = useState('');
-  const [grnInspectionRemarks, setGrnInspectionRemarks] = useState('');
-
-  // Top-level state for Production Admin views to obey React Hook rules
-  const [prodActiveSubTab, setProdActiveSubTab] = useState('All');
-  const [prodSearchQueryText, setProdSearchQueryText] = useState('');
-  const [prodFilterDateVal, setProdFilterDateVal] = useState('');
-  const [prodFilterStatusSelect, setProdFilterStatusSelect] = useState('All');
-  const [prodStatusFilterText, setProdStatusFilterText] = useState('All');
-
-  useEffect(() => {
-    setProdActiveSubTab('All');
-    setProdSearchQueryText('');
-    setProdFilterStatusSelect('All');
-  }, [activeTab]);
-
-  const [showBOMForm, setShowBOMForm] = useState(false);
-  const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [custFormName, setCustFormName] = useState('');
-  const [custFormCompany, setCustFormCompany] = useState('');
-  const [custFormGstNo, setCustFormGstNo] = useState('');
-  const [custFormMobile, setCustFormMobile] = useState('');
-  const [custFormEmail, setCustFormEmail] = useState('');
-
-  // Structured Billing Address
-  const [custFormBillingAddress, setCustFormBillingAddress] = useState('');
-  const [custFormBillingCity, setCustFormBillingCity] = useState('');
-  const [custFormBillingState, setCustFormBillingState] = useState('');
-  const [custFormBillingPincode, setCustFormBillingPincode] = useState('');
-
-  // Structured Delivery Address
-  const [custFormSameAsBilling, setCustFormSameAsBilling] = useState(false);
-  const [custFormDeliveryAddress, setCustFormDeliveryAddress] = useState('');
-  const [custFormDeliveryCity, setCustFormDeliveryCity] = useState('');
-  const [custFormDeliveryState, setCustFormDeliveryState] = useState('');
-  const [custFormDeliveryPincode, setCustFormDeliveryPincode] = useState('');
-
-  const [customerList, setCustomerList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('controlroom_customer_store') || localStorage.getItem('controlroom_customer_list');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return [
-      { code: 'Vikram Solar Pvt Ltd', c2: 'Vikram Solar Pvt Ltd', gstNo: '33AABCU9603R1ZM', c3: 'Rajesh Kumar', c4: '+91 98765 43210', c5: 'rajesh@vikramsolar.com', status: 'ACTIVE', stBg: '#dcfce7', stFg: '#166534', stBorder: '1px solid #bbf7d0', tabGroup: 'Active' },
-      { code: 'Tata Power Renewable', c2: 'Tata Power Ltd', gstNo: '29AAACT2727Q1ZW', c3: 'Anish Sharma', c4: '+91 98123 45678', c5: 'anish.s@tatapower.com', status: 'ACTIVE', stBg: '#dcfce7', stFg: '#166534', stBorder: '1px solid #bbf7d0', tabGroup: 'Active' },
-      { code: 'Apex Infra Systems', c2: 'Apex Infra Ltd', gstNo: '33AABCA1234F1Z5', c3: 'Priya Sundaram', c4: '+91 99400 11223', c5: 'priya@apexinfra.com', status: 'ACTIVE', stBg: '#dcfce7', stFg: '#166534', stBorder: '1px solid #bbf7d0', tabGroup: 'Active' }
-    ];
-  });
-
-  // customerList auto-save removed to prevent cloud feedback loop
-
-
-  const [customerActionMenuIdx, setCustomerActionMenuIdx] = useState(null);
-  const [viewingCustomer, setViewingCustomer] = useState(null);
-  const [editingCustomer, setEditingCustomer] = useState(null);
-  const [customerToDelete, setCustomerToDelete] = useState(null);
-  const [previewAddressProofModal, setPreviewAddressProofModal] = useState(null);
-  const [bomActionMenuPos, setBomActionMenuPos] = useState({ top: 0, left: 0 });
-
-  const [bomStore, setBomStore] = useState([]);
-
-  // bomStore saving removed from secondary view
-
-  useEffect(() => {
-    fetchCloudStore('bom_store', bomStore).then(data => {
-      if (data && Array.isArray(data) && data.length > 0) {
-        setBomStore(prev => {
-          const map = new Map();
-          let localCurrent = Array.isArray(prev) ? prev : [];
-          try {
-            const savedStr = localStorage.getItem('controlroom_bom_store');
-            if (savedStr) {
-              const parsed = JSON.parse(savedStr);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                // Merge parsed with localCurrent
-                const currentMap = new Map();
-                localCurrent.forEach(i => i && currentMap.set(i.bomCode || i.code, i));
-                parsed.forEach(i => i && currentMap.set(i.bomCode || i.code, i));
-                localCurrent = Array.from(currentMap.values());
-              }
-            }
-          } catch (e) { }
-
-          // Insert cloud data first, then overlay local state so fresh local BOMs ALWAYS overwrite remote data
-          data.forEach(item => {
-            if (item) {
-              const k = item.bomCode || item.code;
-              if (k) map.set(k, item);
-            }
-          });
-          localCurrent.forEach(item => {
-            if (item) {
-              const k = item.bomCode || item.code;
-              if (k) {
-                if (map.has(k)) {
-                  map.set(k, { ...map.get(k), ...item });
-                } else {
-                  map.set(k, item);
-                }
-              }
-            }
-          });
-          const merged = Array.from(map.values());
-          const sanitizedMerged = merged.map(stripDataUrlsFromRecord);
-          
-          return sanitizedMerged;
-        });
-      }
-    });
-
-    const syncFromStorage = () => {
-      try {
-        const saved = localStorage.getItem('controlroom_bom_store');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setBomStore(parsed);
-          }
-        }
-      } catch (e) { }
-    };
-
-    window.addEventListener('storage', syncFromStorage);
-    window.addEventListener('controlroom_storage_update', syncFromStorage);
-
-    return () => {
-      window.removeEventListener('storage', syncFromStorage);
-      window.removeEventListener('controlroom_storage_update', syncFromStorage);
-    };
-  }, []);
-
-  const [bomActionMenuIdx, setBomActionMenuIdx] = useState(null);
-  const [showFloatingMoreMenu, setShowFloatingMoreMenu] = useState(false);
-  const [quickPreviewRecord, setQuickPreviewRecord] = useState(null);
-  const [confirmingBomModal, setConfirmingBomModal] = useState(null); // Full BOM object being confirmed by Salesperson
-  const [uploadPaymentModal, setUploadPaymentModal] = useState(null); // Full BOM object uploading payment proof
-  const [paymentProofFile, setPaymentProofFile] = useState(null);
-  const [paymentStageType, setPaymentStageType] = useState('100% Advance'); // '100% Advance' | '50% Advance' | '50% Dispatch' | 'Net 30 Days'
-  const [dispatchPackingModal, setDispatchPackingModal] = useState(null); // Full BOM object being packed by Dispatch Head
-  const [accountsVerificationModal, setAccountsVerificationModal] = useState(null); // Full BOM object being verified by Accounts Team
-  const [isAccountsViewOnly, setIsAccountsViewOnly] = useState(false); // Controls View mode vs Verification mode
-  const [accountsBomViewMode, setAccountsBomViewMode] = useState('paper'); // 'paper' | 'table'
-  const [viewingProofDocModal, setViewingProofDocModal] = useState(null); // BOM object or proof doc being viewed in detail
-  const [showSoftCopyModal, setShowSoftCopyModal] = useState(false);
-  const [softCopyMode, setSoftCopyMode] = useState('upload'); // 'upload' | 'camera'
-  const [selectedSoftCopyFile, setSelectedSoftCopyFile] = useState(null);
-  const [capturedPhotoUrl, setCapturedPhotoUrl] = useState(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraErrorMsg, setCameraErrorMsg] = useState('');
-  const cameraVideoRef = useRef(null);
-  const cameraCanvasRef = useRef(null);
-  const mediaStreamRef = useRef(null);
-
-  const [newBomCode, setNewBomCode] = useState('');
-  const [newBomProductName, setNewBomProductName] = useState('');
-  const [newBomSku, setNewBomSku] = useState('');
-  const [newBomRevision, setNewBomRevision] = useState('');
-  const [newBomTargetQty, setNewBomTargetQty] = useState('');
-  const [newBomStatus, setNewBomStatus] = useState('ACTIVE');
-  const [newBomDeliveryAddress, setNewBomDeliveryAddress] = useState('');
-  const [newBomDeliveryStreet, setNewBomDeliveryStreet] = useState('');
-  const [newBomDeliveryCity, setNewBomDeliveryCity] = useState('');
-  const [newBomDeliveryState, setNewBomDeliveryState] = useState('');
-  const [newBomDeliveryPincode, setNewBomDeliveryPincode] = useState('');
-  const [newBomPaymentType, setNewBomPaymentType] = useState('100% Paid');
-  const [newBomCreditDays, setNewBomCreditDays] = useState(7);
-  const [sameAsBilling, setSameAsBilling] = useState(false);
-  const [newBomDeliveryProofDoc, setNewBomDeliveryProofDoc] = useState(null);
-  const [newBomPaymentProofDoc, setNewBomPaymentProofDoc] = useState(null);
-  const [newBomRemarks, setNewBomRemarks] = useState('');
-  const [newBomTransportMode, setNewBomTransportMode] = useState('Transport');
-  const [newBomTransporterName, setNewBomTransporterName] = useState('');
-  const [newBomVehicleNo, setNewBomVehicleNo] = useState('');
-  const [newBomLrNo, setNewBomLrNo] = useState('');
-  const [newBomGstRate, setNewBomGstRate] = useState('18%');
-  const [selectedPreset, setSelectedPreset] = useState('');
-  const [presetSetCount, setPresetSetCount] = useState(1);
-  const [selectedBomItemIndexes, setSelectedBomItemIndexes] = useState([]);
-  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
-  const [bomConfirmModal, setBomConfirmModal] = useState(null); // { type: 'cancel' | 'draft' | 'create' }
-  const [reuploadAddressProofModal, setReuploadAddressProofModal] = useState(null); // BOM object requiring address proof re-upload
-  const [reuploadProofFile, setReuploadProofFile] = useState(null);
-  const [updatePaymentModal, setUpdatePaymentModal] = useState(null); // BOM object for updating payment (Partial/Credit)
-  const [updatePaymentFile, setUpdatePaymentFile] = useState(null);
-  const [updatePaymentNotes, setUpdatePaymentNotes] = useState('');
-
-
-
-  // Vehicle Loading & Final Dispatch State
-  const [vehicleLoadingModal, setVehicleLoadingModal] = useState(null); // BOM object undergoing vehicle loading
-  const [vehicleLoadingData, setVehicleLoadingData] = useState({
-    vehicleNo: '',
-    driverName: '',
-    driverPhone: '',
-    transporter: '',
-    lrNo: '',
-    sealNo: '',
-    ewayBillNo: '',
-    loadingNotes: ''
-  });
-  const [loadingPhotos, setLoadingPhotos] = useState([]); // [{ id, name, size, dataUrl, capturedAt }]
-  const [loadingVideos, setLoadingVideos] = useState([]); // [{ id, name, size, dataUrl, recordedAt }]
-  const [loadingMediaMode, setLoadingMediaMode] = useState('photo'); // 'photo' | 'video' | 'camera'
-  const [isRecordingLoadingVideo, setIsRecordingLoadingVideo] = useState(false);
-  const [loadingCameraActive, setLoadingCameraActive] = useState(false);
-  const [activeMediaPreviewModal, setActiveMediaPreviewModal] = useState(null); // { type: 'image' | 'video', url, name }
-  const [completedBomSummaryModal, setCompletedBomSummaryModal] = useState(null); // Completed BOM object
-
-  const [customAlert, setCustomAlert] = useState(null);
-
-  const showCustomAlert = (msg, title = null, type = null) => {
-    let detectedType = type;
-    let detectedTitle = title;
-    const strMsg = String(msg || '');
-
-    if (!detectedType) {
-      if (strMsg.includes('❌') || strMsg.toLowerCase().includes('wrong') || strMsg.toLowerCase().includes('error') || strMsg.toLowerCase().includes('fail') || strMsg.toLowerCase().includes('invalid') || strMsg.toLowerCase().includes('unable') || strMsg.toLowerCase().includes('cannot')) {
-        detectedType = 'error';
-        if (!detectedTitle) detectedTitle = 'Uh oh! Something went wrong';
-      } else if (strMsg.includes('⚠️') || strMsg.toLowerCase().includes('warning') || strMsg.toLowerCase().includes('mandatory') || strMsg.toLowerCase().includes('differs') || strMsg.toLowerCase().includes('please')) {
-        detectedType = 'warning';
-        if (!detectedTitle) detectedTitle = 'Attention Required';
-      } else if (strMsg.includes('✅') || strMsg.toLowerCase().includes('success') || strMsg.toLowerCase().includes('approved') || strMsg.toLowerCase().includes('verified') || strMsg.toLowerCase().includes('completed')) {
-        detectedType = 'success';
-        if (!detectedTitle) detectedTitle = 'Action Successful';
-      } else {
-        detectedType = 'info';
-        if (!detectedTitle) detectedTitle = 'System Notification';
-      }
-    }
-
-    const cleanMsg = strMsg.replace(/^[✅⚠️❌📦🚚🔄📝📩]\s*/, '');
-    setCustomAlert({
-      title: detectedTitle || (detectedType === 'error' ? 'Uh oh! Something went wrong' : 'Notification'),
-      message: cleanMsg || (detectedType === 'error' ? 'We apologize for the inconvenience you experienced.' : 'Action completed.'),
-      type: detectedType || 'info'
-    });
-  };
-
-  // Shadow window.alert within OtherViews to always render the custom branded popup
-  const alert = (msg, title, type) => showCustomAlert(msg, title, type);
-
-  const [bomMaterialsList, setBomMaterialsList] = useState([]);
-
-  const [bomRoutingSteps, setBomRoutingSteps] = useState([
-    { stepNo: 1, opName: 'Uncoiling & Cut to Length', machine: 'CNC Cutting Machine', cycleTime: '3.5 sec', setupTime: '10 mins', skill: 'Skilled Operator' },
-    { stepNo: 2, opName: 'Precision Slot Punching', machine: 'Punching Machine #1', cycleTime: '4.0 sec', setupTime: '15 mins', skill: 'Skilled Operator' },
-    { stepNo: 3, opName: 'Quality Inspection & Deburring', machine: 'QC Station #1', cycleTime: '2.0 sec', setupTime: '5 mins', skill: 'QC Inspector' },
-    { stepNo: 4, opName: 'Final Stacking & Packing', machine: 'Packing Bench', cycleTime: '5.0 sec', setupTime: '5 mins', skill: 'Assembly Worker' }
-  ]);
-
-  // Reset sub-form view state whenever switching main tabs/side menu items
-  useEffect(() => {
-    setShowBOMForm(false);
-    setShowWorkOrderForm(false);
-    setShowCustomerForm(false);
-    setViewingCustomer(null);
-    setEditingCustomer(null);
-  }, [activeTab]);
-
-  // Reset GRN modal state to clean initial state
-  const resetCreateGRNForm = () => {
-    setSelectedGRNPo('');
-    setSelectedGRNVendor('');
-    setGrnChallanNo('');
-    setGrnReceivedBy('');
-    setGrnInspectorName('');
-    setGrnInspectionRemarks('');
-    setGrnItems([]);
-    setPoReceivingHistory([]);
-    setIsViewOnlyMode(false);
-    setEditingGrnId(null);
-  };
-
-  // Fetch live Purchase Orders & stored GRNs for GRN selection and list display
-  useEffect(() => {
-    fetch('/api/purchaseorders')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setLivePOs(data);
-        }
-      })
-      .catch(err => console.error('Error fetching live POs:', err));
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') {
-      fetch('/api/grns')
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data)) {
-            const formattedList = data.map(g => ({
-              id: g.grnNo || g.id,
-              poRef: g.poRef || g.poNo || '—',
-              vendor: g.vendor || '—',
-              date: g.date || '—',
-              received: `${g.receivedQty || 0} Units`,
-              status: g.status || 'Approved',
-              val: `₹ ${(g.receivedQty || 0) * 1250}`,
-              challanNo: g.challanNo || '',
-              receivedBy: g.receivedBy || '',
-              inspectorName: g.inspectorName || '',
-              inspectionRemarks: g.inspectionRemarks || '',
-              documents: g.documents || []
-            }));
-            setGrnList(formattedList);
-          }
-        })
-        .catch(err => console.error('Error fetching stored GRNs:', err));
-    }
-  }, [activeTab]);
-
-  // Function to load PO details and line items when a PO is selected
-  const loadPOItems = (selectedId, currentLivePOs = livePOs) => {
-    if (!selectedId) {
-      setSelectedGRNPo('');
-      setGrnItems([]);
-      setSelectedGRNVendor('');
-      setPoReceivingHistory([]);
-      return;
-    }
-
-    const found = currentLivePOs.find(p => p.poNo === selectedId || p.id === selectedId);
-    const vendorName = found ? found.vendor : 'Vendor';
-    const targetId = found ? (found.id || selectedId) : selectedId;
-    const poRef = found ? (found.poNo || selectedId) : selectedId;
-
-    setSelectedGRNPo(poRef);
-    setSelectedGRNVendor(vendorName);
-
-    Promise.all([
-      fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`).then(res => res.ok ? res.json().catch(() => null) : null),
-      fetch(`/api/po-receiving-history/${encodeURIComponent(poRef)}`).then(res => res.ok ? res.json().catch(() => null) : null)
-    ])
-      .then(([detail, historyData]) => {
-        let rawItems = (detail && Array.isArray(detail.items) && detail.items.length > 0)
-          ? detail.items
-          : [
-            { name: 'Solar Mounting Structure', description: 'HDG Aluminium Profile Rail 40x40mm', qty: 3000, unit: 'NOS' },
-            { name: 'Fasteners M8*50 SS304', description: 'SS304 Allen Bolt with Washer', qty: 1000, unit: 'Set' }
-          ];
-
-        const historyTotals = (historyData && historyData.itemReceivedTotals) ? historyData.itemReceivedTotals : {};
-        const historyList = (historyData && historyData.grnHistory) ? historyData.grnHistory : [];
-
-        const items = rawItems.map((it, idx) => {
-          const itemId = it.id || it.itemId || it.lineItemId || `PO-ITEM-${idx}`;
-          const itemName = (it.name || '').trim().toLowerCase();
-
-          let prev = 0;
-          if (historyTotals[itemId] !== undefined) {
-            prev = Number(historyTotals[itemId]);
-          } else if (historyTotals[itemName] !== undefined) {
-            prev = Number(historyTotals[itemName]);
-          } else if (historyTotals[idx] !== undefined) {
-            prev = Number(historyTotals[idx]);
-          } else if (it.previouslyReceived !== undefined) {
-            prev = Number(it.previouslyReceived);
-          }
-
-          const ordered = it.qty || 0;
-          const remaining = (it.remainingQty !== undefined) ? Number(it.remainingQty) : Math.max(0, ordered - prev);
-
-          return {
-            id: itemId,
-            name: it.name,
-            sku: it.sku || `SKU-${101 + idx}`,
-            desc: it.description || '',
-            uom: it.unit || 'NOS',
-            ordered: ordered,
-            prev: prev,
-            remaining: remaining,
-            now: '',
-            accepted: '',
-            rejected: 0,
-            reason: '—',
-            batch: `LOT-2026-${idx + 1}`
-          };
-        });
-
-        setGrnItems(items);
-        setPoReceivingHistory(historyList);
-      })
-      .catch(err => console.error('Error fetching PO receiving history:', err));
-  };
-
-  // Fetch detailed PO summary and GRN receiving history when viewing PO detail
-  useEffect(() => {
-    if (selectedPOForDetail) {
-      const found = livePOs.find(p => p.poNo === selectedPOForDetail || p.id === selectedPOForDetail);
-      const targetId = found ? found.id : selectedPOForDetail;
-
-      fetch(`/api/purchaseorders/${targetId}`)
-        .then(res => res.json())
-        .then(data => setPoDetailData(data))
-        .catch(err => console.error('Error fetching PO detail:', err));
-    } else {
-      setPoDetailData(null);
-    }
-  }, [selectedPOForDetail, livePOs]);
-
-  // Add Stock Form States
-  const [showAddStockForm, setShowAddStockForm] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState('INV-1042');
-  const [showDrawer, setShowDrawer] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState('PAY-0087');
-  const [showPaymentPanel, setShowPaymentPanel] = useState(false);
-  const [stockEntry, setStockEntry] = useState({
-    entryType: 'Stock Addition',
-    warehouse: 'Main Warehouse',
-    entryDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-    reason: 'Opening Stock',
-    refNo: '',
-    addedBy: 'Admin User'
-  });
-  const [addStockItems, setAddStockItems] = useState([]);
-  const [stockDetails, setStockDetails] = useState({
-    batchNo: '',
-    supplier: '',
-    mfgDate: '',
-    expiryDate: '',
-    storageLocation: 'Rack A-04',
-    remarks: ''
-  });
-  const [stockDocs, setStockDocs] = useState([]);
-
-  useEffect(() => {
-    setSelectedRows([]);
-    setShowAddStockForm(false);
-  }, [activeTab]);
-
-  const [grnValidationModal, setGrnValidationModal] = useState(null);
-
-  const handleSaveAndReceive = () => {
-    const missing = [];
-    if (!selectedGRNPo) missing.push('Purchase Order');
-    if (!selectedGRNVendor) missing.push('Vendor');
-    if (!grnChallanNo || String(grnChallanNo).trim() === '') missing.push('DC NO / Invoice No.');
-    if (!grnReceivedBy || String(grnReceivedBy).trim() === '') missing.push('Received By');
-
-    if (missing.length > 0) {
-      setGrnValidationModal({ title: 'Mandatory Fields Required', fields: missing, message: 'Please complete all required fields to proceed.' });
-      return;
-    }
-
-    // Prepare item list with defaults if user didn't type explicit numbers into inputs
-    const processedItems = grnItems.map(it => {
-      const remaining = Math.max(0, (it.ordered || 0) - (it.prev || 0));
-      const nowVal = (it.now !== '' && it.now !== undefined && it.now !== null) ? Number(it.now) : (remaining > 0 ? remaining : (it.ordered || 1));
-      const acceptedVal = (it.accepted !== '' && it.accepted !== undefined && it.accepted !== null) ? Number(it.accepted) : nowVal;
-      return {
-        ...it,
-        now: nowVal,
-        accepted: acceptedVal,
-        rejected: Number(it.rejected || 0)
-      };
-    });
-
-    const invalidItem = processedItems.find(it => {
-      const remaining = Math.max(0, (it.ordered || 0) - (it.prev || 0));
-      return (it.now || 0) > remaining && remaining > 0;
-    });
-
-    if (invalidItem) {
-      const remaining = Math.max(0, (invalidItem.ordered || 0) - (invalidItem.prev || 0));
-      setGrnValidationModal({
-        title: 'Validation Error',
-        message: `Received quantity (${invalidItem.now}) for "${invalidItem.name}" cannot exceed the pending quantity of ${remaining}.`
-      });
-      return;
-    }
-
-    const totalNow = processedItems.reduce((acc, it) => acc + Number(it.now || 0), 0);
-    const totalAccepted = processedItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
-    const totalRejected = processedItems.reduce((acc, it) => acc + Number(it.rejected || 0), 0);
-
-    const docsToAttach = grnDocs || [];
-
-    const payload = {
-      poRef: selectedGRNPo,
-      poNo: selectedGRNPo,
-      vendor: selectedGRNVendor || 'Vendor',
-      challanNo: grnChallanNo || 'DC-NEW',
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      receivedQty: totalNow,
-      acceptedQty: totalAccepted,
-      rejectedQty: totalRejected,
-      receivedBy: grnReceivedBy || '',
-      inspectorName: grnInspectorName || '',
-      inspectionRemarks: grnInspectionRemarks || '',
-      items: processedItems,
-      documents: docsToAttach
-    };
-
-    fetch('/api/grns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.grn) {
-          const formattedGRN = {
-            id: data.grn.grnNo || data.grn.id,
-            poRef: data.grn.poRef || data.grn.poNo || '—',
-            vendor: data.grn.vendor || '—',
-            date: data.grn.date || '—',
-            received: `${totalNow} Units`,
-            status: data.grn.status || 'OPEN / PARTIALLY RECEIVED',
-            val: `₹ ${totalNow * 1250}`,
-            challanNo: data.grn.challanNo || grnChallanNo,
-            receivedBy: data.grn.receivedBy || grnReceivedBy,
-            documents: data.grn.documents || docsToAttach
-          };
-
-          setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
-
-          fetch('/api/grns')
-            .then(res => res.json())
-            .then(grns => {
-              if (Array.isArray(grns)) {
-                setGrnList(grns.map(g => ({
-                  id: g.grnNo || g.id,
-                  poRef: g.poRef || g.poNo || '—',
-                  vendor: g.vendor || '—',
-                  date: g.date || '—',
-                  received: `${g.receivedQty || 0} Units`,
-                  status: g.status || 'Approved',
-                  val: `₹ ${(g.receivedQty || 0) * 1250}`,
-                  challanNo: g.challanNo || '',
-                  receivedBy: g.receivedBy || '',
-                  inspectorName: g.inspectorName || '',
-                  inspectionRemarks: g.inspectionRemarks || '',
-                  documents: g.documents || []
-                })));
-              }
-            });
-
-          fetch('/api/purchaseorders')
-            .then(res => res.json())
-            .then(d => { if (Array.isArray(d)) setLivePOs(d); });
-
-          fetch('/api/items')
-            .then(res => res.json())
-            .then(items => { if (Array.isArray(items)) setItemsList(items); });
-        }
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      })
-      .catch(err => {
-        console.error('Failed to post GRN to API, saving to local state fallback:', err);
-        const fallbackGRN = {
-          id: `GRN-2026-${String(grnList.length + 101).padStart(5, '0')}`,
-          poRef: selectedGRNPo || 'PO-00001',
-          vendor: selectedGRNVendor || 'Vendor',
-          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-          received: `${totalNow} Units`,
-          status: 'OPEN / PARTIALLY RECEIVED',
-          val: `₹ ${totalNow * 1250}`,
-          challanNo: grnChallanNo,
-          receivedBy: grnReceivedBy,
-          documents: docsToAttach
-        };
-        setGrnList(prev => [fallbackGRN, ...prev]);
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      });
-  };
-
-  const handleFullyReceived = () => {
-    if (!selectedGRNPo) {
-      setGrnValidationModal({ title: 'Purchase Order Required', message: 'Please select a Purchase Order to mark as Fully Received.' });
-      return;
-    }
-
-    const completedItems = grnItems.map(it => {
-      const ord = it.ordered || (it.prev ? it.prev + (it.now || 1) : (it.now || 1));
-      const nowQty = Math.max(1, (it.now && it.now > 0) ? it.now : (ord - (it.prev || 0)));
-      const acceptedQty = Math.max(1, (it.accepted && it.accepted > 0) ? it.accepted : nowQty);
-      return {
-        ...it,
-        ordered: ord,
-        now: nowQty,
-        accepted: acceptedQty,
-        rejected: 0,
-        reason: '—'
-      };
-    });
-
-    const totalAccepted = completedItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
-    const docsToAttach = grnDocs || [];
-
-    const payload = {
-      poRef: selectedGRNPo,
-      poNo: selectedGRNPo,
-      vendor: selectedGRNVendor || 'Vendor',
-      challanNo: grnChallanNo || 'DC-FINAL',
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      receivedQty: totalAccepted,
-      acceptedQty: totalAccepted,
-      rejectedQty: 0,
-      receivedBy: grnReceivedBy || 'Store Manager',
-      inspectorName: grnInspectorName || 'Quality Inspector',
-      inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
-      items: completedItems,
-      documents: docsToAttach,
-      status: 'CLOSED / FULLY RECEIVED',
-      forceClosePO: true
-    };
-
-    fetch('/api/grns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.grn) {
-          const formattedGRN = {
-            id: data.grn.grnNo || data.grn.id,
-            poRef: data.grn.poRef || data.grn.poNo || '—',
-            vendor: data.grn.vendor || '—',
-            date: data.grn.date || '—',
-            received: `${totalAccepted} Units`,
-            status: 'CLOSED / FULLY RECEIVED',
-            val: `₹ ${totalAccepted * 1250}`,
-            challanNo: data.grn.challanNo || grnChallanNo,
-            receivedBy: data.grn.receivedBy || grnReceivedBy,
-            documents: data.grn.documents || docsToAttach
-          };
-
-          setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
-        }
-
-        fetch('/api/grns')
-          .then(res => res.json())
-          .then(grns => {
-            if (Array.isArray(grns)) {
-              setGrnList(grns.map(g => ({
-                id: g.grnNo || g.id,
-                poRef: g.poRef || g.poNo || '—',
-                vendor: g.vendor || '—',
-                date: g.date || '—',
-                received: `${g.receivedQty || 0} Units`,
-                status: g.status || 'CLOSED / FULLY RECEIVED',
-                val: `₹ ${(g.receivedQty || 0) * 1250}`,
-                challanNo: g.challanNo || '',
-                receivedBy: g.receivedBy || '',
-                inspectorName: g.inspectorName || '',
-                inspectionRemarks: g.inspectionRemarks || '',
-                documents: g.documents || []
-              })));
-            }
-          });
-
-        fetch('/api/purchaseorders')
-          .then(res => res.json())
-          .then(d => { if (Array.isArray(d)) setLivePOs(d); });
-
-        fetch('/api/items')
-          .then(res => res.json())
-          .then(items => { if (Array.isArray(items)) setItemsList(items); });
-
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      })
-      .catch(err => {
-        console.error('Failed to mark as Fully Received on API, saving to local state fallback:', err);
-        const fallbackGRN = {
-          id: `GRN-2026-${String(grnList.length + 101).padStart(5, '0')}`,
-          poRef: selectedGRNPo || 'PO-00001',
-          vendor: selectedGRNVendor || 'Vendor',
-          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-          received: `${totalAccepted} Units`,
-          status: 'CLOSED / FULLY RECEIVED',
-          val: `₹ ${totalAccepted * 1250}`,
-          challanNo: grnChallanNo || 'DC-FULL',
-          receivedBy: grnReceivedBy || 'Store Manager',
-          documents: docsToAttach
-        };
-        setGrnList(prev => [fallbackGRN, ...prev]);
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      });
-  };
-
-  const handleDeleteGRN = (targetId) => {
-    const targetItem = grnList.find(g => g.id === targetId || g.grnNo === targetId);
-    if (targetItem && (
-      targetItem.status === 'CLOSED / FULLY RECEIVED' ||
-      targetItem.status === 'Approved' ||
-      targetItem.status === 'Fully Accepted' ||
-      targetItem.status === 'Closed' ||
-      targetItem.status === 'CLOSED'
-    )) {
-      alert('Fully received or approved GRNs cannot be deleted.');
-      return;
-    }
-    setGrnToDelete(targetId);
-  };
-
-  const confirmDeleteGRN = () => {
-    if (!grnToDelete) return;
-    const targetId = grnToDelete;
-
-    fetch(`/api/grns/${encodeURIComponent(targetId)}`, { method: 'DELETE' })
-      .then(res => res.json())
-      .then(() => {
-        setGrnList(prev => prev.filter(g => g.id !== targetId && g.grnNo !== targetId));
-        setGrnToDelete(null);
-        // Refresh live POs list
-        fetch('/api/purchaseorders')
-          .then(res => res.json())
-          .then(d => { if (Array.isArray(d)) setLivePOs(d); });
-      })
-      .catch(err => {
-        console.error('Error deleting GRN:', err);
-        setGrnToDelete(null);
-      });
-  };
-
-  const handleAddStockSubmit = () => {
-    let updatedRegistry = [...stockRegistry];
-    addStockItems.forEach(item => {
-      const existIdx = updatedRegistry.findIndex(r => r.code === item.sku);
-      if (existIdx > -1) {
-        const currentQty = Number(updatedRegistry[existIdx].stock.replace(/,/g, ''));
-        const newQty = currentQty + Number(item.qty || 0);
-        updatedRegistry[existIdx] = {
-          ...updatedRegistry[existIdx],
-          stock: String(newQty),
-          val: String(Math.round(newQty * item.rate)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-        };
-      } else {
-        updatedRegistry.push({
-          code: item.sku,
-          item: item.name,
-          category: item.category,
-          location: stockEntry.warehouse,
-          stock: String(item.qty),
-          allocated: '0',
-          incoming: '-',
-          minLevel: '500',
-          val: String(Math.round(item.qty * item.rate)).replace(/\B(?=(\d{3})+(?!\d))/g, ","),
-          status: 'In Stock'
-        });
-      }
-    });
-    setStockRegistry(updatedRegistry);
-    setShowAddStockForm(false);
-  };
-
-  const renderStatusBadge = (status) => {
-    let colors = { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }; // default
-    switch (status) {
-      case 'Pending Approval':
-        colors = { bg: '#fffbeb', color: '#b45309', border: '#fde68a' };
-        break;
-      case 'Pending Review':
-        colors = { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' };
-        break;
-      case 'Approved':
-      case 'Active':
-      case 'Fully Accepted':
-      case '3-Way Match OK':
-      case 'Paid':
-      case 'Completed':
-      case 'Preferred':
-      case 'Ready for Payment':
-        colors = { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' };
-        break;
-      case 'In Procurement':
-        colors = { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
-        break;
-      case 'Partially Fulfilled':
-        colors = { bg: '#fef9c3', color: '#a16207', border: '#fef08a' };
-        break;
-      case 'Rejected':
-      case 'Inactive':
-      case 'Blacklisted':
-      case 'Shortage Detected':
-      case 'Discrepancy (Qty)':
-      case 'On Hold':
-      case 'Failed':
-        colors = { bg: '#fff5f5', color: '#e53e3e', border: '#fed7d7' };
-        break;
-      case 'Draft':
-        colors = { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' };
-        break;
-      case 'Sent':
-        colors = { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
-        break;
-      case 'Viewed':
-        colors = { bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff' };
-        break;
-      case 'Expired':
-        colors = { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' };
-        break;
-      case 'Scheduled':
-        colors = { bg: '#f0fdfa', color: '#0f766e', border: '#99f6e4' };
-        break;
-      default:
-        colors = { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
-    }
-
-    return (
-      <span style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '5px',
-        padding: '4px 10px',
-        borderRadius: '6px',
-        fontSize: '11px',
-        fontWeight: 'bold',
-        backgroundColor: colors.bg,
-        color: colors.color,
-        border: `1px solid ${colors.border}`,
-        whiteSpace: 'nowrap'
-      }}>
-        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: colors.color, display: 'inline-block' }} />
-        {status}
-      </span>
-    );
-  };
-
-  const renderPriorityBadge = (priority) => {
-    let colors = { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
-    switch (priority) {
-      case 'High':
-        colors = { bg: '#fff5f5', color: '#e53e3e', border: '#fed7d7' };
-        break;
-      case 'Normal':
-      case 'Medium':
-        colors = { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
-        break;
-      case 'Low':
-        colors = { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' };
-        break;
-    }
-
-    return (
-      <span style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '5px',
-        padding: '4px 10px',
-        borderRadius: '6px',
-        fontSize: '11px',
-        fontWeight: 'bold',
-        backgroundColor: colors.bg,
-        color: colors.color,
-        border: `1px solid ${colors.border}`,
-        whiteSpace: 'nowrap'
-      }}>
-        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: colors.color, display: 'inline-block' }} />
-        {priority}
-      </span>
-    );
-  };
-
-  const handleSelectAllGeneric = (e, items, keyField) => {
-    if (e.target.checked) {
-      setSelectedRows(items.map(item => item[keyField]));
-    } else {
-      setSelectedRows([]);
-    }
-  };
-
-  const handleSelectRowGeneric = (val) => {
-    if (selectedRows.includes(val)) {
-      setSelectedRows(selectedRows.filter(item => item !== val));
-    } else {
-      setSelectedRows([...selectedRows, val]);
-    }
-  };
-
-  // RFP Data State (Expanded to match user screenshot)
-  const [rfpList, setRfpList] = useState([
-    { id: 'PR-2026-189', requester: 'Ravi Kumar', dept: 'Production', req: 'GI Steel Coil 2mm', qty: '10.00 MT', requiredBy: '15 Jun 2026', priority: 'High', status: 'Pending Approval', date: '29 May 2026, 09:15 AM' },
-    { id: 'PR-2026-190', requester: 'Arun Prasad', dept: 'Design', req: 'Aluminium Rail 120mm', qty: '100 Nos', requiredBy: '18 Jun 2026', priority: 'Normal', status: 'Approved', date: '29 May 2026, 11:30 AM' },
-    { id: 'PR-2026-191', requester: 'Priya Sharma', dept: 'HR', req: 'Office Chair - Executive', qty: '20 Nos', requiredBy: '20 Jun 2026', priority: 'Normal', status: 'In Procurement', date: '28 May 2026, 04:45 PM' },
-    { id: 'PR-2026-192', requester: 'Manoj Kumar', dept: 'Production', req: 'CRC Sheet 1.2mm', qty: '5.00 MT', requiredBy: '16 Jun 2026', priority: 'High', status: 'Pending Review', date: '28 May 2026, 02:20 PM' },
-    { id: 'PR-2026-193', requester: 'Suresh Patel', dept: 'Maintenance', req: 'Bearing SKF 6204', qty: '30 Nos', requiredBy: '17 Jun 2026', priority: 'Low', status: 'Approved', date: '27 May 2026, 10:10 AM' },
-    { id: 'PR-2026-194', requester: 'Karthik R', dept: 'Projects', req: 'MS Channel 75x40', qty: '50.00 MT', requiredBy: '22 Jun 2026', priority: 'High', status: 'In Procurement', date: '27 May 2026, 09:05 AM' },
-    { id: 'PR-2026-195', requester: 'Anitha Devi', dept: 'Admin', req: 'Printer - HP LaserJet', qty: '2 Nos', requiredBy: '25 Jun 2026', priority: 'Normal', status: 'Partially Fulfilled', date: '26 May 2026, 03:30 PM' },
-    { id: 'PR-2026-196', requester: 'Vijay Kumar', dept: 'Stores', req: 'Welding Electrode 6013', qty: '25.00 KG', requiredBy: '19 Jun 2026', priority: 'Low', status: 'Completed', date: '26 May 2026, 11:45 AM' }
-  ]);
-  const [prNumber, setPrNumber] = useState('PR-2026-198');
-  const [prDate, setPrDate] = useState(new Date().toISOString().split('T')[0]);
-  const [prRequestedBy, setPrRequestedBy] = useState('Ravi Kumar');
-  const [prDept, setPrDept] = useState('Production');
-  const [prRequiredDate, setPrRequiredDate] = useState('');
-  const [prPriority, setPrPriority] = useState('Normal');
-  const [prProject, setPrProject] = useState('N/A');
-  const [prCostCenter, setPrCostCenter] = useState('PROD-1001 - Production');
-  const [prPurpose, setPrPurpose] = useState('');
-
-  // Requisition items list state
-  const [prItems, setPrItems] = useState([
-    { name: 'GI Steel Coil 2mm', desc: '', unit: 'MT', qty: '', date: '', vendor: 'N/A' }
-  ]);
-
-  // Additional details state
-  const [prBudget, setPrBudget] = useState('');
-  const [prBrand, setPrBrand] = useState('');
-  const [prNotes, setPrNotes] = useState('');
-  const [prUseDefaultTerms, setPrUseDefaultTerms] = useState(true);
-
-  // Approval flow state
-  const [prReviewBy, setPrReviewBy] = useState('Department Head');
-  const [prApproveBy, setPrApproveBy] = useState('Procurement Head');
-
-  const handleAddItem = () => {
-    setPrItems([...prItems, { name: 'GI Steel Coil 2mm', desc: '', unit: 'MT', qty: '1.00', date: '2026-06-15', vendor: 'N/A' }]);
-  };
-
-  const handleRemoveItem = (index) => {
-    if (prItems.length > 1) {
-      setPrItems(prItems.filter((_, i) => i !== index));
-    }
-  };
-
-  const handleItemChange = (index, field, value) => {
-    const updated = [...prItems];
-    updated[index][field] = value;
-    setPrItems(updated);
-  };
-
-  const renderSelect = (value, onChange, options, style = {}) => {
-    return (
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select id="procurement-reports-value" name="value" aria-label="Value"
-          value={value}
-          onChange={onChange}
-          style={{
-            width: '100%',
-            height: '38px',
-            borderRadius: '8px',
-            border: '1px solid #cbd5e1',
-            padding: '0 12px',
-            fontSize: '13px',
-            backgroundColor: 'white',
-            color: '#334155',
-            outline: 'none',
-            cursor: 'pointer',
-            ...style
-          }}
-        >
-          {options.map((opt, i) => (
-            typeof opt === 'object'
-              ? <option key={i} value={opt.value}>{opt.label}</option>
-              : <option key={i} value={opt}>{opt}</option>
-          ))}
-        </select>
-      </div>
-    );
-  };
-
-  const renderTableSelect = (value, onChange, options, style = {}) => {
-    return renderSelect(value, onChange, options, { height: '36px', borderRadius: '6px', ...style });
-  };
-
-  // Filters State
-  const [deptFilter, setDeptFilter] = useState('All');
-  const [requestedByFilter, setRequestedByFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [priorityFilter, setPriorityFilter] = useState('All');
-  const [activeStatusTab, setActiveStatusTab] = useState('All');
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedPRs, setSelectedPRs] = useState([]);
-
-  // Vendor Data State
-  const [vendorList, setVendorList] = useState([]);
-  const [vendorLoading, setVendorLoading] = useState(false);
-
-  const loadVendorsFromBackend = async () => {
-    setVendorLoading(true);
-    try {
-      const backendVendors = await getVendors();
-      if (Array.isArray(backendVendors) && backendVendors.length > 0) {
-        setVendorList(backendVendors);
-      } else {
-        const res = await fetch('/api/vendors').catch(() => null);
-        if (res && res.ok) {
-          const vData = await res.json().catch(() => []);
-          setVendorList(Array.isArray(vData) ? vData : []);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load vendors", e);
-    } finally {
-      setVendorLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === 'Vendor Management') {
-      loadVendorsFromBackend();
-    }
-  }, [activeTab]);
-
-  const [invoicesList, setInvoicesList] = useState([]);
-  const [printTaxInvoiceModal, setPrintTaxInvoiceModal] = useState(null);
-
-  useEffect(() => {
-    if (activeTab === 'Invoice Management') {
-      const fetchInvoicesFromBackend = async () => {
-        try {
-          const response = await fetch('/api/invoices');
-          if (response.ok) {
-            const backendInvoices = await response.json();
-            if (Array.isArray(backendInvoices)) {
-              setInvoicesList(backendInvoices);
-            }
-          }
-        } catch (err) {
-          console.error("Error fetching Invoices:", err);
-        }
-      };
-      fetchInvoicesFromBackend();
-    }
-  }, [activeTab]);
-
-  const [activeVendorActionMenu, setActiveVendorActionMenu] = useState(null);
-  const [deleteConfirmVendor, setDeleteConfirmVendor] = useState(null);
-  const [viewingVendor, setViewingVendor] = useState(null);
-  const [vendorModalLoading, setVendorModalLoading] = useState(false);
-  const [editingVendor, setEditingVendor] = useState(null);
-
-  const handleOpenVendorDetails = async (vendor) => {
-    setViewingVendor(vendor);
-    setActiveVendorActionMenu(null);
-    if (vendor.id || vendor.code) {
-      setVendorModalLoading(true);
-      try {
-        const vendorId = vendor.id || vendor.code;
-        const res = await fetch(`/api/vendors/${vendorId}`);
-        if (res.ok) {
-          const detail = await res.json();
-          setViewingVendor(detail);
-        }
-      } catch (e) {
-        console.error("Failed to load detailed vendor info from database", e);
-      } finally {
-        setVendorModalLoading(false);
-      }
-    }
-  };
-
-  // Quotations Action States
-  const [activeQuotationActionMenu, setActiveQuotationActionMenu] = useState(null);
-  const [deleteConfirmQuotation, setDeleteConfirmQuotation] = useState(null);
-  const [viewingQuotation, setViewingQuotation] = useState(null);
-  const [editingQuotation, setEditingQuotation] = useState(null);
-
-  // GRN Action States
-  const [activeGrnActionMenu, setActiveGrnActionMenu] = useState(null);
-  const [deleteConfirmGrn, setDeleteConfirmGrn] = useState(null);
-  const [viewingGrn, setViewingGrn] = useState(null);
-  const [editingGrn, setEditingGrn] = useState(null);
-
-  // Invoice Action States
-  const [activeInvoiceActionMenu, setActiveInvoiceActionMenu] = useState(null);
-  const [deleteConfirmInvoice, setDeleteConfirmInvoice] = useState(null);
-  const [viewingInvoice, setViewingInvoice] = useState(null);
-  const [editingInvoice, setEditingInvoice] = useState(null);
-
-  // Payment Action States
-  const [activePaymentActionMenu, setActivePaymentActionMenu] = useState(null);
-  const [deleteConfirmPayment, setDeleteConfirmPayment] = useState(null);
-  const [viewingPayment, setViewingPayment] = useState(null);
-  const [editingPayment, setEditingPayment] = useState(null);
-
-  // Proforma Invoice Action States
-  const [activeProformaActionMenu, setActiveProformaActionMenu] = useState(null);
-  const [deleteConfirmProforma, setDeleteConfirmProforma] = useState(null);
-  const [viewingProforma, setViewingProforma] = useState(null);
-  const [editingProforma, setEditingProforma] = useState(null);
-
-  // RFP Action States
-  const [activeRfpActionMenu, setActiveRfpActionMenu] = useState(null);
-  const [deleteConfirmRfp, setDeleteConfirmRfp] = useState(null);
-  const [viewingRfp, setViewingRfp] = useState(null);
-  const [editingRfp, setEditingRfp] = useState(null);
-
-  // Items Action States
-  const [itemsList, setItemsList] = useState([]);
-  const [activeItemActionMenu, setActiveItemActionMenu] = useState(null);
-  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
-  const [viewingItem, setViewingItem] = useState(null);
-  const [editingItem, setEditingItem] = useState(null);
-  const [isSavingItem, setIsSavingItem] = useState(false);
-  const [isSyncingItems, setIsSyncingItems] = useState(false);
-  const [itemSaveStatus, setItemSaveStatus] = useState(null);
-  const [isCreatingItem, setIsCreatingItem] = useState(false);
-  const [isCreatingProduct, setIsCreatingProduct] = useState(false);
-  const [createStatus, setCreateStatus] = useState(null);
-  const [newItemData, setNewItemData] = useState({
-    name: '',
-    sku: '',
-    rate: '',
-    purchaseRate: '',
-    unit: 'NOS',
-    status: 'Active',
-    warehouse: 'Main Warehouse',
-    description: '',
-    purchaseDescription: '',
-    productType: 'goods'
-  });
-  const [itemsCurrentPage, setItemsCurrentPage] = useState(1);
-  const [itemsRowsPerPage, setItemsRowsPerPage] = useState(10);
-  const [itemsGoToPageInput, setItemsGoToPageInput] = useState('');
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [itemSearchQuery, setItemSearchQuery] = useState('');
-  const [selectedItemWarehouse, setSelectedItemWarehouse] = useState('All Warehouses');
-  const [selectedItemCategory, setSelectedItemCategory] = useState('All Categories');
-  const [selectedItemStatus, setSelectedItemStatus] = useState('All Status');
-  const [itemsLoading, setItemsLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchItemsFromBackend = async () => {
-      try {
-        setItemsLoading(true);
-        const backendItems = await getItems();
-        if (isMounted && Array.isArray(backendItems) && backendItems.length > 0) {
-          setItemsList(prev => {
-            const itemMap = new Map();
-            (prev || []).forEach(it => itemMap.set(it.code || it.sku || it.itemId || it.id || it.name, it));
-            backendItems.forEach(it => {
-              const key = it.code || it.sku || it.itemId || it.id || it.name;
-              if (key) itemMap.set(key, { ...itemMap.get(key), ...it });
-            });
-            return Array.from(itemMap.values());
-          });
-        } else {
-          const response = await fetch('/api/items').catch(() => null);
-          if (response && response.ok) {
-            const zItems = await response.json().catch(() => []);
-            if (isMounted && Array.isArray(zItems) && zItems.length > 0) {
-              setItemsList(prev => {
-                const itemMap = new Map();
-                (prev || []).forEach(it => itemMap.set(it.code || it.sku || it.itemId || it.id || it.name, it));
-                zItems.forEach(it => {
-                  const key = it.code || it.sku || it.itemId || it.id || it.name;
-                  if (key) itemMap.set(key, { ...itemMap.get(key), ...it });
-                });
-                return Array.from(itemMap.values());
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching Catalog Items:", err);
-      } finally {
-        if (isMounted) setItemsLoading(false);
-      }
-    };
-    fetchItemsFromBackend();
-    return () => { isMounted = false; };
-  }, []);
-
-  const handleCreateProduct = async () => {
-    if (!newItemData.name || !newItemData.name.trim()) {
-      setCreateStatus({ type: 'warning', text: 'Item Name is required.' });
-      return;
-    }
-    try {
-      setIsCreatingProduct(true);
-      setCreateStatus(null);
-
-      const payload = {
-        name: newItemData.name.trim(),
-        rate: Number(newItemData.rate) || 0,
-        sku: newItemData.sku ? newItemData.sku.trim() : '',
-        description: newItemData.description ? newItemData.description.trim() : '',
-        unit: newItemData.unit || 'NOS',
-        purchaseRate: Number(newItemData.purchaseRate) || 0,
-        purchaseDescription: newItemData.purchaseDescription ? newItemData.purchaseDescription.trim() : '',
-        productType: newItemData.productType || 'goods',
-        status: newItemData.status || 'Active'
-      };
-
-      const res = await fetch('/api/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await res.json().catch(() => ({}));
-      const createdItem = result.item || {
-        itemId: 'ITEM-' + Date.now(),
-        ...payload
-      };
-
-      // 1. Immediately update React state
-      setItemsList(prev => {
-        const filtered = (prev || []).filter(i => (i.itemId || i.id || i.sku) !== (createdItem.itemId || createdItem.sku));
-        const updated = [createdItem, ...filtered];
-        // 2. Persist to localStorage immediately
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        // 3. Persist directly to Supabase leaves cloud store (ITEM_STORE)
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        return updated;
-      });
-
-      setCreateStatus({ type: 'success', text: result.message || 'Product created successfully!' });
-
-      setTimeout(() => {
-        setIsCreatingItem(false);
-        setCreateStatus(null);
-        setNewItemData({
-          name: '',
-          sku: '',
-          rate: '',
-          purchaseRate: '',
-          unit: 'NOS',
-          status: 'Active',
-          description: '',
-          purchaseDescription: '',
-          productType: 'goods'
-        });
-      }, 1000);
-    } catch (err) {
-      console.error("Error creating product:", err);
-      const fallback = {
-        itemId: 'ITEM-' + Date.now(),
-        name: newItemData.name,
-        rate: Number(newItemData.rate) || 0,
-        sku: newItemData.sku || '—',
-        unit: newItemData.unit || 'NOS',
-        description: newItemData.description || '—',
-        status: (newItemData.status && String(newItemData.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active'
-      };
-      setItemsList(prev => {
-        const filtered = (prev || []).filter(i => (i.itemId || i.id || i.sku) !== (fallback.itemId || fallback.sku));
-        const updated = [fallback, ...filtered];
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        return updated;
-      });
-      setCreateStatus({ type: 'success', text: 'Product created locally in Control Room.' });
-      setTimeout(() => {
-        setIsCreatingItem(false);
-        setCreateStatus(null);
-      }, 1000);
-    } finally {
-      setIsCreatingProduct(false);
-    }
-  };
-
-  const handleSaveItem = async () => {
-    if (!editingItem) return;
-    try {
-      setIsSavingItem(true);
-      setItemSaveStatus(null);
-
-      const targetStatus = (editingItem.status && String(editingItem.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
-      const payload = {
-        name: editingItem.name,
-        rate: Number(editingItem.rate) || 0,
-        sku: editingItem.sku || '',
-        description: editingItem.description || '',
-        unit: editingItem.unit || 'NOS',
-        purchaseRate: Number(editingItem.purchaseRate) || 0,
-        purchaseDescription: editingItem.purchaseDescription || '',
-        status: targetStatus
-      };
-
-      const res = await fetch(`/api/items/${editingItem.itemId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (res.ok) {
-        setItemSaveStatus({ type: 'success', text: 'Item updated successfully!' });
-      } else {
-        setItemSaveStatus({ type: 'warning', text: 'Saved locally in Control Room.' });
-      }
-
-      setItemsList(prev => {
-        const updated = (prev || []).map(it => (it.itemId === editingItem.itemId || it.id === editingItem.itemId) ? { ...it, ...editingItem, ...payload } : it);
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        return updated;
-      });
-
-      setTimeout(() => {
-        setEditingItem(null);
-        setItemSaveStatus(null);
-      }, 900);
-    } catch (err) {
-      console.error("Error updating item:", err);
-      setItemsList(prev => {
-        const updated = (prev || []).map(it => (it.itemId === editingItem.itemId || it.id === editingItem.itemId) ? editingItem : it);
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        return updated;
-      });
-      setItemSaveStatus({ type: 'success', text: 'Item saved locally.' });
-      setTimeout(() => {
-        setEditingItem(null);
-        setItemSaveStatus(null);
-      }, 900);
-    } finally {
-      setIsSavingItem(false);
-    }
-  };
-
-  const [vName, setVName] = useState('');
-  const [vCat, setVCat] = useState('Select category');
-  const [vContact, setVContact] = useState('');
-  const [vEmail, setVEmail] = useState('');
-  const [vPhone, setVPhone] = useState('');
-  const [vType, setVType] = useState('Select vendor type');
-  const [vCompanyReg, setVCompanyReg] = useState('');
-  const [vGST, setVGST] = useState('');
-  const [vPAN, setVPAN] = useState('');
-  const [vWebsite, setVWebsite] = useState('');
-  const [vRegAddress, setVRegAddress] = useState('');
-  const [vCity, setVCity] = useState('');
-  const [vState, setVState] = useState('Select state');
-  const [vCountry, setVCountry] = useState('India');
-  const [vPinCode, setVPinCode] = useState('');
-  const [vBillingAddress, setVBillingAddress] = useState('');
-  const [vBillingCity, setVBillingCity] = useState('');
-  const [vBillingState, setVBillingState] = useState('Select state');
-  const [vBillingCountry, setVBillingCountry] = useState('India');
-  const [vBillingPinCode, setVBillingPinCode] = useState('');
-  const [vSameAsRegistered, setVSameAsRegistered] = useState(true);
-  const [vDesignation, setVDesignation] = useState('');
-  const [vAltPhone, setVAltPhone] = useState('');
-  const [vPrefComm, setVPrefComm] = useState('Select option');
-  const [vPaymentTerms, setVPaymentTerms] = useState('Select payment terms');
-  const [vCurrency, setVCurrency] = useState('INR - Indian Rupee');
-  const [vActiveVendor, setVActiveVendor] = useState(true);
-  const [vPreferredVendor, setVPreferredVendor] = useState(false);
-  const [vBlacklistedVendor, setVBlacklistedVendor] = useState(false);
-  const [vTags, setVTags] = useState('');
-  const [vInternalNotes, setVInternalNotes] = useState('');
-  const [vendorConfirmModal, setVendorConfirmModal] = useState({
-    show: false,
-    action: null,
-    title: '',
-    message: '',
-    confirmLabel: '',
-    confirmBtnColor: '#2563eb'
-  });
-
-  const [isGstFetching, setIsGstFetching] = useState(false);
-  const [gstLookupStatus, setGstLookupStatus] = useState(null);
-
-  const handleGstFetch = async (valToFetch) => {
-    const g = (valToFetch || vGST || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-    if (g.length < 2) return;
-
-    setIsGstFetching(true);
-    setGstLookupStatus(null);
-
-    const stateMap = {
-      '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
-      '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
-      '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur',
-      '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal',
-      '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh',
-      '24': 'Gujarat', '27': 'Maharashtra', '29': 'Karnataka', '30': 'Goa',
-      '32': 'Kerala', '33': 'Tamil Nadu', '36': 'Telangana', '37': 'Andhra Pradesh'
-    };
-
-    const stateCode = g.substring(0, 2);
-    const resolvedState = stateMap[stateCode] || 'Andhra Pradesh';
-    setVState(resolvedState);
-    setVBillingState(resolvedState);
-
-    if (g.length >= 12) {
-      const extractedPan = g.substring(2, 12);
-      setVPAN(extractedPan);
-    }
-
-    try {
-      const res = await fetch(`/api/gst-lookup?gstin=${g}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          if (data.legalName && data.legalName !== '—') setVName(data.legalName);
-          if (data.pan) setVPAN(data.pan);
-          if (data.state) {
-            setVState(data.state);
-            setVBillingState(data.state);
-          }
-          if (data.address) {
-            setVRegAddress(data.address);
-            setVBillingAddress(data.address);
-          }
-          if (data.city) {
-            setVCity(data.city);
-            setVBillingCity(data.city);
-          }
-          if (data.pincode) {
-            setVPinCode(data.pincode);
-            setVBillingPinCode(data.pincode);
-          }
-          if (data.companyReg) setVCompanyReg(data.companyReg);
-          if (data.email) setVEmail(data.email);
-          if (data.phone) setVPhone(data.phone);
-
-          setGstLookupStatus({ type: 'success', msg: `Verified: Official Details Loaded for ${data.legalName}` });
-        }
-      }
-    } catch (err) {
-      console.error('GST Lookup failed', err);
-    } finally {
-      setIsGstFetching(false);
-    }
-  };
-
-  // Vendor Filter State
-  const [vSearchQuery, setVSearchQuery] = useState('');
-  const [vTypeFilter, setVTypeFilter] = useState('All');
-  const [vStatusFilter, setVStatusFilter] = useState('All');
-  const [vCatFilter, setVCatFilter] = useState('All');
-  const [vRatingFilter, setVRatingFilter] = useState('All');
-  const [vTermsFilter, setVTermsFilter] = useState('All');
-  const [vActiveTab, setVActiveTab] = useState('All Vendors');
-  const [vCurrentPage, setVCurrentPage] = useState(1);
-  const [vRowsPerPage, setVRowsPerPage] = useState(10);
-  const [selectedVendors, setSelectedVendors] = useState([]);
-
-  // Quotation comparison state
-  const [selectedRfpQuote, setSelectedRfpQuote] = useState('RFP-2026-101');
-  const quotesComparison = {
-    'RFP-2026-101': [
-      { vendor: 'Tata Steel Ltd.', rate: '₹45,000 / MT', delivery: '5 Days', payment: 'Net 30 Days', ranking: '1st (Recommended)', rankClass: '#15803d', rankBg: '#f0fdf4' },
-      { vendor: 'JSW Steel Ltd.', rate: '₹46,500 / MT', delivery: '3 Days', payment: 'Net 15 Days', ranking: '2nd', rankClass: '#475569', rankBg: '#f1f5f9' },
-      { vendor: 'Essar Steel Ltd.', rate: '₹45,800 / MT', delivery: '7 Days', payment: 'Net 45 Days', ranking: '3rd', rankClass: '#475569', rankBg: '#f1f5f9' }
-    ]
-  };
-
-  // Quotations List State
-  const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
-  const [quotationStatusFilter, setQuotationStatusFilter] = useState('All');
-  const [quotationCustomerFilter, setQuotationCustomerFilter] = useState('All');
-  const [quotationProjectFilter, setQuotationProjectFilter] = useState('All');
-  const [quotationSalesPersonFilter, setQuotationSalesPersonFilter] = useState('All');
-  const [quotationActiveTab, setQuotationActiveTab] = useState('All');
-  const [quotationCurrentPage, setQuotationCurrentPage] = useState(1);
-  const [quotationRowsPerPage, setQuotationRowsPerPage] = useState(10);
-  const [selectedQuotations, setSelectedQuotations] = useState([]);
-
-  const INITIAL_QUOTATIONS = [
-    { id: 'QT-2024-0126', customer: 'Tata Power Solar Systems Ltd.', project: '50 MW Solar Plant - Rajasthan', date: '29 May 2024', validUntil: '28 Jun 2024', amount: '₹ 18,75,000.00', status: 'Sent', salesPerson: 'Ravi Kumar' },
-    { id: 'QT-2024-0125', customer: 'Adani Green Energy Ltd.', project: '100 MW Solar Plant - Gujarat', date: '28 May 2024', validUntil: '27 Jun 2024', amount: '₹ 32,40,000.00', status: 'Viewed', salesPerson: 'Pooja Sharma' },
-    { id: 'QT-2024-0124', customer: 'Waaree Energies Ltd.', project: '25 MW Solar Plant - Maharashtra', date: '27 May 2024', validUntil: '26 Jun 2024', amount: '₹ 9,85,000.00', status: 'Accepted', salesPerson: 'Ravi Kumar' },
-    { id: 'QT-2024-0123', customer: 'Sterling and Wilson Pvt. Ltd.', project: '75 MW Solar Plant - Karnataka', date: '25 May 2024', validUntil: '24 Jun 2024', amount: '₹ 21,60,000.00', status: 'Draft', salesPerson: 'Amit Verma' },
-    { id: 'QT-2024-0122', customer: 'Mahindra Susten Pvt. Ltd.', project: '10 MW Solar Plant - MP', date: '24 May 2024', validUntil: '23 Jun 2024', amount: '₹ 4,30,000.00', status: 'Sent', salesPerson: 'Pooja Sharma' },
-    { id: 'QT-2024-0121', customer: 'NTPC Renewable Energy Ltd.', project: '200 MW Solar Plant - AP', date: '23 May 2024', validUntil: '22 Jun 2024', amount: '₹ 58,20,000.00', status: 'Viewed', salesPerson: 'Ravi Kumar' },
-    { id: 'QT-2024-0120', customer: 'Hero Future Energies Pvt. Ltd.', project: '5 MW Rooftop Project', date: '22 May 2024', validUntil: '21 Jun 2024', amount: '₹ 2,15,000.00', status: 'Expired', salesPerson: 'Amit Verma' },
-    { id: 'QT-2024-0119', customer: 'ReNew Power Pvt. Ltd.', project: '150 MW Solar Plant - Tamil Nadu', date: '21 May 2024', validUntil: '20 Jun 2024', amount: '₹ 41,75,000.00', status: 'Accepted', salesPerson: 'Pooja Sharma' },
-    { id: 'QT-2024-0118', customer: 'Jakson Engineers Ltd.', project: '33 MW Solar Plant - Odisha', date: '20 May 2024', validUntil: '19 Jun 2024', amount: '₹ 11,90,000.00', status: 'Rejected', salesPerson: 'Ravi Kumar' },
-    { id: 'QT-2024-0117', customer: 'Larsen & Toubro Ltd.', project: '80 MW Solar Plant - Gujarat', date: '19 May 2024', validUntil: '18 Jun 2024', amount: '₹ 27,50,000.00', status: 'Sent', salesPerson: 'Amit Verma' }
-  ];
-
-  const [quotationsList, setQuotationsList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('controlroom_quotations_store');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) { }
-    return INITIAL_QUOTATIONS;
-  });
-
-  // quotationsList auto-save removed to prevent cloud feedback loop
-
-
-  useEffect(() => {
-    fetchCloudStore('quotations_store', quotationsList).then(data => {
-      if (data && Array.isArray(data) && data.length > 0) setQuotationsList(data);
-    });
-    const sub = subscribeToCloudStore('quotations_store', (latest) => {
-      if (latest && Array.isArray(latest)) setQuotationsList(latest);
-    });
-    return () => {
-      if (sub && typeof sub.unsubscribe === 'function') sub.unsubscribe();
-    };
-  }, []);
-
-  // GRN State
+import { getPurchaseOrders, getVendors } from '../../services/businzDataService';
+import { fetchCloudStore } from '../../utils/supabaseDataSync';
+
+export default function ProcurementReportsView({ userRole = 'Procurement Head', onNavigateTab }) {
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [grnList, setGrnList] = useState([]);
-  const [grnPo, setGrnPo] = useState('');
-  const [grnVendor, setGrnVendor] = useState('');
-  const [grnQty, setGrnQty] = useState('');
-  const [grnTab, setGrnTab] = useState('All');
-  const [invoiceTab, setInvoiceTab] = useState('All');
-  const [paymentTab, setPaymentTab] = useState('All');
-  const [stockTab, setStockTab] = useState('All');
+  const [vendorsList, setVendorsList] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [grnSearchQuery, setGrnSearchQuery] = useState('');
-  const [grnStatusFilter, setGrnStatusFilter] = useState('All');
-  const [invSearchQuery, setInvSearchQuery] = useState('');
-  const [invStatusFilter, setInvStatusFilter] = useState('All');
-  const [paySearchQuery, setPaySearchQuery] = useState('');
-  const [payStatusFilter, setPayStatusFilter] = useState('All');
-  const [stockSearchQuery, setStockSearchQuery] = useState('');
-  const [stockLocationFilter, setStockLocationFilter] = useState('All');
+  // Active Report Tab: 'po_ledger' | 'vendor_spend' | 'grn_ledger'
+  const [activeReportTab, setActiveReportTab] = useState('po_ledger');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedVendorFilter, setSelectedVendorFilter] = useState('all');
 
-  // Invoice State
-  const [viewingInvoiceModal, setViewingInvoiceModal] = useState(null);
-  const [invoiceModalActiveTab, setInvoiceModalActiveTab] = useState('Invoice Items');
-  const [closeInvoiceReasonModal, setCloseInvoiceReasonModal] = useState(null);
-  const [closeReasonText, setCloseReasonText] = useState('');
-  const [pendingDcModal, setPendingDcModal] = useState(null);
-  const [confirmInvoiceSuccessModal, setConfirmInvoiceSuccessModal] = useState(null);
-  const INITIAL_INVOICES = [
-    {
-      invNo: 'INV-2026-102',
-      date: '12 Jul 2026',
-      vendor: 'Tata Power Renewable',
-      poNo: 'BOM-102',
-      grnNo: 'GRN-VERIFIED',
-      invAmt: '₹ 17,400.00',
-      poVal: '₹ 17,400.00',
-      grnVal: '₹ 17,400.00',
-      diff: '0.00',
-      match: 'Matched',
-      pay: 'Ready',
-      status: 'Ready for Payment',
-      items: [
-        { code: 'PRD-001', name: 'Long Rail 3000 mm', category: '3 Meter Heavy Duty Rail', qty: 8, rate: 1800, selected: true },
-        { code: 'PRD-002', name: 'Mini Rail 100 mm', category: 'Aluminum Mounting Rail', qty: 12, rate: 250, selected: false }
-      ]
-    },
-    {
-      invNo: 'INV-2026-088',
-      date: '02 Jul 2026',
-      vendor: 'Apex Infra Systems',
-      poNo: 'BOM-098',
-      grnNo: 'GRN-1824',
-      invAmt: '₹ 45,000.00',
-      poVal: '₹ 45,000.00',
-      grnVal: '₹ 45,000.00',
-      diff: '0.00',
-      match: 'Matched',
-      pay: 'Ready',
-      status: 'Ready for Payment',
-      items: [
-        { code: 'PRD-101', name: 'Steel Pipe', category: '2 inch GI Pipe', qty: 100, rate: 400, selected: true },
-        { code: 'PRD-102', name: 'Flange', category: '2 inch MS Flange', qty: 50, rate: 100, selected: false }
-      ]
-    },
-    {
-      invNo: 'INV-2026-075',
-      date: '25 Jun 2026',
-      vendor: 'Vikram Solar Pvt Ltd',
-      poNo: 'BOM-092',
-      grnNo: 'GRN-1811',
-      invAmt: '₹ 28,500.00',
-      poVal: '₹ 28,500.00',
-      grnVal: '₹ 28,500.00',
-      diff: '0.00',
-      match: 'Matched',
-      pay: 'Ready',
-      status: 'Ready for Payment',
-      items: [
-        { code: 'PRD-201', name: 'Solar Cable 4sqmm', category: 'DC Solar Cable', qty: 500, rate: 50, selected: true },
-        { code: 'PRD-202', name: 'MC4 Connector Pair', category: 'Connectors', qty: 70, rate: 50, selected: true }
-      ]
-    }
-  ];
-
-  const [invoiceList, setInvoiceList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('controlroom_invoice_store');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Error parsing stored invoice list', e);
-    }
-    return INITIAL_INVOICES;
+  // Month-wise filter: defaults to current month 'YYYY-MM'
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // Keep local convenience cache updated without cloud egress
-  useEffect(() => {
-    if (invoiceList && invoiceList.length > 0) {
-      try {
-        localStorage.setItem('controlroom_invoice_store', JSON.stringify(invoiceList));
-      } catch (_) {}
-    }
-  }, [invoiceList]);
+  // Interactive row selection
+  const [selectedPoRows, setSelectedPoRows] = useState([]);
+  const [selectedVendorRows, setSelectedVendorRows] = useState([]);
+  const [selectedGrnRows, setSelectedGrnRows] = useState([]);
 
-  // Initial cloud fetch for invoices
+  // Pagination states (strictly 5 and 10 per page per BUSINZ rules)
+  const [poPage, setPoPage] = useState(1);
+  const [poRpp, setPoRpp] = useState(10);
+  const [poGoTo, setPoGoTo] = useState('');
+
+  const [vendorPage, setVendorPage] = useState(1);
+  const [vendorRpp, setVendorRpp] = useState(10);
+  const [vendorGoTo, setVendorGoTo] = useState('');
+
+  const [grnPage, setGrnPage] = useState(1);
+  const [grnRpp, setGrnRpp] = useState(10);
+  const [grnGoTo, setGrnGoTo] = useState('');
+
+  // Initial Data Load
+  const loadData = async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
+    else setIsLoading(true);
+
+    try {
+      // 1. Load POs
+      const pos = await getPurchaseOrders().catch(() => []);
+      setPurchaseOrders(Array.isArray(pos) ? pos : []);
+
+      // 2. Load GRNs
+      let grns = [];
+      try {
+        const localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
+        if (Array.isArray(localGrns) && localGrns.length > 0) grns = localGrns;
+      } catch (_) {}
+      if (grns.length === 0) {
+        const cloudGrns = await fetchCloudStore('goods_receipt_notes', []).catch(() => []);
+        if (Array.isArray(cloudGrns) && cloudGrns.length > 0) grns = cloudGrns;
+      }
+      setGrnList(grns);
+
+      // 3. Load Vendors
+      const vends = await getVendors().catch(() => []);
+      setVendorsList(Array.isArray(vends) ? vends : []);
+    } catch (err) {
+      console.warn('Error loading procurement reports data:', err);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    fetchCloudStore('invoice_store', invoiceList).then(data => {
-      if (data && Array.isArray(data) && data.length > 0) setInvoiceList(data);
-    });
-    const sub = subscribeToCloudStore('invoice_store', (latest) => {
-      if (latest && Array.isArray(latest)) setInvoiceList(latest);
-    });
-    return () => {
-      if (sub && typeof sub.unsubscribe === 'function') sub.unsubscribe();
-    };
+    loadData();
   }, []);
 
-  // Payments State
-  const INITIAL_PAYMENTS = [
-    { id: 'PAY-48901', vendor: 'Tata Steel Ltd.', amount: '₹12,74,908.00', mode: 'RTGS', ref: 'RTGS-N887410B', date: '31 Jul 2026', status: 'Completed' },
-    { id: 'PAY-48902', vendor: 'UltraTech Cement', amount: '₹9,00,000.00', mode: 'NEFT', ref: 'NEFT-T5420108', date: '28 Jul 2026', status: 'Scheduled' }
-  ];
+  // Helper date parsing
+  const getPoDateStr = (po) => po.date || po.poDate || po.createdAt || po.created_at || '';
+  const getGrnDateStr = (grn) => grn.date || grn.receivedDate || grn.createdAt || grn.created_at || '';
 
-  const [paymentList, setPaymentList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('controlroom_payment_store');
-      if (saved) return JSON.parse(saved);
-    } catch (e) { }
-    return INITIAL_PAYMENTS;
-  });
-
-  // paymentList auto-save removed to prevent cloud feedback loop
-
-
-  // Vendor Performance scorecard
-  const vendorPerformance = [
-    { name: 'Tata Steel Ltd.', cat: 'Raw Material', ot: '98%', quality: '99.5%', lead: '4.2 Days', rating: 'A+' },
-    { name: 'Havells India Ltd.', cat: 'Electrical', ot: '95%', quality: '98%', lead: '5.0 Days', rating: 'A' },
-    { name: 'UltraTech Cement', cat: 'Construction', ot: '91%', quality: '96%', lead: '6.5 Days', rating: 'B+' },
-    { name: 'Nellore Logistics', cat: 'Logistics', ot: '85%', quality: '92%', lead: '2.5 Days', rating: 'B' }
-  ];
-
-  // Spend analytics summary cards
-  const spendCategories = [
-    { cat: 'Raw Materials', value: '₹45,50,000.00', count: 18, color: '#3b82f6' },
-    { cat: 'Electrical Goods', value: '₹12,20,000.00', count: 6, color: '#10b981' },
-    { cat: 'Logistics / Transport', value: '₹4,50,000.00', count: 12, color: '#f59e0b' },
-    { cat: 'Consumables & Fasteners', value: '₹2,10,000.00', count: 4, color: '#6366f1' }
-  ];
-
-  // Low Stock / Reorder Alerts
-  const INITIAL_REORDER_ALERTS = [
-    { id: 1, name: 'Aluminium Rail 4.2m', sku: 'AL-RAIL-4.2', category: 'Rails', warehouse: 'Main Warehouse', stock: '120', percent: '12%', minLevel: '500', uom: 'Nos', leadTime: '7 Days', reorderQty: '880', val: '8,80,000', status: 'Critical', coverage: '2 Days', level: 12 },
-    { id: 2, name: 'Mid Clamp', sku: 'MC-01', category: 'Clamps', warehouse: 'Main Warehouse', stock: '926', percent: '17%', minLevel: '1,500', uom: 'Nos', leadTime: '5 Days', reorderQty: '1,250', val: '3,12,500', status: 'Critical', coverage: '3 Days', level: 17 },
-    { id: 3, name: 'End Clamp', sku: 'EC-01', category: 'Clamps', warehouse: 'Regional Warehouse', stock: '300', percent: '20%', minLevel: '1,500', uom: 'Nos', leadTime: '5 Days', reorderQty: '1,200', val: '2,40,000', status: 'Critical', coverage: '3 Days', level: 20 },
-    { id: 4, name: 'GI Nut Bolt M8x25', sku: 'NB-M8-25', category: 'Fasteners', warehouse: 'Main Warehouse', stock: '2,450', percent: '25%', minLevel: '10,000', uom: 'Nos', leadTime: '4 Days', reorderQty: '7,550', val: '1,51,000', status: 'Low Stock', coverage: '4 Days', level: 25 },
-    { id: 5, name: 'GI Nut Bolt M10x30', sku: 'NB-M10-30', category: 'Fasteners', warehouse: 'Regional Warehouse', stock: '1,800', percent: '30%', minLevel: '6,000', uom: 'Nos', leadTime: '4 Days', reorderQty: '4,200', val: '1,68,000', status: 'Low Stock', coverage: '4 Days', level: 30 },
-    { id: 6, name: 'Spring Washer M8', sku: 'SW-M8', category: 'Fasteners', warehouse: 'Main Warehouse', stock: '950', percent: '32%', minLevel: '3,000', uom: 'Nos', leadTime: '3 Days', reorderQty: '2,050', val: '41,000', status: 'Low Stock', coverage: '5 Days', level: 32 },
-    { id: 7, name: 'L-Foot', sku: 'LF-01', category: 'Accessories', warehouse: 'Main Warehouse', stock: '160', percent: '33%', minLevel: '480', uom: 'Nos', leadTime: '7 Days', reorderQty: '320', val: '64,000', status: 'Low Stock', coverage: '6 Days', level: 33 },
-    { id: 8, name: 'Cable Clip', sku: 'CC-01', category: 'Accessories', warehouse: 'Regional Warehouse', stock: '3,200', percent: '35%', minLevel: '9,000', uom: 'Nos', leadTime: '3 Days', reorderQty: '5,800', val: '58,000', status: 'Low Stock', coverage: '6 Days', level: 35 },
-    { id: 9, name: 'Earthing Lug', sku: 'EL-01', category: 'Electrical', warehouse: 'Main Warehouse', stock: '220', percent: '37%', minLevel: '600', uom: 'Nos', leadTime: '6 Days', reorderQty: '380', val: '45,600', status: 'Low Stock', coverage: '7 Days', level: 37 },
-    { id: 10, name: 'UV Cable Tie 300mm', sku: 'CT-300', category: 'Accessories', warehouse: 'Regional Warehouse', stock: '1,400', percent: '38%', minLevel: '3,600', uom: 'Nos', leadTime: '3 Days', reorderQty: '2,200', val: '26,400', status: 'Low Stock', coverage: '8 Days', level: 38 }
-  ];
-
-  const [reorderAlerts, setReorderAlerts] = useState(() => {
-    try {
-      const saved = localStorage.getItem('controlroom_reorder_alerts_store');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Error loading reorderAlerts', e);
-    }
-    return INITIAL_REORDER_ALERTS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('controlroom_reorder_alerts_store', JSON.stringify(reorderAlerts));
-    } catch (e) {
-      console.error('Error saving reorderAlerts', e);
-    }
-  }, [reorderAlerts]);
-  const [reorderPage, setReorderPage] = useState(1);
-  const [reorderRowsPerPage, setReorderRowsPerPage] = useState(10);
-  const [selectedReorders, setSelectedReorders] = useState([]);
-
-  const [editingReorderItem, setEditingReorderItem] = useState(null);
-  const [reorder3DotMenuId, setReorder3DotMenuId] = useState(null);
-
-  const currentReorderRows = useMemo(() => {
-    return reorderAlerts.slice(
-      (reorderPage - 1) * reorderRowsPerPage,
-      reorderPage * reorderRowsPerPage
-    );
-  }, [reorderAlerts, reorderPage, reorderRowsPerPage]);
-
-  const handleCreatePoFromReorder = (selectedIds) => {
-    const selectedItems = reorderAlerts.filter(r => selectedIds.includes(r.id));
-    if (selectedItems.length === 0) return;
-    const poItemsPayload = selectedItems.map(item => ({
-      name: item.name,
-      account: 'Raw Material',
-      qty: parseFloat(String(item.reorderQty || '1').replace(/,/g, '')) || 1,
-      unit: item.uom || 'NOS',
-      rate: Math.round((parseFloat(String(item.val || '0').replace(/,/g, '')) || 0) / (parseFloat(String(item.reorderQty || '1').replace(/,/g, '')) || 1)) || 1000,
-      tax: 18
-    }));
-    try {
-      localStorage.setItem('controlroom_pending_reorder_po', JSON.stringify({
-        items: poItemsPayload,
-        timestamp: Date.now()
-      }));
-    } catch (e) {
-      console.error('Failed to store pending reorder PO payload', e);
-    }
-    if (typeof onChangeTab === 'function') {
-      onChangeTab('Purchase Orders');
-    }
+  const getRecordMonthKey = (dStr) => {
+    if (!dStr) return null;
+    const d = new Date(dStr);
+    if (isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
   };
 
-  // Stock status registry
-  const INITIAL_STOCK_REGISTRY = [
-    { code: 'AL-001', item: 'Aluminium Rail 4.2m', category: 'Rails', location: 'Main Warehouse', stock: '120', allocated: '30', incoming: '500', minLevel: '500', val: '8,80,000', status: 'Low Stock' },
-    { code: 'MC-001', item: 'Mid Clamp', category: 'Clamps', location: 'Main Warehouse', stock: '926', allocated: '100', incoming: '1,000', minLevel: '1,500', val: '3,12,500', status: 'Low Stock' },
-    { code: 'EC-001', item: 'End Clamp', category: 'Clamps', location: 'Regional Warehouse', stock: '2,400', allocated: '200', incoming: '-', minLevel: '1,000', val: '2,40,000', status: 'In Stock' },
-    { code: 'NB-025', item: 'GI Nut Bolt M8 x 25', category: 'Fasteners', location: 'Main Warehouse', stock: '0', allocated: '0', incoming: '500', minLevel: '500', val: '1,51,000', status: 'Out of Stock' },
-    { code: 'NB-030', item: 'GI Nut Bolt M10 x 30', category: 'Fasteners', location: 'Regional Warehouse', stock: '1,800', allocated: '150', incoming: '-', minLevel: '2,000', val: '1,68,000', status: 'Low Stock' },
-    { code: 'WS-008', item: 'Spring Washer M8', category: 'Fasteners', location: 'Main Warehouse', stock: '950', allocated: '50', incoming: '-', minLevel: '500', val: '41,000', status: 'In Stock' },
-    { code: 'LF-001', item: 'L-Foot', category: 'Accessories', location: 'Main Warehouse', stock: '160', allocated: '20', incoming: '-', minLevel: '200', val: '64,000', status: 'Low Stock' },
-    { code: 'CC-001', item: 'Cable Clip', category: 'Accessories', location: 'Regional Warehouse', stock: '3,200', allocated: '100', incoming: '-', minLevel: '1,000', val: '58,000', status: 'In Stock' }
-  ];
+  const formatMonthLabel = (monthKey) => {
+    if (!monthKey || monthKey === 'all') return 'All Months (Cumulative)';
+    const parts = monthKey.split('-');
+    if (parts.length !== 2) return monthKey;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const date = new Date(year, month - 1, 1);
+    return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  };
 
-  const [stockRegistry, setStockRegistry] = useState(() => {
-    try {
-      const saved = localStorage.getItem('controlroom_stock_registry_store');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Error loading stockRegistry', e);
-    }
-    return INITIAL_STOCK_REGISTRY;
-  });
+  const cleanNum = (val) => {
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    if (!val) return 0;
+    const n = parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+    return isNaN(n) ? 0 : n;
+  };
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(stockRegistry));
-    } catch (e) {
-      console.error('Error saving stockRegistry', e);
-    }
-  }, [stockRegistry]);
+  const formatCurrency = (num) => {
+    if (!num || isNaN(num)) return '₹ 0.00';
+    return `₹ ${Math.round(num).toLocaleString('en-IN')}`;
+  };
 
-  // Price comparison ledger
-  const priceComparison = [
-    { item: 'GI Steel Coil (MT)', lastPoPrice: '₹45,000.00', avgMarketPrice: '₹45,800.00', bestQuotePrice: '₹44,500.00', bestVendor: 'Tata Steel Ltd.' },
-    { item: 'CRC Sheet (MT)', lastPoPrice: '₹52,000.00', avgMarketPrice: '₹53,200.00', bestQuotePrice: '₹51,800.00', bestVendor: 'JSW Steel Ltd.' },
-    { item: 'Cement Bag (50kg)', lastPoPrice: '₹410.00', avgMarketPrice: '₹415.00', bestQuotePrice: '₹405.00', bestVendor: 'UltraTech Cement' }
-  ];
+  const formatCurrencyShort = (num) => {
+    if (!num || isNaN(num)) return '₹ 0.00 L';
+    if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+    return `₹ ${(num / 100000).toFixed(2)} L`;
+  };
 
-  // Form Submission Handlers
-  const handleCreateRFP = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (prItems.length === 0) return;
-
+  // Extract all available months across POs and GRNs
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set();
     const now = new Date();
-    const formattedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
-      `, ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+    const curMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    monthSet.add(curMonthKey);
 
-    const firstItem = prItems[0];
-    const itemSummary = prItems.length > 1
-      ? `${firstItem.name} (+ ${prItems.length - 1} items)`
-      : firstItem.name;
-    const qtySummary = `${firstItem.qty} ${firstItem.unit}`;
-
-    const newRFP = {
-      id: prNumber || `PR-2026-${198 + rfpList.length}`,
-      requester: prRequestedBy,
-      dept: prDept,
-      req: itemSummary,
-      qty: qtySummary,
-      requiredBy: prRequiredDate ? new Date(prRequiredDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '15 Jun 2026',
-      priority: prPriority,
-      status: 'Pending Approval',
-      date: formattedDate
-    };
-    setRfpList([newRFP, ...rfpList]);
-
-    // Auto-increment PR number
-    try {
-      const parts = prNumber.split('-');
-      const nextNum = parseInt(parts[2]) + 1;
-      setPrNumber(`${parts[0]}-${parts[1]}-${nextNum}`);
-    } catch (err) {
-      setPrNumber(`PR-2026-${198 + rfpList.length + 1}`);
-    }
-
-    // Reset form to fresh default
-    setPrPurpose('');
-    setPrBudget('');
-    setPrBrand('');
-    setPrNotes('');
-    setPrRequiredDate('');
-    setPrPriority('Normal');
-    setPrProject('N/A');
-    setPrItems([
-      { name: 'GI Steel Coil 2mm', desc: '', unit: 'MT', qty: '', date: '', vendor: 'N/A' }
-    ]);
-    setShowForm(false);
-  };
-
-  const handleCreateVendor = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!vName) return;
-
-    let vStatus = 'Active';
-    if (vBlacklistedVendor) vStatus = 'Blacklisted';
-    else if (!vActiveVendor) vStatus = 'Inactive';
-    else if (vPreferredVendor) vStatus = 'Preferred';
-
-    const newVendorPayload = {
-      name: vName,
-      companyName: vName,
-      type: vType === 'Select vendor type' ? 'Supplier' : vType,
-      contact: vContact || '',
-      phone: vPhone || '',
-      email: vEmail || '',
-      cat: vCat === 'Select category' ? 'Steel & Metals' : vCat,
-      status: vStatus,
-      rating: 5.0,
-      spend: '₹ 0.00',
-      terms: vPaymentTerms === 'Select payment terms' ? 'Net 30 Days' : vPaymentTerms,
-      gstin: vGST || '',
-      pan: vPAN || ''
-    };
-
-    // Save new vendor and refresh live list
-    fetch('/api/vendors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newVendorPayload)
-    }).then(res => res.json()).then(data => {
-      if (data.success) {
-        console.log('Vendor created successfully in BUSINZ!', data);
-      } else {
-        console.warn('Vendor creation notice:', data);
-      }
-      loadVendorsFromBackend();
-    }).catch(err => {
-      console.error('Failed to save vendor:', err);
-      loadVendorsFromBackend();
+    purchaseOrders.forEach(po => {
+      const mk = getRecordMonthKey(getPoDateStr(po));
+      if (mk) monthSet.add(mk);
     });
 
-    // Reset states
-    setVName('');
-    setVContact('');
-    setVEmail('');
-    setVPhone('');
-    setVType('Select vendor type');
-    setVCat('Select category');
-    setVCompanyReg('');
-    setVGST('');
-    setVPAN('');
-    setVWebsite('');
-    setVRegAddress('');
-    setVCity('');
-    setVState('Select state');
-    setVPinCode('');
-    setVBillingAddress('');
-    setVBillingCity('');
-    setVBillingState('Select state');
-    setVBillingPinCode('');
-    setVSameAsRegistered(true);
-    setVDesignation('');
-    setVAltPhone('');
-    setVPrefComm('Select option');
-    setVPaymentTerms('Select payment terms');
-    setVCurrency('INR - Indian Rupee');
-    setVActiveVendor(true);
-    setVPreferredVendor(false);
-    setVBlacklistedVendor(false);
-    setVTags('');
-    setVInternalNotes('');
-    setShowForm(false);
-  };
+    grnList.forEach(grn => {
+      const mk = getRecordMonthKey(getGrnDateStr(grn));
+      if (mk) monthSet.add(mk);
+    });
 
+    return Array.from(monthSet).sort().reverse();
+  }, [purchaseOrders, grnList]);
+
+  // Scoped POs matching selected month and vendor
+  const filteredPos = useMemo(() => {
+    return purchaseOrders.filter(po => {
+      if (selectedMonth !== 'all') {
+        const mk = getRecordMonthKey(getPoDateStr(po));
+        if (mk !== selectedMonth) return false;
+      }
+      if (selectedVendorFilter !== 'all') {
+        const vName = (po.vendorName || po.vendor || '').trim().toLowerCase();
+        if (vName !== selectedVendorFilter.toLowerCase()) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const pNo = String(po.poNo || po.id || '').toLowerCase();
+        const vName = String(po.vendorName || po.vendor || '').toLowerCase();
+        const loc = String(po.deliveryLocation || po.shippingAddress || '').toLowerCase();
+        const st = String(po.status || '').toLowerCase();
+        if (!pNo.includes(q) && !vName.includes(q) && !loc.includes(q) && !st.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [purchaseOrders, selectedMonth, selectedVendorFilter, searchQuery]);
+
+  // Scoped GRNs matching selected month
+  const filteredGrns = useMemo(() => {
+    return grnList.filter(grn => {
+      if (selectedMonth !== 'all') {
+        const mk = getRecordMonthKey(getGrnDateStr(grn));
+        if (mk !== selectedMonth) return false;
+      }
+      if (selectedVendorFilter !== 'all') {
+        const vName = (grn.vendorName || grn.vendor || '').trim().toLowerCase();
+        if (vName !== selectedVendorFilter.toLowerCase()) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const gNo = String(grn.grnNo || grn.id || '').toLowerCase();
+        const pNo = String(grn.poNo || '').toLowerCase();
+        const vName = String(grn.vendorName || grn.vendor || '').toLowerCase();
+        if (!gNo.includes(q) && !pNo.includes(q) && !vName.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [grnList, selectedMonth, selectedVendorFilter, searchQuery]);
+
+  // Vendor Spend Summary for selected month
+  const vendorSpendSummary = useMemo(() => {
+    const map = {};
+    filteredPos.forEach(po => {
+      const vName = (po.vendorName || po.vendor || 'Unknown Vendor').trim();
+      const amt = cleanNum(po.totalAmount || po.grandTotal || po.amount);
+      if (!map[vName]) {
+        map[vName] = { vendorName: vName, poCount: 0, totalSpend: 0, pos: [] };
+      }
+      map[vName].poCount += 1;
+      map[vName].totalSpend += amt;
+      map[vName].pos.push(po);
+    });
+
+    const totalSpendAll = Object.values(map).reduce((acc, v) => acc + v.totalSpend, 0);
+
+    return Object.values(map)
+      .map(v => ({
+        ...v,
+        avgPoValue: v.poCount > 0 ? v.totalSpend / v.poCount : 0,
+        sharePct: totalSpendAll > 0 ? ((v.totalSpend / totalSpendAll) * 100).toFixed(1) : '0.0'
+      }))
+      .sort((a, b) => b.totalSpend - a.totalSpend);
+  }, [filteredPos]);
+
+  // Executive Month-Wise Metrics
+  const monthlyMetrics = useMemo(() => {
+    const totalSpend = filteredPos.reduce((acc, po) => acc + cleanNum(po.totalAmount || po.grandTotal || po.amount), 0);
+    const authorizedPos = filteredPos.filter(po => {
+      const st = String(po.status || '').toLowerCase();
+      return st === 'authorized' || st === 'md approved' || st === 'completed' || st === 'issued';
+    }).length;
+    const pendingPos = filteredPos.filter(po => {
+      const st = String(po.status || '').toLowerCase();
+      return st === 'waiting for approval' || st === 'draft' || st === 'pending';
+    }).length;
+    const activeVendors = new Set(filteredPos.map(po => (po.vendorName || po.vendor || '').trim()).filter(Boolean)).size;
+    const totalGrns = filteredGrns.length;
+
+    return {
+      totalSpend,
+      totalSpendFormatted: formatCurrencyShort(totalSpend),
+      totalSpendExact: formatCurrency(totalSpend),
+      poCount: filteredPos.length,
+      authorizedPos,
+      pendingPos,
+      activeVendors,
+      totalGrns
+    };
+  }, [filteredPos, filteredGrns]);
+
+  // Distinct vendors for dropdown
+  const allDistinctVendors = useMemo(() => {
+    const set = new Set();
+    purchaseOrders.forEach(po => {
+      const v = (po.vendorName || po.vendor || '').trim();
+      if (v) set.add(v);
+    });
+    return Array.from(set).sort();
+  }, [purchaseOrders]);
+
+  // Pagination for PO Ledger
+  const poTotalPages = Math.max(1, Math.ceil(filteredPos.length / poRpp));
+  const poStartIndex = (poPage - 1) * poRpp;
+  const currentPos = filteredPos.slice(poStartIndex, poStartIndex + poRpp);
+
+  // Pagination for Vendor Summary
+  const vendorTotalPages = Math.max(1, Math.ceil(vendorSpendSummary.length / vendorRpp));
+  const vendorStartIndex = (vendorPage - 1) * vendorRpp;
+  const currentVendors = vendorSpendSummary.slice(vendorStartIndex, vendorStartIndex + vendorRpp);
+
+  // Pagination for GRN Ledger
+  const grnTotalPages = Math.max(1, Math.ceil(filteredGrns.length / grnRpp));
+  const grnStartIndex = (grnPage - 1) * grnRpp;
+  const currentGrns = filteredGrns.slice(grnStartIndex, grnStartIndex + grnRpp);
+
+  // CSV Export
+  const handleExportCsv = () => {
+    let headers = [];
+    let rows = [];
+    let filename = `Procurement_Report_${selectedMonth}.csv`;
+
+    if (activeReportTab === 'po_ledger') {
+      headers = ['PO Number', 'Date', 'Vendor Name', 'Items Count', 'Total Amount', 'Status', 'Delivery Location'];
+      rows = filteredPos.map(po => [
+        po.poNo || po.id,
+        getPoDateStr(po),
+        `"${(po.vendorName || po.vendor || '').replace(/"/g, '""')}"`,
+        Array.isArray(po.items) ? po.items.length : 1,
+        cleanNum(po.totalAmount || po.grandTotal || po.amount),
+        po.status || 'Issued',
+        `"${(po.deliveryLocation || po.shippingAddress || '').replace(/"/g, '""')}"`
+      ]);
+    } else if (activeReportTab === 'vendor_spend') {
+      headers = ['Vendor Name', 'PO Orders Count', 'Total Spend (INR)', 'Share of Spend %', 'Avg Order Value (INR)'];
+      rows = vendorSpendSummary.map(v => [
+        `"${v.vendorName.replace(/"/g, '""')}"`,
+        v.poCount,
+        Math.round(v.totalSpend),
+        v.sharePct,
+        Math.round(v.avgPoValue)
+      ]);
+      filename = `Vendor_Spend_Analysis_${selectedMonth}.csv`;
+    } else {
+      headers = ['GRN Number', 'PO Number', 'Received Date', 'Vendor Name', 'Status'];
+      rows = filteredGrns.map(grn => [
+        grn.grnNo || grn.id,
+        grn.poNo || '',
+        getGrnDateStr(grn),
+        `"${(grn.vendorName || grn.vendor || '').replace(/"/g, '""')}"`,
+        grn.status || 'Completed'
+      ]);
+      filename = `GRN_Receipts_${selectedMonth}.csv`;
+    }
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-      {(activeTab === 'Procurement Reports' || activeTab === 'Spend Reports' || activeTab === 'Supplier Reports') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>{activeTab} Panel</h2>
-            <span style={{ fontSize: '12px', color: '#64748b' }}>Filter, configure date benchmarks, and export ledger sheets to Excel or PDF format</span>
-          </div>
-
-          <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <strong style={{ fontSize: '14px' }}>Configure Export Parameters</strong>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '4px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label htmlFor="procurement-reports-start-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Start Date</label>
-                <input id="procurement-reports-start-date" name="startDate" aria-label="Start Date" type="date" defaultValue="2026-07-01" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label htmlFor="procurement-reports-end-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>End Date</label>
-                <input id="procurement-reports-end-date" name="endDate" aria-label="End Date" type="date" defaultValue="2026-07-31" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label htmlFor="procurement-reports-export-format" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Export Format</label>
-                <select id="procurement-reports-export-format" name="exportFormat" aria-label="Export Format" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
-                  <option>Excel Spreadsheet (.xlsx)</option>
-                  <option>CSV Format (.csv)</option>
-                  <option>Acrobat Document (.pdf)</option>
-                </select>
-              </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+      
+      {/* 1. HEADER SECTION */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFEFF',
+              color: '#0E7490',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <FileBarChart size={22} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-              <button style={{ backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 24px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}>
-                Compile & Export Report
-              </button>
+            <div>
+              <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, color: '#0F172A', letterSpacing: '-0.3px' }}>
+                Procurement & Spend Reports
+              </h2>
+              <span style={{ fontSize: '12.5px', color: '#64748B' }}>
+                Executive Procurement Analytics • Monthly purchase spend, vendor volume allocation, and Goods Receipt Note (GRN) reconciliation.
+              </span>
             </div>
           </div>
         </div>
+
+        {/* Global Controls: Month Selector, Refresh, Export */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Calendar size={15} style={{ color: '#0E7490' }} />
+            <select
+              id="procurement-report-month-select"
+              name="selectedMonth"
+              aria-label="Filter report by month"
+              value={selectedMonth}
+              onChange={(e) => {
+                setSelectedMonth(e.target.value);
+                setPoPage(1);
+                setVendorPage(1);
+                setGrnPage(1);
+              }}
+              style={{
+                height: '38px',
+                borderRadius: '8px',
+                border: '1.5px solid #0E7490',
+                padding: '0 12px',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                color: '#0E7490',
+                backgroundColor: '#ECFEFF',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="all">All Months (Cumulative)</option>
+              {availableMonths.map(mk => (
+                <option key={mk} value={mk}>{formatMonthLabel(mk)}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => loadData(true)}
+            disabled={isRefreshing}
+            style={{
+              height: '38px',
+              padding: '0 14px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#475569',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              cursor: isRefreshing ? 'wait' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            {isRefreshing ? 'Syncing...' : 'Refresh'}
+          </button>
+
+          <button
+            onClick={handleExportCsv}
+            style={{
+              height: '38px',
+              padding: '0 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#0E7490',
+              color: '#FFFFFF',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)'
+            }}
+          >
+            <Download size={14} /> Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* 2. MONTH-WISE KPI SUMMARY RIBBON */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: '14px',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        {/* KPI 1: Total Spend */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
+              Total Procurement Spend
+            </span>
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ShoppingCart size={15} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px' }}>
+              {monthlyMetrics.totalSpendFormatted}
+            </span>
+            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
+              ({monthlyMetrics.totalSpendExact})
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px' }}>
+            <span>Target period: </span>
+            <strong style={{ color: '#0E7490' }}>{formatMonthLabel(selectedMonth)}</strong>
+          </div>
+        </div>
+
+        {/* KPI 2: POs Issued */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
+              Purchase Orders (Monthly)
+            </span>
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckCircle size={15} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#16A34A', letterSpacing: '-0.5px' }}>
+              {monthlyMetrics.poCount} Orders
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Authorized: <strong style={{ color: '#16A34A' }}>{monthlyMetrics.authorizedPos}</strong></span>
+            <span>Pending MD: <strong style={{ color: '#D97706' }}>{monthlyMetrics.pendingPos}</strong></span>
+          </div>
+        </div>
+
+        {/* KPI 3: GRN Receipts */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
+              GRN Inward Receipts
+            </span>
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <FileCheck size={15} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#D97706', letterSpacing: '-0.5px' }}>
+              {monthlyMetrics.totalGrns} Receipts
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px' }}>
+            <span>Warehouse inward reconciliation complete</span>
+          </div>
+        </div>
+
+        {/* KPI 4: Active Suppliers */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
+              Active Vendors Transacted
+            </span>
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F3E8FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Building2 size={15} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#9333EA', letterSpacing: '-0.5px' }}>
+              {monthlyMetrics.activeVendors} Suppliers
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '4px 8px', borderRadius: '6px' }}>
+            <span>Monthly supply chain diversification</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. REPORT SUB-TABS & FILTERS BAR */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '12px',
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '12px 16px'
+      }}>
+        {/* Navigation Tabs */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setActiveReportTab('po_ledger')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: activeReportTab === 'po_ledger' ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+              backgroundColor: activeReportTab === 'po_ledger' ? '#ECFEFF' : '#FFFFFF',
+              color: activeReportTab === 'po_ledger' ? '#0E7490' : '#475569',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <ShoppingCart size={14} /> Monthly PO Spend Ledger ({filteredPos.length})
+          </button>
+
+          <button
+            onClick={() => setActiveReportTab('vendor_spend')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: activeReportTab === 'vendor_spend' ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+              backgroundColor: activeReportTab === 'vendor_spend' ? '#ECFEFF' : '#FFFFFF',
+              color: activeReportTab === 'vendor_spend' ? '#0E7490' : '#475569',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Building2 size={14} /> Vendor Spend Analysis ({vendorSpendSummary.length})
+          </button>
+
+          <button
+            onClick={() => setActiveReportTab('grn_ledger')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: activeReportTab === 'grn_ledger' ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+              backgroundColor: activeReportTab === 'grn_ledger' ? '#ECFEFF' : '#FFFFFF',
+              color: activeReportTab === 'grn_ledger' ? '#0E7490' : '#475569',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <FileCheck size={14} /> Monthly GRN Receipts ({filteredGrns.length})
+          </button>
+        </div>
+
+        {/* Search & Vendor Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            border: '1px solid #CBD5E1',
+            borderRadius: '8px',
+            padding: '0 10px',
+            height: '36px',
+            backgroundColor: '#F8FAFC',
+            minWidth: '220px'
+          }}>
+            <Search size={14} style={{ color: '#64748B' }} />
+            <input
+              type="text"
+              placeholder="Search by code, vendor..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                border: 'none',
+                outline: 'none',
+                backgroundColor: 'transparent',
+                fontSize: '12.5px',
+                width: '100%',
+                color: '#0F172A'
+              }}
+            />
+          </div>
+
+          <select
+            value={selectedVendorFilter}
+            onChange={(e) => setSelectedVendorFilter(e.target.value)}
+            style={{
+              height: '36px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              padding: '0 10px',
+              fontSize: '12px',
+              fontWeight: '600',
+              color: '#334155',
+              backgroundColor: '#FFFFFF',
+              outline: 'none'
+            }}
+          >
+            <option value="all">All Vendors</option>
+            {allDistinctVendors.map(v => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* 4. MAIN DATA TABLE - TAB 1: PO LEDGER */}
+      {activeReportTab === 'po_ledger' && (
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
+                  <th style={{ width: '48px', textAlign: 'center', padding: '12px 0' }}>
+                    <input
+                      type="checkbox"
+                      style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                      checked={filteredPos.length > 0 && filteredPos.every(p => selectedPoRows.includes(p.poNo || p.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedPoRows(filteredPos.map(p => p.poNo || p.id));
+                        else setSelectedPoRows([]);
+                      }}
+                    />
+                  </th>
+                  <th style={{ padding: '12px 14px' }}>PO Number</th>
+                  <th style={{ padding: '12px 14px' }}>Date</th>
+                  <th style={{ padding: '12px 14px' }}>Vendor / Supplier</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>Items</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Amount</th>
+                  <th style={{ padding: '12px 14px' }}>Delivery Site</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: '#64748B' }}>
+                      Loading procurement records for {formatMonthLabel(selectedMonth)}...
+                    </td>
+                  </tr>
+                ) : currentPos.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
+                      No purchase orders recorded for {formatMonthLabel(selectedMonth)}.
+                    </td>
+                  </tr>
+                ) : (
+                  currentPos.map((po, idx) => {
+                    const poKey = po.poNo || po.id;
+                    const isChecked = selectedPoRows.includes(poKey);
+                    const amt = cleanNum(po.totalAmount || po.grandTotal || po.amount);
+
+                    return (
+                      <tr
+                        key={idx}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                      >
+                        <td style={{
+                          textAlign: 'center',
+                          padding: '12px 0',
+                          borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                            onChange={() => {
+                              setSelectedPoRows(prev =>
+                                prev.includes(poKey) ? prev.filter(k => k !== poKey) : [...prev, poKey]
+                              );
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace' }}>
+                          {po.poNo || po.id}
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          {getPoDateStr(po)}
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0F172A' }}>
+                          {po.vendorName || po.vendor || 'Unknown Vendor'}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', color: '#475569' }}>
+                          {Array.isArray(po.items) ? po.items.length : 1}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                          {formatCurrency(amt)}
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#64748B', fontSize: '12px' }}>
+                          {po.deliveryLocation || po.shippingAddress || 'Head Office / Factory'}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            backgroundColor: (po.status === 'Authorized' || po.status === 'MD Approved') ? '#ECFDF5' : '#FEF3C7',
+                            color: (po.status === 'Authorized' || po.status === 'MD Approved') ? '#059669' : '#D97706',
+                            border: `1px solid ${(po.status === 'Authorized' || po.status === 'MD Approved') ? '#A7F3D0' : '#FDE68A'}`
+                          }}>
+                            {po.status || 'Issued'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Footer */}
+          {filteredPos.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Showing per page</span>
+                  <select
+                    value={poRpp}
+                    onChange={(e) => { setPoRpp(Number(e.target.value)); setPoPage(1); }}
+                    style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', fontWeight: 'bold' }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                  </select>
+                </div>
+                <span>Showing {poStartIndex + 1} to {Math.min(poStartIndex + poRpp, filteredPos.length)} of {filteredPos.length} entries</span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    disabled={poPage === 1}
+                    onClick={() => setPoPage(1)}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: poPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  >
+                    &laquo;
+                  </button>
+                  <button
+                    disabled={poPage === 1}
+                    onClick={() => setPoPage(prev => Math.max(prev - 1, 1))}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: poPage === 1 ? 'not-allowed' : 'pointer' }}
+                  >
+                    &lt;
+                  </button>
+                  {Array.from({ length: poTotalPages }, (_, i) => i + 1).slice(Math.max(0, poPage - 2), poPage + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPoPage(p)}
+                      style={{
+                        border: '1px solid #E2E8F0',
+                        backgroundColor: p === poPage ? '#0E7490' : '#FFFFFF',
+                        color: p === poPage ? '#FFFFFF' : '#475569',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontWeight: p === poPage ? 'bold' : 'normal',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    disabled={poPage === poTotalPages}
+                    onClick={() => setPoPage(prev => Math.min(prev + 1, poTotalPages))}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: poPage === poTotalPages ? 'not-allowed' : 'pointer' }}
+                  >
+                    &gt;
+                  </button>
+                  <button
+                    disabled={poPage === poTotalPages}
+                    onClick={() => setPoPage(poTotalPages)}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: poPage === poTotalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  >
+                    &raquo;
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>Go to page</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={poTotalPages}
+                    value={poGoTo}
+                    onChange={(e) => setPoGoTo(e.target.value)}
+                    style={{ width: '45px', height: '32px', textAlign: 'center', borderRadius: '6px', border: '1px solid #CBD5E1' }}
+                  />
+                  <button
+                    onClick={() => {
+                      const p = parseInt(poGoTo, 10);
+                      if (p >= 1 && p <= poTotalPages) setPoPage(p);
+                    }}
+                    style={{ height: '32px', padding: '0 10px', borderRadius: '6px', border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    Go &rsaquo;
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* ==================== 13. DISPATCH DASHBOARD SCREEN (CONTROL ROOM DESIGN SYSTEM) ==================== */}
+      {/* 4. MAIN DATA TABLE - TAB 2: VENDOR SPEND */}
+      {activeReportTab === 'vendor_spend' && (
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
+                  <th style={{ width: '48px', textAlign: 'center', padding: '12px 0' }}>
+                    <input
+                      type="checkbox"
+                      style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                      checked={vendorSpendSummary.length > 0 && vendorSpendSummary.every(v => selectedVendorRows.includes(v.vendorName))}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedVendorRows(vendorSpendSummary.map(v => v.vendorName));
+                        else setSelectedVendorRows([]);
+                      }}
+                    />
+                  </th>
+                  <th style={{ padding: '12px 14px' }}>Vendor / Supplier Name</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>Total PO Orders</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Spend (INR)</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>Share of Month's Spend</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Average PO Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vendorSpendSummary.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
+                      No vendor spend transactions recorded for {formatMonthLabel(selectedMonth)}.
+                    </td>
+                  </tr>
+                ) : (
+                  currentVendors.map((v, idx) => {
+                    const isChecked = selectedVendorRows.includes(v.vendorName);
+
+                    return (
+                      <tr
+                        key={idx}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                      >
+                        <td style={{
+                          textAlign: 'center',
+                          padding: '12px 0',
+                          borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                            onChange={() => {
+                              setSelectedVendorRows(prev =>
+                                prev.includes(v.vendorName) ? prev.filter(k => k !== v.vendorName) : [...prev, v.vendorName]
+                              );
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0F172A' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Building2 size={16} style={{ color: '#0E7490' }} />
+                            <span>{v.vendorName}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: '700', color: '#0E7490' }}>
+                          {v.poCount}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                          {formatCurrency(v.totalSpend)}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '60px', height: '6px', borderRadius: '3px', backgroundColor: '#E2E8F0', overflow: 'hidden' }}>
+                              <div style={{ width: `${Math.min(100, parseFloat(v.sharePct))}%`, height: '100%', backgroundColor: '#0E7490' }} />
+                            </div>
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490' }}>{v.sharePct}%</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', color: '#475569', fontWeight: '600' }}>
+                          {formatCurrency(v.avgPoValue)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Footer */}
+          {vendorSpendSummary.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Showing per page</span>
+                  <select
+                    value={vendorRpp}
+                    onChange={(e) => { setVendorRpp(Number(e.target.value)); setVendorPage(1); }}
+                    style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', fontWeight: 'bold' }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                  </select>
+                </div>
+                <span>Showing {vendorStartIndex + 1} to {Math.min(vendorStartIndex + vendorRpp, vendorSpendSummary.length)} of {vendorSpendSummary.length} entries</span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    disabled={vendorPage === 1}
+                    onClick={() => setVendorPage(1)}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: vendorPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  >
+                    &laquo;
+                  </button>
+                  <button
+                    disabled={vendorPage === 1}
+                    onClick={() => setVendorPage(prev => Math.max(prev - 1, 1))}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: vendorPage === 1 ? 'not-allowed' : 'pointer' }}
+                  >
+                    &lt;
+                  </button>
+                  {Array.from({ length: vendorTotalPages }, (_, i) => i + 1).slice(Math.max(0, vendorPage - 2), vendorPage + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setVendorPage(p)}
+                      style={{
+                        border: '1px solid #E2E8F0',
+                        backgroundColor: p === vendorPage ? '#0E7490' : '#FFFFFF',
+                        color: p === vendorPage ? '#FFFFFF' : '#475569',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontWeight: p === vendorPage ? 'bold' : 'normal',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    disabled={vendorPage === vendorTotalPages}
+                    onClick={() => setVendorPage(prev => Math.min(prev + 1, vendorTotalPages))}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: vendorPage === vendorTotalPages ? 'not-allowed' : 'pointer' }}
+                  >
+                    &gt;
+                  </button>
+                  <button
+                    disabled={vendorPage === vendorTotalPages}
+                    onClick={() => setVendorPage(vendorTotalPages)}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: vendorPage === vendorTotalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  >
+                    &raquo;
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. MAIN DATA TABLE - TAB 3: GRN LEDGER */}
+      {activeReportTab === 'grn_ledger' && (
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
+                  <th style={{ width: '48px', textAlign: 'center', padding: '12px 0' }}>
+                    <input
+                      type="checkbox"
+                      style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                      checked={filteredGrns.length > 0 && filteredGrns.every(g => selectedGrnRows.includes(g.grnNo || g.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedGrnRows(filteredGrns.map(g => g.grnNo || g.id));
+                        else setSelectedGrnRows([]);
+                      }}
+                    />
+                  </th>
+                  <th style={{ padding: '12px 14px' }}>GRN Number</th>
+                  <th style={{ padding: '12px 14px' }}>PO Reference</th>
+                  <th style={{ padding: '12px 14px' }}>Received Date</th>
+                  <th style={{ padding: '12px 14px' }}>Vendor / Supplier</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>Inward Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredGrns.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
+                      No Goods Receipt Notes inwarded for {formatMonthLabel(selectedMonth)}.
+                    </td>
+                  </tr>
+                ) : (
+                  currentGrns.map((grn, idx) => {
+                    const grnKey = grn.grnNo || grn.id;
+                    const isChecked = selectedGrnRows.includes(grnKey);
+
+                    return (
+                      <tr
+                        key={idx}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                      >
+                        <td style={{
+                          textAlign: 'center',
+                          padding: '12px 0',
+                          borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                            onChange={() => {
+                              setSelectedGrnRows(prev =>
+                                prev.includes(grnKey) ? prev.filter(k => k !== grnKey) : [...prev, grnKey]
+                              );
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace' }}>
+                          {grn.grnNo || grn.id}
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '600', color: '#2563EB', fontFamily: 'monospace' }}>
+                          {grn.poNo || '—'}
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#64748B' }}>
+                          {getGrnDateStr(grn)}
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0F172A' }}>
+                          {grn.vendorName || grn.vendor || 'Unknown Supplier'}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            backgroundColor: '#ECFDF5',
+                            color: '#059669',
+                            border: '1px solid #A7F3D0'
+                          }}>
+                            {grn.status || 'Verified & Inwarded'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Footer */}
+          {filteredGrns.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Showing per page</span>
+                  <select
+                    value={grnRpp}
+                    onChange={(e) => { setGrnRpp(Number(e.target.value)); setGrnPage(1); }}
+                    style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', fontWeight: 'bold' }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                  </select>
+                </div>
+                <span>Showing {grnStartIndex + 1} to {Math.min(grnStartIndex + grnRpp, filteredGrns.length)} of {filteredGrns.length} entries</span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    disabled={grnPage === 1}
+                    onClick={() => setGrnPage(1)}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: grnPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  >
+                    &laquo;
+                  </button>
+                  <button
+                    disabled={grnPage === 1}
+                    onClick={() => setGrnPage(prev => Math.max(prev - 1, 1))}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: grnPage === 1 ? 'not-allowed' : 'pointer' }}
+                  >
+                    &lt;
+                  </button>
+                  {Array.from({ length: grnTotalPages }, (_, i) => i + 1).slice(Math.max(0, grnPage - 2), grnPage + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setGrnPage(p)}
+                      style={{
+                        border: '1px solid #E2E8F0',
+                        backgroundColor: p === grnPage ? '#0E7490' : '#FFFFFF',
+                        color: p === grnPage ? '#FFFFFF' : '#475569',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontWeight: p === grnPage ? 'bold' : 'normal',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    disabled={grnPage === grnTotalPages}
+                    onClick={() => setGrnPage(prev => Math.min(prev + 1, grnTotalPages))}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: grnPage === grnTotalPages ? 'not-allowed' : 'pointer' }}
+                  >
+                    &gt;
+                  </button>
+                  <button
+                    disabled={grnPage === grnTotalPages}
+                    onClick={() => setGrnPage(grnTotalPages)}
+                    style={{ border: '1px solid #E2E8F0', padding: '6px 8px', borderRadius: '6px', cursor: grnPage === grnTotalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  >
+                    &raquo;
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Floating Bottom Action Bar for Multi-row selection */}
+      {((selectedPoRows.length > 0 && activeReportTab === 'po_ledger') ||
+        (selectedVendorRows.length > 0 && activeReportTab === 'vendor_spend') ||
+        (selectedGrnRows.length > 0 && activeReportTab === 'grn_ledger')) && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#0F172A',
+          color: '#FFFFFF',
+          padding: '10px 24px',
+          borderRadius: '50px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+          zIndex: 1000,
+          whiteSpace: 'nowrap',
+          flexDirection: 'row',
+          flexWrap: 'nowrap'
+        }}>
+          <span style={{ fontSize: '13px', fontWeight: '700', color: '#38BDF8' }}>
+            {activeReportTab === 'po_ledger'
+              ? `${selectedPoRows.length} Purchase Order(s) Selected`
+              : activeReportTab === 'vendor_spend'
+              ? `${selectedVendorRows.length} Vendor(s) Selected`
+              : `${selectedGrnRows.length} GRN Receipt(s) Selected`}
+          </span>
+          <div style={{ height: '16px', width: '1px', backgroundColor: '#334155' }} />
+          <button
+            onClick={handleExportCsv}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Download size={14} color="#38BDF8" /> Export Selected
+          </button>
+          <div style={{ height: '16px', width: '1px', backgroundColor: '#334155' }} />
+          <button
+            onClick={() => {
+              setSelectedPoRows([]);
+              setSelectedVendorRows([]);
+              setSelectedGrnRows([]);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#94A3B8',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            ✕ Clear Selection
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }

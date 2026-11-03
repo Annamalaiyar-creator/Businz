@@ -1293,7 +1293,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
                 </thead>
                 <tbody>
                   {(isDispatchView ? (
-                    (bomStore || []).filter(b => b && b.status && b.status !== 'Draft').slice(0, 5).map(b => {
+                    (bomStore || []).filter(b => b && b.salesConfirmed && b.status && b.status !== 'Draft' && b.status !== 'Pending Confirmation' && !String(b.status).toLowerCase().includes('pending confirmation')).slice(0, 5).map(b => {
                       const totalQty = (b.items || []).reduce((acc, it) => acc + (parseFloat(it.qty) || 0), 0);
                       const packedQty = (b.dispatchPacking || []).filter(p => p.packed).length;
                       const totalItems = (b.dispatchPacking || b.items || []).length;

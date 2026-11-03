@@ -378,6 +378,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               const isAccountsEligible = (b) => {
                 if (!b) return false;
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+                if (b.awaitingSalesPaymentProof || (typeof b.status === 'string' && b.status.toLowerCase().includes('awaiting sales payment proof'))) return false;
                 const s = String(b.status || '').toLowerCase().trim();
                 const isSentToAccounts = Boolean(
                   b.accountsVerification?.readyForAccounts ||
@@ -432,7 +433,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
               return {
                 title: 'Accounts Verification & Document Control',
-                subtitle: 'Verify customer payment details (Payment Date, Total Amount, Payment Status) and Hard Copy BOM receipt',
+                subtitle: 'Verify customer payment details, document type (Invoice / DC), and Hard Copy BOM receipt',
                 actionText: '',
                 searchPlaceholder: 'Search Accounts Verification (BOM Code, Customer Name)...',
                 tabs: [
@@ -440,12 +441,31 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Verified', label: 'Verified', count: allAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Payment Status', 'Status'],
+                headers: ['BOM Code', 'Customer Name', 'Document', 'Payment Type', 'Total Amount', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
-                  const payStatus = acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification');
+                  const isSettledCredit = Boolean(b.creditSettled || acc.creditSettled || (typeof b.status === 'string' && b.status.toLowerCase().includes('credit settled')));
+                  const payStatus = isSettledCredit
+                    ? '100% Received (Credit Settled)'
+                    : (acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification'));
                   
+                  // Format BOM Created Date for display below BOM Code
+                  const rawCreatedDate = b.date || b.createdAt || b.bomDate || b.salesConfirmedAt;
+                  let createdDateFormatted = '';
+                  if (rawCreatedDate) {
+                    try {
+                      const d = new Date(rawCreatedDate);
+                      if (!isNaN(d.getTime())) {
+                        createdDateFormatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                      } else {
+                        createdDateFormatted = String(rawCreatedDate).slice(0, 10);
+                      }
+                    } catch (_) {
+                      createdDateFormatted = String(rawCreatedDate).slice(0, 10);
+                    }
+                  }
+
                   // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
                   const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
                   let paymentDateFormatted = '—';
@@ -470,12 +490,88 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                   // Format Total Amount
                   let totalAmtFormatted = '—';
-                  const rawAmt = Number(acc.totalAmount || (isVerified ? (b.grandTotal || b.subTotal || b.totalAmount || 0) : 0));
+                  const rawAmt = Number(acc.totalAmount || b.grandTotal || b.subTotal || b.totalAmount || 0);
                   if (rawAmt > 0) {
                     totalAmtFormatted = `₹ ${rawAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                  }
+
+                  // Calculate and Format Cumulative Customer Credit Amount for Accounts verification
+                  const payTypeNorm = String(b.paymentType || b.paymentTerms || '').trim().toLowerCase();
+                  const cDays = Number(b.creditDays || 0);
+                  const baseOrderVal = rawAmt > 0 ? rawAmt : Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
+
+                  // Helper to check if a BOM's credit has been settled
+                  const isBomCreditSettled = (item) => {
+                    if (!item) return true;
+                    if (item.creditSettled || item.paymentSettled || item.paymentUpdated) return true;
+                    const s = String(item.status || '').toLowerCase();
+                    if (s.includes('credit settled') || s.includes('payment settled') || s.includes('payment uploaded & settled')) return true;
+                    const accItem = item.accountsVerification || {};
+                    if (accItem.creditSettled || accItem.paymentStatus === 'Credit Settled (100% Paid)') return true;
+                    return false;
+                  };
+
+                  // Customer matching for cumulative credit tracking
+                  const normCust = (name) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                  const bCustNorm = normCust(b.customerName || b.companyName || b.c2 || b.vendor || b.clientName);
+                  const bGstNorm = String(b.gstNo || b.customerGst || b.c3 || '').toUpperCase().trim();
+                  const bCode = b.bomCode || b.code || b.id;
+
+                  // 1. Calculate previous unsettled credit for this customer from prior orders
+                  let prevUnsettledCredit = 0;
+                  if (bCustNorm.length >= 2 || bGstNorm.length >= 5) {
+                    (bomStore || []).forEach(other => {
+                      const otherCode = other.bomCode || other.code || other.id;
+                      if (!otherCode || otherCode === bCode) return;
+                      if (other.cancelled || other.status === 'Cancelled' || other.status === 'Cancelled & Stock Restored' || (typeof other.status === 'string' && other.status.toLowerCase().includes('cancel'))) return;
+
+                      // Check customer match
+                      const otherCustNorm = normCust(other.customerName || other.companyName || other.c2 || other.vendor || other.clientName);
+                      const otherGstNorm = String(other.gstNo || other.customerGst || other.c3 || '').toUpperCase().trim();
+                      const isMatch = (bGstNorm && otherGstNorm && bGstNorm === otherGstNorm) ||
+                        (bCustNorm && otherCustNorm && (bCustNorm === otherCustNorm || bCustNorm.includes(otherCustNorm) || otherCustNorm.includes(bCustNorm)));
+                      if (!isMatch) return;
+
+                      // Check if other order was credit and is not settled
+                      const otherPType = String(other.paymentType || other.paymentTerms || other.accountsVerification?.paymentStatus || '').toLowerCase();
+                      const otherCDays = Number(other.creditDays || 0);
+                      const isOtherCredit = otherPType.includes('credit') || otherPType.includes('net 30') || otherCDays > 0;
+
+                      if (isOtherCredit && !isBomCreditSettled(other)) {
+                        const otherAmt = Number(other.accountsVerification?.totalAmount || other.grandTotal || other.subTotal || other.totalAmount || 0);
+                        if (otherAmt > 0) {
+                          prevUnsettledCredit += otherAmt;
+                        }
+                      }
+                    });
+                  }
+
+                  // 2. Current order credit
+                  let currentOrderCredit = 0;
+                  const isCurrentSettled = isBomCreditSettled(b);
+                  if (!isCurrentSettled) {
+                    if (payTypeNorm.includes('credit') || payTypeNorm.includes('net 30') || cDays > 0) {
+                      currentOrderCredit = baseOrderVal > 0 ? baseOrderVal : 0;
+                    } else if (payTypeNorm.includes('partial') || payTypeNorm.includes('50%')) {
+                      currentOrderCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
+                    } else if (payTypeNorm.includes('while dispatch') || payTypeNorm.includes('before dispatch')) {
+                      currentOrderCredit = baseOrderVal > 0 ? Math.round(baseOrderVal * 0.5) : 0;
+                    }
+                  }
+
+                  const totalCustomerCredit = prevUnsettledCredit + currentOrderCredit;
+                  let creditAmtFormatted = '—';
+
+                  if (isCurrentSettled && prevUnsettledCredit === 0) {
+                    creditAmtFormatted = '₹ 0.00 (Settled)';
+                  } else if (prevUnsettledCredit > 0 && currentOrderCredit > 0) {
+                    creditAmtFormatted = `₹ ${totalCustomerCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (₹ ${prevUnsettledCredit.toLocaleString('en-IN')} Prev + ₹ ${currentOrderCredit.toLocaleString('en-IN')})`;
+                  } else if (prevUnsettledCredit > 0 && currentOrderCredit === 0) {
+                    creditAmtFormatted = `₹ ${prevUnsettledCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Prev Credit)`;
+                  } else if (currentOrderCredit > 0) {
+                    creditAmtFormatted = `₹ ${currentOrderCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}${cDays > 0 ? ` (${cDays}d)` : ''}`;
                   } else {
-                    const orderEst = Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
-                    totalAmtFormatted = orderEst > 0 ? `₹ ${orderEst.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Order)` : '—';
+                    creditAmtFormatted = '₹ 0.00 (Nil)';
                   }
 
                   const isWhileDispPendingProof = (b.paymentType === 'Payment While Dispatch' || String(b.paymentType || '').includes('While Dispatch')) && !Boolean(
@@ -491,14 +587,20 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const stBorder = isVerified ? '1px solid #BBF7D0' : isWhileDispPendingProof ? '1px solid #FECACA' : '1px solid #FDE68A';
                   const tabGroup = isVerified ? 'Verified' : 'Pending';
 
+                  const isDc = b.docType === 'DC' || b.documentType === 'DC' || b.invoiceType === 'DC' || String(b.docType || '').toUpperCase() === 'DC';
+                  const docTypeVal = isDc ? 'DC' : 'Invoice';
+
                   return {
                     ...b,
                     code: b.bomCode,
+                    createdDateFormatted: createdDateFormatted,
                     c2: customerDisplayName,
-                    c3: b.paymentType,
-                    c4: paymentDateFormatted,
+                    docType: docTypeVal,
+                    c3: docTypeVal,
+                    c4: b.paymentType || '100% Paid',
                     c5: totalAmtFormatted,
-                    c6: payStatus,
+                    c6: creditAmtFormatted,
+                    paymentStatusText: payStatus,
                     packingProgressText: null,
                     status: statusText,
                     stBg: stBg,
@@ -614,25 +716,35 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 if (!b) return false;
                 const s = String(b.status || '').toLowerCase().trim();
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') {
-                  return Boolean(b.salesConfirmed || b.isSentToDispatch || s.includes('dispatch') || s.includes('packed'));
+                  return Boolean(b.salesConfirmed && (b.isSentToDispatch || s.includes('dispatch') || s.includes('packed')));
                 }
-                const isDraftOrPending = (b.status === 'Draft' || s === 'draft' || s.includes('pending confirmation') || s === 'pending sales confirmation');
-                const hasEnteredDispatch = Boolean(
-                  b.salesConfirmed ||
-                  b.isSentToDispatch ||
-                  s.includes('sent to dispatch') ||
-                  s.includes('dispatch') ||
-                  s.includes('packed') ||
-                  s.includes('accounts') ||
-                  s.includes('invoice') ||
-                  s.includes('loading') ||
-                  s.includes('completed') ||
-                  s.includes('closed')
+                // Orders pending sales reconfirmation or drafts must NEVER appear in Dispatch
+                const isDraftOrPending = Boolean(
+                  !b.salesConfirmed ||
+                  b.status === 'Draft' || s === 'draft' ||
+                  b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
+                  s === 'pending sales confirmation'
                 );
-                if (isDraftOrPending && !hasEnteredDispatch) {
+                if (isDraftOrPending) {
                   return false;
                 }
-                return hasEnteredDispatch || !isDraftOrPending;
+
+                const hasEnteredDispatch = Boolean(
+                  b.salesConfirmed && (
+                    b.isSentToDispatch ||
+                    s.includes('sent to dispatch') ||
+                    s.includes('sent to production') ||
+                    s.includes('confirmed') ||
+                    s.includes('dispatch') ||
+                    s.includes('packed') ||
+                    s.includes('accounts') ||
+                    s.includes('invoice') ||
+                    s.includes('loading') ||
+                    s.includes('completed') ||
+                    s.includes('closed')
+                  )
+                );
+                return hasEnteredDispatch;
               };
 
               const allDispatchBoms = (bomStore || []).filter(isDispatchEligible);
@@ -643,7 +755,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 actionText: '',
                 searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
                 tabs: [
-                  { id: 'All', label: 'All Orders', count: allDispatchBoms.length, bg: '#F1F5F9', fg: '#334155' },
+                  { id: 'All', label: 'All Orders', count: allDispatchBoms.filter(b => !b.cancelled && b.status !== 'Cancelled' && b.status !== 'Cancelled & Stock Restored').length, bg: '#F1F5F9', fg: '#334155' },
                   { id: 'PendingPrint', label: 'Pending Print', count: allDispatchBoms.filter(b => (!b.dispatchPrinted && !b.isPrinted) && !isClosedOrder(b) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Printed', label: 'Print Taken', count: allDispatchBoms.filter(b => (b.dispatchPrinted || b.isPrinted) && !isClosedOrder(b) && !b.cancelled).length, bg: '#DCFCE7', fg: '#166534' },
                   { id: 'PendingPacking', label: 'Pending Packing', count: allDispatchBoms.filter(b => b && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
@@ -654,7 +766,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'Closed', label: 'Closed / Dispatched', count: allDispatchBoms.filter(b => isClosedOrder(b)).length, bg: '#F1F5F9', fg: '#475569' },
                   { id: 'Cancelled', label: 'Cancelled', count: allDispatchBoms.filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
+                headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Dispatch Packing Status'],
                 rows: allDispatchBoms.sort((a, b) => {
                   const parseBomSeq = (code) => {
                     const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
@@ -760,7 +872,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                       tabGroup = 'Packed';
                     }
                   } else if (isPartiallyPacked) {
-                    statusLabel = 'PARTIALLY PACKED';
+                    const isPartialSentToAccounts = Boolean(
+                      b.accountsVerification?.readyForAccounts ||
+                      String(b.status || '').toLowerCase().includes('sent to accounts')
+                    );
+                    statusLabel = isPartialSentToAccounts ? 'PARTIALLY PACKED - SENT TO ACCOUNTS' : 'PARTIALLY PACKED';
                     stBg = '#FEF3C7';
                     stFg = '#B45309';
                     stBorder = '1px solid #FDE68A';
@@ -789,7 +905,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                       ? `All ${totalItemsCount} of ${totalItemsCount} Items Packed & Verified` 
                       : 'Packing Verified & Passed to Accounts';
                   } else if (isPartiallyPacked) {
-                    packingProgressText = `${packedCount} of ${totalItemsCount} Items Packed`;
+                    const isPartialSent = Boolean(b.accountsVerification?.readyForAccounts || String(b.status || '').toLowerCase().includes('sent to accounts'));
+                    packingProgressText = `${packedCount} of ${totalItemsCount} Items Packed${isPartialSent ? ' (Sent to Accounts)' : ''}`;
                   } else if (totalItemsCount === 0) {
                     packingProgressText = 'Items Pending Packing';
                   }
@@ -904,21 +1021,39 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const secondPrintTime = b.secondPrintTimeStr || (b.dispatchPrintHistory?.[1]?.time || (printCount >= 2 ? printTime : ''));
                   const printHistory = Array.isArray(b.dispatchPrintHistory) ? b.dispatchPrintHistory : [];
 
+                  const resolvedTransporter = (() => {
+                    const list = [
+                      b.transporterName,
+                      b.transporter,
+                      b.transporter_name,
+                      b.vehicleLoading?.transporter,
+                      b.vehicleLoading?.transporterName,
+                      b.vehicleLoadingData?.transporter,
+                      matchedPi?.transporterName,
+                      matchedPi?.transporter
+                    ];
+                    const found = list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase()));
+                    return found ? found.trim() : (b.transportMode || 'To be arranged');
+                  })();
+
                   const rowObj = {
                     ...b,
                     code: b.bomCode || b.code || b.id,
                     customerName: customerDisplayName,
                     companyName: customerDisplayName,
                     c2: customerDisplayName,
+                    transporterName: resolvedTransporter,
+                    transporter: resolvedTransporter,
                     dateTimeObj: dt,
                     dateTime: dt.combined,
                     c3: dt.combined,
                     salesPerson: salesPersonName,
                     salesPersonName: salesPersonName,
                     c4: salesPersonName,
+                    c5: undefined,
+                    c6: undefined,
+                    c7: undefined,
                     paymentType: b.paymentType || b.paymentTerms || '100% Paid',
-                    c5: b.paymentType || b.paymentTerms || '100% Paid',
-                    c6: formattedAmt,
                     totalAmountFormatted: formattedAmt,
                     packingProgressText: packingProgressText,
                     status: statusLabel,
@@ -1152,11 +1287,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search Sales BOM (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
@@ -1164,11 +1298,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'BOM': {
@@ -1178,11 +1312,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search BOM (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
@@ -1190,11 +1323,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'BOM Orders': {
@@ -1204,11 +1337,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search BOM Orders (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
@@ -1216,11 +1348,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'Customer Management': {
@@ -1233,7 +1365,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { id: 'Active', label: 'Active Clients', count: (customerList || []).length, bg: '#dcfce7', fg: '#166534' },
                 { id: 'Lead', label: 'New Leads', count: 0, bg: '#dbeafe', fg: '#1e40af' }
               ],
-              headers: ['Customer Name', 'Company Name', 'GSTIN / Tax No.', 'Mobile / Phone', 'Email ID', 'Action'],
+              headers: ['Customer Name', 'Company Name', 'GSTIN / Tax No.', 'Mobile / Phone', 'Email ID'],
               rows: (customerList || []).map(c => ({
                 ...c,
                 code: c.code,
@@ -1250,11 +1382,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               searchPlaceholder: 'Search BOM (BOM Code, Customer Name, Product)...',
               tabs: [
                 { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Pending', label: 'Pending Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status.includes('Pending') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'Sent', label: 'Sent to Production', count: (visibleBomStore || []).filter(b => b.status === 'Sent to Production' || b.status === 'Confirmed').length, bg: '#dcfce7', fg: '#166534' }
               ],
-              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status', 'Action'],
+              headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Payment Type', 'Total (₹)', 'Status'],
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
@@ -1262,11 +1393,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
-                status: b.status || 'Pending Confirmation',
-                stBg: b.status === 'Draft' ? '#fff7ed' : (!b.status || b.status.includes('Pending')) ? '#fef3c7' : '#dcfce7',
-                stFg: b.status === 'Draft' ? '#c2410c' : (!b.status || b.status.includes('Pending')) ? '#b45309' : '#166534',
-                stBorder: b.status === 'Draft' ? '1px solid #fed7aa' : (!b.status || b.status.includes('Pending')) ? '1px solid #fde68a' : '1px solid #bbf7d0',
-                tabGroup: b.status === 'Draft' ? 'Draft' : (!b.status || b.status.includes('Pending')) ? 'Pending' : 'Sent'
+                status: (b.status && b.status !== 'Draft') ? b.status : 'Pending Confirmation',
+                stBg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#fef3c7' : '#dcfce7',
+                stFg: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '#b45309' : '#166534',
+                stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
             },
             'Production Reports': {

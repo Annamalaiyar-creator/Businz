@@ -98,7 +98,7 @@ export default function PresetManagementView(props) {
       category: activeCategory !== 'All' ? activeCategory : 'GAL Hat Purline Structures (2 Row)',
       isCustom: true,
       items: [
-        { name: '', qty: '1', uom: 'NOS', category: 'General', rate: '0.0', gstRate: '18%' }
+        { name: '', qty: '', uom: 'NOS', category: 'General', rate: '0.0', gstRate: '18%' }
       ]
     });
     setIsCreateScreenOpen(true);
@@ -159,7 +159,7 @@ export default function PresetManagementView(props) {
     const newItem = {
       code: product.code || '',
       name: product.name || '',
-      qty: '1',
+      qty: (product.qty !== undefined && product.qty !== null && String(product.qty).trim() !== '' && String(product.qty).trim() !== '0') ? String(product.qty) : '',
       uom: product.uom || 'NOS',
       category: product.material || 'General',
       rate: String(product.rate || '0.0'),
@@ -194,7 +194,13 @@ export default function PresetManagementView(props) {
       alert('Please provide a valid Preset Name / Title.');
       return;
     }
-    const cleanItems = (editingPreset.items || []).filter(it => it.name && it.name.trim() !== '');
+    const cleanItems = (editingPreset.items || []).filter(it => it.name && it.name.trim() !== '').map(it => {
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      return {
+        ...it,
+        qty: (rawQ === '' || rawQ === '0') ? '' : rawQ
+      };
+    });
     if (cleanItems.length === 0) {
       alert('Please add at least one component to the preset.');
       return;
@@ -490,7 +496,7 @@ export default function PresetManagementView(props) {
                         padding: '2px 6px'
                       }}
                     >
-                      {it.name} ({it.qty} {it.uom || 'NOS'})
+                      {it.name} {it.qty !== undefined && it.qty !== null && String(it.qty).trim() !== '' && String(it.qty).trim() !== '0' ? `(${it.qty} ${it.uom || 'NOS'})` : `(${it.uom || 'NOS'})`}
                     </span>
                   ))}
                   {itemCount > 4 && (
@@ -725,7 +731,7 @@ export default function PresetManagementView(props) {
                     onClick={() => {
                       setEditingPreset(prev => ({
                         ...prev,
-                        items: [...(prev.items || []), { name: '', qty: '1', uom: 'NOS', category: 'General', rate: '0.0', gstRate: '18%' }]
+                        items: [...(prev.items || []), { name: '', qty: '', uom: 'NOS', category: 'General', rate: '0.0', gstRate: '18%' }]
                       }));
                     }}
                     style={{
@@ -779,9 +785,9 @@ export default function PresetManagementView(props) {
                           </td>
                           <td style={{ padding: '8px 12px' }}>
                             <input id={`preset-management-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
-                              type="number"
-                              min="1"
-                              value={it.qty}
+                              type="text"
+                              value={it.qty !== undefined && it.qty !== null && String(it.qty).trim() !== '0' ? it.qty : ''}
+                              placeholder=""
                               onChange={(e) => handleUpdateItem(idx, 'qty', e.target.value)}
                               style={{
                                 width: '100%',

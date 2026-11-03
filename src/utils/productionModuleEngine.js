@@ -232,13 +232,12 @@ class ProductionModuleEngine {
   }
 
   initCloudSync() {
-    // Load all collections directly from Supabase Cloud Database
+    // Load core collections directly from Supabase Cloud Database (Fast interactive startup)
     Promise.all([
       fetchCloudStore('vrm_prod_workorders', this.workOrders),
       fetchCloudStore('vrm_prod_inventory', this.inventory),
-      fetchCloudStore('vrm_prod_recipes', this.recipes),
-      fetchCloudStore('vrm_prod_ledger', this.ledger)
-    ]).then(([cloudWOs, cloudInv, cloudRecipes, cloudLedger]) => {
+      fetchCloudStore('vrm_prod_recipes', this.recipes)
+    ]).then(([cloudWOs, cloudInv, cloudRecipes]) => {
       if (Array.isArray(cloudWOs) && cloudWOs.length > 0) {
         this.workOrders = cloudWOs.filter(w => !isLegacyWoId(w?.id || w?.workOrderNo)).map(w => this._sanitizeWorkOrder(w));
         try { localStorage.setItem('vrm_prod_workorders', JSON.stringify(this.workOrders)); } catch (_) {}
@@ -248,8 +247,17 @@ class ProductionModuleEngine {
         try { localStorage.setItem('vrm_prod_inventory', JSON.stringify(this.inventory)); } catch (_) {}
       }
       if (Array.isArray(cloudRecipes) && cloudRecipes.length > 0) this.recipes = cloudRecipes;
-      if (Array.isArray(cloudLedger) && cloudLedger.length > 0) this.ledger = cloudLedger;
       this.notifySubscribers();
+
+      // Asynchronously load recent ledger in background without delaying main dashboard render
+      fetchCloudStore('vrm_prod_ledger', this.ledger)
+        .then((cloudLedger) => {
+          if (Array.isArray(cloudLedger) && cloudLedger.length > 0) {
+            this.ledger = cloudLedger;
+            this.notifySubscribers();
+          }
+        })
+        .catch(() => {});
     }).catch(err => console.warn('[ProductionEngine] Cloud boot fetch notice:', err));
 
     // Live Realtime subscriptions from Supabase

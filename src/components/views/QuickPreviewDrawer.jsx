@@ -2,6 +2,7 @@ import React from "react";
 import { Plus, X, XCircle, ChevronDown, ChevronUp, Receipt, Camera, Video, Truck, FileText, Eye } from "lucide-react";
 import StatusBadge from "../StatusBadge";
 import { getMediaFromCache } from "../../utils/otherViewsShared";
+import DispatchMediaThumbnail from "./DispatchMediaThumbnail";
 
 export default function QuickPreviewDrawer({
   quickPreviewRecord,
@@ -95,27 +96,15 @@ export default function QuickPreviewDrawer({
             View Full Details
           </button>
 
-          {canCancelBom && ['Dispatch Orders', 'Accounts Verification', 'BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) && quickPreviewRecord.status !== 'Cancelled & Stock Restored' && quickPreviewRecord.status !== 'CANCELLED' && !quickPreviewRecord.cancelled && (() => {
-            if (activeTab === 'Dispatch Orders') {
-              const isSent = Boolean(
-                quickPreviewRecord.status === 'Packed & Awaiting Accounts Verification' ||
-                quickPreviewRecord.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
-                quickPreviewRecord.status === 'Packing Verified - Sent to Accounts' ||
-                quickPreviewRecord.status === 'Accounts Verified & Passed to Invoice' ||
-                quickPreviewRecord.status === 'ACCOUNTS VERIFIED' ||
-                quickPreviewRecord.status === 'Invoice Confirmed' ||
-                quickPreviewRecord.status === 'Awaiting Vehicle Loading & Dispatch' ||
-                quickPreviewRecord.status === 'AWAITING VEHICLE LOADING' ||
-                quickPreviewRecord.status === 'Closed' ||
-                quickPreviewRecord.status === 'Completed' ||
-                quickPreviewRecord.tabGroup === 'Packed' ||
-                quickPreviewRecord.tabGroup === 'AwaitingLoading' ||
-                quickPreviewRecord.tabGroup === 'Closed' ||
-                quickPreviewRecord.accountsVerification?.readyForAccounts ||
-                quickPreviewRecord.accountsVerification?.verified
-              );
-              if (isSent) return null;
-            }
+          {canCancelBom &&
+            activeTab !== 'Accounts Verification' &&
+            activeTab !== 'Dispatch Orders' &&
+            !String(activeTab || '').toLowerCase().includes('account') &&
+            !String(activeTab || '').toLowerCase().includes('dispatch') &&
+            ['BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) &&
+            quickPreviewRecord.status !== 'Cancelled & Stock Restored' &&
+            quickPreviewRecord.status !== 'CANCELLED' &&
+            !quickPreviewRecord.cancelled && (() => {
             return (
               <button
                 onClick={() => {
@@ -279,13 +268,23 @@ export default function QuickPreviewDrawer({
 
         if (isClosed) {
           buttonBg = 'linear-gradient(135deg, #15803D, #16A34A)';
-          buttonContent = <>👁️ View Dispatched Shipment Details</>;
+          buttonContent = <>View Dispatched Shipment Details</>;
         } else if (isAwaitingLr) {
           buttonBg = 'linear-gradient(135deg, #D97706, #F59E0B)';
-          buttonContent = <>📄 Upload Transporter LR Copy & Close Order</>;
+          buttonContent = (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={16} strokeWidth={2.2} />
+              <span>Upload Transporter LR Copy & Close Order</span>
+            </span>
+          );
         } else if (isReadyForVehicleLoading) {
           buttonBg = 'linear-gradient(135deg, #0284C7, #0EA5E9)';
-          buttonContent = <>🚚 Proceed to Vehicle Loading & Complete Dispatch</>;
+          buttonContent = (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <Truck size={16} strokeWidth={2.2} />
+              <span>Proceed to Vehicle Loading & Complete Dispatch</span>
+            </span>
+          );
         } else if (isSentToAccounts) {
           return null;
         }
@@ -441,20 +440,20 @@ export default function QuickPreviewDrawer({
                   <th style={{ padding: '8px 10px' }}>Product Item</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center' }}>UOM</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center' }}>Qty</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Rate (₹)</th>
                 </tr>
               </thead>
               <tbody>
                 {((quickPreviewRecord.items || quickPreviewRecord.materials || []).length > 0
                   ? (quickPreviewRecord.items || quickPreviewRecord.materials)
-                  : [{ name: quickPreviewRecord.productName || quickPreviewRecord.c2 || 'BOM Material Kit', uom: 'NOS', qty: 1, rate: parseFloat(quickPreviewRecord.grandTotal || quickPreviewRecord.value || 0) }]
+                  : [{ name: quickPreviewRecord.productName || quickPreviewRecord.c2 || 'BOM Material Kit', uom: 'NOS', qty: 1 }]
                 ).map((it, idx) => (
                   <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                     <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
                     <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{it.name || '—'}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569' }}>{it.uom || it.unit || 'NOS'}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>{it.qty || 1}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: '#0F172A' }}>₹ {Number(it.rate || 0).toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
+                      {it.qty !== undefined && it.qty !== null && String(it.qty).trim() !== '' && String(it.qty).trim() !== '0' ? it.qty : ''}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -489,47 +488,21 @@ export default function QuickPreviewDrawer({
             {hasMedia ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                 {(packPhotos || []).map((ph, pIdx) => {
-                  const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
-                    ? ph.url
-                    : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
                   return (
-                    <div
-                      key={pIdx}
-                      onClick={() => {
+                    <DispatchMediaThumbnail
+                      key={ph.id || pIdx}
+                      photo={ph}
+                      bomCode={quickPreviewRecord?.bomCode || quickPreviewRecord?.code}
+                      height="76px"
+                      label="Photo"
+                      onClick={(resolvedUrl) => {
                         if (typeof setActiveMediaPreviewModal === 'function') {
-                          setActiveMediaPreviewModal({ type: 'image', url: photoUrl, name: ph.name || `Photo ${pIdx + 1}` });
-                        } else if (photoUrl) {
-                          window.open(photoUrl, '_blank');
+                          setActiveMediaPreviewModal({ type: 'image', url: resolvedUrl, name: ph.name || `Photo ${pIdx + 1}` });
+                        } else if (resolvedUrl) {
+                          window.open(resolvedUrl, '_blank');
                         }
                       }}
-                      style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
-                    >
-                      <img
-                        src={photoUrl || ph.dataUrl}
-                        alt={ph.name}
-                        onError={(e) => {
-                          if (!e.currentTarget.dataset.retried && ph.name) {
-                            e.currentTarget.dataset.retried = 'true';
-                            fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
-                              .then(r => r.json())
-                              .then(data => {
-                                if (data?.found && data?.url) {
-                                  e.currentTarget.src = data.url;
-                                  saveMediaToCache(ph.name, data.url);
-                                }
-                              }).catch(() => {});
-                          }
-                        }}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(15,23,42,0.8)', color: 'white', padding: '3px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }} title={ph.uploadTime || ph.uploadedAt || ph.name}>
-                          <Camera size={10} style={{ color: '#38BDF8', flexShrink: 0 }} />
-                          {ph.uploadTime || (ph.uploadedAt ? new Date(ph.uploadedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Photo')}
-                        </span>
-                        <span>›</span>
-                      </div>
-                    </div>
+                    />
                   );
                 })}
                 {packVideos.map((vd, vIdx) => {
@@ -626,7 +599,9 @@ export default function QuickPreviewDrawer({
                 <button
                   type="button"
                   onClick={() => {
-                    const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : ((lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
+                    const cleanPath = lrDoc.storagePath ? lrDoc.storagePath.replace(/^(\/?api\/uploads\/|\/?uploads\/)+/, '') : null;
+                    const directStorageUrl = cleanPath ? `/api/uploads/${lrDoc.storageBucket || 'bom-documents'}/${cleanPath}` : '';
+                    const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : (directStorageUrl || (lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:') ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : ''))));
                     const isPdf = lrDoc.type === 'application/pdf' || (lrDoc.name && lrDoc.name.toLowerCase().endsWith('.pdf'));
                     if (typeof setActiveMediaPreviewModal === 'function') {
                       setActiveMediaPreviewModal({ type: isPdf ? 'pdf' : 'image', url: docUrl, name: `LR Document — ${lrNo}` });
@@ -644,51 +619,21 @@ export default function QuickPreviewDrawer({
             {loadingPhotos.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
                 {loadingPhotos.map((ph, pIdx) => {
-                  const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
-                    ? ph.url
-                    : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
                   return (
-                    <div
-                      key={pIdx}
-                      onClick={() => {
+                    <DispatchMediaThumbnail
+                      key={ph.id || pIdx}
+                      photo={ph}
+                      bomCode={quickPreviewRecord?.bomCode || quickPreviewRecord?.code}
+                      height="76px"
+                      label="Vehicle"
+                      onClick={(resolvedUrl) => {
                         if (typeof setActiveMediaPreviewModal === 'function') {
-                          setActiveMediaPreviewModal({ type: 'image', url: photoUrl || ph.dataUrl, name: ph.name || `Vehicle Loading Photo ${pIdx + 1}` });
-                        } else if (photoUrl || ph.dataUrl) {
-                          window.open(photoUrl || ph.dataUrl, '_blank');
+                          setActiveMediaPreviewModal({ type: 'image', url: resolvedUrl, name: ph.name || `Vehicle Loading Photo ${pIdx + 1}` });
+                        } else if (resolvedUrl) {
+                          window.open(resolvedUrl, '_blank');
                         }
                       }}
-                      style={{
-                        height: '76px',
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        border: '1px solid #CBD5E1',
-                        backgroundColor: '#0F172A',
-                        position: 'relative'
-                      }}
-                    >
-                      <img
-                        src={photoUrl || ph.dataUrl}
-                        alt={ph.name || `Loading photo ${pIdx + 1}`}
-                        onError={(e) => {
-                          if (!e.currentTarget.dataset.retried && ph.name) {
-                            e.currentTarget.dataset.retried = 'true';
-                            fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
-                              .then(r => r.json())
-                              .then(data => {
-                                if (data?.found && data?.url) {
-                                  e.currentTarget.src = data.url;
-                                }
-                              }).catch(() => {});
-                          }
-                        }}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>📷 View</span>
-                        <span>›</span>
-                      </div>
-                    </div>
+                    />
                   );
                 })}
               </div>

@@ -14,6 +14,7 @@ import DocPreviewModal from "./DocPreviewModal";
 import { isTamilNaduIntra } from "../../utils/gstHelper";
 import { notifyInvoiceCompletedReadyForDispatch } from "../../services/notificationService";
 import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
+import { getHsnCode } from "../../utils/hsnCodeService";
 
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
@@ -784,7 +785,7 @@ export default function InvoiceDetailModal({
                         minLevel: 50,
                         status: newSt === 0 ? 'Out of Stock' : (newSt <= 50 ? 'Low Stock' : 'In Stock'),
                         store: 'Main Store',
-                        hsn: '7616',
+                        hsn: pItem.hsn || pItem.hsnCode || getHsnCode(pItem),
                         lastUpdated: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
                         reserved: 0,
                         openingStock: startStock,
@@ -1104,7 +1105,7 @@ export default function InvoiceDetailModal({
                 setIsEditingInvoice(false);
                 setViewingInvoiceModal(null);
                 if (typeof showCustomAlert === 'function') {
-                  showCustomAlert(`✅ Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
+                  showCustomAlert(`Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
                 }
               }}
               style={{
@@ -1158,6 +1159,17 @@ export default function InvoiceDetailModal({
               <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>Invoice Number</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#0F172A' }}>{invNoText}</h2>
+                {(inv?.docType === 'DC' || matchingBom?.docType === 'DC') ? (
+                  <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Truck size={12} strokeWidth={2.2} />
+                    <span>DC (DELIVERY CHALLAN)</span>
+                  </span>
+                ) : (
+                  <span style={{ backgroundColor: '#EEF2FF', color: '#3730A3', border: '1px solid #C7D2FE', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <FileText size={12} strokeWidth={2.2} />
+                    <span>TAX INVOICE</span>
+                  </span>
+                )}
                 {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? (
                   <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                     <Check style={{ width: '13px', height: '13px', strokeWidth: 3 }} /> INVOICE COMPLETED & LOCKED
@@ -1687,7 +1699,7 @@ export default function InvoiceDetailModal({
                             window.dispatchEvent(new Event('controlroom_storage_update'));
                           } catch (_) {}
 
-                          alert(`✅ Reissue request sent to Sales (${salesPersonName}) for order ${targetCode}!\n\nSales has 1 hour to update this Address proof. If not updated within 1 hour, the invoice will be automatically cancelled with "Invoice Cancelled because of the Address Proof is missing are Mismatch".`);
+                          alert(`Reissue request sent to Sales (${salesPersonName}) for order ${targetCode}!\n\nSales has 1 hour to update this Address proof. If not updated within 1 hour, the invoice will be automatically cancelled with "Invoice Cancelled because of the Address Proof is missing are Mismatch".`);
                         } catch (err) {
                           alert(`Address proof reissue request failed: ${err.message}`);
                         }

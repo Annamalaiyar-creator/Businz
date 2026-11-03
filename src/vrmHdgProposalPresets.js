@@ -137,9 +137,17 @@ export function saveCustomPreset(preset) {
   if (!preset || !preset.id) return getAllActivePresets();
 
   try {
+    const cleanItems = Array.isArray(preset.items) ? preset.items.map(it => {
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      return {
+        ...it,
+        qty: (rawQ === '' || rawQ === '0') ? '' : rawQ
+      };
+    }) : [];
     const toSave = {
       ...preset,
       isCustom: true,
+      items: cleanItems,
       updated_at: new Date().toISOString()
     };
     customPresetsCache[preset.id] = toSave;

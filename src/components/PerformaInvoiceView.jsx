@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, Lock } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, UserCheck, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock, GitBranch } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
@@ -15,6 +15,8 @@ import { notifyPiCreated } from '../services/notificationService';
 import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../services/customerService';
 import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 import { getNextSequence } from '../utils/sequenceGenerator';
+import { getHsnCode, is5PctSolarProduct } from '../utils/hsnCodeService';
+export { is5PctSolarProduct };
 
 const defaultSalesPIs = [];
 
@@ -30,27 +32,6 @@ export const PRESET_THEMES = [
 
 export const getPresetTheme = (groupIndex) => {
   return PRESET_THEMES[groupIndex % PRESET_THEMES.length] || PRESET_THEMES[0];
-};
-
-export const is5PctSolarProduct = (name = '', cat = '') => {
-  const text = `${name} ${cat}`.toLowerCase();
-  return (
-    text.includes('inverter') ||
-    text.includes('solar panel') ||
-    text.includes('solar module') ||
-    text.includes('pv module') ||
-    text.includes('panel') ||
-    text.includes('module') ||
-    text.includes('topcon') ||
-    text.includes('bifacial') ||
-    text.includes('monocrystalline') ||
-    text.includes('polycrystalline') ||
-    text.includes('dcr') ||
-    text.includes('ongrid') ||
-    text.includes('offgrid') ||
-    text.includes('hybrid inverter') ||
-    text.includes('waaree')
-  );
 };
 
 const normalizePiRecord = (item) => {
@@ -94,7 +75,8 @@ export const GST_STATE_MAP = {
 };
 
 export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procurement Head', onNavigateTab, targetPiNo, clearTargetPi }) {
-  const isSalesRole = userRole === 'Sales Head' || userRole === 'Sales Executive';
+  const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || (typeof window !== 'undefined' && localStorage.getItem('controlroom_user_role') === 'CEO');
+  const isSalesRole = userRole === 'Sales' || userRole === 'Sales Head' || userRole === 'Sales Executive';
   const storageKey = isSalesRole ? 'controlroom_sales_pi_store' : 'controlroom_procurement_pi_store';
 
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'create' | 'edit'
@@ -124,11 +106,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [endDate, setEndDate] = useState('');
 
   const showTopToast = (message, type = 'success', duration = 5000) => {
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    setTopToast({ message, type });
-    toastTimeoutRef.current = setTimeout(() => {
-      setTopToast(null);
-    }, duration);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('businz_show_toast', {
+        detail: {
+          message: String(message || '').replace(/^[✅📝❌⏳⚠️\s]+/, '').trim(),
+          title: type === 'error' ? 'Attention Required' : 'Proforma Invoice Update',
+          type,
+          document_type: 'PI',
+          duration: Math.round(duration / 1000)
+        }
+      }));
+    }
   };
 
   const [bomList, setBomList] = useState(() => {
@@ -212,8 +200,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   // Two-way helper to find all BOMs generated from this PI (Strict 1-to-1 mapping)
   const getConvertedBomsForPi = (pi) => {
     if (!pi) return [];
-    // STRICT DRAFT GUARD: A Draft PI is work-in-progress and can never be converted or linked to a BOM
-    if (pi.status === 'Draft' || pi.statusType === 'draft') return [];
 
     const piNum = String(pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
     if (!piNum) return [];
@@ -232,36 +218,29 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       const sPi = String(b.sourcePiNo || b.source_pi_no || '').trim().toLowerCase();
       const bCode = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
+      const bId = String(b.id || '').trim().toLowerCase();
 
       // STRICT HARD BARRIER: BOM-659 belongs strictly and exclusively to PI-00061.
       if (bCode === 'bom-659' && piNum !== 'pi-00061') {
         return false;
       }
 
-      // 1. Strict 1-to-1 match by source PI number (with customer verification guard)
+      // 1. Authoritative 1-to-1 match by explicit converted BOM code on the PI
+      if (explicitCode && (bCode === explicitCode || bId === explicitCode)) {
+        return true;
+      }
+
+      // 2. Strict 1-to-1 match by source PI number on the BOM:
+      // Must ensure customer matches or neither is specified, so a fresh PI doesn't accidentally bind to a legacy BOM
       if (sPi && sPi === piNum) {
-        const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
+        const piCust = String(pi.customerName || pi.vendor || pi.companyName || '').trim().toLowerCase();
         const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
-        if (piCust && bCust && piCust !== bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
+        if (piCust && bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
           return false;
         }
         return true;
       }
 
-      // 2. If this BOM is explicitly owned by a DIFFERENT PI, it CANNOT match this PI!
-      if (sPi && sPi !== piNum) return false;
-
-      // 3. Fallback only if BOM has NO sourcePiNo recorded, but explicit convertedBomCode matches
-      if (!sPi && explicitCode && bCode && bCode === explicitCode) {
-        if (bCode === 'bom-659') return false;
-        // Double check customer name if available to avoid cross-customer cross-linking
-        const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
-        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
-        if (piCust && bCust && piCust !== bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
-          return false;
-        }
-        return true;
-      }
       return false;
     });
 
@@ -355,9 +334,126 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
   const isRestrictedSalesUser = Boolean(
     userRole &&
-    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
-    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
   );
+
+  // Tech Support & Management PI Assignment Privileges
+  const isTechSupport = Boolean(
+    userRole &&
+    (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support') || userRole === 'Technical Administrator')
+  );
+  const isTechSupportLogin = Boolean(
+    userRole &&
+    (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().trim() === 'tech support')
+  );
+  const isStrictTechSupport = Boolean(
+    isTechSupportLogin &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Admin', 'Super Admin'].some(r => (userRole || '').toLowerCase().trim() === r.toLowerCase())
+  );
+  const isSalesHead = Boolean(userRole && userRole.toLowerCase().includes('sales head'));
+  const canAssignPi = isTechSupport || isCeo || isSalesHead;
+
+  // PI Assignment Modal State
+  const [showAssignPiModal, setShowAssignPiModal] = useState(false);
+  const [assignPiTarget, setAssignPiTarget] = useState(null);
+  const [salespersonsList, setSalespersonsList] = useState([]);
+  const [selectedSalespersonCode, setSelectedSalespersonCode] = useState('');
+  const [assignReason, setAssignReason] = useState('');
+  const [isAssigningPi, setIsAssigningPi] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/crm/salespersons')
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.success && Array.isArray(d.salespersons)) {
+          setSalespersonsList(d.salespersons);
+        }
+      })
+      .catch(err => console.warn('Could not load salespersons list:', err.message));
+  }, []);
+
+  const handleOpenAssignModal = (pi) => {
+    if (!pi) return;
+    setAssignPiTarget(pi);
+    const existingCode = pi.salesPersonCode || '';
+    setSelectedSalespersonCode(existingCode);
+    setAssignReason('');
+    setShowAssignPiModal(true);
+  };
+
+  const handleConfirmAssignPi = async () => {
+    if (!assignPiTarget || !selectedSalespersonCode) {
+      alert('Please select a sales representative to assign this Proforma Invoice to.');
+      return;
+    }
+
+    const targetSp = salespersonsList.find(s => s.employee_code === selectedSalespersonCode);
+    if (!targetSp) {
+      alert('Selected salesperson is invalid.');
+      return;
+    }
+
+    const cleanPiNo = String(assignPiTarget.piNo || assignPiTarget.id || '').trim();
+    setIsAssigningPi(true);
+
+    try {
+      const res = await fetch(`/api/crm/proforma-invoices/${encodeURIComponent(cleanPiNo)}/assign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-emp-id': currentEmpId || 'TS-001',
+          'x-user-name': currentEmpName || userRole || 'Tech Support',
+          'x-user-role': userRole || 'Tech Support'
+        },
+        body: JSON.stringify({
+          assignedToId: targetSp.employee_code,
+          assignedToName: targetSp.employee_name,
+          assignedToRole: targetSp.role || 'Sales Executive',
+          assignedToEmail: targetSp.email || '',
+          reason: assignReason || `Assigned by ${currentEmpName || userRole || 'Tech Support'}`
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to assign Proforma Invoice');
+      }
+
+      const nowIso = new Date().toISOString();
+      const updatedItem = json.pi || {
+        ...assignPiTarget,
+        salesPerson: targetSp.employee_name,
+        salesperson: targetSp.employee_name,
+        salesRep: targetSp.employee_name,
+        salesPersonCode: targetSp.employee_code,
+        salesPersonEmail: targetSp.email || '',
+        assignedSalesperson: targetSp.employee_name,
+        assignedSalespersonCode: targetSp.employee_code,
+        assignedBy: currentEmpName || userRole || 'Tech Support',
+        assignedByRole: userRole || 'Tech Support',
+        assignedAt: nowIso,
+        assignmentReason: assignReason || `Assigned by ${currentEmpName || userRole || 'Tech Support'}`
+      };
+
+      const nextList = (piList || []).map(p =>
+        String(p.piNo || p.id).trim().toLowerCase() === cleanPiNo.toLowerCase() ? updatedItem : p
+      );
+      updatePiList(nextList);
+
+      if (selectedPi && String(selectedPi.piNo || selectedPi.id).trim().toLowerCase() === cleanPiNo.toLowerCase()) {
+        setSelectedPi(updatedItem);
+      }
+
+      setShowAssignPiModal(false);
+      setAssignPiTarget(null);
+      showTopToast(`✅ Proforma Invoice ${cleanPiNo} successfully assigned to ${targetSp.employee_name}!`, 'success', 5000);
+    } catch (err) {
+      alert(`Assignment failed: ${err.message}`);
+    } finally {
+      setIsAssigningPi(false);
+    }
+  };
 
   const getEffectiveSalesPerson = () => {
     if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && currentEmpName.toLowerCase() !== 'vijay') return currentEmpName;
@@ -377,8 +473,93 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return userRole || 'Sales Executive';
   };
 
+  // Date format helper: strictly DD.MM.YYYY
+  const formatPiDateDot = (dStr) => {
+    if (!dStr) return '—';
+    const clean = String(dStr).trim();
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(clean)) return clean;
+    
+    const isoMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch;
+      return `${d}.${m}.${y}`;
+    }
+    
+    const dt = new Date(clean);
+    if (!isNaN(dt.getTime())) {
+      const d = String(dt.getDate()).padStart(2, '0');
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const y = dt.getFullYear();
+      return `${d}.${m}.${y}`;
+    }
+    return clean;
+  };
+
   const visiblePIList = useMemo(() => {
     const raw = Array.isArray(piList) ? piList.filter(Boolean) : [];
+
+    // Tech Support Isolation: Tech Support users only see PIs created by them
+    if (isStrictTechSupport) {
+      const curCode = (currentEmpId || '').toUpperCase().trim();
+      const curName = (currentEmpName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+      const curEmail = (currentLoggedEmail || '').trim().toLowerCase();
+
+      return raw.filter(pi => {
+        if (!pi) return false;
+        const createdCode = String(pi.createdById || '').toUpperCase().trim();
+        const createdName = String(pi.createdBy || pi.createdByName || pi.author || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+        const createdEmail = String(pi.createdByEmail || '').trim().toLowerCase();
+        const assignedByCode = String(pi.assignedById || '').toUpperCase().trim();
+        const assignedByName = String(pi.assignedBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+
+        // 1. Strict EMP Code matching
+        if (curCode && createdCode && (curCode === createdCode || (curCode === 'TS-VRM001' && createdCode === 'TS-001') || (curCode === 'TS-001' && createdCode === 'TS-VRM001'))) {
+          return true;
+        }
+        if (curCode && assignedByCode && (curCode === assignedByCode)) {
+          return true;
+        }
+
+        // 2. Exact email matching
+        if (curEmail && createdEmail && curEmail === createdEmail) {
+          return true;
+        }
+
+        // 3. Name matching
+        if (curName && createdName) {
+          if (curName === createdName) return true;
+          // Check for distinct numeric identifiers like "Tech Support 1" vs "Tech Support 2"
+          const curNumMatch = curName.match(/\d+/);
+          const createdNumMatch = createdName.match(/\d+/);
+          if (curNumMatch && createdNumMatch && curNumMatch[0] !== createdNumMatch[0]) {
+            return false;
+          }
+          if (createdName.includes(curName) || curName.includes(createdName)) {
+            return true;
+          }
+        }
+        if (curName && assignedByName) {
+          const curNumMatch = curName.match(/\d+/);
+          const assignedNumMatch = assignedByName.match(/\d+/);
+          if (curNumMatch && assignedNumMatch && curNumMatch[0] !== assignedNumMatch[0]) {
+            return false;
+          }
+          if (curName === assignedByName || assignedByName.includes(curName) || curName.includes(assignedByName)) {
+            return true;
+          }
+        }
+
+        // 4. Default fallback for generic TS user and generic TS records
+        const isGenericUser = !curName || curName === 'tech support' || curName === 'tech support specialist';
+        const isGenericRecord = !createdName || createdName === 'tech support' || createdName === 'tech support specialist';
+        if (isGenericUser && isGenericRecord) {
+          return true;
+        }
+
+        return false;
+      });
+    }
+
     if (!isRestrictedSalesUser) return raw;
 
     const curCode = currentEmpId.toUpperCase();
@@ -388,38 +569,161 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     // If no specific employee profile is configured, show all records safely
     if (!curCode && !curName && !curEmail) return raw;
 
+    // Canonical Sales Team Definitions with Name matchers
+    const SALES_TEAM = [
+      { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
+      { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
+      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar', 'vasanth'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-004'] },
+      { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
+      { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
+      { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },
+      { code: 'SE-007', name: 'PRASHANTH', matchNames: ['prashanth', 'prasanth'], emails: ['sales.s2@'], oldCodes: [] },
+      { code: 'SE-008', name: 'Pavithra', matchNames: ['pavithra', 'pavitra'], emails: ['projectsales'], oldCodes: ['SE-010'] },
+      { code: 'SE-009', name: 'KALAISELVI T', matchNames: ['kalaiselvi', 'kalai'], emails: ['mms@'], oldCodes: ['SE-VRM090'] }
+    ];
+
+    // Detect which sales rep is currently logged in (Name-First, then Code)
+    const activeRep = SALES_TEAM.find(rep => 
+      (curName && rep.matchNames.some(m => curName.includes(m) && (!rep.excludeNames || !rep.excludeNames.some(ex => curName.includes(ex))))) ||
+      (curCode && rep.code === curCode) ||
+      (curEmail && rep.emails.some(e => curEmail.includes(e)))
+    );
+
     return raw.filter(pi => {
       if (!pi) return false;
-      const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
-      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
-      const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
 
-      // 1. Strict EMP Code matching
-      if (curCode && spCode && spCode === curCode) {
-        return true;
-      }
+      // Extract all identifying names and text from the PI
+      const piNameText = [
+        pi.salesPerson, pi.salesperson, pi.salesRep, pi.createdBy,
+        pi.assignedSalesperson, pi.assignedToName
+      ].filter(Boolean).join(' ').toLowerCase();
 
-      // 2. Strict Email matching
-      if (curEmail && spEmail && spEmail === curEmail) {
-        return true;
-      }
+      const piEmail = String(pi.salesPersonEmail || pi.email || '').toLowerCase().trim();
+      const piCode = String(pi.salesPersonCode || pi.createdById || '').toUpperCase().trim();
+      const assignedCode = String(pi.assignedSalespersonCode || pi.assignedToCode || pi.assignedToId || '').toUpperCase().trim();
 
-      // 3. Name matching when employee code is unassigned or generic fallback
-      const isGenericCode = !spCode || spCode === 'SE-1000' || spCode === 'SE-VRM001' || spCode === 'SE-DEFAULT' || spCode === 'UNASSIGNED';
-      if (curName && spName && (curName === spName || spName.includes(curName) || curName.includes(spName))) {
-        if (isGenericCode || (curCode && spCode === curCode)) {
+      if (activeRep) {
+        // 1. Primary Rule: NAME MATCHING
+        // If PI contains activeRep's name keywords:
+        const matchesActiveRepName = activeRep.matchNames.some(m => 
+          piNameText.includes(m) && (!activeRep.excludeNames || !activeRep.excludeNames.some(ex => piNameText.includes(ex)))
+        );
+        if (matchesActiveRepName) {
           return true;
         }
-      }
 
-      // If record belongs to a distinct and different salesperson code, exclude
-      if (curCode && spCode && !isGenericCode && spCode !== curCode) {
+        // If PI explicitly contains ANOTHER sales rep's name keywords, strictly exclude it!
+        const matchesOtherRepName = SALES_TEAM.some(other => 
+          other.code !== activeRep.code && 
+          other.matchNames.some(m => piNameText.includes(m) && (!other.excludeNames || !other.excludeNames.some(ex => piNameText.includes(ex))))
+        );
+        if (matchesOtherRepName) {
+          return false;
+        }
+
+        // 2. Email matching
+        if (piEmail && activeRep.emails.some(e => piEmail.includes(e))) {
+          return true;
+        }
+
+        // 3. Old code matching (e.g. SH-001 for Manojraj)
+        if (activeRep.oldCodes && activeRep.oldCodes.includes(piCode)) {
+          return true;
+        }
+
+        // 4. Directly assigned to activeRep
+        if (assignedCode && assignedCode === activeRep.code) {
+          return true;
+        }
+
+        // 5. Explicit new code match ONLY IF the PI has no conflicting other name
+        if (piCode === activeRep.code) {
+          return true;
+        }
+
         return false;
       }
 
+      // Fallback for non-mapped sales users
+      if (curName && piNameText.includes(curName)) return true;
+      if (curCode && (piCode === curCode || assignedCode === curCode)) return true;
+      if (curEmail && piEmail === curEmail) return true;
       return false;
     });
-  }, [piList, isRestrictedSalesUser, currentEmpId, currentEmpName, currentLoggedEmail]);
+  }, [piList, isRestrictedSalesUser, isStrictTechSupport, currentEmpId, currentEmpName, currentLoggedEmail]);
+
+  const piMetrics = useMemo(() => {
+    const list = Array.isArray(visiblePIList) ? visiblePIList : [];
+    
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const utcToday = now.toISOString().split('T')[0];
+    const isToday = (dStr) => {
+      if (!dStr) return false;
+      const s = String(dStr);
+      return s.startsWith(localToday) || s.startsWith(utcToday);
+    };
+
+    const cleanNum = (val) => {
+      if (typeof val === 'number') return isNaN(val) ? 0 : val;
+      if (!val) return 0;
+      const n = parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+      return isNaN(n) ? 0 : n;
+    };
+
+    const formatCurrencyShort = (num) => {
+      if (!num || isNaN(num)) return '₹ 0.00 L';
+      if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+      return `₹ ${(num / 100000).toFixed(2)} L`;
+    };
+
+    // 1. Total PIs today
+    const todayPis = list.filter(pi => {
+      if (!pi) return false;
+      return isToday(pi.piDate) || isToday(pi.date) || isToday(pi.createdAt);
+    });
+    const todayPiVal = todayPis.reduce((acc, pi) => acc + cleanNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+    // 2. Converted to BOM today
+    const todayConvertedPis = list.filter(pi => {
+      if (!pi) return false;
+      const matchedBoms = getConvertedBomsForPi(pi);
+      if (matchedBoms.length > 0) {
+        return matchedBoms.some(b => isToday(b.date) || isToday(b.createdAt)) || isToday(pi.convertedAt) || isToday(pi.updatedAt);
+      }
+      if (pi.status === 'Converted to BOM' || pi.statusType === 'converted') {
+        return isToday(pi.convertedAt) || isToday(pi.updatedAt) || isToday(pi.date);
+      }
+      return false;
+    });
+    const todayConvertedVal = todayConvertedPis.reduce((acc, pi) => acc + cleanNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+    // 3. Assigned to today
+    const todayAssignedPis = list.filter(pi => {
+      if (!pi) return false;
+      const isAssigned = Boolean(
+        pi.assignedSalesperson ||
+        pi.assignedToName ||
+        pi.assignedToId ||
+        (pi.salesPerson && !pi.salesPerson.toLowerCase().includes('support') && !pi.salesPerson.toLowerCase().includes('admin') && !pi.salesPerson.toLowerCase().includes('direct'))
+      );
+      if (!isAssigned) return false;
+      return isToday(pi.assignedAt) || isToday(pi.piDate) || isToday(pi.createdAt);
+    });
+    const todayAssignedVal = todayAssignedPis.reduce((acc, pi) => acc + cleanNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+    return {
+      todayPiCount: todayPis.length,
+      todayPiValFormatted: formatCurrencyShort(todayPiVal),
+      todayConvertedCount: todayConvertedPis.length,
+      todayConvertedValFormatted: formatCurrencyShort(todayConvertedVal),
+      todayAssignedCount: todayAssignedPis.length,
+      todayAssignedValFormatted: formatCurrencyShort(todayAssignedVal),
+      conversionRate: todayPis.length > 0 
+        ? `${((todayConvertedPis.length / todayPis.length) * 100).toFixed(0)}% Converted`
+        : '0% Converted'
+    };
+  }, [visiblePIList, bomList]);
 
   useEffect(() => {
     const loadPiData = async () => {
@@ -551,8 +855,96 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     });
 
+    // ⚡ Native Server-Sent Event (SSE) & Real-Time Single-Record Delta Listeners
+    const handlePiRealtimeEvent = (e) => {
+      const detail = e?.detail || {};
+      const incomingPi = detail?.updatedPi || detail?.pi;
+      const targetPiNo = String(detail?.piNo || detail?.documentId || incomingPi?.piNo || incomingPi?.id || '').trim();
+
+      if (incomingPi && (incomingPi.piNo || incomingPi.id)) {
+        const norm = normalizePiRecord(incomingPi);
+        setPiList(prevList => {
+          const list = Array.isArray(prevList) ? prevList : [];
+          const cleanKey = String(norm.piNo || norm.id).trim().toLowerCase();
+          const idx = list.findIndex(p => p && String(p.piNo || p.id).trim().toLowerCase() === cleanKey);
+          let next;
+          if (idx !== -1) {
+            next = [...list];
+            next[idx] = {
+              ...list[idx],
+              ...norm,
+              salesPerson: norm.salesPerson || norm.assignedSalesperson || norm.salesperson || list[idx].salesPerson,
+              salesperson: norm.salesperson || norm.salesPerson || norm.assignedSalesperson || list[idx].salesperson,
+              salesRep: norm.salesRep || norm.salesPerson || norm.assignedSalesperson || list[idx].salesRep,
+              salesPersonCode: norm.salesPersonCode || norm.assignedSalespersonCode || list[idx].salesPersonCode,
+              assignedSalesperson: norm.assignedSalesperson || norm.salesPerson || list[idx].assignedSalesperson,
+              assignedSalespersonCode: norm.assignedSalespersonCode || norm.salesPersonCode || list[idx].assignedSalespersonCode,
+              assignedToCode: norm.assignedToCode || norm.assignedSalespersonCode || norm.salesPersonCode,
+              assignedToId: norm.assignedToId || norm.assignedSalespersonCode || norm.salesPersonCode,
+              assignedToName: norm.assignedToName || norm.assignedSalesperson || norm.salesPerson
+            };
+          } else {
+            next = [norm, ...list];
+          }
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(next));
+            localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(next));
+          } catch (_) {}
+          return next;
+        });
+      } else if (targetPiNo) {
+        fetch('/api/proforma-invoices')
+          .then(r => r.json())
+          .then(allPis => {
+            if (Array.isArray(allPis)) {
+              const matched = allPis.find(p => p && String(p.piNo || p.id).trim().toLowerCase() === targetPiNo.toLowerCase());
+              if (matched) {
+                const normMatched = normalizePiRecord(matched);
+                setPiList(prevList => {
+                  const list = Array.isArray(prevList) ? prevList : [];
+                  const cleanKey = targetPiNo.toLowerCase();
+                  const idx = list.findIndex(p => p && String(p.piNo || p.id).trim().toLowerCase() === cleanKey);
+                  let next;
+                  if (idx !== -1) {
+                    next = [...list];
+                    next[idx] = {
+                      ...list[idx],
+                      ...normMatched,
+                      salesPerson: normMatched.salesPerson || normMatched.assignedSalesperson || list[idx].salesPerson,
+                      salesperson: normMatched.salesperson || normMatched.salesPerson || list[idx].salesperson,
+                      salesRep: normMatched.salesRep || normMatched.salesPerson || list[idx].salesRep,
+                      salesPersonCode: normMatched.salesPersonCode || normMatched.assignedSalespersonCode || list[idx].salesPersonCode,
+                      assignedSalesperson: normMatched.assignedSalesperson || normMatched.salesPerson || list[idx].assignedSalesperson,
+                      assignedSalespersonCode: normMatched.assignedSalespersonCode || normMatched.salesPersonCode || list[idx].assignedSalespersonCode,
+                      assignedToCode: normMatched.assignedToCode || normMatched.assignedSalespersonCode || normMatched.salesPersonCode,
+                      assignedToId: normMatched.assignedToId || normMatched.assignedSalespersonCode || normMatched.salesPersonCode,
+                      assignedToName: normMatched.assignedToName || normMatched.assignedSalesperson || normMatched.salesPerson
+                    };
+                  } else {
+                    next = [normMatched, ...list];
+                  }
+                  try {
+                    localStorage.setItem(storageKey, JSON.stringify(next));
+                    localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(next));
+                  } catch (_) {}
+                  return next;
+                });
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener('controlroom_pi_updated', handlePiRealtimeEvent);
+    window.addEventListener('controlroom_sales_pi_assigned', handlePiRealtimeEvent);
+    window.addEventListener('controlroom_pi_store_updated', handlePiRealtimeEvent);
+
     return () => {
       if (sub && sub.unsubscribe) sub.unsubscribe();
+      window.removeEventListener('controlroom_pi_updated', handlePiRealtimeEvent);
+      window.removeEventListener('controlroom_sales_pi_assigned', handlePiRealtimeEvent);
+      window.removeEventListener('controlroom_pi_store_updated', handlePiRealtimeEvent);
     };
   }, [storageKey, isSalesRole]);
 
@@ -668,7 +1060,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         });
       }
 
-      showTopToast(`✅ Proforma Invoice ${cleanNo} successfully pushed to Zoho Books as Quote #${estNo}!`, 'success', 6000);
+      showTopToast(`Proforma Invoice ${cleanNo} successfully pushed to Zoho Books as Quote #${estNo}!`, 'success', 6000);
     } catch (err) {
       console.error('[Zoho Push Error]:', err);
       showTopToast(`❌ Zoho Push Failed: ${err.message}`, 'error', 7000);
@@ -744,12 +1136,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete sanitized.deliveryProofDoc;
       delete sanitized.deliveryAddressProofDoc;
       sanitized.isEdit = true;
-      fetch('/api/estimates', {
+      const resp = await fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sanitized)
-      }).catch(err => console.warn('Background PI release sync:', err));
-    } catch (_) {}
+      });
+      if (!resp.ok) {
+        console.warn('PI release sync response not OK:', resp.status);
+      }
+    } catch (err) {
+      console.warn('PI release sync error:', err);
+    }
   };
 
   const handleConvertToBom = (pi) => {
@@ -828,9 +1225,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const pGroups = pi.presetGroups || {};
     const pGroupList = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
-    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} Set${g.setCount > 1 ? 's' : ''})`).join(' + ') : null);
+    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} ${g.unit || (g.setCount > 1 ? 'Sets' : 'Set')})`).join(' + ') : null);
     const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null));
-    const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseInt(g.setCount) || 1), 0) : 1);
+    const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseFloat(g.setCount) || 1), 0) : 1);
 
     const conversionData = {
       sourcePiNo: pi.piNo,
@@ -996,11 +1393,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [presetSetCount, setPresetSetCount] = useState(1);
   const [presetKitPrice, setPresetKitPrice] = useState('');
   const [presetGroups, setPresetGroups] = useState({});
+  // Nested Sub-Preset (Preset inside a Preset) State
+  const [subPresetModalGroup, setSubPresetModalGroup] = useState(null);
+  const [nestedSubPresetVal, setNestedSubPresetVal] = useState('');
+  const [nestedSubPresetCount, setNestedSubPresetCount] = useState(1);
+  // Convert selected standalone items into a PI-only preset
+  const [showConvertPresetModal, setShowConvertPresetModal] = useState(false);
+  const [convertPresetName, setConvertPresetName] = useState('');
+  const [convertPresetPrice, setConvertPresetPrice] = useState('');
+  const [convertPresetGst, setConvertPresetGst] = useState('18%');
   const [selectedItemIndexes, setSelectedItemIndexes] = useState([]);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [showCreateSetModal, setShowCreateSetModal] = useState(false);
   const [newSetName, setNewSetName] = useState('');
   const [newSetCount, setNewSetCount] = useState(1);
+  const [newSetUnit, setNewSetUnit] = useState('Sets');
   const [newSetPrice, setNewSetPrice] = useState('');
   const [newSetGstRate, setNewSetGstRate] = useState('18%');
   const [piConfirmModal, setPiConfirmModal] = useState(null); // 'cancel' | 'draft' | 'create'
@@ -1406,6 +1813,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Structured Line Items State (Fresh empty default)
   const [piItems, setPiItems] = useState([]);
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+  const [dragOverItemIndex, setDragOverItemIndex] = useState(null);
 
   // Transport & Logistics
   const [transportMode, setTransportMode] = useState('Transport');
@@ -1658,13 +2067,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
 
     const itemsSub = (piItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       return acc + (q * r);
@@ -1672,15 +2081,22 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const sub = itemsSub + kitSubtotal;
 
-    // 3. GST: Custom item GSTs + Preset kits GST grouped by rate (e.g. 5%, 18%)
+    // 3. GST: Custom item GSTs + Preset kits GST grouped by rate (e.g. 0%, 5%, 18%)
     const gstTiersMap = {};
+    const extractRate = (val, fallback = 18) => {
+      if (val === undefined || val === null || val === '') return fallback;
+      const str = String(val).replace('%', '').trim();
+      const n = parseFloat(str);
+      return isNaN(n) ? fallback : n;
+    };
 
     (piItems || []).forEach(item => {
-      if (item.isPresetItem) return;
+      if (item.isPresetItem || item.presetGroupId) return;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
+      if (r <= 0) return;
       const rowTot = q * r;
-      const pct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+      const pct = extractRate(item.gstRate, 18);
       const amt = rowTot * (pct / 100);
       if (!gstTiersMap[pct]) gstTiersMap[pct] = { rate: pct, taxable: 0, gstAmt: 0 };
       gstTiersMap[pct].taxable += rowTot;
@@ -1691,41 +2107,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         const groupTotal = unitPrice * multiplier;
+        if (groupTotal <= 0) return;
 
-        const groupItems = (piItems || []).filter(it => (it.presetGroupId || 'legacy_default') === grpId);
-        const totalQty = groupItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 1), 0);
-
-        if (groupItems.length > 0 && totalQty > 0) {
-          groupItems.forEach(it => {
-            const itQty = parseFloat(it.qty) || 1;
-            const itemShare = groupTotal * (itQty / totalQty);
-            const itGstRate = parseFloat(String(it.gstRate || grp.gstRate || '18%').replace('%', '')) || 18;
-            const itAmt = itemShare * (itGstRate / 100);
-            if (!gstTiersMap[itGstRate]) gstTiersMap[itGstRate] = { rate: itGstRate, taxable: 0, gstAmt: 0 };
-            gstTiersMap[itGstRate].taxable += itemShare;
-            gstTiersMap[itGstRate].gstAmt += itAmt;
-          });
-        } else {
-          const gRateStr = grp?.gstRate || '18%';
-          const gPct = parseFloat(String(gRateStr).replace('%', '')) || 18;
-          const gAmt = groupTotal * (gPct / 100);
-          if (!gstTiersMap[gPct]) gstTiersMap[gPct] = { rate: gPct, taxable: 0, gstAmt: 0 };
-          gstTiersMap[gPct].taxable += groupTotal;
-          gstTiersMap[gPct].gstAmt += gAmt;
-        }
+        const gPct = extractRate(grp?.gstRate, 18);
+        const gAmt = groupTotal * (gPct / 100);
+        if (!gstTiersMap[gPct]) gstTiersMap[gPct] = { rate: gPct, taxable: 0, gstAmt: 0 };
+        gstTiersMap[gPct].taxable += groupTotal;
+        gstTiersMap[gPct].gstAmt += gAmt;
       }
     });
 
     const targetState = sameAsBilling ? billingState : (deliveryState || billingState);
     const isIntra = isTamilNaduIntra(gstNo, targetState, billingState);
 
+    // Only include tax tiers with rate > 0 so that 0% rate incurs 0 tax and does not appear as a tax deduction
     const gstTiers = Object.values(gstTiersMap)
-      .filter(t => t.gstAmt > 0 || t.taxable > 0)
+      .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
       .sort((a, b) => a.rate - b.rate);
 
-    const formattedTiers = (gstTiers.length > 0 ? gstTiers : [{ rate: 18, taxable: sub, gstAmt: sub * 0.18 }]).map(t => ({
+    const formattedTiers = gstTiers.map(t => ({
       ...t,
       cgstRate: t.rate / 2,
       cgstAmt: t.gstAmt / 2,
@@ -1769,9 +2171,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         {
           name: joinedProducts,
           description: 'Standard VRM Solar Structure & Accessories Kit',
-          hsn: '73089090',
+          hsn: getHsnCode(joinedProducts || 'Solar Structure Kit'),
           qty: 1,
-          uom: 'Set',
+          uom: 'NOS',
           rate: totals.sub || 100000,
           gstRate: '18%',
           amount: totals.sub || 100000
@@ -1808,7 +2210,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const handleAddMaterialRow = () => {
-    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '73089090' }]);
+    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
   };
 
   const handleAddPresetItem = (groupId) => {
@@ -1824,7 +2226,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       baseQty: 1,
       rate: '0',
       gstRate: grp.gstRate || '18%',
-      hsn: grp.hsn || grp.hsn_or_sac || '73089090',
+      hsn: '',
       isPresetItem: true,
       presetGroupId: targetGid,
       presetName: grp.presetName
@@ -1846,10 +2248,115 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
   };
 
+  const handleReorderPiItem = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    setPiItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handleMovePiItemStep = (fromIndex, direction) => {
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= piItems.length) return;
+    handleReorderPiItem(fromIndex, toIndex);
+  };
+
+  const handleMovePresetGroupBlock = (groupId, direction) => {
+    setPiItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const distinctGroups = [];
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        if (!distinctGroups.includes(g)) distinctGroups.push(g);
+      });
+      const curIdx = distinctGroups.indexOf(groupId);
+      if (curIdx === -1) return prev;
+      const targetIdx = curIdx + direction;
+      if (targetIdx < 0 || targetIdx >= distinctGroups.length) return prev;
+
+      const groupItemsMap = {};
+      distinctGroups.forEach(g => { groupItemsMap[g] = []; });
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        groupItemsMap[g].push(it);
+      });
+
+      const newOrder = [...distinctGroups];
+      const [movedGroup] = newOrder.splice(curIdx, 1);
+      newOrder.splice(targetIdx, 0, movedGroup);
+
+      const result = [];
+      newOrder.forEach(g => {
+        if (groupItemsMap[g]) result.push(...groupItemsMap[g]);
+      });
+      return result;
+    });
+  };
+
+  const selectedStandaloneIndexes = (selectedItemIndexes || []).filter(i => piItems[i] && !piItems[i].isPresetItem);
+
+  const handleConvertSelectedToPreset = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (selectedStandaloneIndexes.length === 0) return;
+    const cleanName = (convertPresetName || '').trim() || `Custom Preset ${Object.keys(presetGroups || {}).length + 1}`;
+    const groupId = 'custom_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const gst = convertPresetGst || '18%';
+    const idxSet = new Set(selectedStandaloneIndexes);
+
+    setPresetGroups(prev => ({
+      ...prev,
+      [groupId]: {
+        groupId,
+        presetId: 'custom_set',
+        presetName: cleanName,
+        setCount: 1,
+        unit: 'Sets',
+        kitPrice: convertPresetPrice ? String(convertPresetPrice) : '',
+        gstRate: gst,
+        hsn: getHsnCode(cleanName),
+        isCustomSet: true
+      }
+    }));
+
+    setPiItems(prev => {
+      const list = prev || [];
+      const converted = [];
+      const rest = [];
+      list.forEach((it, i) => {
+        if (idxSet.has(i)) {
+          const baseQ = parseFloat(it.qty) || 1;
+          converted.push({
+            ...it,
+            isPresetItem: true,
+            presetGroupId: groupId,
+            presetName: cleanName,
+            baseQty: baseQ,
+            rate: '0',
+            gstRate: it.gstRate || gst
+          });
+        } else {
+          rest.push(it);
+        }
+      });
+      return [...rest, ...converted];
+    });
+
+    setSelectedItemIndexes([]);
+    setConvertPresetName('');
+    setConvertPresetPrice('');
+    setConvertPresetGst('18%');
+    setShowConvertPresetModal(false);
+  };
+
   const handleCreateCustomSet = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
-    const count = Math.max(1, parseInt(newSetCount) || 1);
+    const unit = newSetUnit || 'Sets';
+    const count = unit === 'kW' ? Math.max(0.01, parseFloat(newSetCount) || 1) : Math.max(1, parseInt(newSetCount) || 1);
     const groupId = 'custom_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const setGst = newSetGstRate || '18%';
 
@@ -1860,9 +2367,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId: 'custom_set',
         presetName: cleanName,
         setCount: count,
+        unit,
         kitPrice: newSetPrice ? String(newSetPrice) : '',
         gstRate: setGst,
-        hsn: '73089090',
+        hsn: getHsnCode(cleanName),
         isCustomSet: true
       }
     }));
@@ -1870,12 +2378,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const initialItem = {
       name: '',
       category: '',
-      uom: 'NOS',
-      qty: String(1 * count),
+      uom: unit === 'kW' ? 'kW' : 'NOS',
+      qty: '1',
       baseQty: 1,
       rate: '0',
       gstRate: setGst,
-      hsn: '73089090',
+      hsn: '',
       isPresetItem: true,
       presetGroupId: groupId,
       presetName: cleanName
@@ -1885,6 +2393,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     setNewSetName('');
     setNewSetCount(1);
+    setNewSetUnit('Sets');
     setNewSetPrice('');
     setNewSetGstRate('18%');
     setShowCreateSetModal(false);
@@ -1906,7 +2415,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const presetName = targetPreset.label || presetId;
     const isDcrBosKit = targetPreset.category === 'DCR BOS Solar Kits' || targetPreset.category === 'BOS Solar Kits' || (targetPreset.label && targetPreset.label.includes('BOS KITS'));
     const initialGstRate = isDcrBosKit ? '5%' : (targetPreset.gstRate || targetPreset.gst || '18%');
-    const presetHsn = targetPreset.hsn || targetPreset.hsn_or_sac || '73089090';
+    const presetHsn = targetPreset.hsn || targetPreset.hsn_or_sac || getHsnCode(targetPreset.label || presetName);
 
     setPresetGroups(prev => ({
       ...prev,
@@ -1915,6 +2424,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetId,
         presetName,
         setCount: multiplier,
+        unit: targetPreset.unit || 'Sets',
         kitPrice: defaultPrice,
         gstRate: initialGstRate,
         hsn: presetHsn
@@ -1923,7 +2433,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const isFixedKit = isFixedQuantityPreset(presetId, targetPreset.label || presetName);
     const newItems = targetPreset.items.map(it => {
-      const baseQ = parseFloat(it.qty) || 1;
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+      const baseQ = hasQty ? parseFloat(rawQ) : '';
       const resCode = resolveProductCode(it);
       return {
         ...it,
@@ -1931,10 +2443,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+        qty: hasQty ? String(baseQ) : '',
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
-        hsn: it.hsn || it.hsn_or_sac || presetHsn,
+        hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || presetHsn,
         isPresetItem: true
       };
     });
@@ -1951,6 +2463,62 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete updated[groupId];
       return updated;
     });
+  };
+
+  const handleAttachSubPresetToGroup = (parentGroupId, subPresetId, targetPreset, subSetsCount) => {
+    if (!targetPreset || !targetPreset.items || targetPreset.items.length === 0) return;
+    const parentGroup = presetGroups[parentGroupId];
+    if (!parentGroup) return;
+
+    const multiplier = Math.max(1, parseInt(subSetsCount) || 1);
+    const subPresetName = targetPreset.label || subPresetId;
+    const parentPresetName = parentGroup.presetName;
+
+    const newSubItems = targetPreset.items.map(it => {
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+      const baseQ = hasQty ? parseFloat(rawQ) : '';
+      const resCode = resolveProductCode(it);
+      return {
+        ...it,
+        code: it.code || resCode,
+        presetGroupId: parentGroupId,
+        presetName: parentPresetName,
+        isSubPreset: true,
+        subPresetId,
+        subPresetName,
+        baseQty: baseQ,
+        qty: hasQty ? String(baseQ) : '',
+        rate: '0',
+        gstRate: it.gstRate || parentGroup.gstRate || '18%',
+        hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || parentGroup.hsn,
+        isPresetItem: true
+      };
+    });
+
+    setPiItems(prev => [...(prev || []), ...newSubItems]);
+    setPresetGroups(prev => {
+      const existingGrp = prev[parentGroupId];
+      const existingNested = existingGrp.nestedSubPresets || [];
+      return {
+        ...prev,
+        [parentGroupId]: {
+          ...existingGrp,
+          nestedSubPresets: [
+            ...existingNested,
+            {
+              id: subPresetId,
+              name: subPresetName,
+              setCount: multiplier
+            }
+          ]
+        }
+      };
+    });
+
+    setSubPresetModalGroup(null);
+    setNestedSubPresetVal('');
+    setNestedSubPresetCount(1);
   };
 
   const handleRemoveMaterialRow = (idx) => {
@@ -2167,21 +2735,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (!validUntilDate || !validUntilDate.trim()) {
-      missingList.push({
-        field: 'Valid Until Date',
-        message: 'Please select a Valid Until Date.',
-        targetId: 'pi-field-validUntil'
-      });
-    } else if (validUntilDate < todayStr) {
-      missingList.push({
-        field: 'Valid Until Date',
-        message: 'Valid Until date cannot be in the past or a finished date.',
-        targetId: 'pi-field-validUntil'
-      });
-    }
-
     return {
       isValid: missingList.length === 0,
       missingList
@@ -2286,10 +2839,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         ? piList[existingMatchIdx]
         : (isEditing && editIdx !== null ? piList[editIdx] : null);
 
-      const sanitizedItems = (piItems || []).map(it => ({
-        ...it,
-        hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || '73089090').trim()
-      }));
+      const sanitizedItems = (piItems || []).map(it => {
+        const isPreset = Boolean(it.isPresetItem || it.presetGroupId);
+        return {
+          ...it,
+          isPresetItem: isPreset,
+          rate: isPreset ? '0' : String(it.rate || '0'),
+          taxable: isPreset ? 0 : ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)),
+          hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it)).trim()
+        };
+      });
 
       const newPI = {
         id: cleanPiNo,
@@ -2301,7 +2860,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         email,
         gstNo: (gstNo || '').toUpperCase(),
         productName: joinedProducts,
-        hsn: sanitizedItems.find(it => it.hsn)?.hsn || '73089090',
+        hsn: sanitizedItems.find(it => it.hsn)?.hsn || getHsnCode(joinedProducts),
         items: sanitizedItems,
         presetGroups,
         billingAddress: {
@@ -2338,14 +2897,23 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         signedPiDoc: signedPiDoc || null,
         piDate: piDate || new Date().toISOString().split('T')[0],
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        status: isDraft ? 'Draft' : (matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
-        statusType: isDraft ? 'draft' : (matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
-        salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
-        salesperson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
-        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || currentEmpId || 'SE-004',
+        status: isDraft ? 'Draft' : (isEditing && matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
+        statusType: isDraft ? 'draft' : (isEditing && matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
+        salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
+        salesperson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
+        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : (currentEmpId || 'SE-004')),
         salesPersonEmail: (isEditing ? matchedExisting?.salesPersonEmail : null) || currentLoggedEmail || '',
-        createdBy: (isEditing ? matchedExisting?.createdBy : null) || getEffectiveSalesPerson(),
-        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || 'SE-004',
+        assignedSalesperson: (isEditing ? matchedExisting?.assignedSalesperson : null) || (isTechSupport ? salesPerson || '' : ''),
+        assignedSalespersonCode: (isEditing ? matchedExisting?.assignedSalespersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : ''),
+        assignedToName: (isEditing ? matchedExisting?.assignedToName : null) || (isTechSupport ? salesPerson || '' : ''),
+        assignedToId: (isEditing ? matchedExisting?.assignedToId : null) || (isTechSupport ? selectedSalespersonCode || '' : ''),
+        assignedAt: (isEditing ? matchedExisting?.assignedAt : null) || (isTechSupport && salesPerson ? new Date().toISOString() : null),
+        assignedBy: (isEditing ? matchedExisting?.assignedBy : null) || (isTechSupport && salesPerson ? (currentEmpName || 'Tech Support') : null),
+        assignedById: (isEditing ? matchedExisting?.assignedById : null) || (isTechSupport && salesPerson ? (currentEmpId || 'TS-001') : null),
+        createdBy: (isEditing ? matchedExisting?.createdBy : null) || currentEmpName || (isTechSupport ? 'Tech Support' : getEffectiveSalesPerson()),
+        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || (isTechSupport ? 'TS-001' : 'SE-004'),
+        createdByRole: (isEditing ? matchedExisting?.createdByRole : null) || userRole || (isTechSupport ? 'Tech Support' : 'Sales Executive'),
+        createdByEmail: (isEditing ? matchedExisting?.createdByEmail : null) || currentLoggedEmail || '',
         zohoSynced: matchedExisting?.zohoSynced || false,
         zohoEstimateId: matchedExisting?.zohoEstimateId || null,
         zohoModule: 'Quotes'
@@ -2395,9 +2963,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           body: JSON.stringify(sanitizedPayload)
         });
 
-        const data = await response.json();
+        const respText = await response.text();
+        let data = null;
+        try {
+          data = respText ? JSON.parse(respText) : null;
+        } catch (_) {
+          data = null;
+        }
+
         if (!response.ok || !data || data.success === false) {
-          throw new Error(data?.error || `Server returned error status ${response.status}`);
+          throw new Error(data?.error || `Server communication error (HTTP ${response.status}). Please check backend status.`);
         }
 
         const serverAssignedPiNo = data?.pi?.piNo || data?.estimate?.piNo;
@@ -2425,7 +3000,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         if (isDraft) {
           showTopToast(`📝 Proforma Invoice (${finalEstNo}) for ${safeCustomer} has been saved as Draft in BUSINZ database.`, 'info', 5000);
         } else {
-          showTopToast(`✅ Proforma Invoice (${finalEstNo}) for ${safeCustomer} stored permanently in BUSINZ database!`, 'success', 5000);
+          showTopToast(`Proforma Invoice (${finalEstNo}) for ${safeCustomer} stored permanently in BUSINZ database!`, 'success', 5000);
         }
       } catch (saveErr) {
         console.error('[ESTIMATE DB SAVE ERROR]', saveErr);
@@ -2510,18 +3085,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (Array.isArray(pi.items) && pi.items.length > 0) {
       setPiItems(pi.items.map(it => ({
         ...it,
-        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || pi.hsn || '73089090'
+        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it) || pi.hsn
       })));
     } else {
       setPiItems([
         {
           name: pi.productName || 'Solar Mounting Structures & Fasteners',
           category: 'Structure Kit',
-          uom: 'SET',
+          uom: 'NOS',
           qty: String(pi.quantity || 1),
           rate: String(pi.unitValue || 25000),
           gstRate: '18%',
-          hsn: pi.hsn || '73089090'
+          hsn: pi.hsn || getHsnCode(pi.productName)
         }
       ]);
     }
@@ -2536,6 +3111,120 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setUploadProgress(100);
     setViewMode('edit');
     setActiveDropdownIdx(null);
+  };
+
+  // Clones/duplicates a Performa Invoice into a fresh new record with sequential number
+  const handleClonePi = async (pi) => {
+    if (!pi) return;
+    resetForm();
+    setEditIdx(null); // Creating a NEW record, not editing an existing one!
+
+    // 1. Fetch fresh sequential PI Number
+    const nextNo = await fetchNextPiNumber();
+    if (nextNo) setPiNumber(nextNo);
+
+    // 2. Set current date & validity (default 30 days)
+    const todayStr = new Date().toISOString().split('T')[0];
+    setPiDate(todayStr);
+    const validDate = new Date();
+    validDate.setDate(validDate.getDate() + 30);
+    setValidUntilDate(validDate.toISOString().split('T')[0]);
+
+    // 3. Clone Customer Information
+    setVendorName(pi.vendor || pi.customerName || '');
+    setContactPerson(pi.contactPerson || '');
+    setPhone(pi.phone || '');
+    setEmail(pi.email || '');
+    setGstNo(pi.gstNo || '');
+    setSalesPerson(getActiveUserName() || pi.salesPerson || '');
+
+    // 4. Clone Terms & Transportation
+    setPaymentTerms(normalizePaymentTerm(pi.paymentTerms || pi.paymentType || '100% Paid'));
+    setCreditDays(pi.creditDays || '');
+    setTransportMode(pi.transportMode || 'Transport');
+    setTransporterName(pi.transporterName || '');
+    setDestination(pi.destination || pi.deliveryCity || '');
+    setVehicleNo('');
+    setTransportScope(pi.transportScope || 'VRM Structures');
+
+    // 5. Clone Billing Address
+    const bAddr = pi.billingAddress || pi.billingAddressObj || {};
+    if (typeof bAddr === 'object') {
+      setBillingStreet(bAddr.street || bAddr.address || pi.billingStreet || '');
+      setBillingCity(bAddr.city || pi.billingCity || '');
+      setBillingState(bAddr.state || pi.billingState || '');
+      setBillingPincode(bAddr.pincode || bAddr.pin || pi.billingPincode || '');
+    } else if (typeof bAddr === 'string') {
+      setBillingStreet(bAddr || pi.billingStreet || '');
+      setBillingCity(pi.billingCity || '');
+      setBillingState(pi.billingState || '');
+      setBillingPincode(pi.billingPincode || '');
+    } else {
+      setBillingStreet(pi.billingStreet || '');
+      setBillingCity(pi.billingCity || '');
+      setBillingState(pi.billingState || '');
+      setBillingPincode(pi.billingPincode || '');
+    }
+
+    // 6. Clone Delivery Address
+    const dAddr = pi.deliveryAddress || pi.deliveryAddressObj || {};
+    if (typeof dAddr === 'object') {
+      setDeliveryStreet(dAddr.street || dAddr.address || pi.deliveryStreet || '');
+      setDeliveryCity(dAddr.city || pi.deliveryCity || '');
+      setDeliveryState(dAddr.state || pi.deliveryState || '');
+      setDeliveryPincode(dAddr.pincode || dAddr.pin || pi.deliveryPincode || '');
+    } else if (typeof dAddr === 'string') {
+      setDeliveryStreet(dAddr || pi.deliveryStreet || '');
+      setDeliveryCity(pi.deliveryCity || '');
+      setDeliveryState(pi.deliveryState || '');
+      setDeliveryPincode(pi.deliveryPincode || '');
+    } else {
+      setDeliveryStreet(pi.deliveryStreet || '');
+      setDeliveryCity(pi.deliveryCity || '');
+      setDeliveryState(pi.deliveryState || '');
+      setDeliveryPincode(pi.deliveryPincode || '');
+    }
+    setSameAsBilling(pi.sameAsBilling !== undefined ? pi.sameAsBilling : (!pi.deliveryStreet && !pi.deliveryAddress));
+
+    // 7. Clone Preset Groups & Items
+    if (pi.presetGroups) {
+      try {
+        setPresetGroups(JSON.parse(JSON.stringify(pi.presetGroups)));
+      } catch (_) {
+        setPresetGroups(pi.presetGroups);
+      }
+    } else {
+      setPresetGroups({});
+    }
+
+    if (Array.isArray(pi.items) && pi.items.length > 0) {
+      setPiItems(pi.items.map(it => ({
+        ...it,
+        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it) || pi.hsn
+      })));
+    } else {
+      setPiItems([
+        {
+          name: pi.productName || 'Solar Mounting Structures & Fasteners',
+          category: 'Structure Kit',
+          uom: 'NOS',
+          qty: String(pi.quantity || 1),
+          rate: String(pi.unitValue || 25000),
+          gstRate: '18%',
+          hsn: pi.hsn || getHsnCode(pi.productName)
+        }
+      ]);
+    }
+
+    // 8. Documents start clean for cloned record
+    setSignedPiDoc(null);
+    setPdfFile(null);
+    setUploadProgress(0);
+
+    // 9. Open Create view
+    setViewMode('create');
+    setActiveDropdownIdx(null);
+    showTopToast(`Cloned from PI ${pi.piNo || ''}. Assigned fresh PI number: ${nextNo || ''}`, 'success', 4000);
   };
 
   // Deletes the PI
@@ -2638,57 +3327,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-24)', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-
-      {/* ==================== IN-APP TOP NOTIFICATION (SELF-DISMISSING, NO BROWSER ALERT) ==================== */}
-      {topToast && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 999999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '12px 24px',
-          borderRadius: '50px',
-          backgroundColor: topToast.type === 'error' ? '#DC2626' : '#0E7490',
-          color: '#FFFFFF',
-          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.2) inset',
-          fontSize: '13.5px',
-          fontWeight: '700',
-          letterSpacing: '-0.2px',
-          maxWidth: '90vw',
-          pointerEvents: 'auto',
-          transition: 'all 0.25s ease'
-        }}>
-          {topToast.type === 'error' ? (
-            <AlertCircle size={18} style={{ color: '#FEE2E2', flexShrink: 0 }} />
-          ) : (
-            <CheckCircle size={18} style={{ color: '#A7F3D0', flexShrink: 0 }} />
-          )}
-          <span>{topToast.message}</span>
-          <button
-            type="button"
-            onClick={() => setTopToast(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'rgba(255, 255, 255, 0.75)',
-              cursor: 'pointer',
-              marginLeft: '6px',
-              padding: '0 4px',
-              display: 'flex',
-              alignItems: 'center',
-              fontSize: '15px',
-              lineHeight: 1
-            }}
-            title="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* ==================== CONVERTING PI TO BOM ANIMATED MODAL ==================== */}
       {isConvertingToBom && (
@@ -2926,12 +3564,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             String(pi.productName || '').toLowerCase().includes(searchLower) ||
             bomCodesStr.includes(searchLower);
 
-          const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
-          const isConverted = !isDraft && hasSavedBom;
-          const currentStatus = isDraft
-            ? 'Draft'
-            : (isConverted
-              ? 'Converted to BOM'
+          const isExplicitConverted = Boolean(
+            pi.status === 'Converted to BOM' || 
+            pi.statusType === 'converted' || 
+            pi.convertedToBom === true || 
+            pi.convertedBomCode || 
+            pi.convertedBomNo
+          );
+          const isConverted = (hasSavedBom || isExplicitConverted) && pi.status !== 'Cancelled';
+          const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft') && !isConverted;
+          const currentStatus = isConverted
+            ? 'Converted to BOM'
+            : (isDraft
+              ? 'Draft'
               : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
                 ? 'Issued'
                 : (pi.status || 'Issued')));
@@ -2986,51 +3631,161 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button
-                  onClick={() => {
-                    resetForm();
-                    setEditIdx(null);
-                    setViewMode('create');
-                    setPiNumber('');
-                  }}
-                  style={{
-                    backgroundColor: '#0E7490',
-                    border: 'none',
-                    color: 'white',
-                    height: '40px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '0 6px 0 20px',
-                    borderRadius: '50px',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
-                    transition: 'all 0.2s ease-in-out',
-                    flexShrink: 0
-                  }}
-                >
-                  <span>Create PI</span>
-                  <div style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    backgroundColor: '#FFFFFF',
-                    color: '#0E7490',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-                  }}>
-                    <ArrowRight style={{ width: '16px', height: '16px', color: '#0E7490' }} />
-                  </div>
-                </button>
-              </div>
+              {!isCeo && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={() => {
+                      resetForm();
+                      setEditIdx(null);
+                      setViewMode('create');
+                      setPiNumber('');
+                    }}
+                    style={{
+                      backgroundColor: '#0E7490',
+                      border: 'none',
+                      color: 'white',
+                      height: '40px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '0 6px 0 20px',
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
+                      transition: 'all 0.2s ease-in-out',
+                      flexShrink: 0
+                    }}
+                  >
+                    <span>Create PI</span>
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: '#FFFFFF',
+                      color: '#0E7490',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      <ArrowRight style={{ width: '16px', height: '16px', color: '#0E7490' }} />
+                    </div>
+                  </button>
+                </div>
+              )}
             </div>
 
+            {/* PI OPERATIONS & CONVERSION KPI RIBBON (TECH SUPPORT LOGIN ALONE) */}
+            {isTechSupportLogin && piMetrics && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: '12px',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}>
+                {/* Tile 1: Total PIs Today */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #EAEFEF',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Total PIs Today
+                    </span>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileText size={14} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '22px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px' }}>
+                      {piMetrics.todayPiCount} Orders
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '6px' }}>
+                      {piMetrics.todayPiValFormatted}
+                    </span>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+                    <span>Commercial pipeline </span>
+                    <span style={{ color: '#0E7490', fontWeight: '800' }}>New PIs Authored Today</span>
+                  </div>
+                </div>
 
+                {/* Tile 2: Converted to BOM Today */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #EAEFEF',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Converted to BOM Today
+                    </span>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <GitBranch size={14} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '22px', fontWeight: '900', color: '#059669', letterSpacing: '-0.5px' }}>
+                      {piMetrics.todayConvertedCount} Orders
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '6px' }}>
+                      {piMetrics.todayConvertedValFormatted}
+                    </span>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+                    <span>Production handoff </span>
+                    <span style={{ color: '#059669', fontWeight: '800' }}>{piMetrics.conversionRate}</span>
+                  </div>
+                </div>
+
+                {/* Tile 3: Assigned to Today */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #EAEFEF',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Assigned to Today
+                    </span>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <UserCheck size={14} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '22px', fontWeight: '900', color: '#2563EB', letterSpacing: '-0.5px' }}>
+                      {piMetrics.todayAssignedCount} Orders
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '6px' }}>
+                      {piMetrics.todayAssignedValFormatted}
+                    </span>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
+                    <span>Sales assignment </span>
+                    <span style={{ color: '#2563EB', fontWeight: '800' }}>Handed to Sales Reps</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 1. FILTERS & SEARCH ROW CARD */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -3096,12 +3851,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   { id: 'Issued', label: 'Issued / Active', count: visiblePIList.filter(pi => {
                     if (pi.status === 'Draft' || pi.statusType === 'draft' || pi.status === 'Cancelled') return false;
                     const matchedBoms = getConvertedBomsForPi(pi);
-                    return matchedBoms.length === 0;
+                    const isExplicitConverted = Boolean(
+                      pi.status === 'Converted to BOM' || 
+                      pi.statusType === 'converted' || 
+                      pi.convertedToBom === true || 
+                      pi.convertedBomCode || 
+                      pi.convertedBomNo
+                    );
+                    const isConverted = matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM');
+                    return !isConverted;
                   }).length },
                   { id: 'Converted to BOM', label: 'Converted to BOM', count: visiblePIList.filter(pi => {
                     if (pi.status === 'Draft' || pi.statusType === 'draft') return false;
                     const matchedBoms = getConvertedBomsForPi(pi);
-                    return matchedBoms.length > 0;
+                    const isExplicitConverted = Boolean(
+                      pi.status === 'Converted to BOM' || 
+                      pi.statusType === 'converted' || 
+                      pi.convertedToBom === true || 
+                      pi.convertedBomCode || 
+                      pi.convertedBomNo
+                    );
+                    return matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM');
                   }).length },
                   { id: 'Cancelled', label: 'Cancelled', count: visiblePIList.filter(pi => pi.status === 'Cancelled').length },
                   { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => pi.status === 'Draft' || pi.statusType === 'draft').length }
@@ -3142,7 +3912,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             {/* 3. MAIN DATA TABLE MATCHING EXACT REFERENCE DESIGN */}
             <div className="section-card" style={{ padding: 0, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
               <div style={{ overflowX: 'auto', width: '100%' }}>
-                <table className="custom-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                       <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
@@ -3153,19 +3923,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                          />
                       </th>
-                      <th style={{ width: '150px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
+                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>PI NO.</th>
+                      <th style={{ width: '120px', minWidth: '110px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
+                      {isTechSupportLogin ? (
+                        <>
+                          <th style={{ width: '160px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>Created By</th>
+                          <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Assigned to</th>
+                        </>
+                      ) : (
+                        <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
+                      )}
                       <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
-                      <th style={{ width: '160px', minWidth: '150px', padding: '12px 14px', boxSizing: 'border-box' }}>GST No.</th>
-                      <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
                       <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
-                      <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                      <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tableLoading ? (
                       <>
                         <tr style={{ backgroundColor: '#F0FDFA' }}>
-                          <td colSpan={7} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
+                          <td colSpan={isTechSupportLogin ? 8 : 7} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <div className="businz-spin-ring" />
@@ -3195,13 +3972,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '90px', height: '14px' }} />
                             </td>
                             <td style={{ padding: '12px 14px' }}>
-                              <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
-                            </td>
-                            <td style={{ padding: '12px 14px' }}>
-                              <div className="skeleton-shimmer skeleton-text" style={{ width: '110px', height: '14px' }} />
-                            </td>
-                            <td style={{ padding: '12px 14px' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '120px', height: '14px' }} />
+                            </td>
+                            {isTechSupportLogin && (
+                              <td style={{ padding: '12px 14px' }}>
+                                <div className="skeleton-shimmer skeleton-text" style={{ width: '120px', height: '14px' }} />
+                              </td>
+                            )}
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
                             </td>
                             <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '85px', height: '14px', marginLeft: 'auto' }} />
@@ -3214,11 +3996,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </>
                     ) : filteredPIList.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                        <td colSpan={isTechSupportLogin ? 8 : 7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <FileText size={32} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Proforma Invoices found</span>
-                            <span style={{ fontSize: '12px', color: '#94A3B8' }}>No records match your active filter or search query. Click "+ Create Proforma Invoice" above to author a new quotation.</span>
+                            <span style={{ fontSize: '12px', color: '#94A3B8' }}>
+                              {isCeo
+                                ? 'No records match your active filter or search query.'
+                                : 'No records match your active filter or search query. Click "+ Create Proforma Invoice" above to author a new quotation.'}
+                            </span>
                             {(searchQuery || statusFilter !== 'All' || piTab !== 'All') && (
                               <button
                                 type="button"
@@ -3245,14 +4031,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       currentRows.map((pi, idx) => {
                         const isChecked = selectedPIs.includes(pi.piNo);
 
-                        const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
                         const matchedBoms = getConvertedBomsForPi(pi);
                         const hasSavedBom = matchedBoms.length > 0;
-                        const isConverted = !isDraft && hasSavedBom;
-                        const currentStatus = isDraft
-                          ? 'Draft'
-                          : (isConverted
-                            ? 'Converted to BOM'
+                        const isExplicitConverted = Boolean(
+                          pi.status === 'Converted to BOM' || 
+                          pi.statusType === 'converted' || 
+                          pi.convertedToBom === true || 
+                          pi.convertedBomCode || 
+                          pi.convertedBomNo
+                        );
+                        const isConverted = (hasSavedBom || isExplicitConverted) && pi.status !== 'Cancelled';
+                        const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft') && !isConverted;
+                        const currentStatus = isConverted
+                          ? 'Converted to BOM'
+                          : (isDraft
+                            ? 'Draft'
                             : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
                               ? 'Issued'
                               : (pi.status || 'Issued')));
@@ -3304,13 +4097,206 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             </td>
                             <td
                               onClick={() => setSelectedPi(pi)}
-                              style={{ padding: '12px 14px', cursor: 'pointer' }}
+                              style={{ padding: '12px 14px', cursor: 'pointer', width: '150px', minWidth: '130px' }}
                             >
                               <div style={{ fontWeight: 'bold', color: '#2563EB', fontSize: '13px' }}>
                                 {pi.piNo}
                               </div>
                             </td>
-                            <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>
+                            <td style={{ padding: '12px 14px', color: '#64748B', width: '120px', minWidth: '110px', whiteSpace: 'nowrap', fontFamily: isTechSupportLogin ? 'monospace' : 'inherit', fontWeight: isTechSupportLogin ? '600' : 'normal' }}>
+                              {formatPiDateDot(pi.piDate || pi.date || pi.createdAt)}
+                            </td>
+
+                            {/* Tech Support Split: Created By & Assigned to */}
+                            {isTechSupportLogin ? (
+                              <>
+                                {/* Created By (Tech Person name who created PI) */}
+                                <td style={{ padding: '12px 14px', color: '#1E293B', width: '160px', minWidth: '140px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{
+                                      width: '26px',
+                                      height: '26px',
+                                      borderRadius: '50%',
+                                      backgroundColor: '#F3E8FF',
+                                      color: '#9333EA',
+                                      border: '1px solid #E9D5FF',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      flexShrink: 0
+                                    }}>
+                                      {((pi.createdBy || pi.createdByName || pi.author || currentEmpName || 'T')[0] || 'T').toUpperCase()}
+                                    </div>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {pi.createdBy || pi.createdByName || pi.author || currentEmpName || 'Tech Support'}
+                                      </div>
+                                      {pi.createdById && (
+                                        <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                          {pi.createdById}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Assigned to (Sales person name which tech support assigned to) */}
+                                <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
+                                  {(() => {
+                                    const assignedSp = pi.assignedSalesperson || pi.assignedToName || (
+                                      pi.salesPerson && !pi.salesPerson.toLowerCase().includes('support') && !pi.salesPerson.toLowerCase().includes('admin') && !pi.salesPerson.toLowerCase().includes('direct')
+                                        ? pi.salesPerson
+                                        : ''
+                                    );
+                                    const assignedCode = pi.assignedSalespersonCode || pi.assignedToId || (assignedSp ? pi.salesPersonCode : '');
+
+                                    if (assignedSp) {
+                                      return (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <div style={{
+                                            width: '26px',
+                                            height: '26px',
+                                            borderRadius: '50%',
+                                            backgroundColor: '#ECFEFF',
+                                            color: '#0E7490',
+                                            border: '1px solid #A5F3FC',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            flexShrink: 0
+                                          }}>
+                                            {assignedSp[0]?.toUpperCase()}
+                                          </div>
+                                          <div style={{ minWidth: 0, flex: 1 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                              <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {assignedSp}
+                                              </div>
+                                              {canAssignPi && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenAssignModal(pi);
+                                                  }}
+                                                  title={`Reassign PI ${pi.piNo || ''} to Sales Executive`}
+                                                  style={{ border: 'none', background: '#ECFEFF', cursor: 'pointer', padding: '2px 6px', color: '#0E7490', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}
+                                                  onMouseEnter={(e) => {
+                                                    e.currentTarget.style.backgroundColor = '#0E7490';
+                                                    e.currentTarget.style.color = '#FFFFFF';
+                                                  }}
+                                                  onMouseLeave={(e) => {
+                                                    e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                                    e.currentTarget.style.color = '#0E7490';
+                                                  }}
+                                                >
+                                                  <UserCheck size={10} /> Reassign
+                                                </button>
+                                              )}
+                                            </div>
+                                            {assignedCode && (
+                                              <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                                {assignedCode}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '6px' }}>
+                                        <span style={{ fontSize: '12px', color: '#94A3B8', fontStyle: 'italic' }}>
+                                          Not Assigned
+                                        </span>
+                                        {canAssignPi && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenAssignModal(pi);
+                                            }}
+                                            title={`Assign PI ${pi.piNo || ''} to Sales Executive`}
+                                            style={{ border: '1px solid #A5F3FC', background: '#ECFEFF', cursor: 'pointer', padding: '3px 8px', color: '#0E7490', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '700' }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.backgroundColor = '#0E7490';
+                                              e.currentTarget.style.color = '#FFFFFF';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                              e.currentTarget.style.color = '#0E7490';
+                                            }}
+                                          >
+                                            <UserCheck size={11} /> Assign
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                              </>
+                            ) : (
+                              /* Standard Sales Person column for non-Tech-Support logins */
+                              <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{
+                                    width: '26px',
+                                    height: '26px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#ECFEFF',
+                                    color: '#0E7490',
+                                    border: '1px solid #A5F3FC',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    flexShrink: 0
+                                  }}>
+                                    {(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'S')[0]?.toUpperCase()}
+                                  </div>
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                      <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Direct / Admin'}
+                                      </div>
+                                      {canAssignPi && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenAssignModal(pi);
+                                          }}
+                                          title={`Assign/Reassign PI ${pi.piNo || ''} to Sales Executive`}
+                                          style={{ border: 'none', background: '#ECFEFF', cursor: 'pointer', padding: '2px 6px', color: '#0E7490', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#0E7490';
+                                            e.currentTarget.style.color = '#FFFFFF';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#ECFEFF';
+                                            e.currentTarget.style.color = '#0E7490';
+                                          }}
+                                        >
+                                          <UserCheck size={11} /> Assign
+                                        </button>
+                                      )}
+                                    </div>
+                                    {pi.salesPersonCode && (
+                                      <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                        {pi.salesPersonCode}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            )}
+
+                            <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B', minWidth: '220px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.vendor || pi.customerName || 'Direct Customer'}</span>
                                 {pi.contactPerson && <span style={{ fontSize: '11px', color: '#64748B' }}>Attn: {pi.contactPerson}</span>}
@@ -3321,18 +4307,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 </span>
                               </div>
                             </td>
-                            <td style={{ padding: '12px 14px', fontFamily: 'monospace', color: '#475569' }}>{pi.gstNo || '—'}</td>
-                            <td style={{ padding: '12px 14px', color: '#64748B' }}>{pi.piDate}</td>
-                            <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right' }}>{pi.amount}</td>
+                            <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right', width: '150px', minWidth: '130px' }}>
+                              {pi.amount}
+                            </td>
                             
-                            {/* Pill status badge with bullet dot & clickable BOM link */}
-                            <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            {/* Status Column: For Tech Support, strictly badge without BOM buttons */}
+                            <td style={{ padding: '12px 14px', textAlign: 'center', width: isTechSupportLogin ? '150px' : '160px', minWidth: '130px' }}>
                               <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
                                 <span style={{ backgroundColor: statusBg, color: statusFg, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusFg }}></span>
                                   {displayStatus}
                                 </span>
-                                {isConverted && (
+                                {!isTechSupportLogin && isConverted && (
                                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                     {matchedBoms.map((b, bIdx) => {
                                       const bCode = b.bomCode || b.code || b.id;
@@ -3670,6 +4656,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   const isPushed = Boolean(target.zohoSynced);
                   const isCurrentlyPushing = syncingPiNo === target.piNo;
 
+                  // Exclude Convert to BOM and Push to Zoho from floating menu in Tech Support login per user mandate
+                  if (isTechSupportLogin) return null;
+
                   return (
                     <React.Fragment key={target.piNo}>
                       {isConverted ? (
@@ -3816,6 +4805,85 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </button>
                   );
                 })()}
+
+                {/* Clone PI */}
+                {selectedPIs.length === 1 && (
+                  <button
+                    onClick={() => {
+                      const targetPiNo = selectedPIs[0];
+                      const targetPi = targetPiNo ? piList.find(p => p.piNo === targetPiNo) : null;
+                      setSelectedPIs([]);
+                      if (targetPi) {
+                        handleClonePi(targetPi);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      color: '#1E293B',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                    title="Clone / Duplicate this Proforma Invoice"
+                  >
+                    <Copy size={14} style={{ color: '#0E7490' }} />
+                    Clone PI
+                  </button>
+                )}
+
+                {/* Assign to Sales Rep (Tech Support / CEO / Sales Head) */}
+                {selectedPIs.length === 1 && canAssignPi && (
+                  <button
+                    onClick={() => {
+                      const targetPiNo = selectedPIs[0];
+                      const targetPi = targetPiNo ? piList.find(p => p.piNo === targetPiNo) : null;
+                      if (targetPi) {
+                        handleOpenAssignModal(targetPi);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#ECFEFF',
+                      border: '1px solid #A5F3FC',
+                      color: '#0E7490',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: '0 1px 2px rgba(14,116,144,0.1)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#0E7490';
+                      e.currentTarget.style.color = '#FFFFFF';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#ECFEFF';
+                      e.currentTarget.style.color = '#0E7490';
+                    }}
+                    title="Assign this Proforma Invoice to a Sales Representative"
+                  >
+                    <UserCheck size={14} />
+                    Assign to Sales Rep
+                  </button>
+                )}
 
                 {/* Export / Print PDF */}
                 <button
@@ -3970,29 +5038,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div>
-                  <label htmlFor="pi-field-validUntil" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Valid Until Date <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <input name="validUntilDate" aria-label="Valid Until Date"
-                    id="pi-field-validUntil"
-                    type="date"
-                    required
-                    value={validUntilDate}
-                    min={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const todayStr = new Date().toISOString().split('T')[0];
-                      if (val && val < todayStr) {
-                        setValidUntilDate(todayStr);
-                      } else {
-                        setValidUntilDate(val);
-                      }
-                    }}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                   />
-                </div>
-
-                <div>
                   <label htmlFor="performa-invoice-pi-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     PI Number
                   </label>
@@ -4022,16 +5067,56 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label htmlFor="performa-invoice-sales-executive" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Sales Executive
+                    {isTechSupport ? 'Assign to Sales Executive (Optional)' : 'Sales Executive'}
                   </label>
                   <div style={{ position: 'relative' }}>
-                    <input id="performa-invoice-sales-executive" name="salesExecutive" aria-label="Sales Executive"
-                      type="text"
-                      readOnly
-                      disabled
-                      value={salesPerson || getActiveUserName()}
-                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', boxSizing: 'border-box', cursor: 'not-allowed' }}
-                     />
+                    {isTechSupport ? (
+                      <select
+                        id="performa-invoice-sales-executive"
+                        name="salesExecutive"
+                        aria-label="Assign to Sales Executive"
+                        value={selectedSalespersonCode || ''}
+                        onChange={(e) => {
+                          const code = e.target.value;
+                          setSelectedSalespersonCode(code);
+                          const sp = salespersonsList.find(s => s.employee_code === code);
+                          if (sp) {
+                            setSalesPerson(sp.employee_name);
+                          } else {
+                            setSalesPerson('');
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          height: '42px',
+                          borderRadius: '10px',
+                          border: '1.5px solid #0E7490',
+                          padding: '0 14px',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: '#0F172A',
+                          backgroundColor: '#ECFEFF',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="">-- Unassigned (Assign Later) --</option>
+                        {salespersonsList.map(s => (
+                          <option key={s.employee_code} value={s.employee_code}>
+                            {s.employee_name} ({s.employee_code})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input id="performa-invoice-sales-executive" name="salesExecutive" aria-label="Sales Executive"
+                        type="text"
+                        readOnly
+                        disabled
+                        value={salesPerson || getActiveUserName()}
+                        style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', boxSizing: 'border-box', cursor: 'not-allowed' }}
+                       />
+                    )}
                   </div>
                 </div>
               </div>
@@ -4216,26 +5301,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   {isCustomerDropdownOpen && (
                     <div style={{
                       position: 'absolute',
-                      top: 'calc(100% + 4px)',
+                      top: 'calc(100% + 6px)',
                       left: 0,
-                      right: 0,
+                      minWidth: 'min(500px, 92vw)',
+                      width: 'max(100%, 500px)',
+                      maxWidth: '92vw',
                       backgroundColor: '#FFFFFF',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       border: '1px solid #CBD5E1',
-                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      boxShadow: '0 14px 35px -4px rgba(0, 0, 0, 0.18), 0 6px 14px -2px rgba(0, 0, 0, 0.08)',
                       zIndex: 9999,
-                      maxHeight: '280px',
+                      maxHeight: '380px',
                       overflowY: 'auto',
-                      padding: '4px'
+                      padding: '6px'
                     }}>
                       <div style={{
-                        padding: '6px 10px',
-                        fontSize: '11px',
+                        padding: '8px 12px',
+                        fontSize: '11.5px',
                         fontWeight: '700',
                         color: '#64748B',
                         backgroundColor: '#F8FAFC',
-                        borderRadius: '6px',
-                        marginBottom: '4px',
+                        borderRadius: '8px',
+                        marginBottom: '6px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
@@ -4248,7 +5335,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               e.stopPropagation();
                               setVendorName('');
                             }}
-                            style={{ border: 'none', background: 'transparent', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer', padding: 0 }}
+                            style={{ border: 'none', background: 'transparent', color: '#0E7490', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
                           >
                             Clear
                           </button>
@@ -4256,7 +5343,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </div>
 
                       {filteredCustomerSuggestions.length === 0 ? (
-                        <div style={{ padding: '14px', textAlign: 'center', color: '#64748B', fontSize: '12px' }}>
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
                           No matching customers found for "{vendorName}". You can continue typing to use this new company.
                         </div>
                       ) : (
@@ -4281,7 +5368,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 setIsCustomerDropdownOpen(false);
                               }}
                               style={{
-                                padding: '9px 12px',
+                                padding: '10px 14px',
                                 borderRadius: '8px',
                                 cursor: 'pointer',
                                 backgroundColor: isSelected ? '#ECFEFF' : 'transparent',
@@ -4290,7 +5377,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
                                 transition: 'background-color 0.1s ease',
-                                gap: '8px'
+                                gap: '12px',
+                                marginBottom: '2px'
                               }}
                               onMouseEnter={(e) => {
                                 if (!isSelected) e.currentTarget.style.backgroundColor = '#F8FAFC';
@@ -4300,17 +5388,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               }}
                             >
                               <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={{ fontSize: '13px', fontWeight: '700', color: isSelected ? '#0E7490' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div style={{ fontSize: '13.5px', fontWeight: '700', color: isSelected ? '#0E7490' : '#0F172A', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.3' }}>
                                   {name}
                                 </div>
-                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                  {contact && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><User size={11} style={{ color: '#64748B' }} /> {contact}</span>}
-                                  {phone && <span>📞 {phone}</span>}
-                                  {city && <span>📍 {city}</span>}
+                                <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {contact && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><User size={12} style={{ color: '#64748B' }} /> {contact}</span>}
+                                  {phone && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>📞 {phone}</span>}
+                                  {city && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>📍 {city}</span>}
                                 </div>
                               </div>
                               {gst && (
-                                <span style={{ fontSize: '10px', fontWeight: '700', color: '#0369A1', backgroundColor: '#E0F2FE', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: '11px', fontWeight: '700', color: '#0369A1', backgroundColor: '#E0F2FE', padding: '3px 8px', borderRadius: '5px', whiteSpace: 'nowrap', alignSelf: 'center' }}>
                                   GST: {gst}
                                 </span>
                               )}
@@ -4659,7 +5747,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       }}
                     >
                       <Layers size={13} style={{ color: '#0E7490' }} />
-                      {grp.presetName} ({grp.setCount} Set{grp.setCount > 1 ? 's' : ''})
+                      {grp.presetName} ({grp.setCount} {grp.unit || (grp.setCount > 1 ? 'Sets' : 'Set')})
                       <button
                         type="button"
                         onClick={() => handleAddPresetItem(grp.groupId)}
@@ -4683,6 +5771,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setSubPresetModalGroup(grp.groupId);
+                          setNestedSubPresetVal('');
+                          setNestedSubPresetCount(1);
+                        }}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#0284C7',
+                          color: '#FFFFFF',
+                          borderRadius: '4px',
+                          fontSize: '10.5px',
+                          fontWeight: '800',
+                          padding: '1px 7px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          marginLeft: '2px'
+                        }}
+                        title={`Select a second preset to nest inside ${grp.presetName}`}
+                      >
+                        <Layers size={11} /> + Nest Sub-Preset
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleRemovePresetGroup(grp.groupId)}
                         style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '0 0 0 2px', display: 'flex', alignItems: 'center', color: '#0891B2' }}
                         title={`Remove ${grp.presetName}`}
@@ -4699,10 +5812,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 {/* Items Table */}
               <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                <table style={{ width: '100%', minWidth: hasAnyPreset ? '1380px' : '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
+                      <th style={{ padding: '12px 4px', width: '38px', minWidth: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
+                        <GripVertical size={14} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                      </th>
+                      <th style={{ padding: '12px 8px', width: '42px', minWidth: '42px', textAlign: 'center' }}>
                         <input id="performa-invoice-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           checked={piItems.length > 0 && selectedItemIndexes.length === piItems.length}
@@ -4716,26 +5832,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                          />
                       </th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '28%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>HSN / SAC</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>UOM</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '7%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'center' }}>GST Rate</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
+                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>UOM</th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
                       {hasAnyPreset && (
-                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '130px', minWidth: '130px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
                           Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                         </th>
                       )}
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'right' }}>Taxable (₹)</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Total (₹)</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px', textAlign: 'right' }}>Taxable (₹)</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'right' }}>Total (₹)</th>
+                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '48px', minWidth: '48px', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {piItems.length === 0 ? (
                       <tr>
-                        <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
@@ -4782,14 +5898,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         const q = parseFloat(item.qty) || 0;
                         const r = parseFloat(item.rate) || 0;
                         const taxable = isPresetItem ? 0 : q * r;
-                        const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+                        const cleanedGstStr = String(item.gstRate !== undefined && item.gstRate !== null && item.gstRate !== '' ? item.gstRate : '18%').replace('%', '').trim();
+                        const gstPct = isNaN(parseFloat(cleanedGstStr)) ? 18 : parseFloat(cleanedGstStr);
                         const itemTotal = taxable + (taxable * (gstPct / 100));
 
                         return (
                           <React.Fragment key={i}>
                             {isFirstInGroup && (
                               <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{
@@ -4822,7 +5939,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
                                       </span>
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
                                         {(parseInt(currentGroup?.setCount) || 1) > 1 ? (
                                           <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
@@ -4830,6 +5947,54 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           <>Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
                                         )}
                                       </span>
+
+                                      {/* Move entire preset group up / down buttons */}
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#FFFFFF', padding: '2px 4px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMovePresetGroupBlock(groupId, -1)}
+                                          disabled={groupIndex === 0}
+                                          style={{
+                                            border: 'none',
+                                            backgroundColor: 'transparent',
+                                            color: groupIndex === 0 ? '#CBD5E1' : theme.primary,
+                                            cursor: groupIndex === 0 ? 'not-allowed' : 'pointer',
+                                            padding: '2px 5px',
+                                            borderRadius: '4px',
+                                            fontSize: '10px',
+                                            fontWeight: '700',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '2px'
+                                          }}
+                                          title={`Move ${theme.badge} up`}
+                                        >
+                                          <ChevronUp size={11} /> Move Up
+                                        </button>
+                                        <span style={{ color: '#E2E8F0' }}>|</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMovePresetGroupBlock(groupId, 1)}
+                                          disabled={groupIndex === distinctPresetGroupIds.length - 1}
+                                          style={{
+                                            border: 'none',
+                                            backgroundColor: 'transparent',
+                                            color: groupIndex === distinctPresetGroupIds.length - 1 ? '#CBD5E1' : theme.primary,
+                                            cursor: groupIndex === distinctPresetGroupIds.length - 1 ? 'not-allowed' : 'pointer',
+                                            padding: '2px 5px',
+                                            borderRadius: '4px',
+                                            fontSize: '10px',
+                                            fontWeight: '700',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '2px'
+                                          }}
+                                          title={`Move ${theme.badge} down`}
+                                        >
+                                          <ChevronDown size={11} /> Move Down
+                                        </button>
+                                      </div>
+
                                       <button
                                         type="button"
                                         onClick={() => handleAddPresetItem(groupId)}
@@ -4857,7 +6022,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
                               <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
                                       padding: '2px 8px',
@@ -4879,12 +6044,98 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             <tr
                               key={i}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', String(i));
+                                e.dataTransfer.effectAllowed = 'move';
+                                setDraggedItemIndex(i);
+                              }}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                if (dragOverItemIndex !== i) setDragOverItemIndex(i);
+                              }}
+                              onDragLeave={() => {
+                                if (dragOverItemIndex === i) setDragOverItemIndex(null);
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                const fromIdx = draggedItemIndex !== null ? draggedItemIndex : parseInt(e.dataTransfer.getData('text/plain'), 10);
+                                if (!isNaN(fromIdx) && fromIdx !== i) {
+                                  handleReorderPiItem(fromIdx, i);
+                                }
+                                setDraggedItemIndex(null);
+                                setDragOverItemIndex(null);
+                              }}
+                              onDragEnd={() => {
+                                setDraggedItemIndex(null);
+                                setDragOverItemIndex(null);
+                              }}
                               style={{
-                                borderBottom: '1px solid #F1F5F9',
-                                backgroundColor: isChecked ? '#ECFEFF' : (isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : 'transparent'),
-                                transition: 'background-color 0.15s ease'
+                                borderBottom: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex < i)
+                                  ? '3px solid #0E7490'
+                                  : '1px solid #F1F5F9',
+                                borderTop: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex > i)
+                                  ? '3px solid #0E7490'
+                                  : 'none',
+                                backgroundColor: draggedItemIndex === i
+                                  ? '#F8FAFC'
+                                  : (dragOverItemIndex === i
+                                    ? '#ECFEFF'
+                                    : (isChecked ? '#ECFEFF' : (isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : 'transparent'))),
+                                opacity: draggedItemIndex === i ? 0.35 : 1,
+                                transition: 'background-color 0.15s ease, opacity 0.15s ease'
                               }}
                             >
+                              <td
+                                style={{
+                                  padding: '8px 4px',
+                                  textAlign: 'center',
+                                  cursor: 'grab',
+                                  userSelect: 'none',
+                                  verticalAlign: 'middle',
+                                  borderLeft: (draggedItemIndex === i || dragOverItemIndex === i) ? '3px solid #0E7490' : 'none'
+                                }}
+                                title="Click and drag to reorder / align product, or use arrows"
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                                  <GripVertical size={16} style={{ color: '#94A3B8', cursor: 'grab' }} />
+                                  <div style={{ display: 'flex', gap: '2px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleMovePiItemStep(i, -1); }}
+                                      disabled={i === 0}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: i === 0 ? 'not-allowed' : 'pointer',
+                                        padding: '1px',
+                                        color: i === 0 ? '#CBD5E1' : '#64748B',
+                                        lineHeight: 1
+                                      }}
+                                      title="Move product up"
+                                    >
+                                      <ChevronUp size={11} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleMovePiItemStep(i, 1); }}
+                                      disabled={i === piItems.length - 1}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: i === piItems.length - 1 ? 'not-allowed' : 'pointer',
+                                        padding: '1px',
+                                        color: i === piItems.length - 1 ? '#CBD5E1' : '#64748B',
+                                        lineHeight: 1
+                                      }}
+                                      title="Move product down"
+                                    >
+                                      <ChevronDown size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
                               <td style={{
                                 padding: '12px 14px',
                                 textAlign: 'center',
@@ -4907,6 +6158,23 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               </td>
                               <td style={{ padding: '12px 10px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {item.isSubPreset && (
+                                    <div style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      backgroundColor: '#F0FDFA',
+                                      color: '#0D9488',
+                                      border: '1px solid #99F6E4',
+                                      borderRadius: '4px',
+                                      padding: '1px 6px',
+                                      fontSize: '10.5px',
+                                      fontWeight: 800,
+                                      width: 'fit-content'
+                                    }}>
+                                      ↳ Sub-Kit: {item.subPresetName}
+                                    </div>
+                                  )}
                                   <TypeableProductSelect
                                     value={item.name || ''}
                                     itemsList={itemsList}
@@ -4914,22 +6182,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     accentColor={theme.primary}
                                     onChange={(val, matched) => {
                                       if (!matched) {
-                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
+                                        const dynamicHsn = getHsnCode({ name: val, category: item.category });
+                                        const isSolar5 = is5PctSolarProduct(val, item.category, dynamicHsn);
+                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? {
+                                          ...mat,
+                                          name: val,
+                                          hsn: dynamicHsn,
+                                          gstRate: isSolar5 ? '5%' : mat.gstRate
+                                        } : mat));
                                         return;
                                       }
                                       const pName = matched.name;
                                       const pCat = matched.category || matched.description || item.category;
                                       const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
-                                      const pHsn = matched.hsn || matched.hsn_or_sac || item.hsn || '73089090';
-                                      const isSolar5 = is5PctSolarProduct(pName, pCat);
-                                      let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
+                                      const pHsn = matched.hsn || matched.hsn_or_sac || getHsnCode(matched || { name: pName, category: pCat });
+                                      const isSolar5 = is5PctSolarProduct(pName, pCat, pHsn);
+                                      let rawUom = matched.uom || matched.unit || item.uom || 'NOS';
                                       const u = String(rawUom).trim().toUpperCase();
-                                      let resolvedUom = rawUom;
+                                      let resolvedUom = 'NOS';
                                       if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';
                                       else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
-                                      else if (['NUMBERS', 'NUMBER', 'NOS', 'NO'].includes(u)) resolvedUom = 'NOS';
-                                      else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
-                                      else if (['KW', 'KILOWATT', 'KILOWATTS', 'KWP'].includes(u)) resolvedUom = 'KW';
+                                      else resolvedUom = 'NOS';
                                       setPiItems(prev => prev.map((mat, idx) => idx === i ? {
                                         ...mat,
                                         code: pCode || mat.code,
@@ -4951,10 +6224,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       setPiItems(prev => prev.map((mat, idx) => {
                                         if (idx !== i) return mat;
                                         const isSolar5 = is5PctSolarProduct(mat.name, val);
+                                        const dynamicHsn = getHsnCode({ name: mat.name, category: val }) || mat.hsn;
                                         return {
                                           ...mat,
                                           category: val,
-                                          gstRate: isSolar5 ? '5%' : mat.gstRate
+                                          gstRate: isSolar5 ? '5%' : mat.gstRate,
+                                          hsn: dynamicHsn
                                         };
                                       }));
                                     }}
@@ -4981,47 +6256,48 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   )}
                                 </div>
                               </td>
-                              <td style={{ padding: '12px 6px' }}>
+                              <td style={{ padding: '12px 6px', textAlign: 'center' }}>
                                 <input id={`performa-invoice-hsn-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hsn_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HSN / SAC"
                                   type="text"
-                                  placeholder="73089090"
-                                  value={item.hsn !== undefined ? item.hsn : '73089090'}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, hsn: val } : mat));
-                                  }}
+                                  readOnly
+                                  tabIndex={-1}
+                                  placeholder={getHsnCode(item) || 'HSN Code'}
+                                  value={item.hsn !== undefined && item.hsn !== '' ? item.hsn : (item.name ? getHsnCode(item) : '')}
                                   style={{
                                     width: '100%',
+                                    minWidth: '100px',
                                     height: '38px',
                                     borderRadius: '8px',
                                     border: '1px solid #E2E8F0',
                                     padding: '0 6px',
                                     fontSize: '12px',
-                                    fontWeight: '600',
-                                    color: '#0F172A',
-                                    backgroundColor: '#FFFFFF',
+                                    fontWeight: '700',
+                                    color: '#475569',
+                                    backgroundColor: '#F8FAFC',
                                     outline: 'none',
                                     boxSizing: 'border-box',
-                                    textAlign: 'center'
+                                    textAlign: 'center',
+                                    cursor: 'not-allowed'
                                   }}
-                                  title="HSN / SAC Tariff Code"
+                                  title="HSN / SAC Code (Auto-populated from master catalog; read-only)"
                                 />
                               </td>
-                              <td style={{ padding: '12px 10px' }}>
+                              <td style={{ padding: '12px 4px', textAlign: 'center', width: '105px', minWidth: '105px', whiteSpace: 'nowrap' }}>
                                 <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
-                                  value={item.uom || 'NOS'}
+                                  value={['NOS', 'SET', 'KW', 'KG', 'MTR', 'PCS', 'BOX', 'PKT', 'PAIR'].includes(item.uom) ? item.uom : 'NOS'}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                   }}
                                   style={{
                                     width: '100%',
+                                    minWidth: '95px',
                                     height: '38px',
                                     borderRadius: '8px',
                                     border: '1px solid #E2E8F0',
-                                    padding: '0 6px',
+                                    padding: '0 6px 0 10px',
                                     fontSize: '12px',
-                                    fontWeight: '600',
+                                    fontWeight: '700',
                                     color: '#0F172A',
                                     backgroundColor: '#FFFFFF',
                                     outline: 'none',
@@ -5030,17 +6306,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     textAlign: 'center'
                                   }}
                                 >
-                                  <option value="MTR">MTR (Meter)</option>
-                                  <option value="PCS">PCS (Pieces)</option>
-                                  <option value="NOS">NOS (Numbers)</option>
-                                  <option value="SET">SET (Sets)</option>
-                                  <option value="KW">KW (Kilowatt)</option>
-                                  {item.uom && !['MTR', 'PCS', 'NOS', 'SET', 'KW', 'Kw'].includes(item.uom) && (
-                                    <option value={item.uom}>{item.uom}</option>
-                                  )}
+                                  <option value="NOS">NOS</option>
+                                  <option value="SET">SET</option>
+                                  <option value="KW">KW</option>
+                                  <option value="KG">KG</option>
+                                  <option value="MTR">MTR</option>
+                                  <option value="PCS">PCS</option>
+                                  <option value="BOX">BOX</option>
+                                  <option value="PKT">PKT</option>
+                                  <option value="PAIR">PAIR</option>
                                 </select>
                               </td>
-                              <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '12px 6px', verticalAlign: 'middle' }}>
                                 <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                   <input id={`performa-invoice-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                                     type="number"
@@ -5059,7 +6336,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         };
                                       }));
                                     }}
-                                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
+                                    style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF' }}
                                   />
                                 </div>
                               </td>
@@ -5088,10 +6365,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   }}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
                                 >
-                                  <option value="18%">18% GST</option>
-                                  <option value="12%">12% GST</option>
-                                  <option value="5%">5% GST</option>
-                                  <option value="0%">0% Exempt</option>
+                                  <option value="18%">18%</option>
+                                  <option value="12%">12%</option>
+                                  <option value="5%">5%</option>
+                                  <option value="0%">0%</option>
                                 </select>
                               </td>
                               {hasAnyPreset && (() => {
@@ -5160,14 +6437,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             </span>
                                           )}
 
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ fontSize: '10.5px', color: theme.primary, fontWeight: '700' }}>
                                               {groupCount} items ×
                                             </span>
                                             <input id="performa-invoice-set-count" name="setCount" aria-label="SetCount"
                                               type="number"
                                               min="0"
-                                              max="999"
+                                              step={(currentGroup?.unit || 'Sets') === 'kW' ? 'any' : '1'}
+                                              max="99999"
                                               value={currentGroup?.setCount !== undefined && currentGroup?.setCount !== null ? currentGroup.setCount : ''}
                                               onFocus={(e) => e.target.select()}
                                               onChange={(e) => {
@@ -5181,7 +6459,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                   }
                                                   return;
                                                 }
-                                                const parsed = parseInt(rawVal);
+                                                const parsed = parseFloat(rawVal);
                                                 const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
                                                 if (groupId) {
                                                   setPresetGroups(prev => ({
@@ -5189,26 +6467,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                     [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                   }));
                                                 }
-                                                const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
-                                                const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                                setPiItems(prev => prev.map(mat => {
-                                                  if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                    return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                                  }
-                                                  return mat;
-                                                }));
                                               }}
                                               style={{
-                                                width: '42px', height: '26px', borderRadius: '6px',
-                                                border: `1.5px solid ${theme.border}`, fontSize: '13px',
+                                                width: '50px', height: '26px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, fontSize: '12px',
                                                 fontWeight: '800', color: theme.primary, textAlign: 'center',
                                                 padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box'
                                               }}
-                                              title="Sets multiplier for this preset"
+                                              title={(currentGroup?.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this preset"}
                                             />
-                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '600' }}>
-                                              set{(parseInt(currentGroup?.setCount) || 1) !== 1 ? 's' : ''}
-                                            </span>
+                                            <select
+                                              value={currentGroup?.unit || 'Sets'}
+                                              onChange={(e) => {
+                                                const newUnit = e.target.value;
+                                                if (groupId) {
+                                                  setPresetGroups(prev => ({
+                                                    ...prev,
+                                                    [groupId]: { ...(prev[groupId] || currentGroup), unit: newUnit }
+                                                  }));
+                                                }
+                                              }}
+                                              style={{
+                                                height: '26px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, padding: '0 2px',
+                                                fontSize: '11px', fontWeight: '800',
+                                                color: theme.primary, backgroundColor: '#FFFFFF',
+                                                outline: 'none', cursor: 'pointer'
+                                              }}
+                                              title="Choose unit: Sets or kW"
+                                            >
+                                              <option value="Sets">Sets</option>
+                                              <option value="kW">kW</option>
+                                            </select>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                                             <span style={{ fontSize: '10px', color: theme.primary, fontWeight: '700' }}>GST:</span>
@@ -5455,11 +6745,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>Current Account Number</div>
-                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629</div>
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
+                      onClick={() => handleCopyBankDetail('50200031629', 'Account Number')}
                       title="Copy Account Number"
                       style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                     >
@@ -5485,7 +6775,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 {/* Branch Location */}
                 <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span><strong>Branch:</strong> Vinayagapuram Branch</span>
+                  <span><strong>Branch:</strong> VINAYAGAPURAM</span>
                   <span style={{ color: '#0E7490', fontSize: '10px', fontWeight: '700' }}>Settlement: INR (₹)</span>
                 </div>
               </div>
@@ -5538,33 +6828,37 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <span>₹{totals.sub.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
 
-                  {/* Dynamic GST Tiers Breakdown */}
-                  {totals.isIntra ? (
-                    (totals.gstTiers || []).map(tier => (
-                      <React.Fragment key={tier.rate}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
-                          <span>CGST ({tier.cgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
-                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.cgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
-                          <span>SGST ({tier.sgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
-                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.sgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                      </React.Fragment>
-                    ))
-                  ) : (
-                    (totals.gstTiers || []).map(tier => (
-                      <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
-                        <span>IGST ({tier.rate}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
-                        <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    ))
-                  )}
+                  {/* Dynamic GST Tiers Breakdown - Only shown when GST > 0 */}
+                  {totals.gst > 0 && (totals.gstTiers || []).length > 0 && (
+                    <>
+                      {totals.isIntra ? (
+                        (totals.gstTiers || []).map(tier => (
+                          <React.Fragment key={tier.rate}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                              <span>CGST ({tier.cgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                              <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.cgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                              <span>SGST ({tier.sgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                              <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.sgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        (totals.gstTiers || []).map(tier => (
+                          <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                            <span>IGST ({tier.rate}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                            <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        ))
+                      )}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '7px 12px', borderRadius: '8px' }}>
-                    <span>Total GST Amount:</span>
-                    <span>₹{totals.gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '7px 12px', borderRadius: '8px' }}>
+                        <span>Total GST Amount:</span>
+                        <span>₹{totals.gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </>
+                  )}
 
                   <div
                     style={{
@@ -5686,35 +6980,75 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
         const isSame = selectedPi.sameAsBilling || (!dStreet && !dCity);
         const piItemsList = Array.isArray(selectedPi.items) ? selectedPi.items : [];
-        const presetGroupsMap = selectedPi.presetGroups || {};
-        const hasPresets = Object.keys(presetGroupsMap).length > 0 || piItemsList.some(it => it.isPresetItem);
+        const presetGroupsMap = (selectedPi.presetGroups && typeof selectedPi.presetGroups === 'object') ? selectedPi.presetGroups : {};
+        const hasPresets = Object.keys(presetGroupsMap).length > 0 || piItemsList.some(it => it.isPresetItem || it.presetGroupId);
 
-        const subtotalVal = Number(selectedPi.unitValue) || piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
-        const grandTotalVal = parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || (subtotalVal * 1.18);
-        const totalGstVal = Math.max(0, grandTotalVal - subtotalVal);
+        // Accurate Subtotal Calculation (Preset Groups + Custom Standalone Items)
+        let presetKitsSubtotal = 0;
+        Object.values(presetGroupsMap).forEach(grp => {
+          if (!grp) return;
+          const uPrice = parseFloat(grp.kitPrice) || 0;
+          const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 0;
+          presetKitsSubtotal += (uPrice * sCount);
+        });
+        if (presetKitsSubtotal === 0 && selectedPi.kitSubtotal) {
+          presetKitsSubtotal = parseFloat(selectedPi.kitSubtotal) || 0;
+        }
+
+        const customItemsSubtotal = piItemsList.reduce((acc, it) => {
+          if (it.isPresetItem || it.presetGroupId) return acc;
+          const q = parseFloat(it.qty) || 0;
+          const r = parseFloat(it.rate) || 0;
+          return acc + (q * r);
+        }, 0);
+
+        const calculatedSubtotal = presetKitsSubtotal + customItemsSubtotal;
+        const subtotalVal = (selectedPi.unitValue !== undefined && selectedPi.unitValue !== null && !isNaN(parseFloat(selectedPi.unitValue)) && parseFloat(selectedPi.unitValue) > 0)
+          ? parseFloat(selectedPi.unitValue)
+          : ((selectedPi.subtotal !== undefined && selectedPi.subtotal !== null && !isNaN(parseFloat(selectedPi.subtotal)) && parseFloat(selectedPi.subtotal) > 0)
+            ? parseFloat(selectedPi.subtotal)
+            : (calculatedSubtotal > 0 ? calculatedSubtotal : (piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0))));
+
+        const rawGrandTotal = (selectedPi.grandTotal !== undefined && selectedPi.grandTotal !== null && !isNaN(parseFloat(selectedPi.grandTotal)) && parseFloat(selectedPi.grandTotal) > 0)
+          ? parseFloat(selectedPi.grandTotal)
+          : (parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || 0);
+
+        const grandTotalVal = rawGrandTotal > 0 ? rawGrandTotal : (subtotalVal * 1.18);
+        const authoritativeTax = (selectedPi.taxTotal !== undefined && selectedPi.taxTotal !== null && !isNaN(parseFloat(selectedPi.taxTotal)))
+          ? parseFloat(selectedPi.taxTotal)
+          : Math.max(0, grandTotalVal - subtotalVal);
+        const totalGstVal = authoritativeTax;
+
         const isDraft = (selectedPi.status === 'Draft' || selectedPi.statusType === 'draft');
         const matchedBoms = getConvertedBomsForPi(selectedPi);
         const hasSavedBom = matchedBoms.length > 0;
-        const isConverted = !isDraft && hasSavedBom;
+        const isExplicitConverted = Boolean(
+          selectedPi.status === 'Converted to BOM' || 
+          selectedPi.statusType === 'converted' || 
+          selectedPi.convertedToBom === true || 
+          selectedPi.convertedBomCode || 
+          selectedPi.convertedBomNo
+        );
+        const isConverted = !isDraft && hasSavedBom && (isExplicitConverted || selectedPi.status === 'Converted to BOM');
 
+        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
+        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
+        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
+
+        // Group GST by Rate Tier with Strict Conservation
         const modalGstTiersMap = {};
-        (piItemsList || []).forEach(it => {
-          const q = parseFloat(it.qty) || 1;
-          const r = parseFloat(it.rate) || 0;
-          const taxable = it.taxable !== undefined ? parseFloat(it.taxable) : (q * r);
-          const rate = parseFloat(String(it.gstRate || '18').replace('%', '')) || 18;
-          const amt = taxable * (rate / 100);
-          if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
-          modalGstTiersMap[rate].taxable += taxable;
-          modalGstTiersMap[rate].gstAmt += amt;
-        });
 
-        if (selectedPi.presetGroups) {
-          Object.values(selectedPi.presetGroups).forEach(grp => {
+        // 1. Preset Kits (Kit Lump-Sum Prices)
+        if (Object.keys(presetGroupsMap).length > 0) {
+          Object.values(presetGroupsMap).forEach(grp => {
+            if (!grp) return;
             const unitPrice = parseFloat(grp.kitPrice) || 0;
-            const multiplier = parseInt(grp.setCount) || 1;
+            const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
             const groupTotal = unitPrice * multiplier;
-            const rate = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+            if (groupTotal <= 0) return;
+            const rawRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18';
+            const cleaned = String(rawRate).replace('%', '').trim();
+            const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
             const amt = groupTotal * (rate / 100);
             if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
             modalGstTiersMap[rate].taxable += groupTotal;
@@ -5722,13 +7056,44 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           });
         }
 
-        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
-        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
-        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
+        // 2. Custom Items ONLY (strictly exclude preset component items)
+        piItemsList.forEach(it => {
+          if (it.isPresetItem || it.presetGroupId) return; // Component of preset package - cost is inside presetGroups
+          const q = parseFloat(it.qty) || 0;
+          const r = parseFloat(it.rate) || 0;
+          if (r <= 0) return;
+          const taxable = q * r;
+          const rawRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18';
+          const cleaned = String(rawRate).replace('%', '').trim();
+          const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
+          const amt = taxable * (rate / 100);
+          if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
+          modalGstTiersMap[rate].taxable += taxable;
+          modalGstTiersMap[rate].gstAmt += amt;
+        });
 
-        const modalGstTiers = Object.values(modalGstTiersMap)
-          .filter(t => t.gstAmt > 0 || t.taxable > 0)
+        // 3. Fallback tier if empty but subtotal and tax exist
+        if (Object.keys(modalGstTiersMap).length === 0 && subtotalVal > 0) {
+          modalGstTiersMap[18] = { rate: 18, taxable: subtotalVal, gstAmt: totalGstVal };
+        }
+
+        // 4. Strict Conservation Reconciliation:
+        // Force the sum of all tax tiers to exactly match totalGstVal
+        // Guarantees: subtotalVal + sum(tier.gstAmt) === grandTotalVal (Zero Price Mismatch)
+        let modalGstTiers = Object.values(modalGstTiersMap)
+          .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
           .sort((a, b) => a.rate - b.rate);
+
+        const sumCalculatedGst = modalGstTiers.reduce((s, t) => s + t.gstAmt, 0);
+        if (modalGstTiers.length === 1 && totalGstVal > 0) {
+          modalGstTiers[0].gstAmt = totalGstVal;
+        } else if (modalGstTiers.length > 1 && totalGstVal > 0 && Math.abs(sumCalculatedGst - totalGstVal) > 0.05) {
+          const scale = totalGstVal / (sumCalculatedGst || 1);
+          modalGstTiers = modalGstTiers.map(t => ({
+            ...t,
+            gstAmt: Math.round(t.gstAmt * scale * 100) / 100
+          }));
+        }
 
         return (
           <div
@@ -5838,6 +7203,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     );
                   })()}
                   <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedPi;
+                      setSelectedPi(null);
+                      handleClonePi(target);
+                    }}
+                    title="Clone / Duplicate this Proforma Invoice"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      backgroundColor: '#FFFFFF',
+                      color: '#0F172A',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Copy size={14} style={{ color: '#0E7490' }} /> Clone PI
+                  </button>
+                  <button
                     onClick={() => setPrintModalPi(selectedPi)}
                     title="Open Print & PDF Template"
                     style={{
@@ -5929,58 +7318,43 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           </button>
                         );
                       })}
-                      <button
-                        type="button"
-                        onClick={() => syncPiToZoho(selectedPi)}
-                        disabled={syncingPiNo === selectedPi.piNo}
-                        title={selectedPi.zohoSynced ? `Synced to Zoho Books as Quote #${selectedPi.zohoEstimateNo || selectedPi.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: selectedPi.zohoSynced ? '#F0FDF4' : '#0E7490',
-                          color: selectedPi.zohoSynced ? '#15803D' : '#FFFFFF',
-                          border: selectedPi.zohoSynced ? '1px solid #86EFAC' : 'none',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: '800',
-                          cursor: syncingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: selectedPi.zohoSynced ? 'none' : '0 2px 6px rgba(14,116,144,0.25)',
-                          opacity: syncingPiNo === selectedPi.piNo ? 0.7 : 1
-                        }}
-                      >
-                        {syncingPiNo === selectedPi.piNo ? (
-                          <>
-                            <RotateCcw size={14} className="animate-spin" /> Pushing to Zoho...
-                          </>
-                        ) : selectedPi.zohoSynced ? (
-                          <>
-                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
-                          </>
-                        ) : (
-                          <>
-                            <UploadCloud size={14} /> Push to Zoho
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRevertPiToIssued(selectedPi)}
-                        title="Disconnect BOM and revert this PI back to Issued status"
-                        style={{
-                          padding: '8px 14px',
-                          backgroundColor: '#FFF1F2',
-                          color: '#E11D48',
-                          border: '1px solid #FECDD3',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✕ Revert to Issued
-                      </button>
+                      {!isTechSupportLogin && (
+                        <button
+                          type="button"
+                          onClick={() => syncPiToZoho(selectedPi)}
+                          disabled={syncingPiNo === selectedPi.piNo}
+                          title={selectedPi.zohoSynced ? `Synced to Zoho Books as Quote #${selectedPi.zohoEstimateNo || selectedPi.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: selectedPi.zohoSynced ? '#F0FDF4' : '#0E7490',
+                            color: selectedPi.zohoSynced ? '#15803D' : '#FFFFFF',
+                            border: selectedPi.zohoSynced ? '1px solid #86EFAC' : 'none',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            fontWeight: '800',
+                            cursor: syncingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: selectedPi.zohoSynced ? 'none' : '0 2px 6px rgba(14,116,144,0.25)',
+                            opacity: syncingPiNo === selectedPi.piNo ? 0.7 : 1
+                          }}
+                        >
+                          {syncingPiNo === selectedPi.piNo ? (
+                            <>
+                              <RotateCcw size={14} className="animate-spin" /> Pushing to Zoho...
+                            </>
+                          ) : selectedPi.zohoSynced ? (
+                            <>
+                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
+                            </>
+                          ) : (
+                            <>
+                              <UploadCloud size={14} /> Push to Zoho
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -6015,7 +7389,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <strong style={{ fontSize: '13px', color: '#0E7490', fontFamily: 'monospace' }}>{selectedPi.gstNo || 'Unregistered'}</strong>
                     </div>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Sales Executive / Code</span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Sales Executive / Code</span>
+                        {canAssignPi && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAssignModal(selectedPi)}
+                            style={{
+                              border: 'none',
+                              background: '#ECFEFF',
+                              color: '#0E7490',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <UserCheck size={12} /> Assign / Reassign
+                          </button>
+                        )}
+                      </div>
                       <strong style={{ fontSize: '13px', color: '#334155' }}>
                         {selectedPi.salesPerson || '—'} {selectedPi.salesPersonCode ? `(${selectedPi.salesPersonCode})` : ''}
                       </strong>
@@ -6106,39 +7503,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   )}
                 </div>
 
-                {/* 3b. Preset Kits Section (if presets used) */}
-                {Object.keys(presetGroupsMap).length > 0 && (
-                  <div style={{ backgroundColor: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '14px', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                      <Boxes size={16} color="#15803D" />
-                      <strong style={{ fontSize: '13px', color: '#14532D', textTransform: 'uppercase' }}>
-                        Configured Preset Proposal Kits ({Object.keys(presetGroupsMap).length})
-                      </strong>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-                      {Object.values(presetGroupsMap).map((grp, gIdx) => {
-                        const uPrice = parseFloat(grp.kitPrice) || 0;
-                        const sCount = parseInt(grp.setCount) || 1;
-                        const gTotal = uPrice * sCount;
-                        return (
-                          <div key={gIdx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', borderRadius: '10px', padding: '12px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>{grp.presetName}</div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '6px' }}>
-                              <span>Total Quantity: <strong>{sCount} Set{sCount > 1 ? 's' : ''}</strong></span>
-                              <span>GST: <strong>{grp.gstRate || '18%'}</strong></span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '4px' }}>
-                              <span>Kit Rate: <strong>₹{uPrice.toLocaleString('en-IN')}</strong></span>
-                              <span>Total: <strong style={{ color: '#15803D' }}>₹{gTotal.toLocaleString('en-IN')}</strong></span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. Complete Invoice Line Items & Presets */}
+                {/* 4. Complete Invoice Line Items & Presets (Kit Price in Middle with GST Value) */}
                 <div style={{ border: '1px solid #E2E8F0', borderRadius: '14px', overflow: 'hidden' }}>
                   <div style={{ padding: '12px 18px', backgroundColor: '#F1F5F9', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -6210,6 +7575,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           const itGstPct = parseFloat(String(it.gstRate || '18').replace('%', '')) || 18;
                           const itAmt = isPreset ? null : (itTaxable + (itTaxable * (itGstPct / 100)));
 
+                          // Center-aligned kit pricing and GST calculation
+                          const kUnitPrice = parseFloat(currentGroup?.kitPrice) || 0;
+                          const kSetCount = parseFloat(currentGroup?.setCount || 1) || 1;
+                          const kTaxable = kUnitPrice * kSetCount;
+                          const kGstPct = parseFloat(String(currentGroup?.gstRate || '18').replace('%', '')) || 18;
+                          const kGstAmt = kTaxable * (kGstPct / 100);
+                          const kTotalWithGst = kTaxable + kGstAmt;
+
                           return (
                             <React.Fragment key={idx}>
                               {isFirstInGroup && (
@@ -6240,11 +7613,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           color: theme.tagText,
                                           border: `1px solid ${theme.border}`
                                         }}>
-                                          Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                          {currentGroup?.unit === 'kW' ? `Total Capacity: ${currentGroup?.setCount || 1} kW (${groupCount} components)` : `Total Quantity: ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) !== 1 ? 's' : ''} (${groupCount} components)`}
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong>{(parseInt(currentGroup?.setCount) || 1) > 1 ? ` (${currentGroup?.setCount || 1} Sets × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
+                                        <span style={{ color: '#0E7490', fontWeight: '800' }}>Kit Pricing Center-Aligned Below</span>
                                       </div>
                                     </div>
                                   </td>
@@ -6294,7 +7667,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   </div>
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569', fontSize: '11px', fontFamily: 'monospace', fontWeight: '600' }}>
-                                  {it.hsn || it.hsn_or_sac || selectedPi.hsn || '73089090'}
+                                  {it.hsn || it.hsn_or_sac || getHsnCode(it) || selectedPi.hsn}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                   {(() => {
@@ -6319,30 +7692,97 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <td style={{ padding: '10px 12px', textAlign: 'center', color: '#334155', fontWeight: '600' }}>
                                   {itQty} {it.uom || 'NOS'}
                                 </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
-                                  {isPreset ? (
-                                    <span style={{ fontSize: '11px', color: theme.primary, fontStyle: 'italic', fontWeight: '700' }}>In Kit ({theme.badge})</span>
-                                  ) : (
-                                    `₹ ${itRate.toLocaleString('en-IN')}`
-                                  )}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontWeight: '600' }}>
-                                  {isPreset ? (
-                                    <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
-                                  ) : (
-                                    `₹ ${itTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                                  )}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4338CA', fontWeight: '700' }}>
-                                  {it.gstRate || '18%'}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
-                                  {isPreset ? (
-                                    <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
-                                  ) : (
-                                    `₹ ${(itAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                                  )}
-                                </td>
+                                {isPreset ? (
+                                  isFirstInGroup ? (
+                                    <>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF',
+                                          borderLeft: '1px solid #E2E8F0',
+                                          borderRight: '1px solid #E2E8F0'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '800', color: theme.primary, fontSize: '12px' }}>
+                                          ₹ {kUnitPrice.toLocaleString('en-IN')}
+                                        </div>
+                                        <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '600' }}>
+                                          per {currentGroup?.unit || 'Set'}
+                                        </div>
+                                      </td>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF',
+                                          borderRight: '1px solid #E2E8F0'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px' }}>
+                                          ₹ {kTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </div>
+                                        {kSetCount > 1 && (
+                                          <div style={{ fontSize: '9.5px', color: '#64748B' }}>
+                                            ({kSetCount} × ₹{kUnitPrice.toLocaleString('en-IN')})
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF',
+                                          borderRight: '1px solid #E2E8F0'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '800', color: '#4338CA', fontSize: '11.5px' }}>
+                                          {kGstPct}%
+                                        </div>
+                                        <div style={{ fontSize: '10px', fontWeight: '700', color: '#166534', marginTop: '2px' }}>
+                                          ₹ {kGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </div>
+                                      </td>
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '10px 12px',
+                                          textAlign: 'center',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: '#FFFFFF'
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: '900', color: '#0E7490', fontSize: '13px' }}>
+                                          ₹ {kTotalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </div>
+                                        <div style={{ fontSize: '9px', fontWeight: '700', color: '#64748B' }}>
+                                          Total (with GST)
+                                        </div>
+                                      </td>
+                                    </>
+                                  ) : null
+                                ) : (
+                                  <>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                                      ₹ {itRate.toLocaleString('en-IN')}
+                                    </td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontWeight: '600' }}>
+                                      ₹ {itTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4338CA', fontWeight: '700' }}>
+                                      {it.gstRate || '18%'}
+                                    </td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
+                                      ₹ {(itAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </>
+                                )}
                               </tr>
                             </React.Fragment>
                           );
@@ -6410,10 +7850,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <span>Taxable Product Value:</span>
                       <strong style={{ color: '#0F172A' }}>₹ {subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </div>
-                    {selectedPi.kitSubtotal > 0 && (
+                    {(presetKitsSubtotal > 0 || selectedPi.kitSubtotal > 0) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
                         <span>Preset Kits Subtotal:</span>
-                        <strong style={{ color: '#0F172A' }}>₹ {Number(selectedPi.kitSubtotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        <strong style={{ color: '#0F172A' }}>₹ {(presetKitsSubtotal > 0 ? presetKitsSubtotal : Number(selectedPi.kitSubtotal)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                       </div>
                     )}
                     {modalGstTiers.length > 0 ? (
@@ -6439,15 +7879,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         ))
                       )
                     ) : (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                        <span>Applicable GST (Taxes):</span>
-                        <strong style={{ color: '#0F172A' }}>₹ {totalGstVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                      </div>
+                      totalGstVal > 0 ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                          <span>Applicable GST (Taxes):</span>
+                          <strong style={{ color: '#0F172A' }}>₹ {totalGstVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        </div>
+                      ) : null
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #0E7490', marginTop: '4px' }}>
                       <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>Total Invoice Amount:</span>
                       <strong style={{ fontSize: '18px', fontWeight: '900', color: '#0E7490' }}>
-                        {selectedPi.amount ? (selectedPi.amount.startsWith('₹') ? selectedPi.amount : `₹ ${selectedPi.amount}`) : `₹ ${grandTotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        ₹ {grandTotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </strong>
                     </div>
                   </div>
@@ -6527,6 +7969,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </button>
                   )}
 
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedPi;
+                      setSelectedPi(null);
+                      handleClonePi(target);
+                    }}
+                    title="Clone / Duplicate this Proforma Invoice"
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: '10px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#0F172A',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Copy size={15} style={{ color: '#0E7490' }} /> Clone PI
+                  </button>
+
                   {selectedPi.status !== 'Cancelled' && !isConverted && (
                     <button
                       type="button"
@@ -6553,22 +8020,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                   {isConverted ? (
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleRevertPiToIssued(selectedPi)}
-                        style={{
-                          padding: '10px 16px',
-                          borderRadius: '10px',
-                          border: '1.5px solid #CBD5E1',
-                          backgroundColor: '#FFFFFF',
-                          color: '#64748B',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Revert to Issued (Unlink BOM)
-                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -6600,7 +8051,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </button>
                     </div>
                   ) : (
-                    selectedPi.status !== 'Cancelled' && selectedPi.status !== 'Draft' && (
+                    !isTechSupportLogin && selectedPi.status !== 'Cancelled' && selectedPi.status !== 'Draft' && (
                       <button
                         type="button"
                         onClick={() => {
@@ -6997,6 +8448,254 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         </div>
       )}
 
+      {/* ==================== FLOATING ACTION BAR: CONVERT SELECTED TO PRESET ==================== */}
+      {selectedStandaloneIndexes.length > 0 && !showConvertPresetModal && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '50px',
+          boxShadow: '0 10px 30px -5px rgba(0,0,0,0.15), 0 4px 6px -2px rgba(0,0,0,0.05)',
+          padding: '8px 16px',
+          display: 'flex',
+          flexDirection: 'row',
+          flexWrap: 'nowrap',
+          alignItems: 'center',
+          whiteSpace: 'nowrap',
+          gap: '10px',
+          zIndex: 10000,
+          width: 'max-content',
+          maxWidth: 'calc(100vw - 32px)'
+        }}>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0E7490', backgroundColor: '#ECFEFF', padding: '4px 12px', borderRadius: '20px' }}>
+            {selectedStandaloneIndexes.length} Selected
+          </span>
+          <button
+            type="button"
+            onClick={() => { setConvertPresetName(''); setConvertPresetPrice(''); setShowConvertPresetModal(true); }}
+            style={{ border: 'none', backgroundColor: '#0D9488', color: '#FFFFFF', height: '34px', padding: '0 14px', borderRadius: '20px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800 }}
+          >
+            <Layers size={14} /> Convert to Preset
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPiItems(prev => (prev || []).filter((_, idx) => !selectedStandaloneIndexes.includes(idx)));
+              setSelectedItemIndexes([]);
+            }}
+            style={{ border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#DC2626', height: '34px', padding: '0 14px', borderRadius: '20px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800 }}
+          >
+            <Trash2 size={14} /> Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedItemIndexes([])}
+            title="Clear selection"
+            style={{ border: 'none', background: '#F1F5F9', color: '#64748B', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* ==================== CONVERT STANDALONE ITEMS TO PI-ONLY PRESET ==================== */}
+      {showConvertPresetModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <form onSubmit={handleConvertSelectedToPreset} style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', width: '480px', maxWidth: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0' }}>
+            <div style={{ padding: '18px 20px', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="#0D9488" /> Convert to Preset
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#0D9488' }}>
+                  {selectedStandaloneIndexes.length} standalone item(s) · applies to this PI only
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowConvertPresetModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Preset Name</label>
+                <input autoFocus type="text" value={convertPresetName} onChange={(e) => setConvertPresetName(e.target.value)} placeholder="e.g. Site A Fasteners Kit" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Preset Amount (₹)</label>
+                  <input type="number" min="0" value={convertPresetPrice} onChange={(e) => setConvertPresetPrice(e.target.value)} placeholder="Full preset price" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>GST</label>
+                  <select value={convertPresetGst} onChange={(e) => setConvertPresetGst(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}>
+                    <option value="0%">0%</option>
+                    <option value="5%">5%</option>
+                    <option value="12%">12%</option>
+                    <option value="18%">18%</option>
+                    <option value="28%">28%</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '14px 20px', backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" onClick={() => setShowConvertPresetModal(false)} style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>Cancel</button>
+              <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#0D9488', color: '#FFFFFF', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}>Convert to Preset</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ==================== NESTED SUB-PRESET MODAL (PRESET INSIDE PRESET) ==================== */}
+      {subPresetModalGroup && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 999999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            width: '520px',
+            maxWidth: '100%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            overflow: 'visible',
+            border: '1px solid #E2E8F0'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 20px',
+              backgroundColor: '#F0FDFA',
+              borderTopLeftRadius: '16px',
+              borderTopRightRadius: '16px',
+              borderBottom: '1px solid #CCFBF1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="#0D9488" />
+                  Nest Sub-Preset Kit
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#0D9488' }}>
+                  Embedding inside <strong>{presetGroups[subPresetModalGroup]?.presetName || 'Primary Preset'}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSubPresetModalGroup(null)}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Select Secondary Preset to Nest Inside:
+                </label>
+                <SearchablePresetSelector
+                  value={nestedSubPresetVal}
+                  activePresetsMap={activePresetsMap}
+                  accentColor="#0D9488"
+                  width="100%"
+                  placeholder="Search and pick secondary preset to nest..."
+                  onChange={(val) => {
+                    setNestedSubPresetVal(val);
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Sub-Preset Multiplier (Quantity / Sets)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={nestedSubPresetCount}
+                  onChange={(e) => setNestedSubPresetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  style={{
+                    width: '100%',
+                    height: '38px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    padding: '0 12px',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 20px',
+              backgroundColor: '#F8FAFC',
+              borderBottomLeftRadius: '16px',
+              borderBottomRightRadius: '16px',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setSubPresetModalGroup(null)}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!nestedSubPresetVal}
+                onClick={() => {
+                  const target = activePresetsMap?.[nestedSubPresetVal] || VRM_HDG_PRESETS?.[nestedSubPresetVal];
+                  if (target) {
+                    handleAttachSubPresetToGroup(subPresetModalGroup, nestedSubPresetVal, target, nestedSubPresetCount);
+                  }
+                }}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: nestedSubPresetVal ? '#0D9488' : '#94A3B8',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: nestedSubPresetVal ? 'pointer' : 'not-allowed',
+                  boxShadow: nestedSubPresetVal ? '0 2px 6px rgba(13, 148, 136, 0.3)' : 'none'
+                }}
+              >
+                Bundle Inside Preset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ==================== CREATE CUSTOM SET MODAL (THIS PI ALONE) ==================== */}
       {showCreateSetModal && (
         <div
@@ -7079,17 +8778,62 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 />
               </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Pricing / Capacity Unit
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('Sets')}
+                    style={{
+                      flex: 1, height: '36px', borderRadius: '8px',
+                      border: newSetUnit === 'Sets' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1',
+                      backgroundColor: newSetUnit === 'Sets' ? '#F5F3FF' : '#FFFFFF',
+                      color: newSetUnit === 'Sets' ? '#7C3AED' : '#475569',
+                      fontWeight: '800', fontSize: '12.5px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    <span>Sets (Set-based)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('kW')}
+                    style={{
+                      flex: 1, height: '36px', borderRadius: '8px',
+                      border: newSetUnit === 'kW' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1',
+                      backgroundColor: newSetUnit === 'kW' ? '#F5F3FF' : '#FFFFFF',
+                      color: newSetUnit === 'kW' ? '#7C3AED' : '#475569',
+                      fontWeight: '800', fontSize: '12.5px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    <span>kW (Kilowatt Capacity)</span>
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Number of Sets
+                    {newSetUnit === 'kW' ? 'Capacity (kW)' : 'Number of Sets'}
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    max="999"
+                    min={newSetUnit === 'kW' ? '0.01' : '1'}
+                    step={newSetUnit === 'kW' ? 'any' : '1'}
+                    max="99999"
                     value={newSetCount}
-                    onChange={(e) => setNewSetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setNewSetCount('');
+                        return;
+                      }
+                      setNewSetCount(newSetUnit === 'kW' ? (parseFloat(val) || '') : (parseInt(val) || ''));
+                    }}
+                    placeholder={newSetUnit === 'kW' ? 'e.g. 50 or 10.5' : '1'}
                     style={{
                       width: '100%', height: '40px', borderRadius: '8px',
                       border: '1.5px solid #CBD5E1', padding: '0 12px',
@@ -7113,17 +8857,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       outline: 'none', boxSizing: 'border-box', backgroundColor: 'white'
                     }}
                   >
-                    <option value="18%">18% (Standard)</option>
+                    <option value="18%">18%</option>
                     <option value="12%">12%</option>
-                    <option value="5%">5% (Solar / TopCon)</option>
-                    <option value="0%">0% (Exempt)</option>
+                    <option value="5%">5%</option>
+                    <option value="0%">0%</option>
                   </select>
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Kit / Set Lump-Sum Price (₹) <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
+                  {newSetUnit === 'kW' ? 'Rate per kW (₹)' : 'Kit / Set Lump-Sum Price (₹)'} <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
                 </label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: '#64748B' }}>₹</span>
@@ -7133,7 +8877,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     step="any"
                     value={newSetPrice}
                     onChange={(e) => setNewSetPrice(e.target.value)}
-                    placeholder="Enter total taxable price for 1 set"
+                    placeholder={newSetUnit === 'kW' ? 'Enter rate per 1 kW' : 'Enter total taxable price for 1 set'}
                     style={{
                       width: '100%', height: '40px', borderRadius: '8px',
                       border: '1.5px solid #CBD5E1', padding: '0 12px 0 28px',
@@ -7244,6 +8988,200 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== ASSIGN / REASSIGN PROFORMA INVOICE MODAL ==================== */}
+      {showAssignPiModal && assignPiTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '16px'
+          }}
+          onClick={() => {
+            if (!isAssigningPi) {
+              setShowAssignPiModal(false);
+              setAssignPiTarget(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserCheck size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    Assign Proforma Invoice
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>
+                    {assignPiTarget.piNo || assignPiTarget.id} · {assignPiTarget.vendor || assignPiTarget.customerName || 'Customer'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAssigningPi) {
+                    setShowAssignPiModal(false);
+                    setAssignPiTarget(null);
+                  }
+                }}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Order Summary Strip */}
+              <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: '12px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '12px' }}>
+                <div>
+                  <span style={{ color: '#0F766E', display: 'block', fontSize: '11px', fontWeight: '700' }}>Current Assigned Rep</span>
+                  <strong style={{ color: '#0F172A' }}>
+                    {assignPiTarget.salesPerson || assignPiTarget.salesperson || assignPiTarget.createdBy || 'Unassigned / Direct'}
+                  </strong>
+                  {assignPiTarget.salesPersonCode && (
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10.5px' }}>({assignPiTarget.salesPersonCode})</span>
+                  )}
+                </div>
+                <div>
+                  <span style={{ color: '#0F766E', display: 'block', fontSize: '11px', fontWeight: '700' }}>PI Grand Total</span>
+                  <strong style={{ color: '#0E7490', fontSize: '14px' }}>
+                    ₹ {Number(assignPiTarget.grandTotal || assignPiTarget.totalAmount || assignPiTarget.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Target Salesperson Select */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Assign To Sales Executive <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <select
+                  value={selectedSalespersonCode}
+                  onChange={(e) => setSelectedSalespersonCode(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    padding: '0 12px',
+                    fontSize: '13px',
+                    color: '#0F172A',
+                    fontWeight: '600',
+                    outline: 'none',
+                    backgroundColor: '#FFFFFF'
+                  }}
+                >
+                  <option value="">— Select Sales Executive —</option>
+                  {salespersonsList.map((sp) => (
+                    <option key={sp.employee_code} value={sp.employee_code}>
+                      {sp.employee_name} ({sp.employee_code}) — {sp.role || 'Sales Executive'}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                  The selected sales executive will immediately see this PI in their Sales login and can convert it to a BOM Order.
+                </span>
+              </div>
+
+              {/* Reason / Notes */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Assignment Note / Instructions (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={assignReason}
+                  onChange={(e) => setAssignReason(e.target.value)}
+                  placeholder="e.g. Lead inquiry verified by Tech Support, kindly follow up with client and convert to BOM..."
+                  style={{
+                    width: '100%',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    padding: '10px 12px',
+                    fontSize: '12.5px',
+                    color: '#0F172A',
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Audit trail indicator */}
+              <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', color: '#64748B', lineHeight: '1.5' }}>
+                <span style={{ fontWeight: '700', color: '#0F172A' }}>Permanent Audit Rule:</span> Your name (<strong>{currentEmpName || userRole || 'Tech Support'}</strong>) will be recorded permanently in the Proforma Invoice history.
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'flex-end', gap: '10px', backgroundColor: '#F8FAFC' }}>
+              <button
+                type="button"
+                disabled={isAssigningPi}
+                onClick={() => {
+                  setShowAssignPiModal(false);
+                  setAssignPiTarget(null);
+                }}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: isAssigningPi ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isAssigningPi || !selectedSalespersonCode}
+                onClick={handleConfirmAssignPi}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: (!isAssigningPi && selectedSalespersonCode) ? '#0E7490' : '#94A3B8',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: (!isAssigningPi && selectedSalespersonCode) ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: (!isAssigningPi && selectedSalespersonCode) ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
+                }}
+              >
+                {isAssigningPi ? 'Assigning...' : 'Confirm Assignment'}
+              </button>
             </div>
           </div>
         </div>

@@ -4,10 +4,13 @@ import {
   CheckCircle2, Clock, AlertCircle, Building2, User, Mail, ExternalLink,
   ChevronRight, RefreshCw, X, ShieldAlert, Sparkles, Tag, Eye, MoreHorizontal,
   FileText, Check, ChevronDown, Zap, Send, TrendingUp, Layers, Award,
-  Trash2, UserCheck, RotateCcw, Download, Printer, MapPin, ChevronLeft,
-  ChevronsLeft, ChevronsRight, AlertTriangle, Flame, PhoneCall, Users,
-  FileCheck2, Compass, ShieldCheck, HelpCircle
+  Trash2, UserCheck, RotateCcw, Download, Printer, ChevronLeft,
+  ChevronsLeft, ChevronsRight, AlertTriangle, PhoneCall, Users,
+  FileCheck2, Compass, Edit3, UserPlus, Lock
 } from 'lucide-react';
+import Lead360PageView, { LEAD_STAGES, getStageRank, canTransitionStage } from './Lead360PageView';
+import { getNextSequence } from '../../utils/sequenceGenerator';
+import NotificationToast from '../NotificationToast';
 
 const STRUCTURE_CATEGORIES = [
   'Aluminium Mounting Structures',
@@ -22,8 +25,12 @@ const STRUCTURE_CATEGORIES = [
 export default function CrmLeadsView({
   userRole = 'Sales Executive',
   customers = [],
+  quotations = [],
+  opportunities = [],
+  boms = [],
   onNavigateTab,
-  onOpenWhatsAppChat
+  onOpenWhatsAppChat,
+  onConvertLead
 }) {
   // Current Logged In User Identity
   const loggedInEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
@@ -31,15 +38,24 @@ export default function CrmLeadsView({
   const loggedInEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
   // Role Checks
-  const isCeo = ['ceo', 'md', 'managing director'].some(r => (userRole || '').toLowerCase().includes(r));
-  const isTechSupport = ['tech support', 'technical support'].some(r => (userRole || '').toLowerCase().includes(r));
-  const isSalesHead = (userRole || '').toLowerCase().includes('sales head');
-  const isTechAdmin = ['technical administrator', 'technical admin', 'developer'].some(r => (userRole || '').toLowerCase().includes(r));
+  const effectiveRole = (typeof window !== 'undefined' ? (localStorage.getItem('controlroom_user_role') || userRole) : userRole) || '';
+  const effectiveRoleLower = effectiveRole.toLowerCase();
+  const empCodeUpper = (loggedInEmpId || '').toUpperCase().trim();
+  const userNameLower = (loggedInUserName || '').toLowerCase().trim();
+
+  const isCeo = ['ceo', 'md', 'managing director'].some(r => effectiveRoleLower.includes(r)) || empCodeUpper.startsWith('CEO-') || userNameLower.includes('ceo') || userNameLower.includes('md');
+  const isTechSupport = ['tech support', 'technical support', 'tech_support'].some(r => effectiveRoleLower.includes(r)) || empCodeUpper.startsWith('TS-') || userNameLower.includes('tech support') || userNameLower.includes('support');
+  const isSalesHead = effectiveRoleLower.includes('sales head') || empCodeUpper.startsWith('SH-');
+  const isTechAdmin = ['technical administrator', 'technical admin', 'developer', 'ta', 'admin', 'super admin'].some(r => effectiveRoleLower.includes(r)) || empCodeUpper.startsWith('TA-') || empCodeUpper.startsWith('ADM-');
+  const isSalesPerson = (effectiveRoleLower.includes('sales') && !isSalesHead && !isCeo && !isTechSupport && !isTechAdmin);
   const isSalesExec = !isCeo && !isTechSupport && !isSalesHead && !isTechAdmin;
 
-  // Global Visibility Privileges
-  const hasGlobalView = isCeo || isTechSupport || isSalesHead || isTechAdmin;
-  const canAssign = isCeo || isTechSupport || isSalesHead || isTechAdmin;
+  // Lead Creation Privilege: strictly CEO/MD and Tech Support / Tech Admin alone (NEVER sales person / sales executive / sales head)
+  const canCreateLead = (isCeo || isTechSupport || isTechAdmin) && !isSalesPerson;
+
+  // Global Visibility Privileges: strictly CEO/MD and Tech Support / Tech Admin / Sales Head / Admin
+  const hasGlobalView = isCeo || isTechSupport || isTechAdmin || isSalesHead;
+  const canAssign = isCeo || isTechSupport || isTechAdmin;
 
   // Master State from Authoritative PostgreSQL API
   const [dbLeads, setDbLeads] = useState([]);
@@ -54,6 +70,10 @@ export default function CrmLeadsView({
 
   // Interactive Selection State
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
+
+  // Page mode: 'table' | '360' (Dedicated full-page 360° intelligence view)
+  const [viewMode, setViewMode] = useState('table');
+  const [editingLead, setEditingLead] = useState(null);
 
   // Modals & Drawers
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -83,11 +103,12 @@ export default function CrmLeadsView({
     email: '',
     location: '',
     source: 'Direct Inbound',
-    productRequirement: '50kW Aluminium Rooftop Mounting Structures',
-    category: 'Aluminium Mounting Structures',
-    estimatedKw: '50',
+    productRequirement: '',
+    category: '',
+    estimatedKw: '',
     notes: '',
     priority: 'MEDIUM',
+    status: 'New',
     assignedToId: '',
     assignedToName: '',
     assignedToRole: ''
@@ -118,12 +139,14 @@ export default function CrmLeadsView({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Fetch Authoritative Leads from Backend
-  const fetchLeads = async () => {
+  // Fetch Authoritative Leads from Backend (Supports silent background updates to prevent UI blinking)
+  const fetchLeads = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent && (!dbLeads || dbLeads.length === 0)) {
+        setIsLoading(true);
+      }
       const headers = {
-        'x-user-role': userRole,
+        'x-user-role': effectiveRole || userRole,
         'x-user-emp-id': loggedInEmpId,
         'x-user-name': loggedInUserName
       };
@@ -136,7 +159,9 @@ export default function CrmLeadsView({
     } catch (err) {
       console.error('Failed to load leads from database:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -157,8 +182,19 @@ export default function CrmLeadsView({
   const fetchNotifications = async () => {
     if (!loggedInEmpId) return;
     try {
-      const res = await fetch(`/api/crm/leads/notifications?employeeCode=${encodeURIComponent(loggedInEmpId)}`, {
-        headers: { 'x-user-emp-id': loggedInEmpId }
+      const sessionId = (typeof localStorage !== 'undefined')
+        ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '')
+        : '';
+      const currentRole = effectiveRole || userRole || '';
+      const headers = { 
+        'x-user-emp-id': loggedInEmpId,
+        'x-user-role': currentRole,
+        'x-user-name': loggedInUserName
+      };
+      if (sessionId) headers['x-session-id'] = sessionId;
+
+      const res = await fetch(`/api/crm/leads/notifications?employeeCode=${encodeURIComponent(loggedInEmpId)}&role=${encodeURIComponent(currentRole)}`, {
+        headers
       });
       const json = await res.json();
       if (json?.success && Array.isArray(json.notifications)) {
@@ -174,19 +210,65 @@ export default function CrmLeadsView({
     fetchSalespersons();
     fetchNotifications();
 
-    // Periodic Refresh every 45s
+    const handleRealtimeNotif = (e) => {
+      const notif = e.detail;
+      if (notif) {
+        setNotifications(prev => [notif, ...(prev || []).filter(n => n.id !== notif.id)]);
+        fetchLeads(true);
+        if (typeof showToast === 'function' && notif.title) {
+          showToast(notif.title);
+        }
+      }
+    };
+
+    const handleCrmUpdated = (e) => {
+      const detail = e.detail;
+      if (detail && detail.leadId) {
+        // Targeted real-time update in local state without full reload
+        setDbLeads(prev => (prev || []).map(l => {
+          if (l.id === detail.leadId || l.lead_number === detail.leadId) {
+            return {
+              ...l,
+              status: detail.newStatus || detail.status || l.status,
+              is_converted: detail.is_converted !== undefined ? detail.is_converted : l.is_converted
+            };
+          }
+          return l;
+        }));
+        setActiveLead(curr => {
+          if (curr && (curr.id === detail.leadId || curr.lead_number === detail.leadId)) {
+            return {
+              ...curr,
+              status: detail.newStatus || detail.status || curr.status,
+              is_converted: detail.is_converted !== undefined ? detail.is_converted : curr.is_converted
+            };
+          }
+          return curr;
+        });
+      }
+      fetchLeads(true);
+    };
+
+    window.addEventListener('businz_notification_received', handleRealtimeNotif);
+    window.addEventListener('controlroom_crm_updated', handleCrmUpdated);
+
+    // Periodic Refresh every 45s (silent background fetch to prevent UI blinking)
     const timer = setInterval(() => {
-      fetchLeads();
+      fetchLeads(true);
       fetchNotifications();
     }, 45000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('businz_notification_received', handleRealtimeNotif);
+      window.removeEventListener('controlroom_crm_updated', handleCrmUpdated);
+    };
   }, [userRole, loggedInEmpId]);
 
-  // Load Lead Detailed History for Drawer
+  // Load Lead Detailed History and Open Lead 360° Intelligence View
   const openLeadDetail = async (lead) => {
     setActiveLead(lead);
-    setShowDetailDrawer(true);
+    setViewMode('360');
     setIsDetailLoading(true);
     try {
       const res = await fetch(`/api/crm/leads/${lead.id}`);
@@ -216,7 +298,7 @@ export default function CrmLeadsView({
     const revisions = list.reduce((sum, l) => sum + Number(l.total_revisions || 0), 0);
     const converted = list.filter(l => l.status === 'Converted' || Number(l.quotes_accepted || 0) > 0).length;
     const dropped = list.filter(l => ['Dropped', 'Lost', 'Disqualified'].includes(l.status)).length;
-    const unattended24h = list.filter(l => l.is_unattended_24h).length;
+    const unattended2h = list.filter(l => l.is_unattended_2h || l.is_unattended_24h).length;
     const escalated48h = list.filter(l => l.is_unattended_48h).length;
 
     const followupsToday = list.filter(l => {
@@ -236,7 +318,7 @@ export default function CrmLeadsView({
       { label: 'Quote Revisions', val: revisions, color: '#9333EA', bg: '#FAF5FF', icon: RotateCcw },
       { label: 'Converted Won', val: converted, color: '#059669', bg: '#ECFDF5', icon: Award },
       { label: 'Dropped / Lost', val: dropped, color: '#64748B', bg: '#F1F5F9', icon: Trash2 },
-      { label: '24h Inactive', val: unattended24h, color: '#EA580C', bg: '#FFF7ED', icon: Clock },
+      { label: '2h Inactive', val: unattended2h, color: '#EA580C', bg: '#FFF7ED', icon: Clock },
       { label: '48h Escalated', val: escalated48h, color: '#DC2626', bg: '#FEF2F2', icon: AlertCircle },
       { label: 'Follow-ups Today', val: followupsToday, color: '#0891B2', bg: '#ECFEFF', icon: Calendar },
       { label: 'IndiaMART Inbound', val: indiamartLeads, color: '#B45309', bg: '#FFFBEB', icon: Compass }
@@ -251,7 +333,7 @@ export default function CrmLeadsView({
     const inProgress = list.filter(l => ['Assigned', 'Contacted', 'In Progress'].includes(l.status)).length;
     const proposals = list.filter(l => l.status === 'Proposal Sent').length;
     const converted = list.filter(l => l.status === 'Converted').length;
-    const inactive24h = list.filter(l => l.is_unattended_24h && !l.is_unattended_48h).length;
+    const inactive2h = list.filter(l => (l.is_unattended_2h || l.is_unattended_24h) && !l.is_unattended_48h).length;
     const escalated48h = list.filter(l => l.is_unattended_48h).length;
     const dropped = list.filter(l => ['Dropped', 'Lost', 'Disqualified'].includes(l.status)).length;
 
@@ -259,9 +341,9 @@ export default function CrmLeadsView({
       { id: 'All', label: 'All Leads', count: total, bg: '#F1F5F9', color: '#475569' },
       { id: 'Unassigned', label: 'Unassigned', count: unassigned, bg: '#FEF3C7', color: '#B45309' },
       { id: 'Contacted', label: 'In Progress', count: inProgress, bg: '#E0F2FE', color: '#0369A1' },
-      { id: 'Proposal Sent', label: 'Quotations Sent', count: proposals, bg: '#F3E8FF', color: '#7E22CE' },
+      { id: 'Proposal Sent', label: 'Proposals', count: proposals, bg: '#F3E8FF', color: '#7E22CE' },
       { id: 'Converted', label: 'Converted', count: converted, bg: '#DCFCE7', color: '#15803D' },
-      { id: '24h Inactive', label: '24h Inactive', count: inactive24h, bg: '#FFF7ED', color: '#EA580C' },
+      { id: '2h Inactive', label: '2h Inactive', count: inactive2h, bg: '#FFF7ED', color: '#EA580C' },
       { id: '48h Escalated', label: '48h Escalated', count: escalated48h, bg: '#FEF2F2', color: '#DC2626' },
       { id: 'Dropped', label: 'Dropped', count: dropped, bg: '#F1F5F9', color: '#64748B' }
     ];
@@ -292,8 +374,8 @@ export default function CrmLeadsView({
         matchStatus = !lead.assigned_to_user_id || lead.status === 'New';
       } else if (statusFilter === 'Contacted') {
         matchStatus = ['Assigned', 'Contacted', 'In Progress'].includes(lead.status);
-      } else if (statusFilter === '24h Inactive') {
-        matchStatus = lead.is_unattended_24h;
+      } else if (statusFilter === '2h Inactive' || statusFilter === '24h Inactive') {
+        matchStatus = lead.is_unattended_2h || lead.is_unattended_24h;
       } else if (statusFilter === '48h Escalated') {
         matchStatus = lead.is_unattended_48h;
       } else if (statusFilter === 'Dropped') {
@@ -302,12 +384,40 @@ export default function CrmLeadsView({
         matchStatus = lead.status === statusFilter;
       }
 
+      // Salesperson data isolation: Sales persons see leads assigned to them + unassigned leads
+      if (!hasGlobalView) {
+        const myEmp = (loggedInEmpId || '').toLowerCase().trim();
+        const myName = (loggedInUserName || '').toLowerCase().trim();
+        const assignedId = (lead.assigned_to_user_id || '').toLowerCase().trim();
+        const assignedName = (lead.assigned_to_name || lead.assigned_salesperson || '').toLowerCase().trim();
+
+        const isGenericSales = (effectiveRoleLower.includes('sales') && (myEmp === 'se-001' || myName === 'sales executive' || !myEmp));
+        const matchedSalesperson = (salespersons || []).find(s => 
+          (s.employee_code && s.employee_code.toLowerCase() === myEmp) ||
+          (s.employee_name && s.employee_name.toLowerCase().includes(myName)) ||
+          (s.employee_name && myName.includes(s.employee_name.toLowerCase()))
+        );
+        const activeRepCode = (matchedSalesperson?.employee_code || (isGenericSales ? 'se-1000' : myEmp)).toLowerCase();
+        const activeRepName = (matchedSalesperson?.employee_name || myName).toLowerCase();
+
+        const isUnassigned = !lead.assigned_to_user_id || lead.status === 'New';
+        const isAssignedToMe = (
+          isUnassigned ||
+          (myEmp && (assignedId === myEmp || assignedName.includes(myEmp) || (assignedId && myEmp.includes(assignedId)))) ||
+          (myName && (assignedName.includes(myName) || (assignedName && myName.includes(assignedName)))) ||
+          (activeRepCode && (assignedId === activeRepCode || assignedName.includes(activeRepCode))) ||
+          (activeRepName && (assignedName.includes(activeRepName) || activeRepName.includes(assignedName))) ||
+          (isGenericSales && (lead.assigned_to_role || '').toLowerCase().includes('sales'))
+        );
+        if ((myEmp || myName || activeRepCode) && !isAssignedToMe) return false;
+      }
+
       const matchSource = sourceFilter === 'All' || lead.source === sourceFilter;
       const matchAssigned = assignedFilter === 'All' || lead.assigned_to_user_id === assignedFilter;
 
       return matchSearch && matchStatus && matchSource && matchAssigned;
     });
-  }, [dbLeads, searchQuery, statusFilter, sourceFilter, assignedFilter]);
+  }, [dbLeads, searchQuery, statusFilter, sourceFilter, assignedFilter, hasGlobalView, loggedInEmpId, loggedInUserName]);
 
   // Pagination Slice
   const totalEntries = filteredLeads.length;
@@ -332,7 +442,117 @@ export default function CrmLeadsView({
     );
   };
 
-  // Submit Lead Creation
+  // Open Edit Modal for Lead
+  const handleOpenEditModal = (targetLead) => {
+    const l = targetLead || activeLead;
+    if (!l) return;
+    const isConverted = Boolean(
+      l.status === 'Converted' ||
+      l.status === 'Won' ||
+      l.is_converted ||
+      l.converted_customer_code ||
+      l.convertedCustomerCode ||
+      l.converted_customer_id
+    );
+    if (isConverted) {
+      alert('This lead has already been converted to a Customer and cannot be edited. Its details are locked.');
+      return;
+    }
+    setEditingLead(l);
+    setCreateForm({
+      companyName: l.company_name || l.companyName || '',
+      contactPerson: l.contact_person || l.contactPerson || '',
+      designation: l.designation || '',
+      phone: l.phone || '',
+      whatsapp: l.whatsapp || '',
+      email: l.email || '',
+      location: l.location || '',
+      source: l.source || 'Direct Inbound',
+      productRequirement: l.product_requirement || l.productRequirement || '',
+      category: l.category || '',
+      estimatedKw: l.estimated_kw || l.estimatedKw || '',
+      notes: l.notes || '',
+      priority: l.priority || 'MEDIUM',
+      status: l.status || 'New',
+      assignedToId: l.assigned_to_user_id || '',
+      assignedToName: l.assigned_to_name || '',
+      assignedToRole: l.assigned_to_role || ''
+    });
+    setShowCreateModal(true);
+  };
+
+  // Direct Status Transition from Lead 360 View
+  const handleUpdateStatusDirect = async (newStatus, remarks = '') => {
+    if (!activeLead?.id) return;
+    const isLeadConverted = Boolean(
+      activeLead.status === 'Converted' ||
+      activeLead.status === 'Won' ||
+      activeLead.is_converted ||
+      activeLead.converted_customer_code ||
+      activeLead.convertedCustomerCode ||
+      activeLead.converted_customer_id
+    );
+    if (isLeadConverted) {
+      alert('This lead has already been converted to a Customer. Stages are locked.');
+      return;
+    }
+    if (!canTransitionStage(activeLead.status, newStatus)) {
+      alert(`Stages cannot be reversed. Lead stage can only progress forward from "${activeLead.status}".`);
+      return;
+    }
+
+    const previousStatus = activeLead.status;
+    const previousActiveLead = { ...activeLead };
+
+    // Optimistic UI update: instantly update UI so user sees the change in real-time
+    const updatedLead = {
+      ...activeLead,
+      status: newStatus,
+      is_converted: ['Converted', 'Won'].includes(newStatus) ? true : activeLead.is_converted
+    };
+    setActiveLead(updatedLead);
+    setDbLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? { ...l, status: newStatus } : l));
+    if (leadDetailData && (leadDetailData.id === activeLead.id || leadDetailData.lead_number === activeLead.id)) {
+      setLeadDetailData(prev => prev ? { ...prev, status: newStatus } : prev);
+    }
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-role': userRole,
+        'x-user-emp-id': loggedInEmpId,
+        'x-user-name': loggedInUserName
+      };
+      const res = await fetch(`/api/crm/leads/${activeLead.id}/status`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ status: newStatus, remarks })
+      });
+      const data = await res.json();
+      if (data?.success) {
+        showToast(`Lead status updated to "${newStatus}"!`);
+        fetchLeads(true);
+        const detRes = await fetch(`/api/crm/leads/${activeLead.id}`);
+        const detJson = await detRes.json();
+        if (detJson?.success && detJson.data) {
+          setLeadDetailData(detJson.data);
+          setActiveLead(detJson.data);
+        }
+      } else {
+        // Rollback on server failure
+        setActiveLead(previousActiveLead);
+        setDbLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
+        alert(data.error || 'Failed to update status');
+      }
+    } catch (err) {
+      // Rollback on network failure
+      setActiveLead(previousActiveLead);
+      setDbLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
+      alert(err.message);
+    }
+  };
+
+  // Submit Lead Creation or Update
   const handleCreateLead = async (e) => {
     e.preventDefault();
     if (!createForm.phone || !createForm.phone.trim()) {
@@ -343,10 +563,42 @@ export default function CrmLeadsView({
     try {
       const headers = {
         'Content-Type': 'application/json',
-        'x-user-role': userRole,
+        'x-user-role': effectiveRole || userRole,
         'x-user-emp-id': loggedInEmpId,
         'x-user-name': loggedInUserName
       };
+
+      if (editingLead) {
+        if (createForm.status && !canTransitionStage(editingLead.status, createForm.status)) {
+          alert(`Lead stage cannot be reversed. "${editingLead.status}" cannot be moved backward to "${createForm.status}".`);
+          return;
+        }
+        const targetId = editingLead.id || editingLead.lead_number;
+        const res = await fetch(`/api/crm/leads/${targetId}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(createForm)
+        });
+        const data = await res.json();
+        if (data?.success) {
+          showToast(`Lead ${editingLead.lead_number || ''} updated successfully!`);
+          setShowCreateModal(false);
+          setEditingLead(null);
+          await fetchLeads();
+          const refreshId = editingLead.id || editingLead.lead_number;
+          if (refreshId) {
+            const detRes = await fetch(`/api/crm/leads/${refreshId}`);
+            const detJson = await detRes.json();
+            if (detJson?.success && detJson.data) {
+              setLeadDetailData(detJson.data);
+              setActiveLead(detJson.data);
+            }
+          }
+        } else {
+          alert(data.error || 'Failed to update lead');
+        }
+        return;
+      }
 
       const res = await fetch('/api/crm/leads', {
         method: 'POST',
@@ -357,6 +609,8 @@ export default function CrmLeadsView({
       if (data?.success) {
         showToast(`Lead ${data.lead.lead_number} created successfully!`);
         setShowCreateModal(false);
+        setStatusFilter('All');
+        setSearchQuery('');
         setCreateForm({
           companyName: '',
           contactPerson: '',
@@ -366,9 +620,9 @@ export default function CrmLeadsView({
           email: '',
           location: '',
           source: 'Direct Inbound',
-          productRequirement: '50kW Aluminium Rooftop Mounting Structures',
-          category: 'Aluminium Mounting Structures',
-          estimatedKw: '50',
+          productRequirement: '',
+          category: '',
+          estimatedKw: '',
           notes: '',
           priority: 'MEDIUM',
           assignedToId: '',
@@ -381,6 +635,140 @@ export default function CrmLeadsView({
       }
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  // Convert Lead to Customer & follow in Customer List
+  const handleConvertToCustomer = async (lead) => {
+    if (!lead) return;
+
+    const compName = (lead.company_name || lead.companyName || 'New Customer').trim();
+    const contactName = (lead.contact_name || lead.contactPerson || compName).trim();
+    const phoneVal = (lead.phone || lead.phone_number || '').trim();
+    const emailVal = (lead.email || '').trim();
+    const cityVal = lead.city || 'Chennai';
+    const stateVal = lead.state || 'Tamil Nadu';
+    const addressVal = lead.address || '';
+    const repVal = lead.assigned_to_name || lead.assignedSalesperson || loggedInUserName || '';
+
+    // Generate canonical customer code: VRM-CS-[YYYY]-[SEQ] (e.g. VRM-CS-2026-01)
+    let nextCode;
+    try {
+      const res = await fetch('/api/next-customer-number');
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.nextCustomerCode) nextCode = json.nextCustomerCode;
+      }
+    } catch (_) {}
+
+    if (!nextCode) {
+      try {
+        const seq = getNextSequence('CS', customers || []);
+        nextCode = seq?.code;
+      } catch (_) {}
+    }
+    if (!nextCode) {
+      const fy = new Date().getFullYear();
+      nextCode = `VRM-CS-${fy}-01`;
+    }
+    const newCustomer = {
+      id: nextCode,
+      customerCode: nextCode,
+      code: nextCode,
+      companyName: compName,
+      customerName: contactName,
+      customerType: 'EPC Contractor',
+      industry: 'Solar Energy / Utility Scale',
+      gstNumber: lead.gst_number || lead.gstNumber || '',
+      gstNo: lead.gst_number || lead.gstNumber || '',
+      panNumber: lead.pan_number || lead.panNumber || '',
+      address: addressVal,
+      address1: addressVal,
+      billingAddress: addressVal,
+      dispatchAddress: addressVal,
+      city: cityVal,
+      state: stateVal,
+      pincode: lead.pincode || '600001',
+      creditLimit: 2500000,
+      creditDays: 30,
+      paymentTerms: '50% Advance + 50% Dispatch',
+      assignedSalesperson: repVal,
+      source: lead.source || 'Lead Conversion',
+      phone: phoneVal,
+      email: emailVal,
+      primaryContact: {
+        name: contactName,
+        designation: lead.designation || 'Project Head',
+        phone: phoneVal,
+        whatsapp: lead.whatsapp || phoneVal,
+        email: emailVal
+      },
+      leadId: lead.id || lead.lead_number,
+      leadNumber: lead.lead_number || lead.id,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+
+    // 1. Direct Central Database persistence to PostgreSQL public.customers
+    try {
+      await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCustomer)
+      });
+    } catch (err) {
+      console.warn('Customer database save notice:', err);
+    }
+
+    // 2. If onConvertLead callback exists from parent engine, call it for client state
+    if (typeof onConvertLead === 'function') {
+      try {
+        await onConvertLead({
+          ...lead,
+          companyName: compName,
+          contactPerson: contactName,
+          phone: phoneVal,
+          email: emailVal,
+          assignedSalesperson: repVal
+        }, newCustomer);
+      } catch (err) {
+        console.warn('onConvertLead error:', err);
+      }
+    }
+
+    // 3. Update Lead status to 'Converted' in backend DB
+    try {
+      await fetch(`/api/crm/leads/${lead.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newStatus: 'Converted',
+          remarks: `Converted to Customer (${newCustomer.customerCode} - ${compName})`,
+          convertedCustomerId: newCustomer.id,
+          convertedCustomerCode: newCustomer.customerCode,
+          updatedBy: loggedInEmpId || loggedInUserName || 'SYSTEM'
+        })
+      });
+    } catch (err) {
+      console.warn('Lead status conversion sync notice:', err);
+    }
+
+    // 4. Update local dbLeads state
+    setDbLeads(prev => prev.map(l => (l.id === lead.id || l.lead_number === lead.lead_number) ? { 
+      ...l, 
+      status: 'Converted',
+      converted_customer_id: newCustomer.id,
+      converted_customer_code: newCustomer.customerCode,
+      convertedCustomerCode: newCustomer.customerCode
+    } : l));
+
+    // 5. Toast feedback & navigate to Customers list to follow up
+    showToast(`✓ Converted "${compName}" to Customer (${newCustomer.customerCode})! Redirecting to Customers list...`);
+
+    if (onNavigateTab) {
+      setTimeout(() => {
+        onNavigateTab('Customers', { searchCustomer: newCustomer.customerCode });
+      }, 500);
     }
   };
 
@@ -454,7 +842,7 @@ export default function CrmLeadsView({
       });
       const data = await res.json();
       if (data?.success) {
-        showToast(data.timerCleared ? 'Activity logged! 24h unattended timer cleared! ✅' : 'Activity logged successfully!');
+        showToast(data.timerCleared ? 'Activity logged! Inactivity SLA timer cleared!' : 'Activity logged successfully!');
         setShowActivityModal(false);
         setActivityForm({
           activityType: 'CALL',
@@ -512,7 +900,7 @@ export default function CrmLeadsView({
     const headers = [
       'Lead Number', 'Company Name', 'Contact Person', 'Phone', 'Email',
       'Location', 'Product Requirement', 'Estimated kW', 'Source',
-      'Assigned To', 'Assigned By', 'Status', '24h Inactive', 'Created At'
+      'Assigned To', 'Assigned By', 'Status', '2h Inactive', 'Created At'
     ];
 
     const targetList = selectedLeadIds.length > 0
@@ -532,7 +920,7 @@ export default function CrmLeadsView({
       l.assigned_to_name ? `${l.assigned_to_name} (${l.assigned_to_user_id})` : 'Unassigned',
       l.assigned_by_name ? `${l.assigned_by_name} (${l.assigned_by_role || ''})` : '-',
       l.status || '',
-      l.is_unattended_24h ? 'YES' : 'NO',
+      (l.is_unattended_2h || l.is_unattended_24h) ? 'YES' : 'NO',
       l.created_at ? new Date(l.created_at).toLocaleString() : ''
     ]);
 
@@ -550,33 +938,55 @@ export default function CrmLeadsView({
 
   const unreadNotifCount = notifications.filter(n => !n.read).length;
 
+  // =========================================================================
+  // MAIN RENDER: LEAD 360° INTELLIGENCE VIEW OR DEFAULT DIRECTORY TABLE
+  // =========================================================================
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '80px' }}>
-      {/* Toast Notification */}
+      {/* System Standard Toast Notification */}
       {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          backgroundColor: '#0F172A',
-          color: '#FFFFFF',
-          padding: '12px 20px',
-          borderRadius: '8px',
-          fontSize: '13px',
-          fontWeight: 600,
-          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <CheckCircle2 size={16} color="#10B981" />
-          {toastMessage}
-        </div>
+        <NotificationToast
+          alert={toastMessage}
+          onClose={() => setToastMessage(null)}
+        />
       )}
 
-      {/* 1. TOP HEADER WITH CREATE BUTTON (BUSINZ DESIGN SYSTEM) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+      {viewMode === '360' && activeLead ? (
+        <Lead360PageView
+          lead={leadDetailData || activeLead}
+          onBack={() => {
+            setViewMode('table');
+            setActiveLead(null);
+            setLeadDetailData(null);
+          }}
+          onEditLead={(leadToEdit) => handleOpenEditModal(leadToEdit)}
+          onConvertToCustomer={handleConvertToCustomer}
+          onOpenWhatsAppChat={onOpenWhatsAppChat}
+          onNavigateTab={onNavigateTab}
+          quotations={quotations}
+          opportunities={opportunities}
+          boms={boms}
+          customers={customers}
+          activeAccountUser={loggedInUserName}
+          userRole={userRole}
+          onUpdateStatus={handleUpdateStatusDirect}
+          onLogActivity={() => setShowActivityModal(true)}
+          onAssign={() => setShowAssignModal(true)}
+          onRefreshLead={async () => {
+            if (activeLead?.id) {
+              const res = await fetch(`/api/crm/leads/${activeLead.id}`);
+              const json = await res.json();
+              if (json?.success && json.data) {
+                setLeadDetailData(json.data);
+                setActiveLead(json.data);
+              }
+            }
+          }}
+        />
+      ) : (
+        <>
+          {/* 1. TOP HEADER WITH CREATE BUTTON (BUSINZ DESIGN SYSTEM) */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
             Lead Management
@@ -587,39 +997,62 @@ export default function CrmLeadsView({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            style={{
-              backgroundColor: '#0E7490',
-              border: 'none',
-              color: '#FFFFFF',
-              height: '40px',
-              padding: '0 6px 0 20px',
-              borderRadius: '50px',
-              fontSize: '13px',
-              fontWeight: '700',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              cursor: 'pointer',
-              boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <span>Create Lead</span>
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '50%',
-              backgroundColor: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#0E7490'
-            }}>
-              <Plus size={16} strokeWidth={3} />
-            </div>
-          </button>
+          {canCreateLead && (
+            <button
+              onClick={() => {
+                setEditingLead(null);
+                setCreateForm({
+                  companyName: '',
+                  contactPerson: '',
+                  designation: '',
+                  phone: '',
+                  whatsapp: '',
+                  email: '',
+                  location: '',
+                  source: 'Direct Inbound',
+                  productRequirement: '',
+                  category: '',
+                  estimatedKw: '',
+                  notes: '',
+                  priority: 'MEDIUM',
+                  assignedToId: '',
+                  assignedToName: '',
+                  assignedToRole: ''
+                });
+                setShowCreateModal(true);
+              }}
+              style={{
+                backgroundColor: '#0E7490',
+                border: 'none',
+                color: '#FFFFFF',
+                height: '40px',
+                padding: '0 6px 0 20px',
+                borderRadius: '50px',
+                fontSize: '13px',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>Create Lead</span>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                backgroundColor: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#0E7490'
+              }}>
+                <Plus size={16} strokeWidth={3} />
+              </div>
+            </button>
+          )}
         </div>
       </div>
 
@@ -803,28 +1236,26 @@ export default function CrmLeadsView({
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                   />
                 </th>
-                <th style={{ padding: '12px 14px', width: '50px', minWidth: '50px', textAlign: 'center' }}>#</th>
-                <th style={{ padding: '12px 14px', minWidth: '220px' }}>Lead # & Company</th>
+                <th style={{ padding: '12px 14px', width: '60px', minWidth: '60px', textAlign: 'center' }}>S.No.</th>
+                <th style={{ padding: '12px 14px', minWidth: '220px' }}>Lead & Company</th>
                 <th style={{ padding: '12px 14px', minWidth: '170px' }}>Primary Contact</th>
                 <th style={{ padding: '12px 14px', minWidth: '180px' }}>Requirement</th>
                 <th style={{ padding: '12px 14px', width: '130px', minWidth: '130px' }}>Source</th>
                 <th style={{ padding: '12px 14px', width: '150px', minWidth: '150px' }}>Assigned To</th>
-                <th style={{ padding: '12px 14px', width: '120px', minWidth: '120px', textAlign: 'center' }}>Quotations</th>
-                <th style={{ padding: '12px 14px', width: '130px', minWidth: '130px', textAlign: 'center' }}>SLA Status</th>
-                <th style={{ padding: '12px 14px', width: '130px', minWidth: '130px', textAlign: 'center' }}>Status</th>
+                <th style={{ padding: '12px 14px', width: '140px', minWidth: '140px', textAlign: 'center' }}>Lead Status</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '40px 0', color: '#64748B' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 0', color: '#64748B' }}>
                     <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
                     Loading authoritative CRM leads from database...
                   </td>
                 </tr>
               ) : currentRows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '40px 0', color: '#94A3B8' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 0', color: '#94A3B8' }}>
                     No leads found matching your criteria.
                   </td>
                 </tr>
@@ -835,37 +1266,19 @@ export default function CrmLeadsView({
                   // Status Pill Styling
                   let statusBg = '#F1F5F9';
                   let statusColor = '#475569';
-                  if (lead.status === 'New') { statusBg = '#FEF3C7'; statusColor = '#B45309'; }
-                  else if (lead.status === 'Assigned') { statusBg = '#EFF6FF'; statusColor = '#1D4ED8'; }
-                  else if (lead.status === 'Contacted' || lead.status === 'In Progress') { statusBg = '#E0F2FE'; statusColor = '#0369A1'; }
-                  else if (lead.status === 'Proposal Sent') { statusBg = '#F3E8FF'; statusColor = '#7E22CE'; }
-                  else if (lead.status === 'Converted') { statusBg = '#DCFCE7'; statusColor = '#15803D'; }
-                  else if (['Dropped', 'Lost', 'Disqualified'].includes(lead.status)) { statusBg = '#FEE2E2'; statusColor = '#B91C1C'; }
+                  const st = (lead.status || 'New').toLowerCase().trim();
+                  if (st === 'new') { statusBg = '#FEF3C7'; statusColor = '#B45309'; }
+                  else if (st === 'assigned') { statusBg = '#EFF6FF'; statusColor = '#1D4ED8'; }
+                  else if (st === 'contacted' || st === 'in progress' || st === 'process') { statusBg = '#E0F2FE'; statusColor = '#0369A1'; }
+                  else if (st === 'opportunity' || st === 'qualified') { statusBg = '#F3E8FF'; statusColor = '#7E22CE'; }
+                  else if (st === 'proposal sent') { statusBg = '#FAF5FF'; statusColor = '#9333EA'; }
+                  else if (st === 'converted' || st === 'won') { statusBg = '#DCFCE7'; statusColor = '#15803D'; }
+                  else if (['dropped', 'lost', 'disqualified'].includes(st)) { statusBg = '#FEE2E2'; statusColor = '#B91C1C'; }
 
                   // Source Badge Styling
                   const isIndiaMart = (lead.source || '').toLowerCase().includes('indiamart');
                   const sourceBg = isIndiaMart ? '#FFF7ED' : '#F1F5F9';
                   const sourceColor = isIndiaMart ? '#EA580C' : '#475569';
-
-                  // SLA Badge
-                  let slaBadge = (
-                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#ECFDF5', color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle2 size={11} /> Active
-                    </span>
-                  );
-                  if (lead.is_unattended_48h) {
-                    slaBadge = (
-                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#FEF2F2', color: '#DC2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertCircle size={12} /> 48h Escalated
-                      </span>
-                    );
-                  } else if (lead.is_unattended_24h) {
-                    slaBadge = (
-                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#FFF7ED', color: '#EA580C', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertTriangle size={12} /> 24h Unattended
-                      </span>
-                    );
-                  }
 
                   return (
                     <tr
@@ -905,19 +1318,67 @@ export default function CrmLeadsView({
 
                       {/* Lead & Company (Matching Material / SKU layout from Stock Status) */}
                       <td style={{ padding: '12px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0F172A', cursor: 'pointer' }}>
-                          {lead.company_name || 'Independent Client'}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                          <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 700 }}>
-                            {lead.lead_number}
-                          </span>
-                          {lead.created_at && (
-                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>
-                              • {new Date(lead.created_at).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const isLeadConverted = lead.status === 'Converted' || lead.status === 'Won';
+                          const resolvedCustCode = lead.converted_customer_code || lead.convertedCustomerCode || lead.converted_customer_id || (
+                            customers?.find(c => 
+                              (c.leadId && (c.leadId === lead.id || c.leadId === lead.lead_number)) ||
+                              (c.leadNumber && (c.leadNumber === lead.lead_number || c.leadNumber === lead.id)) ||
+                              (lead.phone && c.phone === lead.phone && (isLeadConverted || c.companyName === lead.company_name))
+                            )?.customerCode
+                          );
+
+                          return (
+                            <>
+                              <div style={{ fontWeight: 700, color: '#0F172A', cursor: 'pointer' }}>
+                                {lead.company_name || 'Independent Client'}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 700 }}>
+                                  {lead.lead_number || lead.id}
+                                </span>
+                                {!isCeo && !isTechSupport && isLeadConverted && resolvedCustCode && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (typeof onNavigateTab === 'function') {
+                                        onNavigateTab('Customers', { searchCustomer: resolvedCustCode, targetCustomer: resolvedCustCode });
+                                      }
+                                      window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
+                                        detail: { tab: 'Customers', searchCustomer: resolvedCustCode, targetCustomer: resolvedCustCode } 
+                                      }));
+                                    }}
+                                    title={`View Customer ${resolvedCustCode} in Customers`}
+                                    style={{
+                                      fontSize: '10px',
+                                      color: '#065F46',
+                                      backgroundColor: '#ECFDF5',
+                                      border: '1px solid #A7F3D0',
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D1FAE5'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ECFDF5'}
+                                  >
+                                    Cust: {resolvedCustCode} ↗
+                                  </button>
+                                )}
+                                {lead.created_at && (
+                                  <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                                    • {new Date(lead.created_at).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </td>
 
                       {/* Primary Contact */}
@@ -980,52 +1441,84 @@ export default function CrmLeadsView({
                         )}
                       </td>
 
-                      {/* Quotations Metric */}
+                      {/* Lead Status */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: '10px',
-                            backgroundColor: (lead.quotations_count || 0) > 0 ? '#F3E8FF' : '#F1F5F9',
-                            color: (lead.quotations_count || 0) > 0 ? '#7C3AED' : '#64748B'
-                          }}>
-                            {lead.quotations_count || 0}
-                          </span>
-                          {(lead.total_revisions || 0) > 0 && (
-                            <span style={{
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              padding: '1px 5px',
-                              borderRadius: '4px',
-                              backgroundColor: '#FAF5FF',
-                              color: '#9333EA',
-                              border: '1px solid #E9D5FF'
-                            }}>
-                              Rev {lead.total_revisions}
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                        {(() => {
+                          const isLeadConverted = lead.status === 'Converted' || lead.status === 'Won';
+                          const resolvedCustCode = lead.converted_customer_code || lead.convertedCustomerCode || lead.converted_customer_id || (
+                            customers?.find(c => 
+                              (c.leadId && (c.leadId === lead.id || c.leadId === lead.lead_number)) ||
+                              (c.leadNumber && (c.leadNumber === lead.lead_number || c.leadNumber === lead.id)) ||
+                              (lead.phone && c.phone === lead.phone && (isLeadConverted || c.companyName === lead.company_name))
+                            )?.customerCode
+                          );
 
-                      {/* SLA Timer */}
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        {slaBadge}
-                      </td>
-
-                      {/* Status */}
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        <span style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '12px',
-                          backgroundColor: statusBg,
-                          color: statusColor
-                        }}>
-                          {lead.status}
-                        </span>
+                          return (
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                              <span style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                backgroundColor: isLeadConverted ? '#DCFCE7' : statusBg,
+                                color: isLeadConverted ? '#166534' : statusColor,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isLeadConverted ? '#166534' : statusColor }}></span>
+                                {isLeadConverted ? 'Converted to Customer' : (lead.status || 'New')}
+                              </span>
+                              {!isCeo && !isTechSupport && isLeadConverted && resolvedCustCode && (
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (typeof onNavigateTab === 'function') {
+                                        onNavigateTab('Customers', { searchCustomer: resolvedCustCode, targetCustomer: resolvedCustCode });
+                                      }
+                                      window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
+                                        detail: { tab: 'Customers', searchCustomer: resolvedCustCode, targetCustomer: resolvedCustCode } 
+                                      }));
+                                    }}
+                                    title={`View Customer ${resolvedCustCode} in Customers`}
+                                    style={{
+                                      backgroundColor: '#0E7490',
+                                      color: '#FFFFFF',
+                                      border: 'none',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      boxShadow: '0 1px 3px rgba(14,116,144,0.3)',
+                                      transition: 'transform 0.1s ease'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                  >
+                                    <UserCheck size={12} style={{ marginRight: '3px' }} />
+                                    {resolvedCustCode} ↗
+                                  </button>
+                                </div>
+                              )}
+                              {lead.is_unattended_48h ? (
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: '#DC2626', marginTop: '3px' }}>
+                                  48h Escalated
+                                </div>
+                              ) : (lead.is_unattended_2h || lead.is_unattended_24h) ? (
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: '#EA580C', marginTop: '3px' }}>
+                                  2h Unattended
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -1248,6 +1741,7 @@ export default function CrmLeadsView({
           <button
             onClick={() => {
               const lead = dbLeads.find(l => l.id === selectedLeadIds[0]);
+              setSelectedLeadIds([]);
               if (lead) openLeadDetail(lead);
             }}
             style={{
@@ -1270,11 +1764,164 @@ export default function CrmLeadsView({
             <Eye size={14} style={{ color: '#0E7490' }} /> View Details
           </button>
 
+          {/* Edit Lead (Accessible to Sales Person and all roles) */}
+          {(() => {
+            const selectedLead = selectedLeadIds.length === 1 ? dbLeads.find(l => l.id === selectedLeadIds[0]) : null;
+            const isLeadConverted = selectedLead && (
+              selectedLead.status === 'Converted' ||
+              selectedLead.status === 'Won' ||
+              selectedLead.is_converted ||
+              selectedLead.converted_customer_code ||
+              selectedLead.convertedCustomerCode ||
+              selectedLead.converted_customer_id
+            );
+
+            if (isLeadConverted) {
+              return (
+                <span
+                  title="Lead converted to Customer. Details cannot be edited."
+                  style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #CBD5E1',
+                    color: '#94A3B8',
+                    borderRadius: '50px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    userSelect: 'none'
+                  }}
+                >
+                  <Lock size={14} style={{ color: '#94A3B8' }} /> Edit Locked
+                </span>
+              );
+            }
+
+            return (
+              <button
+                onClick={() => {
+                  if (selectedLeadIds.length > 1) {
+                    alert('You can only edit one lead at a time.');
+                    return;
+                  }
+                  const lead = dbLeads.find(l => l.id === selectedLeadIds[0]);
+                  setSelectedLeadIds([]);
+                  if (lead) handleOpenEditModal(lead);
+                }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#1E293B',
+                  borderRadius: '50px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+              >
+                <Edit3 size={14} style={{ color: '#0E7490' }} /> Edit Lead
+              </button>
+            );
+          })()}
+
+          {/* Convert to Customer / View Customer (Hidden for CEO & Tech Support logins) */}
+          {!isCeo && !isTechSupport && (() => {
+            const selectedLead = selectedLeadIds.length === 1 ? dbLeads.find(l => l.id === selectedLeadIds[0]) : null;
+            const isLeadConverted = selectedLead && (selectedLead.status === 'Converted' || selectedLead.status === 'Won');
+            const selCustCode = selectedLead && (
+              selectedLead.converted_customer_code || selectedLead.convertedCustomerCode || selectedLead.converted_customer_id ||
+              customers?.find(c => 
+                (c.leadId && (c.leadId === selectedLead.id || c.leadId === selectedLead.lead_number)) || 
+                (c.leadNumber && (c.leadNumber === selectedLead.lead_number || c.leadNumber === selectedLead.id)) || 
+                (selectedLead.phone && c.phone === selectedLead.phone)
+              )?.customerCode
+            );
+
+            if (isLeadConverted && selCustCode) {
+              return (
+                <button
+                  onClick={() => {
+                    setSelectedLeadIds([]);
+                    if (typeof onNavigateTab === 'function') {
+                      onNavigateTab('Customers', { searchCustomer: selCustCode, targetCustomer: selCustCode });
+                    }
+                    window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', {
+                      detail: { tab: 'Customers', searchCustomer: selCustCode, targetCustomer: selCustCode }
+                    }));
+                  }}
+                  style={{
+                    backgroundColor: '#0E7490',
+                    border: 'none',
+                    color: '#FFFFFF',
+                    borderRadius: '50px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    boxShadow: '0 1px 3px rgba(14,116,144,0.3)'
+                  }}
+                >
+                  <UserCheck size={14} /> View Customer ({selCustCode}) ↗
+                </button>
+              );
+            }
+
+            return (
+              <button
+                onClick={() => {
+                  if (selectedLeadIds.length > 1) {
+                    alert('Please select one lead at a time to convert to a customer.');
+                    return;
+                  }
+                  const lead = dbLeads.find(l => l.id === selectedLeadIds[0]);
+                  setSelectedLeadIds([]);
+                  if (lead) handleConvertToCustomer(lead);
+                }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#0E7490',
+                  borderRadius: '50px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; e.currentTarget.style.borderColor = '#0E7490'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+              >
+                <UserPlus size={14} style={{ color: '#0E7490' }} /> Convert to Customer
+              </button>
+            );
+          })()}
+
           {/* Reassign (CEO/TS/SH) */}
           {canAssign && (
             <button
               onClick={() => {
                 const lead = dbLeads.find(l => l.id === selectedLeadIds[0]);
+                setSelectedLeadIds([]);
                 if (lead) {
                   setActiveLead(lead);
                   setShowAssignModal(true);
@@ -1301,28 +1948,33 @@ export default function CrmLeadsView({
             </button>
           )}
 
-          {/* Export Selected to CSV */}
-          <button
-            onClick={handleExportCsv}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '50px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-            }}
-          >
-            <Download size={14} style={{ color: '#059669' }} /> Export Selected
-          </button>
+          {/* Export Selected to CSV (Hidden for CEO & Tech Support logins) */}
+          {!isCeo && !isTechSupport && (
+            <button
+              onClick={() => {
+                handleExportCsv();
+                setSelectedLeadIds([]);
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#1E293B',
+                borderRadius: '50px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <Download size={14} style={{ color: '#059669' }} /> Export Selected
+            </button>
+          )}
 
           {/* Close / Deselect */}
           <button
@@ -1344,6 +1996,8 @@ export default function CrmLeadsView({
             <X size={16} />
           </button>
         </div>
+      )}
+        </>
       )}
 
       {/* CREATE LEAD MODAL */}
@@ -1371,12 +2025,14 @@ export default function CrmLeadsView({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>Create New Lead</h3>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
+                  {editingLead ? `Edit Lead: ${editingLead.lead_number || editingLead.company_name || 'Details'}` : 'Create New Lead'}
+                </h3>
                 <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748B' }}>
-                  Auto-sequenced sequence number with 24-hour inactivity SLA.
+                  {editingLead ? 'Update lead profile, customer contact details, and technical scope.' : 'Auto-sequenced sequence number with 2-hour inactivity SLA.'}
                 </p>
               </div>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
+              <button onClick={() => { setShowCreateModal(false); setEditingLead(null); }} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
@@ -1385,7 +2041,7 @@ export default function CrmLeadsView({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                    Company / Customer Name
+                    Company Name
                   </label>
                   <input
                     type="text"
@@ -1475,10 +2131,11 @@ export default function CrmLeadsView({
                     Structure Category
                   </label>
                   <select
-                    value={createForm.category}
+                    value={createForm.category || ''}
                     onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
                   >
+                    <option value="">Select Structure Category...</option>
                     {STRUCTURE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
@@ -1489,7 +2146,7 @@ export default function CrmLeadsView({
                   <input
                     type="number"
                     placeholder="e.g. 50"
-                    value={createForm.estimatedKw}
+                    value={createForm.estimatedKw || ''}
                     onChange={(e) => setCreateForm({ ...createForm, estimatedKw: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
                   />
@@ -1503,72 +2160,111 @@ export default function CrmLeadsView({
                 <textarea
                   rows={3}
                   placeholder="e.g. Need aluminium walk-way clamps and 50kW rail mounting system with SS fasteners."
-                  value={createForm.productRequirement}
+                  value={createForm.productRequirement || ''}
                   onChange={(e) => setCreateForm({ ...createForm, productRequirement: e.target.value })}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
                 />
               </div>
 
-              {/* Assign Lead to Representative */}
-              <div style={{ backgroundColor: '#F0FDFA', border: '1.5px solid #CCFBF1', borderRadius: '10px', padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#0E7490' }}>
-                    <UserCheck size={16} style={{ color: '#0E7490' }} />
-                    Assign To (Sales Representative)
+              {/* Status (Available during Edit) */}
+              {editingLead && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Lead Status
                   </label>
-                  <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 700, backgroundColor: '#CCFBF1', padding: '2px 8px', borderRadius: '4px' }}>
-                    Optional
+                  <select
+                    value={createForm.status || 'New'}
+                    onChange={(e) => {
+                      const sel = e.target.value;
+                      if (!canTransitionStage(editingLead.status, sel)) {
+                        alert(`Stages cannot be reversed. Lead stage can only progress forward from "${editingLead.status}".`);
+                        return;
+                      }
+                      setCreateForm({ ...createForm, status: sel });
+                    }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
+                  >
+                    {LEAD_STAGES.map(s => {
+                      const isPast = getStageRank(s) < getStageRank(editingLead.status);
+                      return (
+                        <option key={s} value={s} disabled={isPast}>
+                          {s} {isPast ? '🔒 (Locked)' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* Assign Lead to Representative */}
+              {canAssign ? (
+                <div style={{ backgroundColor: '#F0FDFA', border: '1.5px solid #CCFBF1', borderRadius: '10px', padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#0E7490' }}>
+                      <UserCheck size={16} style={{ color: '#0E7490' }} />
+                      Assign To (Sales Representative)
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 700, backgroundColor: '#CCFBF1', padding: '2px 8px', borderRadius: '4px' }}>
+                      Optional
+                    </span>
+                  </div>
+                  <select
+                    value={createForm.assignedToId || ''}
+                    onChange={(e) => {
+                      const pool = (salesRepresentatives && salesRepresentatives.length > 0) ? salesRepresentatives : (salespersons || []);
+                      const sel = pool.find(s => s.employee_code === e.target.value);
+                      if (sel) {
+                        setCreateForm({
+                          ...createForm,
+                          assignedToId: sel.employee_code,
+                          assignedToName: sel.employee_name,
+                          assignedToRole: sel.role || 'Sales Executive'
+                        });
+                      } else {
+                        setCreateForm({
+                          ...createForm,
+                          assignedToId: '',
+                          assignedToName: '',
+                          assignedToRole: ''
+                        });
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #99F6E4',
+                      fontSize: '13px',
+                      backgroundColor: '#FFFFFF',
+                      boxSizing: 'border-box',
+                      color: createForm.assignedToId ? '#0F172A' : '#64748B',
+                      fontWeight: createForm.assignedToId ? 700 : 500
+                    }}
+                  >
+                    <option value="">— Unassigned (Assign Later) —</option>
+                    {((salesRepresentatives && salesRepresentatives.length > 0) ? salesRepresentatives : (salespersons || [])).map(s => (
+                      <option key={s.employee_code} value={s.employee_code}>
+                        {s.employee_name} ({s.employee_code} • {s.role || 'Sales Executive'})
+                      </option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: '11px', color: '#475569', marginTop: '4px', display: 'block' }}>
+                    Select a sales executive to assign immediately upon creation, or leave unassigned.
                   </span>
                 </div>
-                <select
-                  value={createForm.assignedToId || ''}
-                  onChange={(e) => {
-                    const pool = (salesRepresentatives && salesRepresentatives.length > 0) ? salesRepresentatives : (salespersons || []);
-                    const sel = pool.find(s => s.employee_code === e.target.value);
-                    if (sel) {
-                      setCreateForm({
-                        ...createForm,
-                        assignedToId: sel.employee_code,
-                        assignedToName: sel.employee_name,
-                        assignedToRole: sel.role || 'Sales Executive'
-                      });
-                    } else {
-                      setCreateForm({
-                        ...createForm,
-                        assignedToId: '',
-                        assignedToName: '',
-                        assignedToRole: ''
-                      });
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #99F6E4',
-                    fontSize: '13px',
-                    backgroundColor: '#FFFFFF',
-                    boxSizing: 'border-box',
-                    color: createForm.assignedToId ? '#0F172A' : '#64748B',
-                    fontWeight: createForm.assignedToId ? 700 : 500
-                  }}
-                >
-                  <option value="">— Unassigned (Assign Later) —</option>
-                  {((salesRepresentatives && salesRepresentatives.length > 0) ? salesRepresentatives : (salespersons || [])).map(s => (
-                    <option key={s.employee_code} value={s.employee_code}>
-                      {s.employee_name} ({s.employee_code} • {s.role || 'Sales Executive'})
-                    </option>
-                  ))}
-                </select>
-                <span style={{ fontSize: '11px', color: '#475569', marginTop: '4px', display: 'block' }}>
-                  Select a sales executive to assign immediately upon creation, or leave unassigned.
-                </span>
-              </div>
+              ) : editingLead ? (
+                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>Assigned Representative</span>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', backgroundColor: '#F1F5F9', padding: '3px 8px', borderRadius: '6px' }}>
+                    {createForm.assignedToName || 'Unassigned'}
+                  </span>
+                </div>
+              ) : null}
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => { setShowCreateModal(false); setEditingLead(null); }}
                   style={{
                     flex: 1,
                     padding: '10px',
@@ -1597,7 +2293,7 @@ export default function CrmLeadsView({
                     cursor: 'pointer'
                   }}
                 >
-                  Create & Initialize SLA
+                  {editingLead ? 'Update Lead' : 'Create & Initialize SLA'}
                 </button>
               </div>
             </form>
@@ -1847,7 +2543,7 @@ export default function CrmLeadsView({
                 fontSize: '11px',
                 color: '#15803D'
               }}>
-                ✅ <strong>Qualifying Interaction:</strong> Submitting this customer activity will verify engagement and immediately clear any pending 24-hour unattended warnings.
+                <strong>Qualifying Interaction:</strong> Submitting this customer activity will verify engagement and immediately clear any pending 2-hour unattended warnings.
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -1958,15 +2654,15 @@ export default function CrmLeadsView({
             <div style={{
               padding: '14px 18px',
               borderRadius: '10px',
-              backgroundColor: leadDetailData?.is_unattended_24h ? '#FFF7ED' : '#F0FDF4',
-              border: `1px solid ${leadDetailData?.is_unattended_24h ? '#FED7AA' : '#BBF7D0'}`,
+              backgroundColor: (leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '#FFF7ED' : '#F0FDF4',
+              border: `1px solid ${(leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '#FED7AA' : '#BBF7D0'}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between'
             }}>
               <div>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: leadDetailData?.is_unattended_24h ? '#C2410C' : '#15803D' }}>
-                  {leadDetailData?.is_unattended_48h ? '48-Hour Escalation Triggered' : leadDetailData?.is_unattended_24h ? '24-Hour Inactivity Warning Active' : 'SLA Active & Compliant'}
+                <span style={{ fontSize: '13px', fontWeight: 700, color: (leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '#C2410C' : '#15803D' }}>
+                  {leadDetailData?.is_unattended_48h ? '48-Hour Escalation Triggered' : (leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '2-Hour Inactivity Warning Active' : 'SLA Active & Compliant'}
                 </span>
                 <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
                   Last Qualifying Activity: {leadDetailData?.last_qualifying_activity_at ? new Date(leadDetailData.last_qualifying_activity_at).toLocaleString() : 'No qualifying call/interaction yet'}

@@ -85,55 +85,87 @@ class CentralInventoryStore {
       return (c && delCodes.includes(c)) || (n && delCodes.includes(n));
     };
 
-    // 1. Load Item Master with localStorage and Supabase Cloud Database fallback
-    let seeded = [...INITIAL_CENTRAL_ITEMS].filter(it => !isDeletedItem(it));
-    try {
-      const savedItems = localStorage.getItem(this.storageKeyItems);
-      if (savedItems) {
-        const parsed = JSON.parse(savedItems);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          seeded = parsed.filter(item => {
-            const c = String(item?.code || item?.sku || item?.itemId || '').trim();
-            const n = String(item?.name || '').trim();
-            if (isDeletedItem(item)) return false;
-            return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
-          });
-        }
-      }
-    } catch (_) {}
-
-    // Ingest any newly created products from item_store / controlroom_item_store
+    // 1. Authoritative Item Master derived strictly from Item Directory
+    let authoritativeItems = [];
     try {
       const customStoreRaw = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
       if (customStoreRaw) {
         const parsedCustom = JSON.parse(customStoreRaw);
         if (Array.isArray(parsedCustom) && parsedCustom.length > 0) {
-          const seededCodeMap = new Set(seeded.map(s => String(s.code || s.sku || s.name).toUpperCase().trim()));
-          parsedCustom.forEach(ci => {
-            const codeKey = String(ci?.code || ci?.sku || ci?.itemId || ci?.name || '').toUpperCase().trim();
-            if (codeKey && !seededCodeMap.has(codeKey) && !isDeletedItem(ci) && !/^\d{10,}$/.test(codeKey)) {
-              seeded.push({
-                code: ci.code || ci.sku || ci.itemId || ci.name,
-                sku: ci.sku || ci.code || '',
-                name: ci.name,
-                cat: ci.category || ci.cat || (ci.productType === 'service' ? 'Services' : 'Finished Goods'),
-                type: ci.productType === 'service' ? 'Service' : 'Finished Product',
-                uom: ci.uom || ci.unit || 'NOS',
-                unitRate: Number(ci.rate || ci.price || 0),
-                openingStock: Number(ci.openingStock !== undefined ? ci.openingStock : (ci.stock || 0)),
-                physicalStock: Number(ci.physicalStock !== undefined ? ci.physicalStock : (ci.stock || 0)),
-                stock: Number(ci.stock || 0),
-                available: Number(ci.available !== undefined ? ci.available : (ci.stock || 0)),
-                availableStock: Number(ci.availableStock !== undefined ? ci.availableStock : (ci.stock || 0)),
-                onHand: Number(ci.onHand !== undefined ? ci.onHand : (ci.stock || 0)),
-                reserved: 0
-              });
-              seededCodeMap.add(codeKey);
-            }
+          authoritativeItems = parsedCustom.filter(ci => {
+            const c = String(ci?.code || ci?.sku || ci?.itemId || ci?.name || '').trim();
+            return c && !/^\d{10,}$/.test(c) && !isDeletedItem(ci);
           });
         }
       }
     } catch (_) {}
+
+    let seeded = [];
+    if (authoritativeItems.length > 0) {
+      const authMap = new Map();
+      authoritativeItems.forEach(ci => {
+        const c = String(ci.code || ci.sku || ci.itemId || ci.name).toUpperCase().trim();
+        authMap.set(c, {
+          code: ci.code || ci.sku || ci.itemId || ci.name,
+          sku: ci.sku || ci.code || '',
+          name: ci.name,
+          cat: ci.category || ci.cat || (ci.productType === 'service' ? 'Services' : 'Finished Goods'),
+          type: ci.productType === 'service' ? 'Service' : 'Finished Product',
+          uom: ci.uom || ci.unit || 'NOS',
+          unitRate: Number(ci.rate || ci.price || 0),
+          openingStock: Number(ci.openingStock !== undefined ? ci.openingStock : (ci.stock || 0)),
+          physicalStock: Number(ci.physicalStock !== undefined ? ci.physicalStock : (ci.stock || 0)),
+          stock: Number(ci.stock || 0),
+          available: Number(ci.available !== undefined ? ci.available : (ci.stock || 0)),
+          availableStock: Number(ci.availableStock !== undefined ? ci.availableStock : (ci.stock || 0)),
+          onHand: Number(ci.onHand !== undefined ? ci.onHand : (ci.stock || 0)),
+          reserved: 0
+        });
+      });
+
+      // Overlay saved items from storageKeyItems ONLY for matching authoritative items
+      try {
+        const savedItems = localStorage.getItem(this.storageKeyItems);
+        if (savedItems) {
+          const parsed = JSON.parse(savedItems);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsed.forEach(item => {
+              const c = String(item?.code || item?.sku || item?.itemId || item?.name || '').toUpperCase().trim();
+              if (authMap.has(c)) {
+                const ex = authMap.get(c);
+                authMap.set(c, {
+                  ...ex,
+                  ...item,
+                  code: ex.code,
+                  name: ex.name,
+                  cat: ex.cat,
+                  type: ex.type
+                });
+              }
+            });
+          }
+        }
+      } catch (_) {}
+
+      seeded = Array.from(authMap.values());
+    } else {
+      // Fallback only when Item Directory is not yet populated
+      seeded = [...INITIAL_CENTRAL_ITEMS].filter(it => !isDeletedItem(it));
+      try {
+        const savedItems = localStorage.getItem(this.storageKeyItems);
+        if (savedItems) {
+          const parsed = JSON.parse(savedItems);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            seeded = parsed.filter(item => {
+              const c = String(item?.code || item?.sku || item?.itemId || '').trim();
+              const n = String(item?.name || '').trim();
+              if (isDeletedItem(item)) return false;
+              return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+            });
+          }
+        }
+      } catch (_) {}
+    }
 
     const sanitizeInventoryItems = (list) => {
       let bomAllocMap = new Map();
@@ -207,6 +239,17 @@ class CentralInventoryStore {
 
     fetchCloudStore('item_store', this.items).then(cloudItems => {
       if (Array.isArray(cloudItems) && cloudItems.length > 0) {
+        const cloudMap = new Map();
+        cloudItems.forEach(ci => {
+          const k = String(ci.code || ci.sku || ci.name || '').toUpperCase().trim();
+          if (k) cloudMap.set(k, ci);
+        });
+        (this.items || []).forEach(localItem => {
+          const k = String(localItem.code || localItem.sku || localItem.name || '').toUpperCase().trim();
+          if (k && !cloudMap.has(k)) {
+            cloudItems.push(localItem);
+          }
+        });
         this.items = sanitizeInventoryItems(cloudItems);
         try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
         this.notifyChange();
@@ -301,35 +344,20 @@ class CentralInventoryStore {
       this.saveReservations();
     }
 
-    // 7. Load Notifications
-    const savedNotif = safeStorageGet(this.storageKeyNotifications);
-    if (savedNotif) {
-      try {
-        this.notifications = JSON.parse(savedNotif);
-      } catch (e) {
-        this.notifications = [];
-      }
-    } else {
-      this.notifications = [
-        {
-          id: 'NOTIF-001',
-          type: 'INFO',
-          title: 'System Central Inventory Initialized',
-          message: 'Single-source-of-truth transaction ledger active.',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          date: new Date().toISOString().split('T')[0],
-          targetDepartments: ['Procurement', 'Production', 'Sales'],
-          read: false
-        }
-      ];
-      this.saveNotifications();
-    }
+    // 7. Notifications (Decommissioned)
+    this.notifications = [];
   }
 
   // Helper Persistence Methods
   saveItems() {
     try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
-    saveCloudStore('item_store', this.items);
+    try {
+      const role = (localStorage.getItem('controlroom_user_role') || localStorage.getItem('controlroom_logged_user_role') || '').toLowerCase();
+      const canWriteItemStore = ['procurement', 'purchase', 'production', 'dispatch', 'admin', 'technical administrator', 'ceo', 'director'].some(r => role.includes(r));
+      if (canWriteItemStore) {
+        saveCloudStore('item_store', this.items);
+      }
+    } catch (_) {}
   }
   saveTransactions() {
     try { localStorage.setItem(this.storageKeyTx, JSON.stringify(this.transactions)); } catch (_) {}
@@ -352,11 +380,7 @@ class CentralInventoryStore {
     saveCloudStore('reservations_store', this.reservations);
   }
   saveNotifications() {
-    try { localStorage.setItem(this.storageKeyNotifications, JSON.stringify(this.notifications)); } catch (_) {}
-    if (this._saveNotifsTimer) clearTimeout(this._saveNotifsTimer);
-    this._saveNotifsTimer = setTimeout(() => {
-      saveCloudStore('notifications_store', this.notifications);
-    }, 2000);
+    // No-op: Notifications decommissioned
   }
 
   notifyChange() {
@@ -570,61 +594,37 @@ class CentralInventoryStore {
           type: 'OUT_OF_STOCK',
           title: `OUT OF STOCK ALERT: ${item.name} (${item.code})`,
           message: `Current Stock is 0 ${item.uom}. Production may be blocked. Immediate procurement required!`,
-          targetDepartments: ['Procurement', 'Production']
+          targetDepartments: ['Procurement'],
+          itemName: item.name,
+          itemCode: item.code
         });
       } else if (item.onHand <= item.minLevel) {
         this.addNotification({
           type: 'LOW_STOCK',
           title: `LOW STOCK ALERT: ${item.name} (${item.code})`,
           message: `Current Stock (${item.onHand} ${item.uom}) is below Minimum Level (${item.minLevel} ${item.uom}). Purchase action required.`,
-          targetDepartments: ['Procurement', 'Production']
+          targetDepartments: ['Procurement'],
+          itemName: item.name,
+          itemCode: item.code
         });
       }
     });
   }
 
-  addNotification({ type, title, message, targetDepartments }) {
-    const exists = this.notifications.some(n => n.title === title && !n.read && n.date === new Date().toISOString().split('T')[0]);
-    if (!exists) {
-      const newNotif = {
-        id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        type: type || 'INFO',
-        title,
-        message,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        date: new Date().toISOString().split('T')[0],
-        targetDepartments: targetDepartments || ['Procurement', 'Production'],
-        read: false
-      };
-      this.notifications.unshift(newNotif);
-      this.saveNotifications();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('central_notification_added'));
-      }
-    }
+  addNotification() {
+    // No-op: Notifications decommissioned
   }
 
-  getNotifications(userDept = 'All') {
-    if (userDept === 'All') return this.notifications;
-    return this.notifications.filter(n => n.targetDepartments.includes('All') || n.targetDepartments.includes(userDept));
+  getNotifications() {
+    return [];
   }
 
-  markNotificationRead(id) {
-    const n = this.notifications.find(x => x.id === id);
-    if (n) {
-      n.read = true;
-      this.saveNotifications();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('central_notification_added'));
-      }
-    }
+  markNotificationRead() {
+    // No-op
   }
 
   markAllNotificationsRead() {
-    this.notifications.forEach(n => { n.read = true; });
-    this.saveNotifications();
-    localStorage.setItem('controlroom_notifications_read', 'true');
-    window.dispatchEvent(new Event('central_notification_added'));
+    // No-op
   }
 
   // ----------------------------------------------------

@@ -2,16 +2,21 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getBackupDir, getStoreFilePath } from './runtimePaths.js';
+import { recordJobStart, recordJobEnd } from './memoryDiagnostics.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BACKUP_DIR = getBackupDir();
+const resolveBackupDir = () => getBackupDir();
 
-// Ensure backups directory exists
-if (!fs.existsSync(BACKUP_DIR)) {
+// Ensure backups directory exists (strictly skipped in optimization test mode)
+if (!isOptimizationTestMode()) {
   try {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const backupDir = resolveBackupDir();
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
   } catch (err) {
     console.error('[BackupEngine] Failed to create backup dir:', err.message);
   }
@@ -45,10 +50,13 @@ export function formatBytes(bytes, decimals = 2) {
  * Capture full unified snapshot: Database Stores + Supabase cloud tables + Media Cache
  */
 export async function createFullBackup({ supabaseClient, memoryStore = {}, triggeredBy = 'System Admin' } = {}) {
+  if (isOptimizationTestMode()) {
+    throw new Error('[FAIL-CLOSED] External backup creation is blocked in optimization test mode.');
+  }
   const timestamp = new Date().toISOString();
   const fileDateStr = timestamp.replace(/[:.]/g, '-');
   const filename = `controlroom_backup_${fileDateStr}.json`;
-  const backupFilePath = path.join(BACKUP_DIR, filename);
+  const backupFilePath = path.join(resolveBackupDir(), filename);
 
   console.log(`\n🛡️ [BackupEngine] Starting Full ERP & Media Backup (${timestamp})...`);
 
@@ -134,20 +142,17 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
 
   // 3. Collect Media Cache (All PDFs, images, proof documents, datasheets)
   let mediaCache = {};
+  let mediaSizeBytes = 0;
   const mediaPath = getStoreFilePath('media_cache.json');
   if (fs.existsSync(mediaPath)) {
     try {
+      const mediaStat = fs.statSync(mediaPath);
+      mediaSizeBytes = mediaStat.size;
       mediaCache = JSON.parse(fs.readFileSync(mediaPath, 'utf8'));
     } catch (_) {}
   }
   backupData.media = mediaCache;
-
   const mediaKeys = Object.keys(mediaCache);
-  let mediaSizeBytes = 0;
-  try {
-    const mediaRaw = JSON.stringify(mediaCache);
-    mediaSizeBytes = Buffer.byteLength(mediaRaw, 'utf8');
-  } catch (_) {}
 
   // 4. Update metadata
   backupData.metadata.totalStores = Object.keys(backupData.stores).length;
@@ -156,66 +161,190 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
   backupData.metadata.mediaSizeBytes = mediaSizeBytes;
   backupData.metadata.mediaSizeFormatted = formatBytes(mediaSizeBytes);
 
-  // 5. Serialize and write backup to disk
-  const backupJsonString = JSON.stringify(backupData, null, 2);
-  const totalSizeBytes = Buffer.byteLength(backupJsonString, 'utf8');
-  backupData.metadata.backupSizeBytes = totalSizeBytes;
-  backupData.metadata.backupSizeFormatted = formatBytes(totalSizeBytes);
+  const jobStartTime = recordJobStart('backupEngine');
 
-  // Re-write with updated size
-  fs.writeFileSync(backupFilePath, JSON.stringify(backupData, null, 2), 'utf8');
+  try {
+    // 5. Serialize and stream directly to disk incrementally to prevent giant contiguous JSON string buffers in V8 heap
+    const writeStream = fs.createWriteStream(backupFilePath, { encoding: 'utf8' });
 
-  console.log(`✅ [BackupEngine] Backup successfully written to ${filename}`);
-  console.log(`   Stores: ${backupData.metadata.totalStores} | Records: ${totalRecords} | Media: ${mediaKeys.length} files (${backupData.metadata.mediaSizeFormatted}) | Total: ${backupData.metadata.backupSizeFormatted}\n`);
+    const preamble = {
+      system: backupData.system,
+      version: backupData.version,
+      backupId: backupData.backupId,
+      createdAt: backupData.createdAt,
+      triggeredBy: backupData.triggeredBy,
+      metadata: backupData.metadata
+    };
 
-  // 6. Prune old backups (keep latest 15)
-  pruneOldBackups(15);
+    let preambleStr = JSON.stringify(preamble, null, 2);
+    // Remove trailing closing brace to open envelope
+    preambleStr = preambleStr.slice(0, preambleStr.lastIndexOf('}'));
+    writeStream.write(preambleStr + ',\n  "stores": {\n');
 
-  return {
-    success: true,
-    filename,
-    filePath: backupFilePath,
-    metadata: backupData.metadata,
-    createdAt: timestamp
-  };
+    const storeKeys = Object.keys(backupData.stores);
+    for (let i = 0; i < storeKeys.length; i++) {
+      const k = storeKeys[i];
+      const isLast = i === storeKeys.length - 1;
+      const serializedStore = JSON.stringify(backupData.stores[k], null, 2);
+      const indented = serializedStore.replace(/\n/g, '\n    ');
+      writeStream.write(`    "${k}": ${indented}${isLast ? '' : ','}\n`);
+      // Immediately release in-memory copy for this store
+      backupData.stores[k] = null;
+    }
+    writeStream.write('  },\n');
+    backupData.stores = null;
+
+    // Stream media cache and immediately release
+    writeStream.write('  "media": ');
+    const serializedMedia = JSON.stringify(backupData.media || {}, null, 2);
+    writeStream.write(serializedMedia.replace(/\n/g, '\n  '));
+    writeStream.write(',\n');
+    backupData.media = null;
+    mediaCache = null;
+
+    // Stream cloud users and finalize envelope
+    writeStream.write(`  "cloudUsers": ${JSON.stringify(backupData.cloudUsers || [], null, 2).replace(/\n/g, '\n  ')}\n}\n`);
+
+    await new Promise((resolve, reject) => {
+      writeStream.end((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    const finalStat = fs.statSync(backupFilePath);
+    backupData.metadata.backupSizeBytes = finalStat.size;
+    backupData.metadata.backupSizeFormatted = formatBytes(finalStat.size);
+
+    console.log(`✅ [BackupEngine] Backup successfully written to ${filename}`);
+    console.log(`   Stores: ${backupData.metadata.totalStores} | Records: ${totalRecords} | Media: ${mediaKeys.length} files (${backupData.metadata.mediaSizeFormatted}) | Total: ${backupData.metadata.backupSizeFormatted}\n`);
+
+    // 6. Prune old backups (keep latest 15)
+    pruneOldBackups(15);
+
+    return {
+      success: true,
+      filename,
+      filePath: backupFilePath,
+      metadata: backupData.metadata,
+      createdAt: timestamp
+    };
+  } finally {
+    recordJobEnd('backupEngine', jobStartTime);
+  }
 }
 
 /**
- * List all available backups
+ * Lightweight header reader: extracts metadata and timestamp using multi-stage probing
+ * (4KB fast-path -> 64KB extended -> 32KB tail probe).
+ * Guarantees zero full-file buffering and never silently omits valid backups.
+ */
+export function readBackupHeader(fullPath) {
+  let fd = null;
+  try {
+    const stat = fs.statSync(fullPath);
+    const fileSize = stat.size;
+    fd = fs.openSync(fullPath, 'r');
+
+    let metadata = {
+      totalRecords: '—',
+      mediaCount: '—',
+      mediaSizeFormatted: '—'
+    };
+    let createdAt = null;
+
+    const extractFields = (text) => {
+      if (!createdAt) {
+        const createdMatch = text.match(/"createdAt"\s*:\s*"([^"]+)"/);
+        if (createdMatch) {
+          createdAt = createdMatch[1];
+        } else {
+          const bkpMatch = text.match(/"backupId"\s*:\s*"BKP-(\d+)"/);
+          if (bkpMatch) {
+            try {
+              createdAt = new Date(Number(bkpMatch[1])).toISOString();
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (metadata.totalRecords === '—') {
+        const metaMatch = text.match(/"metadata"\s*:\s*\{([^}]+)\}/);
+        if (metaMatch) {
+          try {
+            const parsedMeta = JSON.parse(`{${metaMatch[1]}}`);
+            metadata = { ...metadata, ...parsedMeta };
+          } catch (_) {}
+        }
+      }
+    };
+
+    // Stage 1: Probe first 4096 bytes (Fast path for standard backups)
+    const initialSize = Math.min(4096, fileSize);
+    const buf4k = Buffer.alloc(initialSize);
+    const read1 = fs.readSync(fd, buf4k, 0, initialSize, 0);
+    extractFields(buf4k.toString('utf8', 0, read1));
+
+    // Stage 2: If metadata or createdAt missing, probe up to 64KB from head
+    if ((metadata.totalRecords === '—' || !createdAt) && fileSize > 4096) {
+      const probeSize = Math.min(65536, fileSize);
+      const buf64k = Buffer.alloc(probeSize);
+      const read2 = fs.readSync(fd, buf64k, 0, probeSize, 0);
+      extractFields(buf64k.toString('utf8', 0, read2));
+    }
+
+    // Stage 3: If metadata still missing and file is large, probe the tail 32KB
+    // (covers cases where metadata is appended at the end of the JSON object)
+    if (metadata.totalRecords === '—' && fileSize > 65536) {
+      const tailSize = Math.min(32768, fileSize);
+      const tailOffset = fileSize - tailSize;
+      const bufTail = Buffer.alloc(tailSize);
+      const read3 = fs.readSync(fd, bufTail, 0, tailSize, tailOffset);
+      extractFields(bufTail.toString('utf8', 0, read3));
+    }
+
+    return { metadata, createdAt };
+  } catch (_) {
+    return {
+      metadata: { totalRecords: '—', mediaCount: '—', mediaSizeFormatted: '—' },
+      createdAt: null
+    };
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+  }
+}
+
+/**
+ * List all available backups using lightweight header streaming (Zero full-file buffering)
+ * Guarantees that valid backups are never silently omitted.
  */
 export function listBackups() {
-  if (!fs.existsSync(BACKUP_DIR)) return [];
+  if (isOptimizationTestMode()) {
+    return [];
+  }
+  const backupDir = resolveBackupDir();
+  if (!fs.existsSync(backupDir)) return [];
   try {
-    const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith('controlroom_backup_') && f.endsWith('.json'))
+    const files = fs.readdirSync(backupDir)
+      .filter(f => f.endsWith('.json') && (f.startsWith('controlroom_backup_') || f.startsWith('businz_backup_') || f.includes('backup')))
       .sort()
       .reverse();
 
     return files.map(file => {
-      const fullPath = path.join(BACKUP_DIR, file);
+      const fullPath = path.join(backupDir, file);
       const stat = fs.statSync(fullPath);
-      let meta = {
-        totalRecords: '—',
-        mediaCount: '—',
-        mediaSizeFormatted: '—'
-      };
-
-      try {
-        // Read header/metadata quickly
-        const content = fs.readFileSync(fullPath, 'utf8');
-        const parsed = JSON.parse(content);
-        if (parsed.metadata) meta = parsed.metadata;
-        if (parsed.createdAt) meta.createdAt = parsed.createdAt;
-      } catch (_) {}
+      const { metadata, createdAt } = readBackupHeader(fullPath);
 
       return {
         filename: file,
         sizeBytes: stat.size,
         sizeFormatted: formatBytes(stat.size),
-        createdAt: meta.createdAt || stat.mtime.toISOString(),
-        totalRecords: meta.totalRecords,
-        mediaCount: meta.mediaCount,
-        mediaSizeFormatted: meta.mediaSizeFormatted
+        createdAt: createdAt || stat.mtime.toISOString(),
+        totalRecords: metadata.totalRecords || '—',
+        mediaCount: metadata.mediaCount || '—',
+        mediaSizeFormatted: metadata.mediaSizeFormatted || '—'
       };
     });
   } catch (err) {
@@ -228,13 +357,17 @@ export function listBackups() {
  * Delete older backups exceeding keepCount
  */
 export function pruneOldBackups(keepCount = 15) {
+  if (isOptimizationTestMode()) {
+    return;
+  }
   try {
+    const backupDir = resolveBackupDir();
     const backups = listBackups();
     if (backups.length > keepCount) {
       const excess = backups.slice(keepCount);
       excess.forEach(b => {
         try {
-          const p = path.join(BACKUP_DIR, b.filename);
+          const p = path.join(backupDir, b.filename);
           if (fs.existsSync(p)) fs.unlinkSync(p);
           console.log(`[BackupEngine] Pruned old backup: ${b.filename}`);
         } catch (_) {}
@@ -247,6 +380,10 @@ export function pruneOldBackups(keepCount = 15) {
  * Restore ERP state from a backup object
  */
 export async function restoreFromBackup(backupData, { supabaseClient, memoryStore = {} } = {}) {
+  if (isOptimizationTestMode()) {
+    throw new Error('[FAIL-CLOSED] External backup restoration is blocked in optimization test mode.');
+  }
+
   if (!backupData || typeof backupData !== 'object') {
     throw new Error('Invalid backup file structure.');
   }

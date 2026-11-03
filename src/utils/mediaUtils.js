@@ -303,6 +303,11 @@ export const stripDataUrlsFromRecord = (obj) => {
       delete target.url;
     }
 
+    // Auto-resolve storagePath to permanent URL so photos never disappear
+    if (!target.url && target.storagePath) {
+      target.url = `/api/uploads/${target.storageBucket || 'bom-documents'}/${target.storagePath}`;
+    }
+
     // If target has a permanent server URL (/api/uploads/ or http), strip heavy base64
     if (target.url && (target.url.startsWith('/api/uploads/') || target.url.startsWith('/uploads/') || target.url.startsWith('http://') || target.url.startsWith('https://'))) {
       if (target.dataUrl) delete target.dataUrl;

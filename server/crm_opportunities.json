@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "id": "OPP-2026-101",
+    "oppNumber": "OPP-2026-101",
+    "title": "0 kW Aluminium Mounting Structure",
+    "customerId": "CUST-VRM-2549",
+    "customerName": "Contact 7092996057",
+    "companyName": "Contact 7092996057",
+    "dealValue": 0,
+    "stage": "Requirement Received",
+    "probability": 40,
+    "assignedSalesperson": "sales",
+    "salesperson": "sales",
+    "targetCloseDate": "2026-11-09",
+    "expectedClosingDate": "2026-11-09",
+    "capacityKw": 100,
+    "structureType": "Aluminium Rooftop Rails",
+    "contactPerson": "",
+    "phone": "",
+    "requirement": "",
+    "productCategory": "Aluminium Mounting Structures",
+    "estimatedQty": "",
+    "priority": "HIGH",
+    "bomCode": "",
+    "quotationNumber": "",
+    "lastActivity": "",
+    "nextFollowup": "",
+    "notes": "",
+    "createdAt": "2026-10-25T16:35:13.944Z",
+    "updatedAt": "2026-10-25T16:35:13.944Z"
+  }
+]

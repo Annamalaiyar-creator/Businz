@@ -2,7 +2,7 @@ import React from "react";
 import {
   Plus, Trash2, Eye, FileText, AlertCircle, AlertTriangle, X,
   CheckCircle, Clock, FileCheck, UploadCloud, Truck, Package,
-  ShoppingCart, Upload, Layers, Image, Bell, Save
+  ShoppingCart, Upload, Layers, Image, Bell, Save, Boxes, ChevronDown, User, Paperclip
 } from "lucide-react";
 import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
@@ -12,10 +12,13 @@ import { saveCloudStoreImmediate, saveCloudBomRow } from "../../utils/supabaseDa
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { getFullProductsCatalogWithStock } from "../../utils/productCatalogService";
 import { resolveProductCode, normalizeProductName } from "../../utils/vrmProductsData";
+import { searchCustomers } from "../../services/customerService";
 import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
 import { getNextSequence } from "../../utils/sequenceGenerator";
 import { isFixedQuantityPreset, VRM_HDG_PRESETS } from "../../vrmHdgProposalPresets";
+import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
+import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from "../PerformaInvoiceView";
 
 export default function CreateBomFormPage(props) {
   const {
@@ -38,7 +41,216 @@ export default function CreateBomFormPage(props) {
     showClearConfirmModal, setShowClearConfirmModal,
     bomConfirmModal, setBomConfirmModal, showCustomAlert
   } = props;
+  const [internalDocType, setInternalDocType] = React.useState('Invoice');
+  const newBomDocType = props.newBomDocType !== undefined ? props.newBomDocType : internalDocType;
+  const setNewBomDocType = props.setNewBomDocType || setInternalDocType;
+
+  const validateProductionBomForm = props.validateProductionBomForm || ((isDraft = false) => {
+    const errors = {};
+    const missingList = [];
+    if (!newBomProductName || !newBomProductName.trim()) {
+      errors.customerName = 'Customer Name is required';
+      missingList.push({ field: 'Customer Name', message: 'Please select or enter Customer Name.', targetId: 'new-bom-customer-input' });
+    }
+    if (!isDraft && (!newBomDocType || !newBomDocType.trim())) {
+      errors.docType = 'Document Type (DC or Invoice) is mandatory';
+      missingList.push({ field: 'Document Type (DC or Invoice) *', message: 'Document Type is mandatory. Please select Invoice or DC.', targetId: 'new-bom-doc-type' });
+    }
+    if (!isDraft && (!newBomDeliveryDate || !newBomDeliveryDate.trim())) {
+      errors.deliveryDate = 'Delivery Date is required';
+      missingList.push({ field: 'Delivery Date', message: 'Please select expected delivery date.', targetId: 'prod-field-newBomDeliveryDate' });
+    }
+    if (!bomMaterialsList || bomMaterialsList.length === 0) {
+      errors.items = 'At least 1 product item is required';
+      missingList.push({ field: 'Items', message: 'Please add at least one material/product item.', targetId: 'bom-materials-list' });
+    }
+    return { isValid: missingList.length === 0, missingList, errors };
+  });
+
   const [newBomPartialAmount, setNewBomPartialAmount] = React.useState(props.newBomPartialAmount || '');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = React.useState(false);
+  const [customersData, setCustomersData] = React.useState(() => (Array.isArray(customerList) ? customerList : []));
+  const searchCustTimerRef = React.useRef(null);
+
+  // Sync customer list from props
+  React.useEffect(() => {
+    if (Array.isArray(customerList) && customerList.length > 0) {
+      setCustomersData(prev => {
+        const map = new Map();
+        (prev || []).forEach(p => {
+          const k = (p.customerCode || p.id || p.companyName || p.name || '').toLowerCase().trim();
+          if (k) map.set(k, p);
+        });
+        customerList.forEach(c => {
+          const k = (c.customerCode || c.id || c.companyName || c.name || '').toLowerCase().trim();
+          if (k && !map.has(k)) map.set(k, c);
+        });
+        return Array.from(map.values());
+      });
+    }
+  }, [customerList]);
+
+  // Lazy-load initial registered customers if empty
+  React.useEffect(() => {
+    if (!customersData || customersData.length === 0) {
+      searchCustomers({ limit: 60 })
+        .then(res => {
+          if (Array.isArray(res) && res.length > 0) {
+            setCustomersData(res);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  const filteredCustomerSuggestions = React.useMemo(() => {
+    const list = Array.isArray(customersData) ? customersData : [];
+    const q = (newBomProductName || '').toLowerCase().trim();
+    if (!q) return list.slice(0, 60);
+    return list.filter(c => {
+      const name = (c.companyName || c.name || c.c2 || c.customerName || '').toLowerCase();
+      const code = (c.code || c.customerCode || c.id || '').toLowerCase();
+      const gst = (c.gst || c.gstNumber || c.gstNo || c.gstin || '').toLowerCase();
+      const contact = (c.contact || c.contactPerson || c.primaryContact?.name || '').toLowerCase();
+      const phone = (c.phone || c.mobile || c.primaryContact?.phone || '').toLowerCase();
+      const city = (c.city || c.billingAddressObj?.city || '').toLowerCase();
+      return name.includes(q) || code.includes(q) || gst.includes(q) || contact.includes(q) || phone.includes(q) || city.includes(q);
+    }).slice(0, 60);
+  }, [customersData, newBomProductName]);
+
+  const handleSelectCustomer = (chosen) => {
+    if (!chosen) return;
+    const name = (chosen.companyName || chosen.name || chosen.c2 || chosen.customerName || chosen.code || '').trim();
+    if (name) {
+      setNewBomProductName(name);
+    }
+
+    const dObj = chosen.deliveryAddressObj || {};
+    const dAddr = dObj.address || chosen.c7 || chosen.deliveryAddress || chosen.dispatchAddress || '';
+    const bObj = chosen.billingAddressObj || {};
+    const bAddr = bObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '';
+
+    const clean = (s) => String(s || '').trim().toLowerCase();
+    const isSame = !dAddr || (
+      clean(dAddr) === clean(bAddr) &&
+      clean(dObj.city || chosen.city || '') === clean(bObj.city || chosen.city || '') &&
+      clean(dObj.state || chosen.state || '') === clean(bObj.state || chosen.state || '') &&
+      clean(dObj.pincode || chosen.pincode || '') === clean(bObj.pincode || chosen.pincode || '')
+    );
+
+    setSameAsBilling(isSame);
+    setNewBomDeliveryProofDoc(null);
+
+    // Auto-fill billing address
+    setNewBomBillingStreet(bObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '');
+    setNewBomBillingCity(bObj.city || chosen.city || '');
+    setNewBomBillingState(bObj.state || chosen.state || '');
+    setNewBomBillingPincode(bObj.pincode || chosen.pincode || '');
+
+    // Auto-fill delivery address
+    if (dAddr && !isSame) {
+      setNewBomDeliveryStreet(dObj.address || chosen.c7 || chosen.deliveryAddress || chosen.dispatchAddress || '');
+      setNewBomDeliveryCity(dObj.city || chosen.dispatchCity || chosen.city || '');
+      setNewBomDeliveryState(dObj.state || chosen.dispatchState || chosen.state || '');
+      setNewBomDeliveryPincode(dObj.pincode || chosen.dispatchPincode || chosen.pincode || '');
+    } else {
+      setNewBomDeliveryStreet(bObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '');
+      setNewBomDeliveryCity(bObj.city || chosen.city || '');
+      setNewBomDeliveryState(bObj.state || chosen.state || '');
+      setNewBomDeliveryPincode(bObj.pincode || chosen.pincode || '');
+    }
+
+    if (bomFormErrors.customerName) {
+      setBomFormErrors(prev => ({ ...prev, customerName: null }));
+    }
+    setIsCustomerDropdownOpen(false);
+  };
+
+  // Normalize multi-image proofs for Delivery Address and Payment (target: at least 4 images)
+  const deliveryDocs = React.useMemo(() => {
+    if (!newBomDeliveryProofDoc) return [];
+    return Array.isArray(newBomDeliveryProofDoc) ? newBomDeliveryProofDoc : [newBomDeliveryProofDoc];
+  }, [newBomDeliveryProofDoc]);
+
+  const paymentDocs = React.useMemo(() => {
+    if (!newBomPaymentProofDoc) return [];
+    return Array.isArray(newBomPaymentProofDoc) ? newBomPaymentProofDoc : [newBomPaymentProofDoc];
+  }, [newBomPaymentProofDoc]);
+
+  const handleUploadDeliveryProofFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    files.forEach((file) => {
+      try {
+        validateClientFile(file);
+        compressAndSaveFile(file, (res) => {
+          if (res) {
+            if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+            const docObj = {
+              ...res,
+              _rawFile: file,
+              dataUrl: res.dataUrl || null,
+              previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+            };
+            setNewBomDeliveryProofDoc(prev => {
+              const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+              if (current.some(d => d.name === docObj.name && d.size === docObj.size)) return current;
+              return [...current, docObj];
+            });
+          }
+        });
+      } catch (err) {
+        alert(`⚠️ Cannot Proceed with ${file.name}: ${err.message}`);
+      }
+    });
+  };
+
+  const handleRemoveDeliveryDoc = (index) => {
+    setNewBomDeliveryProofDoc(prev => {
+      const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+      const updated = current.filter((_, i) => i !== index);
+      return updated.length > 0 ? updated : null;
+    });
+  };
+
+  const handleUploadPaymentProofFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    files.forEach((file) => {
+      try {
+        validateClientFile(file);
+        compressAndSaveFile(file, (res) => {
+          if (res) {
+            if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+            const docObj = {
+              ...res,
+              _rawFile: file,
+              dataUrl: res.dataUrl || null,
+              previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+            };
+            setNewBomPaymentProofDoc(prev => {
+              const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+              if (current.some(d => d.name === docObj.name && d.size === docObj.size)) return current;
+              return [...current, docObj];
+            });
+            if (setBomFormErrors) {
+              setBomFormErrors(prev => ({ ...prev, paymentProof: null }));
+            }
+          }
+        });
+      } catch (err) {
+        alert(`⚠️ Cannot Proceed with ${file.name}: ${err.message}`);
+      }
+    });
+  };
+
+  const handleRemovePaymentDoc = (index) => {
+    setNewBomPaymentProofDoc(prev => {
+      const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+      const updated = current.filter((_, i) => i !== index);
+      return updated.length > 0 ? updated : null;
+    });
+  };
 
   // Live unified catalog with real-time stock balances
   const [itemsList, setItemsList] = React.useState(() => {
@@ -97,10 +309,11 @@ export default function CreateBomFormPage(props) {
 
   const calculateBOMTotals = () => {
     const kitUnitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
-    const kitMultiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1;
+    const kitMultiplier = parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1;
     const kitSubtotal = selectedPreset ? (kitUnitPrice * kitMultiplier) : 0;
 
     const itemsSub = (bomMaterialsList || []).reduce((acc, item) => {
+      if (selectedPreset && (item.isPresetItem || item.presetGroupId)) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       return acc + (q * r);
@@ -110,6 +323,7 @@ export default function CreateBomFormPage(props) {
     const disc = 0;
 
     const itemsGst = (bomMaterialsList || []).reduce((acc, item) => {
+      if (selectedPreset && (item.isPresetItem || item.presetGroupId)) return acc;
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;
@@ -179,28 +393,7 @@ export default function CreateBomFormPage(props) {
             onClick={() => setBomConfirmModal('cancel')}
             style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
           >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => {
-              const validation = validateProductionBomForm(true);
-              if (!validation.isValid) {
-                showCustomAlert({
-                  title: `⚠️ Missing Required Details (${validation.missingList.length} field${validation.missingList.length > 1 ? 's' : ''})`,
-                  message: 'Please complete the highlighted details before saving draft:',
-                  type: 'warning',
-                  details: validation.missingList,
-                  targetFieldId: validation.missingList[0]?.targetId
-                });
-                return;
-              }
-              setBomConfirmModal('draft');
-            }}
-            style={{ border: 'none', background: '#FFFFFF', color: '#4F46E5', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
-          >
-            <FileText style={{ width: '15px', height: '15px' }} />
-            Save as Draft
+            ← Back
           </button>
 
           <button
@@ -221,7 +414,7 @@ export default function CreateBomFormPage(props) {
             style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             <CheckCircle style={{ width: '16px', height: '16px' }} />
-            Create Order →
+            Complete →
           </button>
         </div>
       </div>
@@ -237,7 +430,7 @@ export default function CreateBomFormPage(props) {
           </h3>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           <div>
             <label htmlFor="create-bom-form-order-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Date</label>
             <div style={{ position: 'relative' }}>
@@ -281,6 +474,47 @@ export default function CreateBomFormPage(props) {
           </div>
 
           <div>
+            <label htmlFor="prod-field-newBomDocType" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              Document Type <span style={{ color: '#EF4444' }}>*</span>
+            </label>
+            <select
+              id="prod-field-newBomDocType"
+              name="docType"
+              aria-label="Document Type"
+              value={newBomDocType}
+              onChange={(e) => {
+                const val = e.target.value;
+                setNewBomDocType(val);
+                if (val === 'DC') {
+                  setNewBomPaymentType('100% Paid');
+                  setNewBomPaymentProofDoc(null);
+                  setPaymentDocs([]);
+                }
+                if (bomFormErrors.docType) {
+                  setBomFormErrors(prev => ({ ...prev, docType: null }));
+                }
+              }}
+              style={{
+                width: '100%', height: '42px', borderRadius: '10px',
+                border: bomFormErrors.docType ? '2px solid #EF4444' : (newBomDocType === 'DC' ? '1.5px solid #D97706' : '1.5px solid #0E7490'),
+                backgroundColor: bomFormErrors.docType ? '#FEF2F2' : (newBomDocType === 'DC' ? '#FFFBEB' : '#F0FDFA'),
+                padding: '0 12px', fontSize: '13px', fontWeight: '800',
+                color: newBomDocType === 'DC' ? '#92400E' : '#0E7490',
+                outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
+              }}
+            >
+              <option value="">-- Select DC or Invoice --</option>
+              <option value="Invoice">Invoice (Official Tax Invoice)</option>
+              <option value="DC">DC (Delivery Challan)</option>
+            </select>
+            {bomFormErrors.docType && (
+              <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                ⚠️ {bomFormErrors.docType}
+              </div>
+            )}
+          </div>
+
+          <div>
             <label htmlFor="create-bom-form-order-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Number</label>
             <input id="create-bom-form-order-number" name="orderNumber" aria-label="Order Number"
               type="text"
@@ -304,98 +538,211 @@ export default function CreateBomFormPage(props) {
           </h3>
         </div>
 
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
             <label htmlFor="prod-field-newBomProductName" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Customer Name <span style={{ color: '#EF4444' }}>*</span>
             </label>
-            <div style={{ width: '100%' }}>
-              <input name="customerName" aria-label="Customer Name"
+            <div style={{ position: 'relative', width: '100%' }}>
+              <input
+                id="prod-field-newBomProductName"
+                name="customerName"
+                aria-label="Customer Name"
                 type="text"
-                list="bom-customer-name-suggestions"
-                placeholder="Type or select customer from list..."
+                autoComplete="off"
+                placeholder="Type or select customer from registered list..."
                 value={newBomProductName}
                 onChange={(e) => {
                   const val = e.target.value;
                   setNewBomProductName(val);
-                  const target = (val || '').toLowerCase().trim();
-                  if (!target) return;
-
-                  const chosen = customerList.find(c => {
-                    const code = (c.code || '').toLowerCase().trim();
-                    const c2 = (c.c2 || '').toLowerCase().trim();
-                    const cName = (c.customerName || '').toLowerCase().trim();
-                    const comp = (c.companyName || '').toLowerCase().trim();
-                    return code === target || c2 === target || cName === target || comp === target ||
-                           (code && code.startsWith(target)) || (c2 && c2.startsWith(target)) ||
-                           (cName && cName.startsWith(target)) || (comp && comp.startsWith(target)) ||
-                           (c2 && c2.includes(target)) || (comp && comp.includes(target));
-                  });
-
-                  if (chosen) {
-                    const dObj = chosen.deliveryAddressObj || {};
-                    const dAddr = dObj.address || chosen.c7 || chosen.deliveryAddress || chosen.dispatchAddress || '';
-                    const bObj = chosen.billingAddressObj || {};
-                    const bAddr = bObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '';
-
-                    const clean = (s) => String(s || '').trim().toLowerCase();
-                    const isSame = !dAddr || (
-                      clean(dAddr) === clean(bAddr) &&
-                      clean(dObj.city || chosen.city || '') === clean(bObj.city || chosen.city || '') &&
-                      clean(dObj.state || chosen.state || '') === clean(bObj.state || chosen.state || '') &&
-                      clean(dObj.pincode || chosen.pincode || '') === clean(bObj.pincode || chosen.pincode || '')
-                    );
-
-                    setSameAsBilling(isSame);
-                    setNewBomDeliveryProofDoc(null);
-
-                    if (dAddr && !isSame) {
-                      setNewBomDeliveryStreet(dObj.address || chosen.c7 || chosen.deliveryAddress || chosen.dispatchAddress || '');
-                      setNewBomDeliveryCity(dObj.city || chosen.dispatchCity || chosen.city || '');
-                      setNewBomDeliveryState(dObj.state || chosen.dispatchState || chosen.state || '');
-                      setNewBomDeliveryPincode(dObj.pincode || chosen.dispatchPincode || chosen.pincode || '');
-                    } else {
-                      setNewBomDeliveryStreet(bObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '');
-                      setNewBomDeliveryCity(bObj.city || chosen.city || '');
-                      setNewBomDeliveryState(bObj.state || chosen.state || '');
-                      setNewBomDeliveryPincode(bObj.pincode || chosen.pincode || '');
-                    }
-                  }
+                  setIsCustomerDropdownOpen(true);
                   if (bomFormErrors.customerName) {
                     setBomFormErrors(prev => ({ ...prev, customerName: null }));
                   }
+                  const q = val.trim();
+                  if (q.length >= 2) {
+                    if (searchCustTimerRef.current) clearTimeout(searchCustTimerRef.current);
+                    searchCustTimerRef.current = setTimeout(async () => {
+                      try {
+                        const matches = await searchCustomers({ query: q, limit: 50 });
+                        if (Array.isArray(matches) && matches.length > 0) {
+                          setCustomersData(prev => {
+                            const map = new Map();
+                            (prev || []).forEach(p => {
+                              const k = (p.customerCode || p.id || p.companyName || p.name || '').toLowerCase().trim();
+                              if (k) map.set(k, p);
+                            });
+                            matches.forEach(m => {
+                              const k = (m.customerCode || m.id || m.companyName || m.name || '').toLowerCase().trim();
+                              if (k && !map.has(k)) map.set(k, m);
+                            });
+                            return Array.from(map.values());
+                          });
+                        }
+                      } catch (_) {}
+                    }, 250);
+                  }
                 }}
-                id="prod-field-newBomProductName"
+                onFocus={() => setIsCustomerDropdownOpen(true)}
                 style={{
-                  width: '100%', height: '42px', borderRadius: '10px',
-                  border: bomFormErrors.customerName ? '2px solid #EF4444' : '1px solid #E2E8F0',
-                  backgroundColor: bomFormErrors.customerName ? '#FEF2F2' : 'white',
-                  padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none'
+                  width: '100%',
+                  height: '42px',
+                  borderRadius: '10px',
+                  border: bomFormErrors.customerName ? '2px solid #EF4444' : isCustomerDropdownOpen ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                  backgroundColor: bomFormErrors.customerName ? '#FEF2F2' : '#FFFFFF',
+                  padding: '0 36px 0 14px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#0F172A',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  boxShadow: isCustomerDropdownOpen ? '0 0 0 3px rgba(14, 116, 144, 0.1)' : 'none'
                 }}
-               />
-              {bomFormErrors.customerName && (
-                <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                  ⚠️ {bomFormErrors.customerName}
+              />
+              <button
+                type="button"
+                onClick={() => setIsCustomerDropdownOpen(prev => !prev)}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748B'
+                }}
+                title="Toggle customer list"
+              >
+                <ChevronDown size={16} style={{ transform: isCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+              </button>
+
+              {/* Custom Searchable Scrollable Dropdown List with ALL Customers (Identical to PI) */}
+              {isCustomerDropdownOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  minWidth: 'min(520px, 92vw)',
+                  width: 'max(100%, 520px)',
+                  maxWidth: '92vw',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #CBD5E1',
+                  boxShadow: '0 14px 35px -4px rgba(0, 0, 0, 0.18), 0 6px 14px -2px rgba(0, 0, 0, 0.08)',
+                  zIndex: 9999,
+                  maxHeight: '380px',
+                  overflowY: 'auto',
+                  padding: '6px'
+                }}>
+                  <div style={{
+                    padding: '8px 12px',
+                    fontSize: '11.5px',
+                    fontWeight: '700',
+                    color: '#64748B',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '8px',
+                    marginBottom: '6px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span>SHOWING {filteredCustomerSuggestions.length} OF {customersData.length} REGISTERED CUSTOMERS</span>
+                    {newBomProductName && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNewBomProductName('');
+                        }}
+                        style={{ border: 'none', background: 'transparent', color: '#0E7490', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {filteredCustomerSuggestions.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+                      No matching customers found for "{newBomProductName}". You can continue typing to use this company.
+                    </div>
+                  ) : (
+                    filteredCustomerSuggestions.map((c, idx) => {
+                      const name = (c.companyName || c.name || c.c2 || c.customerName || c.code || '').trim();
+                      const gst = c.gst || c.gstNumber || c.gstNo || c.gstin;
+                      const contact = c.contact || c.contactPerson || c.primaryContact?.name;
+                      const phone = c.phone || c.mobile || c.primaryContact?.phone;
+                      const city = c.city || c.billingAddressObj?.city;
+                      const isSelected = name.toLowerCase() === (newBomProductName || '').toLowerCase().trim();
+
+                      return (
+                        <div
+                          key={idx}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectCustomer(c);
+                          }}
+                          onClick={() => {
+                            handleSelectCustomer(c);
+                          }}
+                          style={{
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            backgroundColor: isSelected ? '#ECFEFF' : 'transparent',
+                            borderLeft: isSelected ? '3px solid #0E7490' : '3px solid transparent',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            transition: 'background-color 0.1s ease',
+                            gap: '12px',
+                            marginBottom: '2px'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: '13.5px', fontWeight: '700', color: isSelected ? '#0E7490' : '#0F172A', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.3' }}>
+                              {name}
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                              {contact && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><User size={12} style={{ color: '#64748B' }} /> {contact}</span>}
+                              {phone && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>📞 {phone}</span>}
+                              {city && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>📍 {city}</span>}
+                            </div>
+                          </div>
+                          {gst && (
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#0369A1', backgroundColor: '#E0F2FE', padding: '3px 8px', borderRadius: '5px', whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                              GST: {gst}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               )}
-              <datalist id="bom-customer-name-suggestions">
-                {customerList.map((c, idx) => {
-                  const val = c.code || c.customerName || c.companyName;
-                  const label = c.c2 || c.companyName;
-                  return (
-                    <option key={idx} value={val}>
-                      {label && label !== val ? `${val} (${label})` : val}
-                    </option>
-                  );
-                })}
-              </datalist>
             </div>
+            {bomFormErrors.customerName && (
+              <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                ⚠️ {bomFormErrors.customerName}
+              </div>
+            )}
           </div>
           <button
+            type="button"
             onClick={() => {
               setShowCustomerForm(true);
             }}
-            style={{ border: '1px solid #E0E7FF', background: '#EEF2FF', color: '#4F46E5', height: '42px', padding: '0 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+            style={{ border: '1px solid #E0E7FF', background: '#EEF2FF', color: '#4F46E5', height: '42px', padding: '0 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', marginTop: '24px' }}
           >
             <Plus style={{ width: '15px', height: '15px' }} />
             Add New Customer
@@ -650,137 +997,37 @@ export default function CreateBomFormPage(props) {
                     </div>
                   </div>
 
-                  {/* MANDATORY ADDRESS PROOF ATTACHMENT WHEN DELIVERY ADDRESS DIFFERS FROM BILLING */}
+                  {/* ADDRESS PROOF REFERENCE (ATTACHMENT UPLOAD IN DEDICATED BOTTOM SECTION) */}
                   {!sameAsBilling ? (
                     <div style={{
                       marginTop: '6px',
-                      padding: '14px 16px',
+                      padding: '12px 16px',
                       backgroundColor: '#FEF2F2',
-                      border: '1px dashed #F87171',
-                      borderRadius: '12px',
+                      border: '1px solid #FECACA',
+                      borderRadius: '10px',
                       display: 'flex',
-                      flexDirection: 'column',
-                      gap: '10px'
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <AlertCircle style={{ width: '14px', height: '14px' }} />
-                          </div>
-                          <div>
-                            <h5 style={{ margin: 0, fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>
-                              Delivery Address Proof Document <span style={{ color: '#64748B', fontWeight: '600' }}>(Optional)</span>
-                            </h5>
-                            <span style={{ fontSize: '11px', color: '#B91C1C' }}>
-                              Delivery address differs from billing address. Upload proof (GST / Electricity Bill / Consignee Lease).
-                            </span>
-                          </div>
-                        </div>
-                        {newBomDeliveryProofDoc && (
-                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle style={{ width: '12px', height: '12px' }} /> Attached
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertCircle style={{ width: '16px', height: '16px', color: '#DC2626', flexShrink: 0 }} />
+                        <span style={{ fontSize: '12px', color: '#991B1B', fontWeight: '600' }}>
+                          Alternate Delivery Address specified. Address proof can be attached (optional) in the <strong>Document Attachments</strong> section at the bottom of this form.
+                        </span>
                       </div>
-
-                      {newBomDeliveryProofDoc ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FECACA' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <FileText style={{ width: '16px', height: '16px', color: '#DC2626' }} />
-                            <div>
-                              <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>{newBomDeliveryProofDoc.name}</div>
-                              <div style={{ fontSize: '10px', color: '#64748B' }}>{newBomDeliveryProofDoc.size || '1.2 MB'} • Uploaded</div>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => setPreviewDocModal({ title: 'Delivery Address Proof Document', doc: newBomDeliveryProofDoc })}
-                              style={{ border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '6px' }}
-                            >
-                              <Eye style={{ width: '13px', height: '13px' }} /> View Image
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setNewBomDeliveryProofDoc(null)}
-                              style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Trash2 style={{ width: '13px', height: '13px' }} /> Remove
-                            </button>
-                          </div>
-                        </div>
+                      {deliveryDocs.length > 0 ? (
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                          ✓ {deliveryDocs.length} Image{deliveryDocs.length > 1 ? 's' : ''} Attached
+                        </span>
                       ) : (
-                        <div
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            const file = e.dataTransfer.files && e.dataTransfer.files[0];
-                            if (file) {
-                              try {
-                                validateClientFile(file);
-                                compressAndSaveFile(file, (res) => {
-                                  if (res) {
-                                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                    setNewBomDeliveryProofDoc({
-                                      ...res,
-                                      _rawFile: file,
-                                      dataUrl: res.dataUrl || null,
-                                      previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                                    });
-                                  }
-                                });
-                              } catch (err) {
-                                setNewBomDeliveryProofDoc(null);
-                                alert(`⚠️ Cannot Proceed: ${err.message}`);
-                              }
-                            }
-                          }}
-                          style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '16px 20px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
-                        >
-                          <UploadCloud style={{ width: '28px', height: '28px', color: '#DC2626' }} />
-                          <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
-                            Drag & drop address proof document here or
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                              <Upload style={{ width: '13px', height: '13px' }} />
-                              Browse Files
-                              <input id="create-bom-form-input-3" name="input3" aria-label="Input 3"
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  const file = e.target.files && e.target.files[0];
-                                  if (file) {
-                                    try {
-                                      validateClientFile(file);
-                                      compressAndSaveFile(file, (res) => {
-                                        if (res) {
-                                          if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                          setNewBomDeliveryProofDoc({
-                                            ...res,
-                                            _rawFile: file,
-                                            dataUrl: res.dataUrl || null,
-                                            previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                                          });
-                                        }
-                                      });
-                                    } catch (err) {
-                                      e.target.value = '';
-                                      setNewBomDeliveryProofDoc(null);
-                                      alert(`⚠️ Cannot Proceed: ${err.message}`);
-                                    }
-                                  }
-                                }}
-                               />
-                            </label>
-                          </div>
-                          <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG, DOC (Max 5 MB)</span>
-                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '3px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                          📷 Upload in Bottom Section
+                        </span>
                       )}
                     </div>
                   ) : (
-                    <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
                       <CheckCircle style={{ width: '13px', height: '13px' }} /> Delivery address matches registered billing address. No additional address proof required.
                     </div>
                   )}
@@ -821,14 +1068,14 @@ export default function CreateBomFormPage(props) {
                 setSelectedBomItemIndexes([]);
 
                 if (targetPreset && targetPreset.items) {
-                  const isFixedKit = isFixedQuantityPreset(val, targetPreset.label || val);
-                  const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                   setBomMaterialsList(targetPreset.items.map(it => {
-                    const baseQ = parseFloat(it.qty) || 1;
+                    const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+                    const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+                    const baseQ = hasQty ? parseFloat(rawQ) : '';
                     return {
                       ...it,
                       baseQty: baseQ,
-                      qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+                      qty: hasQty ? String(baseQ) : '',
                       rate: '0',
                       isPresetItem: true
                     };
@@ -852,14 +1099,14 @@ export default function CreateBomFormPage(props) {
                 onClick={() => {
                   const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
                   if (targetPreset && targetPreset.items) {
-                    const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset.label || selectedPreset);
-                    const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                     const additionalItems = targetPreset.items.map(it => {
-                      const baseQ = parseFloat(it.qty) || 1;
+                      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+                      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+                      const baseQ = hasQty ? parseFloat(rawQ) : '';
                       return {
                         ...it,
                         baseQty: baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+                        qty: hasQty ? String(baseQ) : '',
                         rate: '0',
                         isPresetItem: true
                       };
@@ -904,32 +1151,6 @@ export default function CreateBomFormPage(props) {
                   const rawVal = e.target.value;
                   const newCount = rawVal === '' ? '' : Math.max(1, parseInt(rawVal) || 1);
                   setPresetSetCount(newCount);
-
-                  const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
-                  const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset?.label || selectedPreset);
-                  const multiplier = isFixedKit ? 1 : (parseInt(rawVal) || 1);
-                  if (targetPreset && targetPreset.items) {
-                    const baseItems = targetPreset.items;
-                    setBomMaterialsList(baseItems.map(it => {
-                      const baseQ = parseFloat(it.qty) || 1;
-                      return {
-                        ...it,
-                        baseQty: baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
-                        rate: '0',
-                        isPresetItem: true
-                      };
-                    }));
-                  } else if (bomMaterialsList.length > 0) {
-                    setBomMaterialsList(prev => prev.map(it => {
-                      const baseQ = parseFloat(it.baseQty || it.qty) || 1;
-                      return {
-                        ...it,
-                        baseQty: it.baseQty || baseQ,
-                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier))
-                      };
-                    }));
-                  }
                 }}
                 style={{
                   width: '54px',
@@ -1039,10 +1260,10 @@ export default function CreateBomFormPage(props) {
         )}
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+          <table style={{ width: '100%', minWidth: '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
             <thead>
               <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
+                <th style={{ padding: '12px 8px', width: '42px', minWidth: '42px', textAlign: 'center' }}>
                   <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                     type="checkbox"
                     checked={bomMaterialsList.length > 0 && selectedBomItemIndexes.length === bomMaterialsList.length}
@@ -1056,52 +1277,181 @@ export default function CreateBomFormPage(props) {
                     style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
                    />
                 </th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '25%' }}>
+                <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '240px' }}>
                   Product / Item <span style={{ color: '#EF4444' }}>*</span>
                 </th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '18%' }}>Description</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>
+                <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '160px' }}>Description</th>
+                <th style={{ padding: '12px 8px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
+                <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>
                   Qty <span style={{ color: '#EF4444' }}>*</span>
                 </th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
+                <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
+                <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px', textAlign: 'right' }}>Taxable (₹)</th>
+                <th style={{ padding: '12px 10px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'right' }}>Total (₹)</th>
+                <th style={{ padding: '12px 6px', fontWeight: '700', width: '48px', minWidth: '48px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {bomMaterialsList.map((item, i) => {
-                const q = parseFloat(item.qty) || 0;
-                const r = parseFloat(item.rate) || 0;
-                const taxable = q * r;
-                const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
-                const gstAmt = taxable * (gstPct / 100);
-                const rowTot = taxable + gstAmt;
-                const isChecked = selectedBomItemIndexes.includes(i);
-                return (
-                  <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#EEF2FF' : 'transparent' }}>
-                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                      <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedBomItemIndexes(prev => [...prev, i]);
-                          } else {
-                            setSelectedBomItemIndexes(prev => prev.filter(idx => idx !== i));
-                          }
-                        }}
-                        style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
-                       />
-                    </td>
-                    <td style={{ padding: '12px 10px' }}>
-                      <TypeableProductSelect
-                        value={item.name || ''}
-                        itemsList={itemsList}
-                        placeholder="Type or select product..."
-                        accentColor="#4F46E5"
+              {(() => {
+                const hasAnyPreset = bomMaterialsList.some(it => it.isPresetItem || (selectedPreset && parseFloat(it.rate || 0) === 0));
+                const distinctGroupIds = [];
+                bomMaterialsList.forEach(it => {
+                  const isPreset = Boolean(it.isPresetItem || (selectedPreset && parseFloat(it.rate || 0) === 0));
+                  if (isPreset) {
+                    const gid = it.presetGroupId || it.presetName || (selectedPreset || 'default_preset');
+                    if (!distinctGroupIds.includes(gid)) {
+                      distinctGroupIds.push(gid);
+                    }
+                  }
+                });
+                const customItems = bomMaterialsList.filter(it => !it.isPresetItem && !(selectedPreset && parseFloat(it.rate || 0) === 0));
+
+                return bomMaterialsList.map((item, i) => {
+                  const q = parseFloat(item.qty) || 0;
+                  const r = parseFloat(item.rate) || 0;
+                  const taxable = q * r;
+                  const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+                  const gstAmt = taxable * (gstPct / 100);
+                  const rowTot = taxable + gstAmt;
+                  const isChecked = selectedBomItemIndexes.includes(i);
+
+                  const isPresetItem = Boolean(item.isPresetItem || (selectedPreset && r === 0));
+                  const gid = isPresetItem ? (item.presetGroupId || item.presetName || (selectedPreset || 'default_preset')) : null;
+                  const groupItems = isPresetItem ? bomMaterialsList.filter(it => (it.presetGroupId || it.presetName || (selectedPreset || 'default_preset')) === gid) : [];
+                  const isFirstInGroup = isPresetItem && bomMaterialsList.findIndex(it => (it.presetGroupId || it.presetName || (selectedPreset || 'default_preset')) === gid) === i;
+                  const groupCount = groupItems.length;
+                  const groupIndex = gid ? distinctGroupIds.indexOf(gid) : -1;
+                  const presetNumber = groupIndex >= 0 ? groupIndex + 1 : 1;
+                  const theme = groupIndex >= 0 ? getPresetTheme(groupIndex) : PRESET_THEMES[0];
+                  const itemIndexInGroup = isPresetItem ? groupItems.findIndex(it => it === item) + 1 : 0;
+                  const isFirstCustomItem = !isPresetItem && bomMaterialsList.findIndex(it => !it.isPresetItem && !(selectedPreset && parseFloat(it.rate || 0) === 0)) === i;
+                  const customIndex = !isPresetItem ? customItems.findIndex(it => it === item) + 1 : null;
+                  const displaySNo = isPresetItem && distinctGroupIds.length > 0
+                    ? `${presetNumber}.${itemIndexInGroup}`
+                    : (customIndex !== null ? (distinctGroupIds.length > 0 ? `C.${customIndex}` : `${i + 1}`) : `${i + 1}`);
+                  const presetDisplayName = item.presetName || selectedPreset || `Preset Package ${presetNumber}`;
+
+                  return (
+                    <React.Fragment key={i}>
+                      {isFirstInGroup && (
+                        <tr key={`create-bom-preset-hdr-${gid}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                          <td colSpan={9} style={{ padding: '8px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: theme.primary,
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  <Boxes size={12} />
+                                  {theme.badge}
+                                </span>
+                                <strong style={{ fontSize: '13px', color: theme.primary, letterSpacing: '0.2px' }}>
+                                  {presetDisplayName}
+                                </strong>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  color: theme.tagText,
+                                  backgroundColor: theme.tagBg,
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  border: `1px solid ${theme.border}`
+                                }}>
+                                  {presetSetCount || 1} Sets • {groupCount} Components
+                                </span>
+                              </div>
+                              {presetKitPrice && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '11.5px', color: '#475569' }}>
+                                    Package Price: <strong style={{ color: theme.primary }}>₹ {parseFloat(presetKitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {isFirstCustomItem && distinctGroupIds.length > 0 && (
+                        <tr key="create-bom-custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                          <td colSpan={9} style={{ padding: '8px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: '#475569',
+                                color: '#FFFFFF',
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                letterSpacing: '0.5px'
+                              }}>
+                                CUSTOM ITEMS
+                              </span>
+                              <strong style={{ fontSize: '12px', color: '#334155' }}>
+                                Additional Materials / Standalone Products ({customItems.length} items)
+                              </strong>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#EEF2FF' : (isPresetItem ? theme.bg : 'transparent') }}>
+                        <td style={{
+                          padding: '12px 10px',
+                          textAlign: 'center',
+                          borderLeft: isChecked ? '4px solid #4F46E5' : (isPresetItem ? `4px solid ${theme.primary}` : '4px solid #CBD5E1')
+                        }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedBomItemIndexes(prev => [...prev, i]);
+                                } else {
+                                  setSelectedBomItemIndexes(prev => prev.filter(idx => idx !== i));
+                                }
+                              }}
+                              style={{ accentColor: theme.primary, cursor: 'pointer' }}
+                             />
+                            <span style={{ fontSize: '10px', fontWeight: '800', color: isPresetItem ? theme.primary : '#64748B' }}>
+                              #{displaySNo}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 10px' }}>
+                          {isPresetItem && (
+                            <div style={{ marginBottom: '4px' }}>
+                              <span style={{
+                                backgroundColor: theme.tagBg,
+                                color: theme.tagText,
+                                border: `1px solid ${theme.border}`,
+                                fontSize: '10px',
+                                fontWeight: '800',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                letterSpacing: '0.3px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: theme.primary }} />
+                                {theme.badge} • Component {itemIndexInGroup} of {groupCount}
+                              </span>
+                            </div>
+                          )}
+                          <TypeableProductSelect
+                            value={item.name || ''}
+                            itemsList={itemsList}
+                            placeholder="Type or select product..."
+                            accentColor={theme.primary}
                         onChange={(val, matched) => {
                           if (!matched) {
                             setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
@@ -1147,7 +1497,7 @@ export default function CreateBomFormPage(props) {
                           const val = e.target.value;
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                         }}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
+                        style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700' }}
                        />
                       <datalist id={`uom-list-${i}`}>
                         <option value="NOS" />
@@ -1161,7 +1511,7 @@ export default function CreateBomFormPage(props) {
                         <option value="PAIR" />
                       </datalist>
                     </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                    <td style={{ padding: '12px 6px', textAlign: 'center' }}>
                       <input id={`create-bom-form-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                         type="number"
                         value={item.qty}
@@ -1170,7 +1520,7 @@ export default function CreateBomFormPage(props) {
                           const val = e.target.value;
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                         }}
-                        style={{ width: '100%', height: '34px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box' }}
+                        style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '700', color: '#0F172A' }}
                        />
                       {(() => {
                         const avail = getItemStock(item.name, item.code);
@@ -1228,10 +1578,10 @@ export default function CreateBomFormPage(props) {
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
                       >
-                        <option value="18%">18% GST</option>
-                        <option value="12%">12% GST</option>
-                        <option value="5%">5% GST</option>
-                        <option value="0%">0% Exempt</option>
+                        <option value="18%">18%</option>
+                        <option value="12%">12%</option>
+                        <option value="5%">5%</option>
+                        <option value="0%">0%</option>
                       </select>
                     </td>
                     <td style={{ padding: '12px 10px', color: '#475569', textAlign: 'right', fontWeight: '600' }}>
@@ -1256,9 +1606,11 @@ export default function CreateBomFormPage(props) {
                         <Trash2 style={{ width: '15px', height: '15px' }} />
                       </button>
                     </td>
-                  </tr>
-                );
-              })}
+                      </tr>
+                    </React.Fragment>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -1353,22 +1705,32 @@ export default function CreateBomFormPage(props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label htmlFor="create-bom-form-payment-terms" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Terms</label>
-              <select id="create-bom-form-payment-terms" name="paymentTerms" aria-label="Payment Terms"
-                value={newBomPaymentType}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setNewBomPaymentType(val);
-                  if (val === 'Credit Payment' || val === 'Payment While Dispatch') {
-                    setNewBomPaymentProofDoc(null);
-                  }
-                }}
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="100% Paid">100% Paid</option>
-                <option value="Partial Paid">Partial Paid</option>
-                <option value="Payment While Dispatch">Payment While Dispatch</option>
-                <option value="Credit Payment">Credit Payment</option>
-              </select>
+              {newBomDocType === 'DC' ? (
+                <select id="create-bom-form-payment-terms" name="paymentTerms" aria-label="Payment Terms"
+                  value="100% Paid"
+                  disabled
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', fontWeight: '700' }}
+                >
+                  <option value="100% Paid">100% Paid</option>
+                </select>
+              ) : (
+                <select id="create-bom-form-payment-terms" name="paymentTerms" aria-label="Payment Terms"
+                  value={newBomPaymentType}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewBomPaymentType(val);
+                    if (val === 'Credit Payment' || val === 'Payment While Dispatch') {
+                      setNewBomPaymentProofDoc(null);
+                    }
+                  }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="100% Paid">100% Paid</option>
+                  <option value="Partial Paid">Partial Paid</option>
+                  <option value="Payment While Dispatch">Payment While Dispatch</option>
+                  <option value="Credit Payment">Credit Payment</option>
+                </select>
+              )}
             </div>
 
             {(newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && (
@@ -1481,146 +1843,26 @@ export default function CreateBomFormPage(props) {
                 </div>
               </div>
             ) : (
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
-                    Payment Attachment / Slip <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  {newBomPaymentProofDoc && (
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle style={{ width: '12px', height: '12px' }} /> Attached
-                    </span>
-                  )}
+              <div style={{ border: '1px solid #BBF7D0', borderRadius: '14px', padding: '20px', backgroundColor: '#F0FDF4', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', boxSizing: 'border-box', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircle style={{ width: '18px', height: '18px' }} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#166534' }}>{newBomPaymentType} Terms Active</h4>
+                    <span style={{ fontSize: '11px', color: '#15803D' }}>Payment slip attachment required</span>
+                  </div>
                 </div>
-
-                {newBomPaymentProofDoc ? (
-                  <div style={{ border: '1px solid #86EFAC', borderRadius: '12px', padding: '16px', backgroundColor: '#F0FDF4', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <FileCheck style={{ width: '18px', height: '18px' }} />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{newBomPaymentProofDoc.name}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>{newBomPaymentProofDoc.size || '1.2 MB'} • Payment Document Attached</div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewDocModal({ title: 'Payment Proof Document', doc: newBomPaymentProofDoc })}
-                          style={{ border: '1px solid #BBF7D0', background: '#DCFCE7', color: '#166534', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Eye style={{ width: '13px', height: '13px' }} /> View Image
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewBomPaymentProofDoc(null)}
-                          style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Trash2 style={{ width: '13px', height: '13px' }} /> Remove
-                        </button>
-                      </div>
-                    </div>
-                    {(newBomPaymentProofDoc.previewUrl || newBomPaymentProofDoc.dataUrl) && (
-                      <div style={{ borderTop: '1px solid #BBF7D0', paddingTop: '10px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', padding: '10px' }}>
-                        <img src={newBomPaymentProofDoc.previewUrl || newBomPaymentProofDoc.dataUrl} alt="Payment Proof Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }} />
-                      </div>
-                    )}
+                <p style={{ fontSize: '12px', color: '#166534', margin: 0, lineHeight: '1.5' }}>
+                  Please attach bank transfer receipt, NEFT/RTGS advice, or deposit counterfoil in the <strong>Document Attachments</strong> section at the bottom of this form.
+                </p>
+                {paymentDocs.length > 0 ? (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}>
+                    ✓ {paymentDocs.length} Payment Document{paymentDocs.length > 1 ? 's' : ''} Attached Below
                   </div>
                 ) : (
-                  <div
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files && e.dataTransfer.files[0];
-                      if (file) {
-                        try {
-                          validateClientFile(file);
-                          compressAndSaveFile(file, (res) => {
-                            if (res) {
-                              if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                              setNewBomPaymentProofDoc({
-                                ...res,
-                                _rawFile: file,
-                                dataUrl: res.dataUrl || null,
-                                previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                              });
-                            }
-                          });
-                        } catch (err) {
-                          setNewBomPaymentProofDoc(null);
-                          alert(`⚠️ Cannot Proceed: ${err.message}`);
-                        }
-                      }
-                    }}
-                    id="prod-field-newBomPaymentProofDoc"
-                    style={{
-                      border: (bomFormErrors?.paymentProof) ? '2px dashed #EF4444' : '2px dashed #CBD5E1',
-                      borderRadius: '12px',
-                      padding: '24px 16px',
-                      textAlign: 'center',
-                      backgroundColor: (bomFormErrors?.paymentProof) ? '#FEF2F2' : '#FAFAFA',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '10px',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <UploadCloud style={{ width: '34px', height: '34px', color: (bomFormErrors?.paymentProof) ? '#EF4444' : '#6366F1' }} />
-                    <span style={{ fontSize: '13px', color: (bomFormErrors?.paymentProof) ? '#DC2626' : '#475569', fontWeight: '700' }}>
-                      Drag & drop payment slip / bank advice here or
-                    </span>
-                    {bomFormErrors?.paymentProof && (
-                      <div style={{ color: '#DC2626', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertCircle style={{ width: '14px', height: '14px' }} /> {bomFormErrors.paymentProof}
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <label style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '6px',
-                        backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', color: '#4F46E5',
-                        padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700',
-                        cursor: 'pointer'
-                      }}>
-                        <Upload style={{ width: '13px', height: '13px' }} />
-                        Browse Files
-                        <input id="create-bom-form-input-4" name="input4" aria-label="Input 4"
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                          style={{ display: "none" }}
-                          onChange={(e) => {
-                            const file = e.target.files && e.target.files[0];
-                            if (file) {
-                              try {
-                                validateClientFile(file);
-                                compressAndSaveFile(file, (res) => {
-                                  if (res) {
-                                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                    setNewBomPaymentProofDoc({
-                                      ...res,
-                                      _rawFile: file,
-                                      dataUrl: res.dataUrl || null,
-                                      previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                                    });
-                                  }
-                                });
-                              } catch (err) {
-                                e.target.value = '';
-                                setNewBomPaymentProofDoc(null);
-                                alert(`⚠️ Cannot Proceed: ${err.message}`);
-                              }
-                            }
-                          }}
-                         />
-                      </label>
-                    </div>
-
-                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>
-                      Supported formats: PDF, JPG, PNG (Max 5 MB)
-                    </span>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}>
+                    ⚠️ Payment slip attachment pending in bottom section
                   </div>
                 )}
               </div>
@@ -1657,28 +1899,350 @@ export default function CreateBomFormPage(props) {
             <span style={{ color: '#4F46E5' }}>₹{totals.grand.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
+      </div>
 
-        {/* BOTTOM ACTION BUTTON BAR */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '20px', marginTop: '10px' }}>
+      {/* SECTION 6: DOCUMENT ATTACHMENTS & PROOFS (DEDICATED SEPARATE BOTTOM SECTION) */}
+      <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+              6
+            </div>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                DOCUMENT ATTACHMENTS & PROOFS
+              </h3>
+              <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                Mandatory payment slips and alternate delivery address documents
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {(() => {
+          const needsAddressProof = !sameAsBilling;
+          const isPaidOrder = (
+            newBomPaymentType === '100% Paid' ||
+            newBomPaymentType === '100% Advance' ||
+            newBomPaymentType === 'Partial Paid' ||
+            newBomPaymentType === 'Partial Payment' ||
+            String(newBomPaymentType || '').toLowerCase().includes('advance') ||
+            String(newBomPaymentType || '').toLowerCase().includes('partial')
+          );
+
+          if (!needsAddressProof && !isPaidOrder) {
+            return (
+              <div style={{
+                padding: '20px',
+                borderRadius: '12px',
+                backgroundColor: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <CheckCircle style={{ width: '22px', height: '22px', color: '#16A34A', flexShrink: 0 }} />
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#166534' }}>
+                    No Mandatory Attachments Required
+                  </h4>
+                  <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#15803D' }}>
+                    Delivery address matches registered billing address, and payment terms ({newBomPaymentType}) do not require upfront payment proof. You can proceed directly to create the order.
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* 1. Address Proof Upload (Shows if different delivery address) */}
+              {needsAddressProof && (
+                <div style={{
+                  padding: '18px 20px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1.5px dashed #F87171',
+                  borderRadius: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <AlertCircle style={{ width: '18px', height: '18px' }} />
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+                          Delivery Address Proof <span style={{ color: '#64748B', fontWeight: '600' }}>(Optional)</span>
+                        </h4>
+                        <span style={{ fontSize: '11px', color: '#B91C1C' }}>
+                          Alternate delivery address specified. Upload electricity bill, GST certificate, lease copy, or premises photos if available.
+                        </span>
+                      </div>
+                    </div>
+                    {deliveryDocs.length >= 4 ? (
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCircle style={{ width: '12px', height: '12px' }} /> {deliveryDocs.length} Images Attached
+                      </span>
+                    ) : deliveryDocs.length > 0 ? (
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        📷 {deliveryDocs.length} Image{deliveryDocs.length > 1 ? 's' : ''} Attached
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Attached Delivery Proof List */}
+                  {deliveryDocs.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+                      {deliveryDocs.map((doc, idx) => (
+                        <div key={idx} style={{ border: '1px solid #FECACA', borderRadius: '10px', padding: '8px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                          <div style={{ position: 'relative', height: '100px', backgroundColor: '#FEF2F2', borderRadius: '6px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {(doc.previewUrl || doc.dataUrl) ? (
+                              <img src={doc.previewUrl || doc.dataUrl} alt={doc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <FileText style={{ width: '32px', height: '32px', color: '#DC2626' }} />
+                            )}
+                            <span style={{ position: 'absolute', top: '4px', left: '4px', backgroundColor: 'rgba(15, 23, 42, 0.75)', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', padding: '1px 6px', borderRadius: '4px' }}>
+                              Image #{idx + 1}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={doc.name}>
+                            {doc.name}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#64748B', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{doc.size || 'Attached'}</span>
+                            <span style={{ color: '#166534', fontWeight: '700' }}>✓ Attached</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDocModal({ title: `Delivery Address Proof #${idx + 1}: ${doc.name}`, doc })}
+                              style={{ flex: 1, border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '5px', borderRadius: '6px' }}
+                            >
+                              <Eye style={{ width: '12px', height: '12px' }} /> View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDeliveryDoc(idx)}
+                              style={{ border: 'none', background: '#FEE2E2', color: '#EF4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px 8px', borderRadius: '6px' }}
+                              title="Remove this image"
+                            >
+                              <Trash2 style={{ width: '12px', height: '12px' }} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dropzone */}
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        handleUploadDeliveryProofFiles(e.dataTransfer.files);
+                      }
+                    }}
+                    style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: deliveryDocs.length > 0 ? '12px 16px' : '16px 20px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
+                  >
+                    <UploadCloud style={{ width: deliveryDocs.length > 0 ? '22px' : '28px', height: deliveryDocs.length > 0 ? '22px' : '28px', color: '#DC2626' }} />
+                    <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
+                      {deliveryDocs.length > 0
+                        ? `Attach more delivery address images (Select multiple files to reach 4+ images)`
+                        : `Drag & drop delivery address images here (Upload at least 4 images e.g. Site front, Entrance, Access road, Premises proof)`}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                        <Upload style={{ width: '13px', height: '13px' }} />
+                        {deliveryDocs.length > 0 ? '+ Add More Images' : 'Browse / Select Files (Multi-Select)'}
+                        <input id="create-bom-form-input-address-proof" name="addressProofInput" aria-label="Address Proof Input"
+                          type="file"
+                          multiple
+                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              handleUploadDeliveryProofFiles(e.target.files);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: JPG, PNG, PDF, DOC (Multi-select enabled • Auto-compressed to lightweight &lt; 25 KB)</span>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Payment Proof Upload (Shows if 100% or Partial Paid, but NOT for DC) */}
+              {isPaidOrder && !(String(newBomDocType || '').toUpperCase().includes('DC') || String(newBomDocType || '').toUpperCase().includes('CHALLAN')) && (
+                <div style={{
+                  padding: '18px 20px',
+                  backgroundColor: '#F0FDF4',
+                  border: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '1.5px dashed #EF4444' : '1.5px dashed #86EFAC',
+                  borderRadius: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <CheckCircle style={{ width: '18px', height: '18px' }} />
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+                          Payment Attachment / Slip ({newBomPaymentType}) <span style={{ color: '#EF4444' }}>*</span>
+                        </h4>
+                        <span style={{ fontSize: '11px', color: '#166534' }}>
+                          Mandatory bank remittance advice, NEFT/RTGS transaction receipt, or bank deposit counterfoil.
+                        </span>
+                      </div>
+                    </div>
+                    {paymentDocs.length >= 4 ? (
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCircle style={{ width: '12px', height: '12px' }} /> {paymentDocs.length} Slips Attached (Target Met)
+                      </span>
+                    ) : paymentDocs.length > 0 ? (
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        📷 {paymentDocs.length} Slip{paymentDocs.length > 1 ? 's' : ''} Attached
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Attached Payment Proof List */}
+                  {paymentDocs.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+                      {paymentDocs.map((doc, idx) => (
+                        <div key={idx} style={{ border: '1px solid #86EFAC', borderRadius: '10px', padding: '8px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                          <div style={{ position: 'relative', height: '100px', backgroundColor: '#DCFCE7', borderRadius: '6px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {(doc.previewUrl || doc.dataUrl) ? (
+                              <img src={doc.previewUrl || doc.dataUrl} alt={doc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <FileCheck style={{ width: '32px', height: '32px', color: '#166534' }} />
+                            )}
+                            <span style={{ position: 'absolute', top: '4px', left: '4px', backgroundColor: 'rgba(15, 23, 42, 0.75)', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', padding: '1px 6px', borderRadius: '4px' }}>
+                              Slip #{idx + 1}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={doc.name}>
+                            {doc.name}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#64748B', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{doc.size || 'Attached'}</span>
+                            <span style={{ color: '#166534', fontWeight: '700' }}>✓ Verified</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDocModal({ title: `Payment Proof #${idx + 1}: ${doc.name}`, doc })}
+                              style={{ flex: 1, border: '1px solid #BBF7D0', background: '#DCFCE7', color: '#166534', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '5px', borderRadius: '6px' }}
+                            >
+                              <Eye style={{ width: '12px', height: '12px' }} /> View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePaymentDoc(idx)}
+                              style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px 8px', borderRadius: '6px' }}
+                              title="Remove this slip"
+                            >
+                              <Trash2 style={{ width: '12px', height: '12px' }} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dropzone */}
+                  <div
+                    id="prod-field-newBomPaymentProofDoc"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        handleUploadPaymentProofFiles(e.dataTransfer.files);
+                      }
+                    }}
+                    style={{
+                      border: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '2px dashed #EF4444' : '2px dashed #CBD5E1',
+                      borderRadius: '12px',
+                      padding: paymentDocs.length > 0 ? '14px 16px' : '20px 16px',
+                      textAlign: 'center',
+                      backgroundColor: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '#FEF2F2' : '#FAFAFA',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <UploadCloud style={{ width: paymentDocs.length > 0 ? '22px' : '30px', height: paymentDocs.length > 0 ? '22px' : '30px', color: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '#EF4444' : '#10B981' }} />
+                    <span style={{ fontSize: '12.5px', color: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '#DC2626' : '#475569', fontWeight: '700' }}>
+                      {paymentDocs.length > 0
+                        ? `Attach more payment slips / receipts (Multi-select enabled)`
+                        : `Drag & drop payment slip / bank advice here (Upload at least 4 images e.g. Transfer receipt, Bank statement, RTGS voucher)`}
+                    </span>
+                    {bomFormErrors?.paymentProof && paymentDocs.length === 0 && (
+                      <div style={{ color: '#DC2626', fontSize: '11.5px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertCircle style={{ width: '14px', height: '14px' }} /> {bomFormErrors.paymentProof}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <label style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        backgroundColor: '#FFFFFF', border: '1px solid #10B981', color: '#047857',
+                        padding: '6px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700',
+                        cursor: 'pointer'
+                      }}>
+                        <Upload style={{ width: '13px', height: '13px' }} />
+                        {paymentDocs.length > 0 ? '+ Add More Payment Slips' : 'Browse / Select Files (Multi-Select)'}
+                        <input id="create-bom-form-input-payment-proof" name="paymentProofInput" aria-label="Payment Proof Input"
+                          type="file"
+                          multiple
+                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              handleUploadPaymentProofFiles(e.target.files);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    <span style={{ fontSize: '10px', color: '#94A3B8' }}>
+                      Supported formats: PDF, JPG, PNG (Multi-select enabled • Auto-compressed to lightweight &lt; 25 KB)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* BOTTOM ACTION BUTTON BAR */}
+      <div style={{ backgroundColor: 'white', padding: '18px 24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
           <button
             onClick={() => setBomConfirmModal('cancel')}
             style={{ border: '1px solid #CBD5E1', background: 'white', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}
           >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => setBomConfirmModal('draft')}
-            style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', color: '#4F46E5', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <FileText style={{ width: '15px', height: '15px' }} />
-            Save as Draft
+            ← Back
           </button>
 
           <button
             onClick={() => {
               if (!newBomProductName || !newBomProductName.trim()) {
                 alert('⚠️ Please select or enter a Customer Name before creating the BOM order.');
+                return;
+              }
+              if (!newBomDocType || !newBomDocType.trim()) {
+                alert('⚠️ Please select Document Type (DC or Invoice) before creating the BOM order.');
                 return;
               }
               if (!bomMaterialsList || bomMaterialsList.length === 0) {
@@ -1705,14 +2269,33 @@ export default function CreateBomFormPage(props) {
                 alert(`⚠️ Incomplete Item Details:\n\n• ${invalidItems.join('\n• ')}`);
                 return;
               }
+              {/* Validate mandatory payment attachment */}
+              const isPaidOrder = (
+                newBomPaymentType === '100% Paid' ||
+                newBomPaymentType === '100% Advance' ||
+                newBomPaymentType === 'Partial Paid' ||
+                newBomPaymentType === 'Partial Payment' ||
+                String(newBomPaymentType || '').toLowerCase().includes('advance') ||
+                String(newBomPaymentType || '').toLowerCase().includes('partial')
+              );
+              const isDcOrder = Boolean(
+                newBomDocType === 'DC' ||
+                newBomDocType === 'Delivery Challan' ||
+                String(newBomDocType || '').toUpperCase().includes('DC') ||
+                String(newBomDocType || '').toUpperCase().includes('CHALLAN')
+              );
+              if (!isDcOrder && isPaidOrder && paymentDocs.length === 0) {
+                alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${newBomPaymentType}" orders. Please attach the payment proof slip in the Document Attachments section below.`);
+                return;
+              }
               setBomConfirmModal('create');
             }}
             style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            Create Order →
+            <CheckCircle style={{ width: '16px', height: '16px' }} />
+            Complete →
           </button>
         </div>
-      </div>
 
       {/* CONFIRMATION POPUP OVERLAY MODAL */}
       {bomConfirmModal && (
@@ -1765,13 +2348,11 @@ export default function CreateBomFormPage(props) {
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0F172A' }}>
-                  {bomConfirmModal === 'cancel' && 'Discard BOM Order?'}
-                  {bomConfirmModal === 'draft' && 'Save BOM as Draft?'}
+                  {bomConfirmModal === 'cancel' && 'Go Back?'}
                   {bomConfirmModal === 'create' && 'Confirm BOM Order Creation?'}
                 </h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B', lineHeight: '1.4' }}>
-                  {bomConfirmModal === 'cancel' && 'Are you sure you want to cancel? Any unsaved changes entered in this BOM form will be lost.'}
-                  {bomConfirmModal === 'draft' && 'Save this Bill of Materials as a draft order so you can review and update it later?'}
+                  {bomConfirmModal === 'cancel' && 'Are you sure you want to go back? Any unsaved changes entered in this BOM form will be lost.'}
                   {bomConfirmModal === 'create' && `Are you sure you want to finalize and create BOM Order (${newBomCode})?`}
                 </p>
               </div>
@@ -1902,6 +2483,7 @@ export default function CreateBomFormPage(props) {
                       id: finalCode,
                       bomCode: finalCode,
                       code: finalCode,
+                      docType: newBomDocType || 'Invoice',
                       sourcePiNo: explicitSourcePi || null,
                       date: new Date().toISOString().split('T')[0],
                       createdAt: new Date().toISOString(),
@@ -1913,7 +2495,8 @@ export default function CreateBomFormPage(props) {
                       billingAddressObj: billingObj,
                       deliveryAddress: deliveryFull,
                       deliveryAddressObj: deliveryObj,
-                      deliveryAddressProofDoc: sameAsBilling ? null : (newBomDeliveryProofDoc || null),
+                      deliveryAddressProofDoc: sameAsBilling ? null : (deliveryDocs[0] || null),
+                      deliveryAddressProofDocs: sameAsBilling ? [] : deliveryDocs,
                       transportMode: newBomTransportMode || 'Transport',
                       transporterName: newBomTransporterName || '',
                       destination: (newBomDestination || '').trim(),
@@ -1924,12 +2507,13 @@ export default function CreateBomFormPage(props) {
                       balanceAmount: (newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') ? Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)) : (['100% Paid', '100% Advance'].includes(newBomPaymentType) ? 0 : totals.grand),
                       creditDays: newBomPaymentType === 'Credit Payment' ? (parseInt(newBomCreditDays) || 7) : null,
                       creditDueDate: newBomPaymentType === 'Credit Payment' ? new Date(Date.now() + (parseInt(newBomCreditDays) || 7) * 86400000).toISOString().split('T')[0] : null,
-                      paymentProofDoc: newBomPaymentProofDoc || null,
-                      paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && Boolean(newBomPaymentProofDoc),
+                      paymentProofDoc: paymentDocs[0] || null,
+                      paymentProofDocs: paymentDocs,
+                      paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && paymentDocs.length > 0,
                       remarks: newBomRemarks || '',
-                      status: isDraft ? 'Draft' : 'Sales Confirmed - Sent to Dispatch',
-                      salesConfirmed: !isDraft,
-                      salesConfirmedAt: !isDraft ? new Date().toISOString() : null,
+                      status: 'Pending Confirmation',
+                      salesConfirmed: false,
+                      salesConfirmedAt: null,
                       salesPerson: effectiveSalesPersonName,
                       salesPersonCode: effectiveSalesPersonCode,
                       createdBy: effectiveCreatorName,
@@ -1944,16 +2528,18 @@ export default function CreateBomFormPage(props) {
                         qty: cleanNum(item.qty, 1),
                         rate: cleanNum(item.rate, 0),
                         gstRate: item.gstRate || newBomGstRate || '18%',
-                        confirmed: !isDraft
+                        confirmed: false
                       })),
                       payments: {
                         advance50Uploaded: false,
                         dispatch50Uploaded: false,
                         advance100Uploaded: newBomPaymentType === '100% Paid' && hasPaymentProof,
                         net30Uploaded: false,
-                        proofDoc: newBomPaymentProofDoc ? newBomPaymentProofDoc.name : null,
-                        proofDocObj: newBomPaymentProofDoc || null,
-                        paymentUpdated: newBomPaymentType === '100% Paid' && Boolean(newBomPaymentProofDoc)
+                        proofDoc: paymentDocs[0] ? paymentDocs[0].name : null,
+                        proofDocObj: paymentDocs[0] || null,
+                        proofDocs: paymentDocs.map(d => d.name),
+                        proofDocObjs: paymentDocs,
+                        paymentUpdated: newBomPaymentType === '100% Paid' && paymentDocs.length > 0
                       },
                       dispatchPacking: (bomMaterialsList || []).map(item => ({
                         name: item.name || 'Custom Item',
@@ -1995,61 +2581,79 @@ export default function CreateBomFormPage(props) {
                     sanitizedNewBom.code = finalAssignedCode;
                     sanitizedNewBom.id = finalAssignedCode;
 
-                    // Upload any attached files to private Supabase Storage under the final BOM code
-                    if (newBomDeliveryProofDoc && newBomDeliveryProofDoc._rawFile && !sameAsBilling) {
+                    // Upload any attached delivery proof files to private Supabase Storage
+                    if (deliveryDocs.length > 0 && !sameAsBilling) {
                       try {
-                        const meta = await uploadBomDocumentFile({
-                          file: newBomDeliveryProofDoc._rawFile,
-                          bomCode: finalAssignedCode,
-                          category: 'delivery-proof'
-                        });
-                        sanitizedNewBom.deliveryAddressProofDoc = meta;
-                      } catch (upErr) {
-                        console.warn('Storage upload fallback, keeping local delivery proof:', upErr);
-                        sanitizedNewBom.deliveryAddressProofDoc = {
-                          name: newBomDeliveryProofDoc.name || 'Delivery_Address_Proof',
-                          size: newBomDeliveryProofDoc.size || 'Attached',
-                          mimeType: newBomDeliveryProofDoc.mimeType || 'image/jpeg',
-                          uploadedAt: new Date().toISOString(),
-                          dataUrl: newBomDeliveryProofDoc.dataUrl || null,
-                          previewUrl: newBomDeliveryProofDoc.previewUrl || null
-                        };
+                        const uploadedDeliveryDocs = await Promise.all(deliveryDocs.map(async (doc, idx) => {
+                          if (doc && doc._rawFile) {
+                            try {
+                              const meta = await uploadBomDocumentFile({
+                                file: doc._rawFile,
+                                bomCode: finalAssignedCode,
+                                category: `delivery-proof-${idx + 1}`
+                              });
+                              return meta;
+                            } catch (upErr) {
+                              console.warn('Storage upload fallback, keeping local delivery proof:', upErr);
+                            }
+                          }
+                          return {
+                            name: doc.name || `Delivery_Address_Proof_${idx + 1}`,
+                            size: doc.size || 'Attached',
+                            mimeType: doc.mimeType || 'image/jpeg',
+                            uploadedAt: new Date().toISOString(),
+                            dataUrl: doc.dataUrl || null,
+                            previewUrl: doc.previewUrl || null
+                          };
+                        }));
+                        sanitizedNewBom.deliveryAddressProofDocs = uploadedDeliveryDocs;
+                        sanitizedNewBom.deliveryAddressProofDoc = uploadedDeliveryDocs[0] || null;
+                      } catch (err) {
+                        console.warn('Error uploading delivery proof docs:', err);
                       }
                     }
 
-                    if (newBomPaymentProofDoc && newBomPaymentProofDoc._rawFile) {
+                    // Upload any attached payment proof files to private Supabase Storage
+                    if (paymentDocs.length > 0) {
                       try {
-                        const meta = await uploadBomDocumentFile({
-                          file: newBomPaymentProofDoc._rawFile,
-                          bomCode: finalAssignedCode,
-                          category: 'payment-proof'
-                        });
-                        sanitizedNewBom.paymentProofDoc = meta;
+                        const uploadedPaymentDocs = await Promise.all(paymentDocs.map(async (doc, idx) => {
+                          if (doc && doc._rawFile) {
+                            try {
+                              const meta = await uploadBomDocumentFile({
+                                file: doc._rawFile,
+                                bomCode: finalAssignedCode,
+                                category: `payment-proof-${idx + 1}`
+                              });
+                              return meta;
+                            } catch (upErr) {
+                              console.warn('Storage upload fallback, keeping local payment proof:', upErr);
+                            }
+                          }
+                          return {
+                            name: doc.name || `Payment_Slip_${idx + 1}`,
+                            size: doc.size || 'Attached',
+                            mimeType: doc.mimeType || 'image/jpeg',
+                            uploadedAt: new Date().toISOString(),
+                            dataUrl: doc.dataUrl || null,
+                            previewUrl: doc.previewUrl || null
+                          };
+                        }));
+                        sanitizedNewBom.paymentProofDocs = uploadedPaymentDocs;
+                        sanitizedNewBom.paymentProofDoc = uploadedPaymentDocs[0] || null;
                         if (sanitizedNewBom.payments) {
-                          sanitizedNewBom.payments.proofDocObj = meta;
-                          sanitizedNewBom.payments.proofDoc = meta.originalName || newBomPaymentProofDoc.name;
+                          sanitizedNewBom.payments.proofDocObjs = uploadedPaymentDocs;
+                          sanitizedNewBom.payments.proofDocObj = uploadedPaymentDocs[0] || null;
+                          sanitizedNewBom.payments.proofDocs = uploadedPaymentDocs.map(d => d.originalName || d.name);
+                          sanitizedNewBom.payments.proofDoc = uploadedPaymentDocs[0]?.originalName || uploadedPaymentDocs[0]?.name || null;
                         }
-                      } catch (upErr) {
-                        console.warn('Storage upload fallback, keeping local payment proof:', upErr);
-                        sanitizedNewBom.paymentProofDoc = {
-                              name: newBomPaymentProofDoc.name || 'Payment_Slip',
-                              size: newBomPaymentProofDoc.size || 'Attached',
-                              mimeType: newBomPaymentProofDoc.mimeType || 'image/jpeg',
-                              uploadedAt: new Date().toISOString(),
-                              dataUrl: newBomPaymentProofDoc.dataUrl || null,
-                              previewUrl: newBomPaymentProofDoc.previewUrl || null
-                        };
-                        if (sanitizedNewBom.payments) {
-                          sanitizedNewBom.payments.proofDocObj = sanitizedNewBom.paymentProofDoc;
-                          sanitizedNewBom.payments.proofDoc = newBomPaymentProofDoc.name || 'Payment_Slip';
-                        }
+                      } catch (err) {
+                        console.warn('Error uploading payment proof docs:', err);
                       }
                     }
 
                     let sResOk = false;
                     const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: !isDraft });
-                    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-                    const endpoints = isHttps ? ['/api/boms'] : ['/api/boms', 'http://localhost:5001/api/boms'];
+                    const endpoints = ['/api/boms'];
                     for (const url of endpoints) {
                       try {
                         const controller = new AbortController();
@@ -2077,17 +2681,9 @@ export default function CreateBomFormPage(props) {
                       }
                     }
 
-                    // Deduct / Reserve Stock in Central Inventory & Raw Materials Stores ONLY if sent to dispatch (never for drafts)
-                    if (!isDraft) {
-                      try {
-                        centralInventoryStore.deductStockForBOM(finalAssignedCode, sanitizedNewBom.items, sanitizedNewBom.salesPerson || 'Sales Executive');
-                        sanitizedNewBom.stockBlocked = true;
-                        sanitizedNewBom.stockBlockedAt = new Date().toISOString();
-                        sanitizedNewBom.stockDeducted = true;
-                      } catch (cErr) {
-                        console.warn('Central store deduction error in CreateBomFormPage:', cErr);
-                      }
-                    }
+                    // Stock deduction & reservation is strictly performed upon Sales Reconfirmation in ConfirmingBomModal
+                    sanitizedNewBom.stockBlocked = false;
+                    sanitizedNewBom.stockDeducted = false;
 
                     // If BOM originates from a converted Proforma Invoice, mark the PI as converted to avoid double-allocation
                     const srcPi = sanitizedNewBom.sourcePiNo;
@@ -2101,21 +2697,42 @@ export default function CreateBomFormPage(props) {
                               const updated = list.map(pi => (pi.piNo === srcPi || pi.id === srcPi) ? {
                                 ...pi,
                                 status: 'Converted to BOM',
+                                statusType: 'converted',
                                 convertedToBom: true,
                                 isConverted: true,
                                 convertedBomCode: finalAssignedCode,
+                                convertedBomNo: finalAssignedCode,
                                 convertedDate: new Date().toISOString()
                               } : pi);
                               localStorage.setItem(storeKey, JSON.stringify(updated));
-                              saveCloudStore(storeKey.replace('controlroom_', ''), updated);
                             }
                           }
                         } catch (_) {}
                       };
                       updatePiList('controlroom_sales_pi_store');
                       updatePiList('controlroom_procurement_pi_store');
+
+                      // Targeted single-record persistence to PostgreSQL public.proforma_invoices
+                      try {
+                        fetch('/api/estimates', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            piNo: srcPi,
+                            status: 'Converted to BOM',
+                            statusType: 'converted',
+                            convertedBomCode: finalAssignedCode,
+                            convertedBomNo: finalAssignedCode,
+                            isConverted: true,
+                            convertedToBom: true,
+                            isEdit: true
+                          })
+                        }).catch(err => console.warn('PI conversion status update error:', err));
+                      } catch (_) {}
+
                       try {
                         window.dispatchEvent(new CustomEvent('controlroom_pi_store_updated', { detail: { piNo: srcPi, bomCode: finalAssignedCode } }));
+                        window.dispatchEvent(new CustomEvent('controlroom_pi_updated', { detail: { piNo: srcPi, status: 'Converted to BOM', convertedBomCode: finalAssignedCode } }));
                       } catch (_) {}
                     }
 
@@ -2139,9 +2756,15 @@ export default function CreateBomFormPage(props) {
                       // Atomically push created BOM order to Supabase and Node server API
                       saveCloudBomRow(sanitizedNewBom);
                       try {
+                        const sesId = typeof window !== 'undefined' && window.localStorage
+                          ? localStorage.getItem('controlroom_device_session_id')
+                          : null;
                         fetch('/api/boms', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: {
+                            'Content-Type': 'application/json',
+                            ...(sesId ? { 'x-session-id': sesId } : {})
+                          },
                           body: JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: false })
                         }).catch(err => console.error('Error syncing created BOM to server:', err));
                       } catch (_) {}
@@ -2161,12 +2784,19 @@ export default function CreateBomFormPage(props) {
                     });
 
                     if (!isDraft) {
-                      notifyBomSentToDispatch({
-                        bomCode: finalAssignedCode,
-                        customerName: sanitizedNewBom.companyName || sanitizedNewBom.customerName,
-                        salesPerson: sanitizedNewBom.salesPerson
-                      });
-                      alert(`✅ BOM (${finalAssignedCode}) created successfully and sent to Dispatch for packing!`);
+                      try {
+                        if (typeof notifyBomCreatedToSales === 'function') {
+                          notifyBomCreatedToSales({
+                            bomCode: finalAssignedCode,
+                            customerName: sanitizedNewBom.companyName || sanitizedNewBom.customerName,
+                            salesPerson: sanitizedNewBom.salesPerson,
+                            salesPersonCode: sanitizedNewBom.salesPersonCode || sanitizedNewBom.createdById
+                          });
+                        }
+                      } catch (nErr) {
+                        console.warn('notifyBomCreatedToSales non-fatal:', nErr);
+                      }
+                      alert(`✅ BOM (${finalAssignedCode}) saved!\n\nPlease select this order in the table and click "Reconfirm BOM" in the floating bottom action bar to verify materials & quantities before forwarding to Dispatch.`);
                     } else {
                       alert(`📝 BOM (${finalAssignedCode}) saved as Draft.`);
                     }
@@ -2211,9 +2841,8 @@ export default function CreateBomFormPage(props) {
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
-                {bomConfirmModal === 'cancel' && 'Yes, Discard'}
-                {bomConfirmModal === 'draft' && 'Yes, Save Draft'}
-                {bomConfirmModal === 'create' && 'Yes, Confirm & Create'}
+                {bomConfirmModal === 'cancel' && 'Yes, Go Back'}
+                {bomConfirmModal === 'create' && 'Yes, Complete Order'}
               </button>
             </div>
           </div>

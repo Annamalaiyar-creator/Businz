@@ -2,6 +2,31 @@ import { supabase } from '../supabaseClient.js';
 import { getFinancialYear, formatSequenceCode, extractMaxSequence } from './sequenceGenerator.js';
 import { fetchCustomersDeduplicated, invalidateCustomerCache } from '../services/customerService.js';
 
+/**
+ * Isolated Node.js Test Mode Guard (Phase 9G)
+ * Evaluates strictly when:
+ * 1. Running in Node.js without a browser window (typeof window === 'undefined')
+ * 2. BUSINZ_OPTIMIZATION_TEST_MODE is active ('true' or '1')
+ * In normal browser execution, window is defined so this always returns false.
+ */
+export function isIsolatedNodeTestMode() {
+  return typeof window === 'undefined' &&
+    typeof process !== 'undefined' &&
+    Boolean(process.env && (process.env.BUSINZ_OPTIMIZATION_TEST_MODE === 'true' || process.env.BUSINZ_OPTIMIZATION_TEST_MODE === '1'));
+}
+
+/**
+ * Safe Window Event Dispatcher (Phase 9G)
+ * Guarantees window.dispatchEvent never throws ReferenceError when running in Node.js
+ */
+function safeDispatchWindowEvent(eventName, detail) {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(new CustomEvent(eventName, { detail }));
+    } catch (_) {}
+  }
+}
+
 // Canonical column projection for BOM list/table queries (includes accounts_verification JSON for full metadata & extra data retention)
 export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
 
@@ -309,6 +334,7 @@ export function toDatabaseOpportunityRow(item) {
  */
 export async function saveCloudOpportunityRow(opp) {
   if (!opp) return null;
+  if (isIsolatedNodeTestMode()) return opp;
   const row = toDatabaseOpportunityRow(opp);
   if (!row) return null;
 
@@ -325,12 +351,8 @@ export async function saveCloudOpportunityRow(opp) {
     const consumerOpp = toConsumerOpportunity(data?.[0] || row);
 
     // Broadcast local event
-    window.dispatchEvent(new CustomEvent('controlroom_opportunity_update', {
-      detail: { opportunity: consumerOpp, action: 'upsert' }
-    }));
-    window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-      detail: { storeKey: 'crm_opportunities', action: 'upsert', item: consumerOpp }
-    }));
+    safeDispatchWindowEvent('controlroom_opportunity_update', { opportunity: consumerOpp, action: 'upsert' });
+    safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'crm_opportunities', action: 'upsert', item: consumerOpp });
 
     // Async disk backup fallback
     try {
@@ -353,6 +375,7 @@ export async function saveCloudOpportunityRow(opp) {
  */
 export async function deleteCloudOpportunityRow(oppId) {
   if (!oppId) return false;
+  if (isIsolatedNodeTestMode()) return true;
 
   try {
     const { error } = await supabase
@@ -366,12 +389,8 @@ export async function deleteCloudOpportunityRow(oppId) {
     }
 
     // Broadcast local event
-    window.dispatchEvent(new CustomEvent('controlroom_opportunity_update', {
-      detail: { id: oppId, action: 'delete' }
-    }));
-    window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-      detail: { storeKey: 'crm_opportunities', action: 'delete', id: oppId }
-    }));
+    safeDispatchWindowEvent('controlroom_opportunity_update', { id: oppId, action: 'delete' });
+    safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'crm_opportunities', action: 'delete', id: oppId });
 
     // Async server deletion
     try {
@@ -495,6 +514,7 @@ export function toDatabaseInvoiceRow(item) {
  */
 export async function saveCloudInvoiceRow(invoice) {
   if (!invoice) return null;
+  if (isIsolatedNodeTestMode()) return invoice;
   const row = toDatabaseInvoiceRow(invoice);
   if (!row) return null;
 
@@ -511,14 +531,8 @@ export async function saveCloudInvoiceRow(invoice) {
     const consumerInv = toConsumerInvoice(data?.[0] || row);
 
     // Broadcast local event matching existing listeners
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
-        detail: { invoice: consumerInv, action: 'upsert' }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-        detail: { storeKey: 'invoice_store', action: 'upsert', item: consumerInv }
-      }));
-    }
+    safeDispatchWindowEvent('controlroom_invoice_store_updated', { invoice: consumerInv, action: 'upsert' });
+    safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'invoice_store', action: 'upsert', item: consumerInv });
 
     // Async disk backup fallback
     try {
@@ -541,6 +555,7 @@ export async function saveCloudInvoiceRow(invoice) {
  */
 export async function deleteCloudInvoiceRow(invoiceId) {
   if (!invoiceId) return false;
+  if (isIsolatedNodeTestMode()) return true;
   const cleanId = String(invoiceId).trim();
 
   try {
@@ -554,14 +569,8 @@ export async function deleteCloudInvoiceRow(invoiceId) {
       return false;
     }
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
-        detail: { invoiceId: cleanId, action: 'delete' }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-        detail: { storeKey: 'invoice_store', action: 'delete', itemId: cleanId }
-      }));
-    }
+    safeDispatchWindowEvent('controlroom_invoice_store_updated', { invoiceId: cleanId, action: 'delete' });
+    safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'invoice_store', action: 'delete', itemId: cleanId });
 
     return true;
   } catch (err) {
@@ -671,6 +680,7 @@ export function toDatabaseLeadRow(lead) {
  */
 export async function deleteCloudLeadRow(leadId) {
   if (!leadId) return false;
+  if (isIsolatedNodeTestMode()) return true;
   try {
     const { error } = await supabase
       .from('leads')
@@ -681,12 +691,8 @@ export async function deleteCloudLeadRow(leadId) {
       console.warn('[SupabaseSync] Single lead delete error:', error.message);
     }
 
-    window.dispatchEvent(new CustomEvent('controlroom_leads_update', {
-      detail: { id: leadId, action: 'delete' }
-    }));
-    window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-      detail: { storeKey: 'crm_leads', action: 'delete', id: leadId }
-    }));
+    safeDispatchWindowEvent('controlroom_leads_update', { id: leadId, action: 'delete' });
+    safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'crm_leads', action: 'delete', id: leadId });
 
     try {
       fetch(`/api/crm/leads/${encodeURIComponent(leadId)}`, { method: 'DELETE' }).catch(() => {});
@@ -895,7 +901,7 @@ export function toConsumerBom(row) {
     cgstAmount: Number(row.cgst_amount || 0),
     sgstAmount: Number(row.sgst_amount || 0),
     grandTotal: Number(row.grand_total || 0),
-    cancelled: Boolean(row.cancelled || extraData.cancelled),
+    cancelled: Boolean(row.cancelled || extraData.cancelled || String(row.status || '').toLowerCase().includes('cancel')),
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancelledByRole: extraData.cancelledByRole || null,
@@ -997,6 +1003,15 @@ export function toDatabaseBomRow(item) {
   if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
   if (item.invoiceNo) mergedExtra.invoiceNo = item.invoiceNo;
   if (item.destination) mergedExtra.destination = item.destination;
+  if (item.cancelled !== undefined || String(item.status || '').toLowerCase().includes('cancel')) {
+    mergedExtra.cancelled = Boolean(item.cancelled || String(item.status || '').toLowerCase().includes('cancel'));
+  }
+  if (item.cancelledAt) mergedExtra.cancelledAt = item.cancelledAt;
+  if (item.cancelledBy) mergedExtra.cancelledBy = item.cancelledBy;
+  if (item.cancelledByRole) mergedExtra.cancelledByRole = item.cancelledByRole;
+  if (item.cancelledByTeam) mergedExtra.cancelledByTeam = item.cancelledByTeam;
+  if (item.cancelledByNameAndRole) mergedExtra.cancelledByNameAndRole = item.cancelledByNameAndRole;
+  if (item.cancellationReason) mergedExtra.cancellationReason = item.cancellationReason;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
@@ -1093,6 +1108,7 @@ export function toDatabaseBomRow(item) {
  */
 export async function saveCloudBomRow(bom) {
   if (!bom) return null;
+  if (isIsolatedNodeTestMode()) return bom;
   const row = toDatabaseBomRow(bom);
   if (!row) return null;
 
@@ -1109,26 +1125,26 @@ export async function saveCloudBomRow(bom) {
     const consumerBom = toConsumerBom(data?.[0] || row);
 
     // Broadcast local events matching existing listeners
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('controlroom_bom_updated', {
-        detail: { bom: consumerBom, action: 'upsert' }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', {
-        detail: { bom: consumerBom, action: 'upsert' }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-        detail: { storeKey: 'bom_store', action: 'upsert', item: consumerBom }
-      }));
-    }
+    safeDispatchWindowEvent('controlroom_bom_updated', { bom: consumerBom, action: 'upsert' });
+    safeDispatchWindowEvent('controlroom_bom_store_updated', { bom: consumerBom, action: 'upsert' });
+    safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'bom_store', action: 'upsert', item: consumerBom });
 
     // Async server notification
     try {
-      const baseUrl = (typeof window !== 'undefined' && window.location?.origin) ? '' : 'http://localhost:5001';
-      fetch(`${baseUrl}/api/boms`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bom: consumerBom, isUpdate: true })
-      }).catch(() => {});
+      const baseUrl = (typeof window !== 'undefined' && window.location?.origin) ? '' : (process.env.BUSINZ_TEST_API_URL || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : ''));
+      if (baseUrl !== undefined) {
+        const sesId = typeof window !== 'undefined' && window.localStorage
+          ? localStorage.getItem('controlroom_device_session_id')
+          : null;
+        fetch(`${baseUrl}/api/boms`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sesId ? { 'x-session-id': sesId } : {})
+          },
+          body: JSON.stringify({ bom: consumerBom, isUpdate: true })
+        }).catch(() => {});
+      }
     } catch (_) {}
 
     return consumerBom;
@@ -1143,6 +1159,7 @@ export async function saveCloudBomRow(bom) {
  */
 export async function deleteCloudBomRow(bomId) {
   if (!bomId) return false;
+  if (isIsolatedNodeTestMode()) return true;
   const cleanId = String(bomId).trim();
 
   try {
@@ -1157,24 +1174,24 @@ export async function deleteCloudBomRow(bomId) {
     }
 
     // Broadcast local events
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('controlroom_bom_updated', {
-        detail: { id: cleanId, action: 'delete' }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', {
-        detail: { id: cleanId, action: 'delete' }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-        detail: { storeKey: 'bom_store', action: 'delete', id: cleanId }
-      }));
-    }
+    safeDispatchWindowEvent('controlroom_bom_updated', { id: cleanId, action: 'delete' });
+    safeDispatchWindowEvent('controlroom_bom_store_updated', { id: cleanId, action: 'delete' });
+    safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'bom_store', action: 'delete', id: cleanId });
 
     // Async server deletion
     try {
-      const baseUrl = (typeof window !== 'undefined' && window.location?.origin) ? '' : 'http://localhost:5001';
-      fetch(`${baseUrl}/api/boms/${encodeURIComponent(cleanId)}`, {
-        method: 'DELETE'
-      }).catch(() => {});
+      const baseUrl = (typeof window !== 'undefined' && window.location?.origin) ? '' : (process.env.BUSINZ_TEST_API_URL || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : ''));
+      if (baseUrl !== undefined) {
+        const sesId = typeof window !== 'undefined' && window.localStorage
+          ? localStorage.getItem('controlroom_device_session_id')
+          : null;
+        fetch(`${baseUrl}/api/boms/${encodeURIComponent(cleanId)}`, {
+          method: 'DELETE',
+          headers: {
+            ...(sesId ? { 'x-session-id': sesId } : {})
+          }
+        }).catch(() => {});
+      }
     } catch (_) {}
 
     return true;
@@ -1189,6 +1206,7 @@ export async function deleteCloudBomRow(bomId) {
  */
 export async function fetchCloudBom(bomId) {
   if (!bomId) return null;
+  if (isIsolatedNodeTestMode()) return null;
   const cleanId = String(bomId).trim();
   try {
     const { data, error } = await supabase
@@ -1212,6 +1230,7 @@ export async function fetchCloudBom(bomId) {
  */
 export async function fetchBomAccountsVerification(orderId) {
   if (!orderId) return null;
+  if (isIsolatedNodeTestMode()) return null;
   const cleanId = String(orderId).trim();
   try {
     let result = await supabase
@@ -1239,6 +1258,19 @@ export async function fetchBomAccountsVerification(orderId) {
   return null;
 }
 
+// Rapid In-Flight Request Deduplication & Short-Lived In-Memory Cache (Eliminates parallel duplicate network fetches)
+const inFlightCloudStoreRequests = new Map();
+const recentCloudStoreCache = new Map();
+const CLOUD_STORE_DEDUP_TTL_MS = 3500;
+
+export function invalidateCloudStoreCache(storeKey) {
+  if (storeKey) {
+    recentCloudStoreCache.delete(String(storeKey));
+  } else {
+    recentCloudStoreCache.clear();
+  }
+}
+
 /**
  * Fetch a data collection DIRECTLY from Supabase cloud database
  * @param {string} storeKey - Unique identifier (e.g. 'bom_store', 'invoice_store', 'customer_store', 'crm_opportunities')
@@ -1246,6 +1278,37 @@ export async function fetchBomAccountsVerification(orderId) {
  * @returns {Promise<Array|Object>}
  */
 export async function fetchCloudStore(storeKey, fallbackData = []) {
+  if (isIsolatedNodeTestMode()) return fallbackData;
+
+  const keyStr = String(storeKey);
+  const now = Date.now();
+
+  // 1. Instant return from short-lived memory cache if recent (< 3.5s old)
+  const cached = recentCloudStoreCache.get(keyStr);
+  if (cached && (now - cached.timestamp < CLOUD_STORE_DEDUP_TTL_MS)) {
+    return cached.data;
+  }
+
+  // 2. If identical fetch is currently in-flight, await the same promise (Zero duplicate network calls)
+  if (inFlightCloudStoreRequests.has(keyStr)) {
+    return inFlightCloudStoreRequests.get(keyStr);
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const data = await executeFetchCloudStore(storeKey, fallbackData);
+      recentCloudStoreCache.set(keyStr, { data, timestamp: Date.now() });
+      return data;
+    } finally {
+      inFlightCloudStoreRequests.delete(keyStr);
+    }
+  })();
+
+  inFlightCloudStoreRequests.set(keyStr, fetchPromise);
+  return fetchPromise;
+}
+
+async function executeFetchCloudStore(storeKey, fallbackData = []) {
   // CANONICAL CUSTOMER READ PATH: Query local backend proxy first (Zero PostgREST egress)
   if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
     // 1. Try local server memory cache first with request deduplication and scoped in-memory caching (Phase B1 & B2)
@@ -1386,9 +1449,15 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
 
   // 1. Fetch instantly from local server endpoint /api/store/:key first
   try {
+    const sessionId = (typeof localStorage !== 'undefined')
+      ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '')
+      : '';
+    const headers = {};
+    if (sessionId) headers['x-session-id'] = sessionId;
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`/api/store/${storeKey}`, { signal: controller.signal }).catch(() => null);
+    const res = await fetch(`/api/store/${storeKey}`, { headers, signal: controller.signal }).catch(() => null);
     clearTimeout(timeoutId);
     if (res && res.ok) {
       const json = await res.json();
@@ -1430,6 +1499,8 @@ const pendingSaveData = {};
  */
 export async function saveCloudStoreImmediate(storeKey, storeData) {
   if (storeData === undefined || storeData === null) return;
+  if (isIsolatedNodeTestMode()) return;
+  invalidateCloudStoreCache(storeKey);
 
   // Direct persistence for employees to Supabase users table
   if (storeKey === 'employees_store' && Array.isArray(storeData)) {
@@ -1510,12 +1581,8 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
       }
 
       // Broadcast update locally to all listening React components in current window
-      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-        detail: { storeKey: 'customer_store', data: storeData }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_customer_update', {
-        detail: storeData
-      }));
+      safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'customer_store', data: storeData });
+      safeDispatchWindowEvent('controlroom_customer_update', storeData);
     } catch (err) {
       console.warn('[SupabaseSync] Error persisting customer:', err?.message || err);
     }
@@ -1542,12 +1609,8 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
       }
 
       // Broadcast update locally to all listening React components in current window
-      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-        detail: { storeKey: 'crm_opportunities', data: storeData }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_opportunity_update', {
-        detail: { opportunity: storeData, action: 'upsert' }
-      }));
+      safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'crm_opportunities', data: storeData });
+      safeDispatchWindowEvent('controlroom_opportunity_update', { opportunity: storeData, action: 'upsert' });
     } catch (err) {
       console.warn('[SupabaseSync] Error persisting to public.opportunities:', err?.message || err);
     }
@@ -1582,12 +1645,8 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
         }
       }
 
-      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-        detail: { storeKey: 'crm_leads', data: storeData }
-      }));
-      window.dispatchEvent(new CustomEvent('controlroom_leads_update', {
-        detail: { leads: storeData, action: 'upsert' }
-      }));
+      safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'crm_leads', data: storeData });
+      safeDispatchWindowEvent('controlroom_leads_update', { leads: storeData, action: 'upsert' });
     } catch (err) {
       console.warn('[SupabaseSync] Error persisting to public.leads:', err?.message || err);
     }
@@ -1608,28 +1667,15 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     try {
       if (Array.isArray(storeData)) {
         console.warn(`[SupabaseSync] Whole-array BOM sync to public.bom_orders blocked (${storeData.length} records) to prevent excessive PostgREST egress.`);
-        // Broadcast locally to current window only, NEVER send whole array to Supabase
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-            detail: { storeKey: 'bom_store', data: storeData }
-          }));
-        }
+        safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'bom_store', data: storeData });
       } else if (storeData && typeof storeData === 'object') {
         const row = toDatabaseBomRow(storeData);
         if (row) {
           await supabase.from('bom_orders').upsert(row, { onConflict: 'id' });
         }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-            detail: { storeKey: 'bom_store', data: storeData }
-          }));
-          window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', {
-            detail: { bom: storeData }
-          }));
-          window.dispatchEvent(new CustomEvent('controlroom_bom_updated', {
-            detail: { bom: storeData }
-          }));
-        }
+        safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'bom_store', data: storeData });
+        safeDispatchWindowEvent('controlroom_bom_store_updated', { bom: storeData });
+        safeDispatchWindowEvent('controlroom_bom_updated', { bom: storeData });
       }
     } catch (err) {
       console.warn('[SupabaseSync] Error persisting to public.bom_orders:', err?.message || err);
@@ -1652,25 +1698,14 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     try {
       if (Array.isArray(storeData)) {
         console.warn(`[SupabaseSync] Whole-array invoice sync to public.invoices blocked (${storeData.length} records) to prevent excessive PostgREST egress.`);
-        // Broadcast locally to current window only, NEVER send whole array to Supabase
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-            detail: { storeKey: 'invoice_store', data: storeData }
-          }));
-        }
+        safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'invoice_store', data: storeData });
       } else if (storeData && typeof storeData === 'object') {
         const row = toDatabaseInvoiceRow(storeData);
         if (row) {
           await supabase.from('invoices').upsert(row, { onConflict: 'id' });
         }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-            detail: { storeKey: 'invoice_store', data: storeData }
-          }));
-          window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
-            detail: { invoice: storeData }
-          }));
-        }
+        safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'invoice_store', data: storeData });
+        safeDispatchWindowEvent('controlroom_invoice_store_updated', { invoice: storeData });
       }
     } catch (err) {
       console.warn('[SupabaseSync] Error persisting to public.invoices:', err?.message || err);
@@ -1694,22 +1729,14 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     try {
       if (Array.isArray(storeData)) {
         console.warn(`[SupabaseSync] Whole-array PI sync to database blocked (${storeData.length} records) to prevent overwriting other users' records.`);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-            detail: { storeKey, data: storeData }
-          }));
-        }
+        safeDispatchWindowEvent('controlroom_store_update', { storeKey, data: storeData });
       } else if (storeData && typeof storeData === 'object') {
         fetch('/api/estimates', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(storeData)
         }).catch(() => {});
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-            detail: { storeKey, data: storeData }
-          }));
-        }
+        safeDispatchWindowEvent('controlroom_store_update', { storeKey, data: storeData });
       }
     } catch (err) {
       console.warn('[SupabaseSync] Error persisting PI:', err?.message || err);
@@ -1717,51 +1744,27 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     return; // STOP! NEVER touch leaves table for PIs!
   }
 
+  // Zero-leaves-interaction policy (Phase 9I): Broadcast store update event safely to listening React components
+  safeDispatchWindowEvent('controlroom_store_update', { storeKey, data: storeData });
+
+  // Direct persistence to self-hosted Node server endpoint
   try {
-    const employeeKey = storeKey.toUpperCase();
-    const { data: records } = await supabase
-      .from('leaves')
-      .select('id')
-      .eq('employee', employeeKey)
-      .order('id', { ascending: false });
-
-    const payload = {
-      employee: employeeKey,
-      reason: JSON.stringify(storeData),
-      status: 'active',
-      dates: new Date().toISOString(),
-      duration: String(Array.isArray(storeData) ? storeData.length : 1),
-      type: 'Store'
-    };
-
-    if (records && records.length > 0) {
-      await supabase.from('leaves').update(payload).eq('id', records[0].id);
-      if (records.length > 1) {
-        const excess = records.slice(1).map(r => r.id);
-        supabase.from('leaves').delete().in('id', excess).then(() => {}).catch(() => {});
-      }
-    } else {
-      await supabase.from('leaves').insert(payload);
-    }
-
-    // Broadcast update locally to all listening React components in current window
-    window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-      detail: { storeKey, data: storeData }
-    }));
-  } catch (err) {
-    console.warn(`[Supabase Immediate Sync Warn for ${storeKey}]:`, err?.message || err);
-  }
-
-  try {
+    const sesId = typeof window !== 'undefined' && window.localStorage
+      ? localStorage.getItem('controlroom_device_session_id')
+      : null;
     await fetch(`/api/store/${storeKey}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sesId ? { 'x-session-id': sesId } : {})
+      },
       body: JSON.stringify(storeData)
     }).catch(() => {});
   } catch (err) {}
 }
 
 export function saveCloudStore(storeKey, storeData) {
+  if (isIsolatedNodeTestMode()) return;
   pendingSaveData[storeKey] = storeData;
 
   // Clear existing debounce timer
@@ -1818,7 +1821,7 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
 
     const piNo = String(b.sourcePiNo || b.source_pi_no || b.piNo || '').trim().toLowerCase();
 
-    // 1. If code was already seen, merge in place (preferring higher workflow progression)
+    // 1. If code was already seen, merge in place (preferring higher workflow progression, honoring legitimate cancellations)
     if (seenCodes.has(code)) {
       const idx = seenCodes.get(code);
       const existing = resolvedList[idx];
@@ -1838,6 +1841,31 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
         : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
           ? 'PARTIALLY_PACKED'
           : (b.packingStatus || existing.packingStatus || null);
+
+      // Check if either record is cancelled (Cancellations MUST be honored and never regressed)
+      const isBCancelled = Boolean(b.cancelled || String(b.status || '').toLowerCase().includes('cancel'));
+      const isExistingCancelled = Boolean(existing.cancelled || String(existing.status || '').toLowerCase().includes('cancel'));
+      const isCancelledMerge = isBCancelled || isExistingCancelled;
+      const cancelledObj = isBCancelled ? b : existing;
+
+      if (isCancelledMerge) {
+        resolvedList[idx] = {
+          ...existing,
+          ...b,
+          status: 'Cancelled & Stock Restored',
+          cancelled: true,
+          stockBlocked: false,
+          cancellationReason: cancelledObj.cancellationReason || b.cancellationReason || existing.cancellationReason || '',
+          cancelledBy: cancelledObj.cancelledBy || b.cancelledBy || existing.cancelledBy || null,
+          cancelledByRole: cancelledObj.cancelledByRole || b.cancelledByRole || existing.cancelledByRole || null,
+          cancelledByTeam: cancelledObj.cancelledByTeam || b.cancelledByTeam || existing.cancelledByTeam || null,
+          cancelledByNameAndRole: cancelledObj.cancelledByNameAndRole || b.cancelledByNameAndRole || existing.cancelledByNameAndRole || null,
+          cancelledAt: cancelledObj.cancelledAt || b.cancelledAt || existing.cancelledAt || null,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus
+        };
+        continue;
+      }
 
       resolvedList[idx] = newRank >= existingRank ? {
         ...existing,
@@ -1901,6 +1929,31 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
         : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
           ? 'PARTIALLY_PACKED'
           : (b.packingStatus || existing.packingStatus || null);
+
+      // Check if either record is cancelled (Cancellations MUST be honored and never regressed)
+      const isBCancelled = Boolean(b.cancelled || String(b.status || '').toLowerCase().includes('cancel'));
+      const isExistingCancelled = Boolean(existing.cancelled || String(existing.status || '').toLowerCase().includes('cancel'));
+      const isCancelledMerge = isBCancelled || isExistingCancelled;
+      const cancelledObj = isBCancelled ? b : existing;
+
+      if (isCancelledMerge) {
+        resolvedList[idx] = {
+          ...existing,
+          ...b,
+          status: 'Cancelled & Stock Restored',
+          cancelled: true,
+          stockBlocked: false,
+          cancellationReason: cancelledObj.cancellationReason || b.cancellationReason || existing.cancellationReason || '',
+          cancelledBy: cancelledObj.cancelledBy || b.cancelledBy || existing.cancelledBy || null,
+          cancelledByRole: cancelledObj.cancelledByRole || b.cancelledByRole || existing.cancelledByRole || null,
+          cancelledByTeam: cancelledObj.cancelledByTeam || b.cancelledByTeam || existing.cancelledByTeam || null,
+          cancelledByNameAndRole: cancelledObj.cancelledByNameAndRole || b.cancelledByNameAndRole || existing.cancelledByNameAndRole || null,
+          cancelledAt: cancelledObj.cancelledAt || b.cancelledAt || existing.cancelledAt || null,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus
+        };
+        continue;
+      }
 
       if (newRank >= existingRank) {
         seenCodes.delete(String(existing.bomCode || existing.code || existing.id || '').trim());
@@ -1975,6 +2028,7 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
  * @returns {Promise<string>} Next BOM code (e.g., 'BOM-625')
  */
 export async function getAndReserveNextBomCode(commit = true) {
+  if (isIsolatedNodeTestMode()) return 'VRM-BOM-TEST-999';
   // First attempt atomic server reservation with strict 1200ms timeout to prevent UI hangs
   try {
     const endpoint = commit ? '/api/boms/reserve-code' : '/api/boms/next-code';
@@ -2102,6 +2156,7 @@ export async function getAndReserveNextBomCode(commit = true) {
  * @returns {Object} Subscription channel that can be unsubscribed
  */
 export function subscribeToCloudStore(storeKey, onUpdateCallback) {
+  if (isIsolatedNodeTestMode()) return { unsubscribe: () => {} };
   try {
     const employeeKey = storeKey.toUpperCase();
     let lastEmittedJson = '';
@@ -2121,7 +2176,9 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
         safeEmit(e.detail.data);
       }
     };
-    window.addEventListener('controlroom_store_update', handleLocalUpdate);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('controlroom_store_update', handleLocalUpdate);
+    }
 
     // Supabase Realtime subscription for cross-device/cross-user sync
     const isBomStore = storeKey === 'bom_store' || storeKey === 'BOM_STORE';
@@ -2202,7 +2259,9 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
 
     return {
       unsubscribe: () => {
-        window.removeEventListener('controlroom_store_update', handleLocalUpdate);
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('controlroom_store_update', handleLocalUpdate);
+        }
         if (channel) supabase.removeChannel(channel);
       }
     };

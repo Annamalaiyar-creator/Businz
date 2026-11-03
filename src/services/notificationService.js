@@ -1,1110 +1,419 @@
 // ===================================================================================
-// CONTROLROOM WORKFLOW NOTIFICATION & AUDIO SERVICE
+// BUSINZ ERP: UNIFIED NOTIFICATION SERVICE
 // ===================================================================================
-// Manages real-time multi-stage notifications with synthesized Web Audio chimes,
-// cross-tab BroadcastChannel sync, and deep linking across workflow stages:
-// 1. Sales -> Dispatch (BOM received to pack) -> redirects to 'Dispatch Orders'
-// 2. Dispatch -> Sales & Accounts (BOM packed & ready for accounts) -> redirects to 'Accounts Verification' / 'BOM Orders'
-// 3. Accounts -> Billing (Verified & ready for invoicing) -> redirects to 'Invoice Management'
-// 4. Billing -> Sales & Dispatch (Invoice completed & ready to dispatch) -> redirects to 'BOM Orders' / 'Dispatch Orders'
+// Provides WhatsApp/Modern SaaS real-time notifications, Web Audio chimes,
+// and Text-to-Speech voice announcements for all ERP workflows (BOM, Lead, PO, PI, etc.)
 // ===================================================================================
 
-import { fetchCloudStore, saveCloudStore } from "../utils/supabaseDataSync";
+let sharedAudioCtx = null;
 
-let audioCtx = null;
-
-let hasUserGesture = false;
-
-/**
- * Returns or initializes a Web Audio Context, handling browser autoplay resumption.
- */
 export function getAudioContext() {
-  if (typeof window === 'undefined' || !hasUserGesture) return null;
+  if (typeof window === 'undefined') return null;
   try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return null;
-    if (!audioCtx) {
-      audioCtx = new AudioContextClass();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx && !sharedAudioCtx) {
+      sharedAudioCtx = new AudioCtx();
     }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(() => {});
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
     }
-    return audioCtx;
-  } catch (e) {
+    return sharedAudioCtx;
+  } catch (_) {
     return null;
   }
 }
 
-// Automatically unlock audio context on initial user click/keypress in the window
-if (typeof window !== 'undefined') {
-  const unlockAudio = () => {
-    hasUserGesture = true;
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (AudioContextClass && !audioCtx) {
-        audioCtx = new AudioContextClass();
-      }
-      if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume().catch(() => {});
-      }
-    } catch (_) {}
-    window.removeEventListener('click', unlockAudio);
-    window.removeEventListener('keydown', unlockAudio);
-    window.removeEventListener('touchstart', unlockAudio);
-  };
-  window.addEventListener('click', unlockAudio, { once: true, passive: true });
-  window.addEventListener('keydown', unlockAudio, { once: true, passive: true });
-  window.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
-}
-
 /**
- * Synthesizes a melodic, professional chime using the Web Audio API.
- * Never requires external audio files, works offline, zero latency, and sounds crisp.
- * @param {'chime' | 'success' | 'alert' | 'invoice'} soundType 
+ * Play a pleasant, high-fidelity dual-tone notification chime using Web Audio API
  */
-export function playWorkflowNotificationSound(soundType = 'chime') {
+export function playWorkflowNotificationSound() {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
 
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => playMelody(ctx, soundType)).catch(() => {});
-    } else {
-      playMelody(ctx, soundType);
-    }
-  } catch (e) {
-    console.warn('Error playing workflow notification sound:', e);
+    const now = ctx.currentTime;
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+
+    // Dual-tone harmonic chime (WhatsApp / iOS style): 587.33Hz (D5) -> 880Hz (A5)
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now);
+    osc1.frequency.exponentialRampToValueAtTime(880.0, now + 0.12);
+
+    gain1.gain.setValueAtTime(0.25, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+
+    osc1.start(now);
+    osc1.stop(now + 0.4);
+  } catch (err) {
+    console.warn('[AudioChime] Chime error:', err);
   }
 }
 
-function playMelody(ctx, soundType) {
-  const now = ctx.currentTime;
-  const masterGain = ctx.createGain();
-  masterGain.connect(ctx.destination);
-  masterGain.gain.setValueAtTime(0.35, now);
-
-  let notes = [];
-  if (soundType === 'success') {
-    // Uplifting major chord progression: C5 -> E5 -> G5 -> C6
-    notes = [
-      { freq: 523.25, time: 0.0,  duration: 0.28, type: 'sine' },
-      { freq: 659.25, time: 0.10, duration: 0.28, type: 'sine' },
-      { freq: 783.99, time: 0.20, duration: 0.35, type: 'triangle' },
-      { freq: 1046.5, time: 0.32, duration: 0.65, type: 'sine' }
-    ];
-  } else if (soundType === 'invoice') {
-    // Crisp energetic two-tone chime
-    notes = [
-      { freq: 659.25, time: 0.0,  duration: 0.22, type: 'sine' },
-      { freq: 987.77, time: 0.12, duration: 0.55, type: 'sine' }
-    ];
-  } else if (soundType === 'alert') {
-    // Double ding attention tone
-    notes = [
-      { freq: 880.00, time: 0.0,  duration: 0.18, type: 'sine' },
-      { freq: 880.00, time: 0.16, duration: 0.45, type: 'sine' }
-    ];
-  } else {
-    // Default 'chime' (Slack/Apple style pleasant 3-bell ring: D5 -> A5 -> D6)
-    notes = [
-      { freq: 587.33, time: 0.0,  duration: 0.30, type: 'sine' },
-      { freq: 880.00, time: 0.12, duration: 0.35, type: 'sine' },
-      { freq: 1174.66, time: 0.24, duration: 0.65, type: 'sine' }
-    ];
-  }
-
-  notes.forEach(({ freq, time, duration, type }) => {
-    const osc = ctx.createOscillator();
-    const noteGain = ctx.createGain();
-
-    osc.type = type || 'sine';
-    osc.frequency.setValueAtTime(freq, now + time);
-
-    // Exponential decay envelope (natural bell strike)
-    noteGain.gain.setValueAtTime(0.001, now + time);
-    noteGain.gain.exponentialRampToValueAtTime(0.8, now + time + 0.02);
-    noteGain.gain.exponentialRampToValueAtTime(0.001, now + time + duration);
-
-    osc.connect(noteGain);
-    noteGain.connect(masterGain);
-
-    osc.start(now + time);
-    osc.stop(now + time + duration + 0.05);
-  });
-}
-
-/**
- * Synthesizes an iconic Porter / delivery-app style upbeat order alert tone.
- * High clarity, vibrant 3-tone ascending chime (G5 -> C6 -> E6).
- */
 export function playPorterOrderAlert() {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => playPorterChime(ctx)).catch(() => {});
-    } else {
-      playPorterChime(ctx);
-    }
-  } catch (e) {
-    console.warn('Error playing Porter order alert:', e);
-  }
+  playWorkflowNotificationSound();
 }
 
-function playPorterChime(ctx) {
-  const now = ctx.currentTime;
-  const masterGain = ctx.createGain();
-  masterGain.connect(ctx.destination);
-  masterGain.gain.setValueAtTime(0.48, now);
-
-  // Iconic Porter / logistics style energetic 3-beat chime
-  const notes = [
-    { freq: 783.99, time: 0.0,  duration: 0.12, type: 'triangle' },
-    { freq: 1046.5, time: 0.11, duration: 0.15, type: 'sine' },
-    { freq: 1318.5, time: 0.24, duration: 0.40, type: 'sine' }
-  ];
-
-  notes.forEach(({ freq, time, duration, type }) => {
-    const osc = ctx.createOscillator();
-    const noteGain = ctx.createGain();
-    osc.type = type || 'sine';
-    osc.frequency.setValueAtTime(freq, now + time);
-    noteGain.gain.setValueAtTime(0.001, now + time);
-    noteGain.gain.exponentialRampToValueAtTime(0.9, now + time + 0.015);
-    noteGain.gain.exponentialRampToValueAtTime(0.001, now + time + duration);
-    osc.connect(noteGain);
-    noteGain.connect(masterGain);
-    osc.start(now + time);
-    osc.stop(now + time + duration + 0.05);
-  });
-}
-
-/**
- * Global preference for Voice Notifications (Text-to-Speech)
- * Per requirements: Voice is ALWAYS ON.
- */
 export function isVoiceNotificationEnabled() {
-  return true; // Voice is always enabled
+  if (typeof window === 'undefined' || !window.localStorage) return true;
+  const val = localStorage.getItem('businz_voice_notifications_enabled');
+  return val === null ? true : val === 'true';
 }
 
 export function setVoiceNotificationEnabled(enabled) {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem('businz_voice_notifications_enabled', enabled ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('businz_voice_toggle', { detail: { enabled: Boolean(enabled) } }));
+  }
+}
+
+export function getVoiceAnnouncementText(notif) {
+  if (!notif) return '';
+  if (typeof notif === 'string') return notif;
+  if (notif.voice_text && typeof notif.voice_text === 'string') return notif.voice_text;
+
+  const eventType = String(notif.event_type || '').toUpperCase().trim();
+  const docType = String(notif.document_type || '').toUpperCase().trim();
+  const actorName = notif.actor_name || notif.actor_role || '';
+
+  switch (eventType) {
+    case 'PI_SAVED':
+      return 'Proforma Invoice saved successfully';
+    case 'PI_ASSIGNED':
+      return 'Proforma Invoice assigned to you';
+    case 'BOM_SUBMITTED':
+      return 'New BOM submitted from Sales';
+    case 'PACKING_VERIFIED':
+      return 'Packing verified by Dispatch';
+    case 'ACCOUNTS_APPROVED':
+      return 'Payment verified by Accounts';
+    case 'ACCOUNTS_REJECTED':
+    case 'PACKING_RETURNED':
+      return 'Verification returned by Accounts';
+    case 'INVOICE_COMPLETED':
+      return 'Invoice completed, order ready for loading';
+    case 'ORDER_DISPATCHED':
+      return 'Order dispatched';
+    case 'BOM_CANCELLED':
+      return actorName ? `BOM cancelled by ${actorName}` : 'BOM order cancelled';
+    case 'PO_SUBMITTED_FOR_APPROVAL':
+      return 'Purchase Order submitted for approval';
+    case 'PO_APPROVED':
+      return 'Purchase Order approved by MD';
+    case 'PO_REJECTED':
+      return 'Purchase Order rejected';
+    case 'PO_AWAITING_PAYMENT':
+      return 'Approved Purchase Order awaiting payment';
+    case 'PO_PAYMENT_COMPLETED':
+      return 'Purchase Order payment completed';
+    case 'LEAD_CREATED':
+      return 'New lead received';
+    case 'LEAD_ASSIGNED':
+      return 'New lead assigned to you';
+    case 'LEAD_REASSIGNED':
+      return 'Lead reassigned to you';
+    case 'WORK_ORDER_ASSIGNED':
+      return 'Work order assigned';
+    default:
+      if (notif.title && typeof notif.title === 'string') {
+        return notif.title.replace(/[^\w\s.,]/gi, '').trim();
+      }
+      return 'New workflow update';
+  }
+}
+
+export function speakNotificationVoice(textOrNotif) {
   if (typeof window === 'undefined') return;
+
+  // 1. Always play the dual-tone notification chime immediately
   try {
-    localStorage.setItem('controlroom_voice_notifications_enabled', 'true');
-    window.dispatchEvent(new CustomEvent('controlroom_voice_setting_changed', { detail: { enabled: true } }));
+    playWorkflowNotificationSound();
   } catch (_) {}
-}
 
-/**
- * Cache available speech synthesis voices
- */
-let cachedVoices = [];
-if (typeof window !== 'undefined' && window.speechSynthesis) {
-  const loadVoices = () => {
-    try {
-      cachedVoices = window.speechSynthesis.getVoices() || [];
-    } catch (_) {}
-  };
-  loadVoices();
-  if (window.speechSynthesis.onvoiceschanged !== undefined) {
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-  }
-}
+  // 2. Check if voice announcements are enabled and supported
+  if (!isVoiceNotificationEnabled() || !('speechSynthesis' in window)) return;
 
-/**
- * Extracts a voice announcement in the format: "[Company Name], [Status]"
- * (e.g. "Vikram Solar, Order Packed" or "Tata Power, Proforma Invoice Created")
- */
-export function getPorterVoiceCue(titleOrMessage, metadata = {}) {
-  const fullText = ((typeof titleOrMessage === 'object' ? `${titleOrMessage.title || ''} ${titleOrMessage.message || ''}` : titleOrMessage) || '');
-  const upperText = fullText.toUpperCase();
-  const step = (metadata && metadata.step) ? String(metadata.step).toUpperCase() : '';
-
-  // 1. Extract and clean company / customer / vendor name
-  let rawCompany = '';
-  if (metadata) {
-    rawCompany = metadata.companyName || metadata.customerName || metadata.customer || metadata.company || metadata.client || metadata.clientName || metadata.vendor || metadata.vendorName || '';
-  }
-  if (!rawCompany && typeof titleOrMessage === 'object' && titleOrMessage) {
-    rawCompany = titleOrMessage.companyName || titleOrMessage.customerName || titleOrMessage.customer || titleOrMessage.company || titleOrMessage.client || titleOrMessage.clientName || titleOrMessage.vendor || titleOrMessage.vendorName || '';
-  }
-
-  // If not in metadata, inspect message parentheses: e.g. "BOM-1042 (Vikram Solar)"
-  if (!rawCompany) {
-    const parenMatch = fullText.match(/\(([^)]+)\)/);
-    if (parenMatch && parenMatch[1]) {
-      const candidate = parenMatch[1].trim();
-      if (!candidate.startsWith('BOM-') && !candidate.startsWith('INV-') && !candidate.startsWith('PO-') && !candidate.startsWith('PI-') && candidate.length > 2) {
-        rawCompany = candidate;
-      }
-    }
-  }
-
-  // If not in parentheses, inspect "for [Company]" or "from [Company]"
-  if (!rawCompany) {
-    const forMatch = fullText.match(/\b(?:for|from)\s+([A-Z0-9][A-Za-z0-9\s&]+?)(?:\s+(?:has|is|was|to|\.|—|-|\(|$))/);
-    if (forMatch && forMatch[1]) {
-      const candidate = forMatch[1].trim();
-      if (candidate.length > 2 && candidate.toLowerCase() !== 'dispatch' && candidate.toLowerCase() !== 'accounts') {
-        rawCompany = candidate;
-      }
-    }
-  }
-
-  // Clean company name for crisp, natural voice pronunciation (e.g. "Vikram Solar Pvt Ltd" -> "Vikram Solar")
-  let cleanCompany = '';
-  if (rawCompany && typeof rawCompany === 'string') {
-    cleanCompany = rawCompany
-      .replace(/\b(Pvt|Private)\s+(Ltd|Limited)\b/gi, '')
-      .replace(/\b(Ltd|Limited|LLP|Inc|Corp)\b/gi, '')
-      .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '')
-      .replace(/[–—_#*:()!]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const lower = cleanCompany.toLowerCase();
-    if (lower === 'customer' || lower === 'client' || lower === 'all' || lower === 'vendor') {
-      cleanCompany = '';
-    }
-  }
-
-  const companyToSpeak = cleanCompany || 'VRM';
-
-  // 2. Determine Status cleanly
-  let status = 'New Order';
-  if (step.includes('BOM_SENT_TO_DISPATCH') || upperText.includes('RECEIVED FOR DISPATCH') || upperText.includes('RECEIVED TO PACK') || upperText.includes('NEW BOM RECEIVED') || upperText.includes('RECEIVED TO DISPATCH')) {
-    status = 'You have received a BOM for dispatch';
-  } else if (step.includes('BOM_PACKED') || upperText.includes('PACKED AND SENT') || upperText.includes('PACKED & SENT') || upperText.includes('BOM PACKED') || upperText.includes('ORDER PACKED') || upperText.includes('PACKING COMPLETED')) {
-    status = 'Order Packed';
-  } else if (step.includes('ACCOUNTS_VERIFIED') || step.includes('BILLING_NOTIF') || upperText.includes('ACCOUNTS APPROVED') || upperText.includes('PAYMENT APPROVED')) {
-    status = 'Payment Approved';
-  } else if (step.includes('INVOICE_COMPLETED') || step.includes('DISPATCH_NOTIF') || upperText.includes('INVOICE COMPLETED') || upperText.includes('CLEARED FOR VEHICLE')) {
-    status = 'Order Cleared for Dispatch';
-  } else if (step.includes('CANCEL') || upperText.includes('CANCEL')) {
-    status = 'Order Cancelled';
-  } else if (upperText.includes('ACCOUNTS VERIFICATION') || upperText.includes('FOR ACCOUNTS')) {
-    status = 'Payment Verification Needed';
-  } else if (upperText.includes('READY FOR INVOICE') || upperText.includes('READY FOR INVOICING')) {
-    status = 'Invoice Ready';
-  } else if (step.includes('DISPATCH') || upperText.includes('DISPATCH') || upperText.includes('VEHICLE LOADED')) {
-    status = 'Order Dispatched';
-  } else if (upperText.includes('PROFORMA INVOICE') || upperText.includes('CONVERTED TO PI') || upperText.includes('PI CREATED')) {
-    status = 'Proforma Invoice Created';
-  } else if (upperText.includes('PURCHASE ORDER APPROVED') || upperText.includes('PO APPROVED')) {
-    status = 'Purchase Order Approved';
-  } else if (upperText.includes('PURCHASE ORDER') || upperText.includes('NEW PO')) {
-    status = 'New Purchase Order';
-  } else if (upperText.includes('QUOTATION CONVERTED')) {
-    status = 'Quotation Converted';
-  } else if (upperText.includes('QUOTATION')) {
-    status = 'Quotation Created';
-  } else if (upperText.includes('WORK ORDER')) {
-    status = 'New Work Order';
-  } else if (upperText.includes('NEW BOM') || upperText.includes('NEW ORDER')) {
-    status = 'New Order';
-  } else {
-    // Fallback: Take the first few words of the title cleanly
-    const title = (typeof titleOrMessage === 'object' ? titleOrMessage.title : titleOrMessage) || '';
-    const cleanTitle = title
-      .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '')
-      .replace(/[–—_#*:()!]/g, ' ')
-      .trim();
-
-    const words = cleanTitle.split(/\s+/).filter(Boolean);
-    if (words.length > 0 && words.length <= 4) {
-      status = words.join(' ');
-    }
-  }
-
-  // 3. Return Combined: "[Company Name], [Status]"
-  return `${companyToSpeak}, ${status}`;
-}
-
-/**
- * Pronounces the voice announcement using a clear female / girl voice
- * format: "[Company Name], [Status]"
- * @param {string} text - The cue to speak (or full text which will be converted to a cue)
- * @param {Object} options - Optional configuration { rate, pitch, volume }
- */
-export function speakNotificationVoice(text, options = {}) {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  const text = typeof textOrNotif === 'object' ? getVoiceAnnouncementText(textOrNotif) : textOrNotif;
+  if (!text || typeof text !== 'string') return;
 
   try {
-    let cue = (text && typeof text === 'string' && (text.length > 40 || text.includes('.')))
-      ? getPorterVoiceCue(text, options.metadata)
-      : (text || 'VRM, New Order');
-
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
     window.speechSynthesis.cancel();
 
-    // Final clean
-    const spoken = cue
-      .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '')
-      .replace(/[–—_#*]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (!spoken) return;
-
-    const utterance = new SpeechSynthesisUtterance(spoken);
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
     utterance.lang = 'en-US';
-    utterance.rate = options.rate || 1.05; // Clear natural speed
-    utterance.pitch = options.pitch || 1.18; // Soft, natural female/girl voice pitch
-    utterance.volume = options.volume != null ? options.volume : 1.0;
 
-    // Prioritize natural-sounding female / girl voices
-    let voices = cachedVoices.length > 0 ? cachedVoices : [];
-    if (voices.length === 0 && window.speechSynthesis.getVoices) {
-      voices = window.speechSynthesis.getVoices() || [];
-    }
+    // Store globally on window to protect against Chromium GC bug that silently cuts off speech
+    window._businzSpeechUtterance = utterance;
 
-    if (voices.length > 0) {
-      const femaleKeywords = [
-        'google uk english female',
-        'google us english',
-        'samantha',
-        'victoria',
-        'karen',
-        'zira',
-        'jenny',
-        'aria',
-        'veena',
-        'heera',
-        'neerja',
-        'hazel',
-        'susan',
-        'fiona',
-        'moira',
-        'tessa',
-        'ava',
-        'allison',
-        'serena',
-        'kate',
-        'female',
-        'woman',
-        'girl'
-      ];
+    const selectVoiceAndSpeak = () => {
+      try {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          const preferred = voices.find(v =>
+            v.lang.startsWith('en') &&
+            (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Daniel') || v.name.includes('Karen') || v.default)
+          ) || voices.find(v => v.lang.startsWith('en'));
 
-      // 1. Search for English female voice
-      let girlVoice = null;
-      for (const kw of femaleKeywords) {
-        girlVoice = voices.find(v => 
-          (v.lang && v.lang.startsWith('en')) && 
-          v.name.toLowerCase().includes(kw)
-        );
-        if (girlVoice) break;
-      }
-
-      // 2. Fallback: Any voice with female/girl in name
-      if (!girlVoice) {
-        girlVoice = voices.find(v => {
-          const nm = v.name.toLowerCase();
-          return nm.includes('female') || nm.includes('girl') || nm.includes('woman');
-        });
-      }
-
-      // 3. Fallback: standard en-US or en voice
-      if (!girlVoice) {
-        girlVoice = voices.find(v => v.lang === 'en-US') || voices.find(v => v.lang && v.lang.startsWith('en'));
-      }
-
-      if (girlVoice) {
-        utterance.voice = girlVoice;
-      }
-    }
-
-    window.speechSynthesis.speak(utterance);
-  } catch (e) {
-    console.warn('Speech synthesis error:', e);
-  }
-}
-
-// Global listener for custom speak events
-if (typeof window !== 'undefined') {
-  window.addEventListener('controlroom_voice_speak', (e) => {
-    if (e && e.detail && e.detail.text) {
-      speakNotificationVoice(e.detail.text, e.detail.options);
-    }
-  });
-}
-
-/**
- * Checks whether a given role matches the notification's target roles.
- * System administrators and Executives always receive all notifications.
- */
-export function isRoleTargeted(userRole, targetRoles, metadata = {}) {
-  if (!userRole) return false;
-  
-  const roleList = Array.isArray(targetRoles) ? targetRoles : (targetRoles ? [targetRoles] : []);
-  const normUserRole = (userRole || '').toLowerCase().trim();
-
-  // STRICT USER REQUIREMENT: Dispatch operational alert ("You have received a BOM for dispatch")
-  // MUST appear ONLY on the Dispatch login, and NOT on any other login (not Sales, not Admin/CEO, not Accounts, etc.)
-  const isDispatchExclusive = metadata?.step === 'BOM_SENT_TO_DISPATCH' || metadata?.isDispatchOnly || 
-    (roleList.length > 0 && roleList.every(r => (r || '').toLowerCase().includes('dispatch')));
-
-  if (isDispatchExclusive) {
-    return normUserRole.includes('dispatch') || normUserRole === 'dh' || normUserRole === 'dispatch head' || normUserRole === 'dispatch executive';
-  }
-
-  // Executive Leadership & Tech Admins have global visibility for general system notifications
-  const adminRoles = ['CEO', 'Managing Director', 'MD', 'Technical Administrator', 'Developer'];
-  if (adminRoles.includes(userRole) || (userRole || '').startsWith('TA')) {
-    return true;
-  }
-
-  if (!targetRoles || targetRoles === 'All' || targetRoles === '*' || targetRoles.length === 0) {
-    return true;
-  }
-
-  // Resolve active logged in user name and employee ID
-  let currentUserName = '';
-  let currentUserEmpId = '';
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      currentUserName = (localStorage.getItem('controlroom_logged_user_name') || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      currentUserEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
-    }
-  } catch (_) {}
-
-  // Fallback defaults if not set in localStorage
-  if (!currentUserName) {
-    if (userRole === 'Sales Executive') currentUserName = 'sales executive';
-    else if (userRole === 'Sales Head') currentUserName = 'sales head';
-    else if (userRole === 'Technical Administrator' || userRole === 'CEO') currentUserName = 'annamalaiyar';
-  }
-
-  // 1. Direct match by employee ID
-  if (currentUserEmpId) {
-    for (const t of roleList) {
-      if (t && String(t).trim().toUpperCase() === currentUserEmpId) return true;
-    }
-    if (metadata && metadata.salesPersonCode && String(metadata.salesPersonCode).trim().toUpperCase() === currentUserEmpId) {
-      return true;
-    }
-  }
-
-  // 2. Direct match by user name (e.g. Sales Person who created the BOM)
-  if (currentUserName) {
-    for (const t of roleList) {
-      if (!t) continue;
-      const cleanTarget = String(t).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      if (cleanTarget && (cleanTarget === currentUserName || cleanTarget.includes(currentUserName) || currentUserName.includes(cleanTarget))) {
-        return true;
-      }
-    }
-    if (metadata && (metadata.salesPerson || metadata.createdBy)) {
-      const sp = String(metadata.salesPerson || metadata.createdBy).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      if (sp && (sp === currentUserName || sp.includes(currentUserName) || currentUserName.includes(sp))) {
-        return true;
-      }
-    }
-  }
-
-  // 3. Direct match by userRole
-  if (roleList.includes(userRole)) return true;
-
-  // 4. Departmental / role-level matching
-  const normalizedUserRole = userRole.toLowerCase();
-
-  for (const t of roleList) {
-    const norm = (t || '').toLowerCase();
-    
-    // Dispatch department
-    if ((norm.includes('dispatch') || norm.includes('production')) && 
-        (normalizedUserRole.includes('dispatch') || normalizedUserRole.includes('production') || normalizedUserRole.includes('floor'))) {
-      return true;
-    }
-    
-    // Sales department
-    if (norm.includes('sales') && normalizedUserRole.includes('sales')) {
-      // If notification has a specific salesPerson and this user is a Sales Executive:
-      if (normalizedUserRole === 'sales executive' && currentUserName && metadata && (metadata.salesPerson || metadata.createdBy)) {
-        const creator = String(metadata.salesPerson || metadata.createdBy).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-        if (creator && creator !== 'sales executive' && creator !== 'sales head' && creator !== 'sales') {
-          // Check if current user is that creator
-          if (creator === currentUserName || creator.includes(currentUserName) || currentUserName.includes(creator)) {
-            return true;
-          }
-          // Different sales executive: do not alert them
-          return false;
+          if (preferred) utterance.voice = preferred;
         }
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.warn('[VoiceAlert] Speak execution error:', err);
       }
-      return true;
-    }
-    
-    // Accounts department
-    if (norm.includes('account') && normalizedUserRole.includes('account')) {
-      return true;
-    }
-    
-    // Billing department
-    if ((norm.includes('billing') || norm.includes('invoice')) && 
-        (normalizedUserRole.includes('billing') || normalizedUserRole.includes('invoice') || normalizedUserRole.includes('account'))) {
-      return true;
-    }
-  }
+    };
 
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        selectVoiceAndSpeak();
+      };
+    } else {
+      selectVoiceAndSpeak();
+    }
+  } catch (err) {
+    console.warn('[VoiceAlert] Text-to-speech error:', err);
+  }
+}
+
+export function isRoleTargeted() {
   return false;
 }
 
-// Setup cross-tab BroadcastChannel if supported
-let broadcastChannel = null;
-if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-  try {
-    broadcastChannel = new BroadcastChannel('controlroom_notifications_channel');
-    broadcastChannel.onmessage = (event) => {
-      if (event && event.data && event.data.type === 'VRM_WORKFLOW_NOTIFICATION') {
-        const notif = event.data.payload;
-        // Dispatch local event in this tab
-        window.dispatchEvent(new CustomEvent('vrm_workflow_toast', { detail: notif }));
-        window.dispatchEvent(new Event('vrm_notifications_updated'));
-
-        // Play alert audio and voice if targeted to this active tab's session
-        try {
-          const currentRole = (typeof window !== 'undefined' && window.localStorage)
-            ? (localStorage.getItem('controlroom_user_role') || '')
-            : '';
-          const isTargeted = isRoleTargeted(currentRole, notif.targetRoles, notif.metadata);
-          if (isTargeted) {
-            playPorterOrderAlert();
-            setTimeout(() => {
-              const cue = getPorterVoiceCue(notif, notif.metadata);
-              speakNotificationVoice(cue, { rate: 1.12, pitch: 1.05 });
-            }, 320);
-          }
-        } catch (_) {}
-      }
-    };
-  } catch (e) {
-    console.warn('BroadcastChannel not initialized:', e);
-  }
+export function sendWorkflowNotification() {
+  // No-op: Notifications completely removed
+  return { id: 'disabled', unread: false };
 }
 
-/**
- * Core function to send and persist a workflow notification.
- * Plays sound, displays live toast banner, syncs to localStorage & broadcast channel.
- */
-export function sendWorkflowNotification({
-  title,
-  message,
-  targetTab,
-  targetRoles = ['All'],
-  type = 'info',
-  soundType = 'chime',
-  metadata = {}
-}) {
-  const notifId = `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const notification = {
-    id: notifId,
-    title,
-    message,
-    targetTab,
-    targetRoles: Array.isArray(targetRoles) ? targetRoles : [targetRoles],
-    role: Array.isArray(targetRoles) ? targetRoles[0] : targetRoles,
-    type,
-    soundType,
-    time: timeStr,
-    createdAt: new Date().toISOString(),
-    metadata,
-    unread: true
-  };
-
-  // 1. Save to persistent storage for Header Bell icon
-  try {
-    const existing = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
-    const updated = [notification, ...existing.filter(n => n.id !== notifId)].slice(0, 50);
-    localStorage.setItem('vrm_live_notifications', JSON.stringify(updated));
-    saveCloudStore('notifications_store', updated);
-  } catch (e) {
-    console.error('Error saving live notification:', e);
-  }
-
-  // 2. Play iconic Porter-style order alert chime & speak voice cue if current user session is targeted
-  const currentRole = (typeof window !== 'undefined' && window.localStorage)
-    ? (localStorage.getItem('controlroom_user_role') || '')
-    : '';
-  const isTargetedToCurrentSession = isRoleTargeted(currentRole, targetRoles, metadata);
-
-  if (isTargetedToCurrentSession) {
-    playPorterOrderAlert();
-
-    // 2b. Speak short, punchy Porter-style voice cue (e.g. "Vikram Solar, Order Packed!")
-    setTimeout(() => {
-      const cue = getPorterVoiceCue(notification, notification.metadata);
-      speakNotificationVoice(cue, { rate: 1.12, pitch: 1.05 });
-    }, 320);
-  }
-
-  // 3. Emit local event for current tab toast ONLY if current user is targeted
-  if (typeof window !== 'undefined' && isTargetedToCurrentSession) {
-    window.dispatchEvent(new CustomEvent('vrm_workflow_toast', { detail: notification }));
-    window.dispatchEvent(new Event('vrm_notifications_updated'));
-  }
-
-  // 4. Broadcast to other open browser tabs
-  if (broadcastChannel) {
-    try {
-      broadcastChannel.postMessage({
-        type: 'VRM_WORKFLOW_NOTIFICATION',
-        payload: { ...notification, fromBroadcast: true }
-      });
-    } catch (e) {
-      console.warn('Error posting to BroadcastChannel:', e);
-    }
-  }
-
-  return notification;
+export function markNotificationAsRead() {
+  // No-op
 }
 
-/**
- * Marks a notification ID as read in localStorage and dispatches an update event.
- */
-export function markNotificationAsRead(notifId) {
-  if (!notifId) return;
-  try {
-    const existing = JSON.parse(localStorage.getItem('controlroom_read_notification_ids') || '[]');
-    if (!existing.includes(notifId)) {
-      const updated = [...existing, notifId];
-      localStorage.setItem('controlroom_read_notification_ids', JSON.stringify(updated));
-    }
-    window.dispatchEvent(new Event('vrm_notifications_updated'));
-  } catch (e) {
-    console.error('Error marking notification as read:', e);
-  }
+export function deleteLiveNotification() {
+  // No-op
 }
 
-/**
- * Removes a notification completely from storage.
- */
-export function deleteLiveNotification(notifId) {
-  if (!notifId) return;
-  try {
-    const existing = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
-    const filtered = existing.filter(n => n.id !== notifId);
-    localStorage.setItem('vrm_live_notifications', JSON.stringify(filtered));
-    window.dispatchEvent(new Event('vrm_notifications_updated'));
-  } catch (e) {
-    console.error('Error deleting live notification:', e);
-  }
-}
-
-/**
- * Clears all live notifications and read history from storage.
- */
 export function clearAllLiveNotifications() {
-  try {
-    localStorage.removeItem('vrm_live_notifications');
-    localStorage.removeItem('controlroom_read_notification_ids');
-    window.dispatchEvent(new Event('vrm_notifications_updated'));
-  } catch (e) {
-    console.error('Error clearing live notifications:', e);
+  // Clean up any remaining legacy localStorage keys if present
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      localStorage.removeItem('vrm_live_notifications');
+      localStorage.removeItem('controlroom_read_notification_ids');
+      localStorage.removeItem('controlroom_notifications_read');
+      localStorage.removeItem('controlroom_voice_notifications_enabled');
+      localStorage.removeItem('controlroom_central_notifications_v2');
+    } catch (_) {}
   }
 }
 
-// ===================================================================================
-// DEDICATED WORKFLOW HELPERS AS REQUESTED
-// ===================================================================================
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+// Enterprise Real-Time Department-to-Department Workflow Notification Dispatchers
+// -----------------------------------------------------------------------------------
 
-/**
- * STEP 1: Sales person creates/proceeds with a BOM to Dispatch / Production.
- * Dispatch team receives message: "You have received a BOM to pack: [BOM ID / Customer]"
- * Clicking redirects to 'Dispatch Orders' screen.
- */
-export function notifyBomSentToDispatch({ bomCode, customerName, salesPerson }) {
-  const safeCustomer = customerName || 'Customer';
-  return sendWorkflowNotification({
-    title: `📦 New BOM Received for Dispatch`,
-    message: `You have received BOM ${bomCode} (${safeCustomer}) for dispatch. Click to open and begin packing.`,
-    targetTab: 'Dispatch Orders',
-    targetRoles: ['Dispatch Head', 'Dispatch Executive', 'Dispatch'],
-    type: 'info',
-    soundType: 'chime',
-    metadata: {
-      bomCode,
-      customerName: safeCustomer,
-      salesPerson: salesPerson || 'Sales Executive',
-      step: 'BOM_SENT_TO_DISPATCH',
-      isDispatchOnly: true
-    }
-  });
-}
+async function sendServerWorkflowNotification(payload) {
+  try {
+    const actorEmp = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
+    const actorName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || 'System';
+    const actorRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || 'System';
 
-/**
- * STEP 2: Dispatch / Production finishes packing the BOM.
- * 1. Sales person receives notification: "BOM [BOM ID] is packed and proceeded to Accounts verification"
- * 2. Accounts team receives notification: "BOM [BOM ID] is packed and ready for Accounts verification"
- * Clicking redirects to 'Accounts Verification' or 'BOM Orders'.
- */
-export function notifyBomPackedAndSentToAccounts({ bomCode, customerName, salesPerson, salesPersonCode, createdBy, createdById }) {
-  const safeCustomer = customerName || 'Customer';
-  const resolvedSalesPerson = (salesPerson || createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-  const resolvedCode = salesPersonCode || createdById || '';
-
-  // Target list specifically for the salesperson who created this BOM:
-  // Includes their exact name/ID, as well as Sales Executive and Sales Head
-  const salesTargets = [
-    resolvedSalesPerson,
-    resolvedCode,
-    'Sales Executive',
-    'Sales Head',
-    'CEO',
-    'Managing Director'
-  ].filter(Boolean);
-
-  // 2a. Notification specifically for the Sales Person who created the BOM
-  sendWorkflowNotification({
-    title: `📦 BOM Packing Completed`,
-    message: `BOM ${bomCode} (${safeCustomer}) created by ${resolvedSalesPerson || 'Sales'} has been fully packed and proceeded to Accounts verification.`,
-    targetTab: 'BOM Orders',
-    targetRoles: salesTargets,
-    type: 'success',
-    soundType: 'success',
-    metadata: {
-      bomCode,
-      customerName: safeCustomer,
-      salesPerson: resolvedSalesPerson || 'Sales Executive',
-      salesPersonCode: resolvedCode,
-      createdBy: resolvedSalesPerson,
-      step: 'BOM_PACKED'
-    }
-  });
-
-  // 2b. Notification for Accounts Team (staggered slightly so voice alerts don't collide)
-  setTimeout(() => {
-    sendWorkflowNotification({
-      title: `💳 New BOM for Accounts Verification`,
-      message: `BOM ${bomCode} (${safeCustomer}) is fully packed and ready for payment & accounts verification.`,
-      targetTab: 'Accounts Verification',
-      targetRoles: ['Accounts Head', 'Accounts Executive'],
-      type: 'info',
-      soundType: 'chime',
-      metadata: {
-        bomCode,
-        customerName: safeCustomer,
-        salesPerson: resolvedSalesPerson,
-        step: 'BOM_PACKED_ACCOUNTS_NOTIF'
-      }
+    const res = await fetch('/api/workflow-notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-employee-code': actorEmp,
+        'x-user-name': actorName,
+        'x-user-role': actorRole
+      },
+      body: JSON.stringify({
+        ...payload,
+        actorEmpCode: actorEmp,
+        actorName,
+        actorRole
+      })
     });
-  }, 1600);
-}
-
-/**
- * STEP 2.5: Proforma Invoice Created Notification
- * Voice alert: "[Customer Name], Proforma Invoice Created!"
- * Triggered whenever a sales person creates a Proforma Invoice.
- */
-export function notifyPiCreated({ piNo, customerName, salesPerson, salesPersonCode, amount }) {
-  const safeCustomer = customerName || 'Customer';
-  const cleanSalesPerson = (salesPerson || '').replace(/\s*\([^)]*\)/g, '').trim();
-  const amtText = amount ? ` (${amount})` : '';
-
-  const salesTargets = [
-    cleanSalesPerson,
-    salesPersonCode,
-    'Sales Executive',
-    'Sales Head',
-    'Procurement Admin',
-    'Accounts Head',
-    'Accounts Executive',
-    'CEO',
-    'Managing Director',
-    'Technical Administrator'
-  ].filter(Boolean);
-
-  return sendWorkflowNotification({
-    title: `📑 Proforma Invoice Created`,
-    message: `Proforma Invoice ${piNo} for ${safeCustomer}${amtText} has been created by ${cleanSalesPerson || 'Sales'}.`,
-    targetTab: 'Proforma Invoice',
-    targetRoles: salesTargets,
-    type: 'success',
-    soundType: 'success',
-    metadata: {
-      piNo,
-      customerName: safeCustomer,
-      salesPerson: cleanSalesPerson,
-      salesPersonCode: salesPersonCode || '',
-      step: 'PI_CREATED'
-    }
-  });
-}
-
-/**
- * STEP 3: Accounts verification completed.
- * Proceeds to Billing team for invoice generation.
- * Billing team gets notified: "BOM [BOM ID] verified by Accounts, ready for Invoicing"
- * Clicking redirects to 'Invoice Management'.
- */
-export function notifyAccountsVerificationCompleted({ bomCode, customerName, invoiceNo, salesPerson }) {
-  const safeCustomer = customerName || 'Customer';
-  const invText = invoiceNo ? ` (${invoiceNo})` : '';
-
-  // 3a. Universal completion notification for all stakeholders & current user
-  sendWorkflowNotification({
-    title: `🧾 Accounts Verified & Invoice Created`,
-    message: `Accounts verification completed for BOM ${bomCode} (${safeCustomer}). Assigned ${invText || 'Invoice'} and forwarded to Billing & Invoice Management.`,
-    targetTab: 'Invoice Management',
-    targetRoles: ['All', 'Accounts Head', 'Accounts Executive', 'Billing', 'Invoice Executive', 'Sales Executive', 'Sales Head', 'Admin', 'CEO', 'MD'],
-    type: 'success',
-    soundType: 'invoice',
-    metadata: {
-      bomCode,
-      invoiceNo,
-      customerName: safeCustomer,
-      salesPerson,
-      step: 'ACCOUNTS_VERIFIED_BILLING_NOTIF'
-    }
-  });
-
-  // 3b. Notification for Sales Person
-  return sendWorkflowNotification({
-    title: `💳 Accounts Approved BOM`,
-    message: `Accounts verification passed for BOM ${bomCode} (${safeCustomer}). Forwarded to Billing for invoice generation.`,
-    targetTab: 'BOM Orders',
-    targetRoles: ['Sales Executive', 'Sales Head', 'All'],
-    type: 'info',
-    soundType: 'chime',
-    metadata: {
-      bomCode,
-      customerName: safeCustomer,
-      salesPerson,
-      step: 'ACCOUNTS_VERIFIED_SALES_NOTIF'
-    }
-  });
-}
-
-/**
- * STEP 4: Invoice completed by Billing team.
- * 1. Billing & Sales person receive notification: "Invoice is completed for BOM [BOM ID] and ready to dispatch."
- * 2. Dispatch team receives notification: "Invoice cleared. Ready for vehicle loading & dispatch!"
- * Clicking redirects to 'BOM Orders' or 'Dispatch Orders'.
- */
-export function notifyInvoiceCompletedReadyForDispatch({ invoiceNo, bomCode, customerName, salesPerson }) {
-  const safeCustomer = customerName || 'Customer';
-  const safeInv = invoiceNo || 'INV-2026';
-
-  // 4a. Universal notification for Billing operator, Sales Person & Admins
-  sendWorkflowNotification({
-    title: `✅ Invoice Confirmed & Ready for Dispatch`,
-    message: `Invoice ${safeInv} for BOM ${bomCode} (${safeCustomer}) confirmed and released to Dispatch for vehicle loading.`,
-    targetTab: 'Invoice Management',
-    targetRoles: ['All', 'Billing', 'Invoice Executive', 'Accounts Head', 'Accounts Executive', 'Sales Executive', 'Sales Head', 'Admin', 'CEO', 'MD'],
-    type: 'success',
-    soundType: 'success',
-    metadata: {
-      invoiceNo: safeInv,
-      bomCode,
-      customerName: safeCustomer,
-      salesPerson: salesPerson || 'Sales Executive',
-      step: 'INVOICE_COMPLETED_SALES_NOTIF'
-    }
-  });
-
-  // 4b. Notification for Dispatch Team
-  return sendWorkflowNotification({
-    title: `🚚 Order Cleared for Vehicle Loading`,
-    message: `Invoice ${safeInv} cleared for BOM ${bomCode} (${safeCustomer}). Ready for vehicle loading and final dispatch!`,
-    targetTab: 'Dispatch Orders',
-    targetRoles: ['Dispatch Head', 'Production Head', 'Dispatch Executive', 'Floor Supervisor', 'All'],
-    type: 'success',
-    soundType: 'chime',
-    metadata: {
-      invoiceNo: safeInv,
-      bomCode,
-      customerName: safeCustomer,
-      step: 'INVOICE_COMPLETED_DISPATCH_NOTIF'
-    }
-  });
-}
-
-/**
- * STEP 5: BOM Cancelled by Dispatch (or Accounts/Production).
- * Immediately notifies the Sales Person who raised this BOM with the exact reason,
- * releases inventory, and logs to the audit notification center.
- */
-export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, reason, cancelledBy, cancelledByRole, cancelledByTeam }) {
-  const safeCustomer = customerName || 'Customer';
-  const safeCode = bomCode || 'BOM';
-  const safeReason = reason || 'Order cancelled';
-  const displayCanceller = cancelledBy || 'Authorized Personnel';
-  const safeSalesPerson = salesPerson || 'Sales Executive';
-
-  // 5a. High-priority notification specifically targeting the Sales Person and Sales Team
-  return sendWorkflowNotification({
-    title: `❌ BOM Cancelled: ${safeCode}`,
-    message: `BOM ${safeCode} (${safeCustomer}) was CANCELLED by ${displayCanceller}. Reason: "${safeReason}". Blocked stock has been released.`,
-    targetTab: 'BOM Orders',
-    targetRoles: [safeSalesPerson, 'Sales Executive', 'Sales Head', 'All', 'Admin', 'CEO', 'MD'],
-    type: 'error',
-    soundType: 'alert',
-    metadata: {
-      bomCode: safeCode,
-      customerName: safeCustomer,
-      salesPerson: safeSalesPerson,
-      cancelledBy: displayCanceller,
-      cancelledByRole: cancelledByRole || '',
-      cancelledByTeam: cancelledByTeam || '',
-      reason: safeReason,
-      step: 'BOM_CANCELLED_NOTIF'
-    }
-  });
-}
-
-/**
- * STEP 6: Vehicle Loading & Dispatch Completed Notification.
- * Notifies the Sales Person who raised/owns this BOM that dispatch is completed.
- * Voice alert: "[Customer Name], Order Dispatched!"
- * Target: Sales Person (by name, ID, role: Sales Executive, Sales Head), plus leadership.
- */
-export function notifyDispatchCompletedToSales({
-  bomCode,
-  customerName,
-  salesPerson,
-  salesPersonCode,
-  createdBy,
-  createdById,
-  vehicleNo,
-  lrNo,
-  transporter,
-  deliveryMode,
-  status
-}) {
-  const safeCustomer = customerName || 'Customer';
-  const resolvedSalesPerson = (salesPerson || createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-  const resolvedCode = salesPersonCode || createdById || '';
-  const vText = vehicleNo ? ` via Vehicle ${vehicleNo}` : '';
-  const lrText = lrNo && lrNo !== 'N/A' && lrNo !== 'N/A (Self-Pickup)' ? ` (LR: ${lrNo})` : '';
-  const isDirect = deliveryMode === 'direct';
-
-  const salesTargets = [
-    resolvedSalesPerson,
-    resolvedCode,
-    'Sales Executive',
-    'Sales Head',
-    'All',
-    'CEO',
-    'Managing Director',
-    'MD',
-    'Technical Administrator'
-  ].filter(Boolean);
-
-  const message = isDirect
-    ? `Dispatch for BOM ${bomCode} (${safeCustomer}) is COMPLETED! Goods directly handed over / customer self-pickup completed.`
-    : `Dispatch for BOM ${bomCode} (${safeCustomer}) is COMPLETED! Goods loaded${vText}${lrText} and dispatched to customer.`;
-
-  return sendWorkflowNotification({
-    title: `🚚 BOM Dispatched: ${bomCode}`,
-    message,
-    targetTab: 'BOM Orders',
-    targetRoles: salesTargets,
-    type: 'success',
-    soundType: 'success',
-    metadata: {
-      bomCode,
-      customerName: safeCustomer,
-      salesPerson: resolvedSalesPerson || 'Sales Executive',
-      salesPersonCode: resolvedCode,
-      createdBy: resolvedSalesPerson,
-      vehicleNo,
-      lrNo,
-      transporter,
-      step: 'DISPATCH_COMPLETED'
-    }
-  });
-}
-
-/**
- * Triggers a real-time notification with melodic chime to Accounts & Procurement when a GRN (partial or full) is completed.
- */
-export function notifyGrnCompletedToAccounts({
-  grnNo,
-  poNo,
-  vendor,
-  receivedQty,
-  totalOrderedQty,
-  isPartial,
-  challanNo,
-  receivedBy
-}) {
-  const accountsTargets = [
-    'Accounts Head',
-    'Accounts Executive',
-    'Finance & Accounts',
-    'Procurement Head',
-    'Procurement Executive',
-    'CEO',
-    'Managing Director',
-    'MD',
-    'Technical Administrator',
-    'All'
-  ];
-
-  const receiptType = isPartial ? 'Partially Received' : 'Fully Received';
-  const qtyText = totalOrderedQty ? `${receivedQty} of ${totalOrderedQty} Units` : `${receivedQty} Units`;
-
-  return sendWorkflowNotification({
-    title: `📦 GRN ${receiptType}: ${grnNo} (PO: ${poNo || '—'})`,
-    message: `GRN ${grnNo} inwarded for ${poNo || 'PO'} (${vendor || 'Vendor'}): ${qtyText} received (DC/Inv: ${challanNo || '—'}). Ready for Accounts bill verification.`,
-    targetTab: 'Goods Receipt Note',
-    targetRoles: accountsTargets,
-    type: isPartial ? 'info' : 'success',
-    soundType: isPartial ? 'chime' : 'success',
-    metadata: {
-      grnNo,
-      poNo,
-      vendor,
-      receivedQty,
-      totalOrderedQty,
-      isPartial,
-      challanNo,
-      receivedBy,
-      step: isPartial ? 'GRN_PARTIAL_INWARDED' : 'GRN_FULLY_INWARDED'
-    }
-  });
-}
-
-let isSyncingNotifs = false;
-let notifSyncDebounceTimer = null;
-
-/**
- * Fetch latest notifications from cloud store and merge with local notifications
- * so Dispatch and Accounts logins on different devices/browsers receive live alerts.
- */
-export async function syncCloudNotifications() {
-  if (typeof window === 'undefined' || isSyncingNotifs) return;
-  isSyncingNotifs = true;
-  try {
-    const cloudNotifs = await fetchCloudStore('notifications_store', []);
-    if (Array.isArray(cloudNotifs) && cloudNotifs.length > 0) {
-      const localNotifs = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
-      const map = new Map();
-      [...cloudNotifs, ...localNotifs].forEach(n => {
-        if (n && n.id && !map.has(n.id)) {
-          map.set(n.id, n);
-        }
-      });
-      const merged = Array.from(map.values()).slice(0, 50);
-      const prevStr = localStorage.getItem('vrm_live_notifications');
-      const nextStr = JSON.stringify(merged);
-      if (prevStr !== nextStr) {
-        localStorage.setItem('vrm_live_notifications', nextStr);
-        window.dispatchEvent(new Event('vrm_notifications_updated'));
-      }
-    }
-  } catch (_) {
-  } finally {
-    isSyncingNotifs = false;
+    return await res.json();
+  } catch (err) {
+    console.warn('[WorkflowNotif Send Error]:', err.message);
+    return { success: false, error: err.message };
   }
 }
 
-if (typeof window !== 'undefined') {
-  setTimeout(() => syncCloudNotifications(), 2500);
-  window.addEventListener('controlroom_storage_update', () => {
-    if (notifSyncDebounceTimer) clearTimeout(notifSyncDebounceTimer);
-    notifSyncDebounceTimer = setTimeout(() => {
-      syncCloudNotifications();
-    }, 2000);
+export function notifyStockShortageToProcurement() {
+  return { success: true };
+}
+
+export function notifyBomCreatedToSales() {
+  return { success: true };
+}
+
+export function notifyBomSentToDispatch({ bomCode, customerName, salesPerson }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Dispatch Head',
+    eventType: 'BOM_SUBMITTED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `📦 New BOM Submitted: ${bomCode}`,
+    message: `BOM ${bomCode} (${customerName || 'Customer'}) has been confirmed by ${salesPerson || 'Sales'} and forwarded for Dispatch Packing.`,
+    targetTab: 'Dispatch Orders',
+    targetRecordId: bomCode,
+    dedupId: `bom_submitted_${bomCode}`
   });
 }
 
+export function notifyBomPackedAndSentToAccounts({ bomCode, customerName, actorName }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Accounts Head',
+    eventType: 'PACKING_VERIFIED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `💳 Packing Verified: BOM ${bomCode}`,
+    message: `BOM ${bomCode} (${customerName || 'Customer'}) packed and verified by Dispatch. Ready for Accounts Payment Verification.`,
+    targetTab: 'Accounts Verification',
+    targetRecordId: bomCode,
+    dedupId: `bom_packing_verified_${bomCode}`
+  });
+}
+
+export function notifyPiCreated() {
+  return { success: true };
+}
+
+export function notifyAccountsVerificationCompleted({ bomCode, customerName, actorName }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Billing',
+    eventType: 'ACCOUNTS_APPROVED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `📄 Accounts Verified: BOM ${bomCode}`,
+    message: `Payment & accounts verification complete for BOM ${bomCode} (${customerName || 'Customer'}). Ready for Tax Invoice generation.`,
+    targetTab: 'Invoice Management',
+    targetRecordId: bomCode,
+    dedupId: `bom_accounts_approved_${bomCode}`
+  });
+}
+
+export function notifyInvoiceCompletedReadyForDispatch({ bomCode, customerName, invoiceNo }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Dispatch Head',
+    eventType: 'INVOICE_COMPLETED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `🚚 Invoice Confirmed — Ready for Loading: ${bomCode}`,
+    message: `Tax Invoice (${invoiceNo || bomCode}) completed for ${customerName || 'Customer'}. Ready for vehicle loading and final dispatch.`,
+    targetTab: 'Dispatch Orders',
+    targetRecordId: bomCode,
+    dedupId: `bom_invoice_ready_loading_${bomCode}`
+  });
+}
+
+export function notifyDispatchCompletedToSales({ bomCode, customerName, salesPerson, salesPersonId, transporterName, lrNumber }) {
+  return sendServerWorkflowNotification({
+    recipientEmpCode: salesPersonId || null,
+    recipientRole: 'Sales Executive',
+    eventType: 'ORDER_DISPATCHED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `🚀 Order Dispatched: BOM ${bomCode}`,
+    message: `Order ${bomCode} (${customerName || 'Customer'}) has been loaded and dispatched via ${transporterName || 'Transporter'}${lrNumber ? ` (LR: ${lrNumber})` : ''}.`,
+    targetTab: 'Sales BOM',
+    targetRecordId: bomCode,
+    dedupId: `bom_dispatched_${bomCode}`
+  });
+}
+
+export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, reason, cancelledBy }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Sales Executive',
+    eventType: 'BOM_CANCELLED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `❌ BOM ${bomCode} Cancelled`,
+    message: `BOM ${bomCode} (${customerName || 'Customer'}) was cancelled by ${cancelledBy || 'Dispatch'}. Reason: ${reason || 'Cancelled by Dispatch'}`,
+    targetTab: 'Sales BOM',
+    targetRecordId: bomCode,
+    dedupId: `bom_cancel_${bomCode}_${Date.now()}`
+  });
+}
+
+export function notifyCreditPaymentSettled({ bomCode, customerName, salesPerson, amount, utrNumber }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'Accounts Head',
+    eventType: 'CREDIT_PAYMENT_SETTLED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `💳 Credit Payment Settled: ${bomCode}`,
+    message: `${salesPerson || 'Sales'} recorded payment of ₹ ${Number(amount || 0).toLocaleString('en-IN')} for ${customerName || 'Customer'} (UTR: ${utrNumber || 'N/A'}). Credit settled.`,
+    targetTab: 'Accounts Verification',
+    targetRecordId: bomCode,
+    metadata: {
+      bomCode,
+      customerName,
+      amount,
+      utrNumber
+    },
+    dedupId: `credit_settled_${bomCode}_${Date.now()}`
+  });
+}
+
+export function notifyGrnCompletedToAccounts() {
+  return { success: true, disabled: true };
+}
+
+export function notifyAccountsVerified() {
+  return { success: true, disabled: true };
+}
+
+export function notifyInvoiceCompleted() {
+  return { success: true, disabled: true };
+}
+
+export function notifyVehicleLoadedAndDispatched() {
+  return { success: true, disabled: true };
+}
+
+export function notifyPurchaseOrderApproved() {
+  return { success: true, disabled: true };
+}
+
+export function notifyNewQuotationCreated() {
+  return { success: true, disabled: true };
+}
+
+export function notifyQuotationConverted() {
+  return { success: true, disabled: true };
+}
+
+export function notifyNewWorkOrderCreated() {
+  return { success: true, disabled: true };
+}
+
+export function notifyStockShortage() {
+  return { success: true, disabled: true };
+}
+
+export function notifyLeadUnattended24h() {
+  return { success: true, disabled: true };
+}
+
+export function notifyLeadAssigned() {
+  return { success: true, disabled: true };
+}
+
+export function notifyNewLead() {
+  return { success: true, disabled: true };
+}
+
+export function syncNotificationsFromCloud() {
+  return Promise.resolve([]);
+}
+
+export function pruneStaleLiveNotifications() {
+  return [];
+}

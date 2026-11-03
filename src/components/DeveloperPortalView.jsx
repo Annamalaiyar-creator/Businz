@@ -311,7 +311,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
       }, 4500);
 
       setTimeout(() => {
-        setDeployLogs(prev => [...prev, '✅ DEPLOYMENT COMPLETE! Server updated to v2.4.2 (System Health: 100%)']);
+        setDeployLogs(prev => [...prev, 'DEPLOYMENT COMPLETE! Server updated to v2.4.2 (System Health: 100%)']);
         setIsDeploying(false);
         setCurrentVersion('v2.4.2');
         if (showCustomAlert) showCustomAlert('Server deployment completed successfully! Live version is now v2.4.2.', 'Deploy Success', 'success');
@@ -1746,7 +1746,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                 <div style={{ color: '#64748B' }}>Ready to launch deployment pipeline. Click "Authorize 2FA & Deploy Server" below.</div>
               ) : (
                 deployLogs.map((log, idx) => (
-                  <div key={idx} style={{ color: log.includes('✅') ? '#34D399' : log.includes('🚀') ? '#FDBA74' : '#E2E8F0' }}>
+                  <div key={idx} style={{ color: log.includes('') ? '#34D399' : log.includes('🚀') ? '#FDBA74' : '#E2E8F0' }}>
                     {log}
                   </div>
                 ))

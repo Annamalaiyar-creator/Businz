@@ -2,15 +2,37 @@
  * scripts/test_two_user_concurrency.js
  * Two-User Inventory Concurrency Test: Over-reservation Prevention & SSE Synchronization
  */
+const storageMap = new Map();
+if (!globalThis.localStorage || typeof globalThis.localStorage.getItem !== 'function') {
+  globalThis.localStorage = {
+    getItem: (k) => storageMap.get(k) || null,
+    setItem: (k, v) => storageMap.set(k, String(v)),
+    removeItem: (k) => storageMap.delete(k),
+    clear: () => storageMap.clear()
+  };
+}
+if (!globalThis.window) {
+  globalThis.window = {
+    dispatchEvent: () => true,
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+}
+
 import assert from 'assert';
 import http from 'http';
 import { centralInventoryStore } from '../src/utils/centralInventoryStore.js';
+import { resolveAndValidateTestApiUrl } from './testEnvironmentGuard.js';
+
+// Resolve explicit test API URL (Fails closed if missing, or if targeting 5001/5002)
+const BASE_URL = resolveAndValidateTestApiUrl();
 
 console.log('===============================================================');
 console.log('🧪 TWO-USER INVENTORY CONCURRENCY & SSE SYNCHRONIZATION TEST');
 console.log('===============================================================\n');
 
 async function runConcurrencyTest() {
+  centralInventoryStore.initStore();
   const itemCode = 'CONCUR-ALU-01';
   const initialStock = 100;
 
@@ -29,7 +51,7 @@ async function runConcurrencyTest() {
 
   // 2. Setup SSE connection to verify real-time event reception
   let receivedEvents = [];
-  const sseReq = http.request('http://127.0.0.1:5001/api/realtime-events', (res) => {
+  const sseReq = http.request(`${BASE_URL}/api/realtime-events`, (res) => {
     res.on('data', chunk => {
       const text = chunk.toString();
       if (text.includes('data:')) {

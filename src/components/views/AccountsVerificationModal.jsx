@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
-  Loader2, ExternalLink, AlertTriangle, User, Truck
+  Loader2, ExternalLink, AlertTriangle, User, Truck, Package
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -10,7 +10,7 @@ import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../util
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import { supabase } from "../../supabaseClient";
 import StatusBadge from "../StatusBadge";
-import { VRMBomPrintSheet } from "../VRMBomPrintTemplate";
+// VRMBomPrintSheet removed per user mandate: strictly display itemized interactive BOM table with centered kit pricing in accounts login
 
 export default function AccountsVerificationModal({
   accountsVerificationModal,
@@ -28,7 +28,6 @@ export default function AccountsVerificationModal({
   showCustomAlert
 }) {
   const [viewingProofDocModal, setViewingProofDocModal] = useState(null);
-  const [accountsBomViewMode, setAccountsBomViewMode] = useState('paper');
   const [resolvedProofDataUrl, setResolvedProofDataUrl] = useState(null);
   const [resolvedAddressProofDataUrl, setResolvedAddressProofDataUrl] = useState(null);
   const [isResolvingProof, setIsResolvingProof] = useState(false);
@@ -222,6 +221,12 @@ export default function AccountsVerificationModal({
     accountsVerificationModal?.status === 'Cancelled & Stock Restored' ||
     (accountsVerificationModal?.status && typeof accountsVerificationModal.status === 'string' && accountsVerificationModal.status.toLowerCase().includes('cancel'))
   );
+  const isPartialPackingOrder = Boolean(
+    accountsVerificationModal?.isPartialPacking ||
+    accountsVerificationModal?.accountsVerification?.isPartialPacking ||
+    accountsVerificationModal?.packingStatus === 'PARTIALLY_PACKED' ||
+    String(accountsVerificationModal?.status || '').toLowerCase().includes('partial')
+  );
   const normalizePaymentTerm = (term) => {
     if (!term) return '';
     const str = String(term).trim();
@@ -233,9 +238,8 @@ export default function AccountsVerificationModal({
   };
   const salesPaymentStatus = normalizePaymentTerm(accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3) || '100% Paid';
 
-  const currentPayStatus = accVerif.paymentStatus 
-    ? normalizePaymentTerm(accVerif.paymentStatus)
-    : salesPaymentStatus;
+  // Customer Payment Status is strictly determined by Sales BOM and cannot be altered by Accounts
+  const currentPayStatus = salesPaymentStatus;
   const hardCopy = isAlreadyCompleted ? true : Boolean(accVerif.hardCopyReceived);
   const bomCodeText = (accountsVerificationModal && (accountsVerificationModal.bomCode || accountsVerificationModal.code)) || 'BOM-2026';
   const custNameText = (() => {
@@ -324,10 +328,6 @@ export default function AccountsVerificationModal({
   const completeVerification = async () => {
     if (isWhileDispatch && !hasUploadedPaymentProof) {
       alert('⛔ CANNOT APPROVE — PAYMENT ATTACHMENT REQUIRED\n\nThis order has payment terms "Payment While Dispatch". The payment proof image/slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order must remain on HOLD in the Accounts team until the Sales person attaches the payment proof receipt.');
-      return;
-    }
-    if (!currentPayStatus) {
-      alert('⚠️ Please select the Customer Payment Status before completing accounts verification.');
       return;
     }
     if (!currentPayDate) {
@@ -533,6 +533,41 @@ export default function AccountsVerificationModal({
               }}>
                 {bomCodeText}
               </span>
+              {accountsVerificationModal?.docType === 'DC' ? (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <Truck size={13} strokeWidth={2.2} />
+                  <span>DC (DELIVERY CHALLAN)</span>
+                </span>
+              ) : (
+                <span style={{
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <FileText size={13} strokeWidth={2.2} />
+                  <span>TAX INVOICE</span>
+                </span>
+              )}
               <span style={{
                 backgroundColor: 'rgba(14, 165, 233, 0.25)', border: '1px solid rgba(56, 189, 248, 0.5)',
                 color: '#E0F2FE', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800',
@@ -545,6 +580,23 @@ export default function AccountsVerificationModal({
                 status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isWhileDispatch && !hasUploadedPaymentProof ? 'AWAITING PAYMENT SLIP' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
                 size="sm"
               />
+              {isPartialPackingOrder && (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FCD34D',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <Package style={{ width: '13px', height: '13px', color: '#D97706' }} />
+                  PARTIAL SHIPMENT
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custNameText}</strong></span>
@@ -557,23 +609,6 @@ export default function AccountsVerificationModal({
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {canCancelBom && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && !isCancelled && (
-            <button
-              onClick={() => handleCancelBomOrder(accountsVerificationModal)}
-              style={{
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                color: '#FEE2E2', height: '42px', padding: '0 18px',
-                borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                cursor: 'pointer', backdropFilter: 'blur(4px)',
-                display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-              title="Cancel BOM and release reserved inventory"
-            >
-              <XCircle style={{ width: '15px', height: '15px', color: '#FCA5A5' }} />
-              Cancel BOM
-            </button>
-          )}
           <button
             onClick={() => setAccountsVerificationModal(null)}
             style={{
@@ -606,7 +641,7 @@ export default function AccountsVerificationModal({
               ) : (
                 <>
                   <CheckCircle style={{ width: '16px', height: '16px' }} />
-                  Complete Verification & Create Invoice
+                  Complete Verification
                 </>
               )}
             </button>
@@ -631,8 +666,22 @@ export default function AccountsVerificationModal({
             <Receipt style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Type</div>
-            <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>{payTypeText}</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Type & Status</div>
+            <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>{payTypeText || '100% Paid'}</div>
+            <div style={{ marginTop: '3px' }}>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: '700',
+                color: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '#15803D' : (currentPayStatus.includes('Credit') ? '#1D4ED8' : '#B45309'),
+                backgroundColor: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '#DCFCE7' : (currentPayStatus.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                border: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '1px solid #BBF7D0' : (currentPayStatus.includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                padding: '2px 8px',
+                borderRadius: '4px',
+                display: 'inline-block'
+              }}>
+                {currentPayStatus || '100% Received'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -689,6 +738,40 @@ export default function AccountsVerificationModal({
         </div>
       </div>
 
+      {/* ─── PARTIAL PACKING NOTICE BANNER ─── */}
+      {isPartialPackingOrder && (
+        <div style={{
+          backgroundColor: '#FFFBEB',
+          border: '1.5px solid #FDE68A',
+          borderRadius: '14px',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '14px',
+          boxShadow: '0 2px 8px rgba(245,158,11,0.06)'
+        }}>
+          <div style={{
+            width: '38px', height: '38px', borderRadius: '10px',
+            backgroundColor: '#FEF3C7', color: '#B45309',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Package style={{ width: '20px', height: '20px' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: '800', color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>Partially Packed Shipment</span>
+              <span style={{ fontSize: '11px', color: '#B45309', backgroundColor: '#FEF3C7', border: '1px solid #FCD34D', padding: '1px 8px', borderRadius: '12px', fontWeight: '800' }}>
+                Dispatch Forwarded
+              </span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#78350F', marginTop: '3px', lineHeight: '1.5' }}>
+              Dispatch has confirmed packing for a subset of items for this order. Accounts can verify payment details and generate the invoice sequence for this partial dispatch. Unpacked items will remain in the dispatch queue for future shipments.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── PAYMENT WHILE DISPATCH HOLD BANNER ─── */}
       {isWhileDispatch && !hasUploadedPaymentProof && (
         <div style={{
@@ -742,8 +825,8 @@ export default function AccountsVerificationModal({
             <Receipt style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
           </div>
           <div>
-            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Payment Details & Verification</h3>
-            <p style={{ fontSize: '11px', color: '#64748B', margin: 0 }}>Confirm & record customer payment receipt date, total amount, and terms</p>
+            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Payment Details &amp; Verification</h3>
+            <p style={{ fontSize: '11px', color: '#64748B', margin: 0 }}>Confirm &amp; record customer payment receipt date and verified total amount</p>
           </div>
         </div>
 
@@ -809,54 +892,111 @@ export default function AccountsVerificationModal({
             </div>
           </div>
 
-          {/* Payment status dropdown */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'center' }}>
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '8px' }}>
-                Customer Payment Status {isAlreadyCompleted && <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700' }}>(Verified • Read Only)</span>}
-              </label>
-              <select id="accounts-verification-select-1" name="select1" aria-label="Select 1"
-                disabled={isAlreadyCompleted}
-                value={currentPayStatus || '100% Paid'}
-                onChange={(e) => {
-                  if (isAlreadyCompleted) return;
-                  const val = e.target.value;
-                  setAccountsVerificationModal(prev => prev ? ({
-                    ...prev,
-                    accountsVerification: { ...(prev.accountsVerification || {}), paymentStatus: val }
-                  }) : null);
-                }}
-                style={{
-                  width: '100%', height: '42px', borderRadius: '10px',
-                  border: '1px solid #CBD5E1', padding: '0 14px',
-                  fontSize: '13px', fontWeight: '600', color: '#0F172A',
-                  outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
-                  cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
-                  opacity: isAlreadyCompleted ? 0.9 : 1
-                }}
-              >
-                <option value="100% Paid">100% Paid</option>
-                <option value="Partial Paid">Partial Paid</option>
-                <option value="Payment While Dispatch">Payment While Dispatch</option>
-                <option value="Credit Payment">Credit Payment</option>
-              </select>
-            </div>
+          {/* Customer Credit Terms & Credit Amount Notice for Accounts Verification */}
+          {(() => {
+            const isCredit = currentPayStatus === 'Credit Payment' || 
+              String(accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || '').toLowerCase().includes('credit') ||
+              Number(accountsVerificationModal?.creditDays || 0) > 0;
+            const cDays = Number(accountsVerificationModal?.creditDays || 30);
+            const totalVal = cleanNum(currentTotalAmount, 0) || cleanNum(accountsVerificationModal?.grandTotal, 0);
+            if (!isCredit) return null;
 
-            {/* Current payment status badge matching standard StatusBadge design */}
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '8px' }}>
-                Current Status
-              </label>
+            // Helper to check if a BOM's credit has been settled
+            const isBomCreditSettled = (item) => {
+              if (!item) return true;
+              if (item.creditSettled || item.paymentSettled || item.paymentUpdated) return true;
+              const s = String(item.status || '').toLowerCase();
+              if (s.includes('credit settled') || s.includes('payment settled') || s.includes('payment uploaded & settled')) return true;
+              const accItem = item.accountsVerification || {};
+              if (accItem.creditSettled || accItem.paymentStatus === 'Credit Settled (100% Paid)') return true;
+              return false;
+            };
+
+            const allBoms = (Array.isArray(bomStore) && bomStore.length > 0)
+              ? bomStore
+              : (() => {
+                  try {
+                    const localBoms = localStorage.getItem('controlroom_bom_store');
+                    return localBoms ? JSON.parse(localBoms) : [];
+                  } catch (_) { return []; }
+                })();
+
+            const normCust = (name) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+            const m = accountsVerificationModal || {};
+            const bCustNorm = normCust(m.customerName || m.companyName || m.c2 || m.vendor || m.clientName);
+            const bGstNorm = String(m.gstNo || m.customerGst || m.c3 || '').toUpperCase().trim();
+            const bCode = m.bomCode || m.code || m.id;
+
+            let prevUnsettledCredit = 0;
+            if (bCustNorm.length >= 2 || bGstNorm.length >= 5) {
+              allBoms.forEach(other => {
+                const otherCode = other.bomCode || other.code || other.id;
+                if (!otherCode || otherCode === bCode) return;
+                if (other.cancelled || other.status === 'Cancelled' || other.status === 'Cancelled & Stock Restored' || (typeof other.status === 'string' && other.status.toLowerCase().includes('cancel'))) return;
+
+                const otherCustNorm = normCust(other.customerName || other.companyName || other.c2 || other.vendor || other.clientName);
+                const otherGstNorm = String(other.gstNo || other.customerGst || other.c3 || '').toUpperCase().trim();
+                const isMatch = (bGstNorm && otherGstNorm && bGstNorm === otherGstNorm) ||
+                  (bCustNorm && otherCustNorm && (bCustNorm === otherCustNorm || bCustNorm.includes(otherCustNorm) || otherCustNorm.includes(bCustNorm)));
+                if (!isMatch) return;
+
+                const otherPType = String(other.paymentType || other.paymentTerms || other.accountsVerification?.paymentStatus || '').toLowerCase();
+                const otherCDays = Number(other.creditDays || 0);
+                const isOtherCredit = otherPType.includes('credit') || otherPType.includes('net 30') || otherCDays > 0;
+
+                if (isOtherCredit && !isBomCreditSettled(other)) {
+                  const otherAmt = Number(other.accountsVerification?.totalAmount || other.grandTotal || other.subTotal || other.totalAmount || 0);
+                  if (otherAmt > 0) {
+                    prevUnsettledCredit += otherAmt;
+                  }
+                }
+              });
+            }
+
+            const totalCreditRisk = prevUnsettledCredit + totalVal;
+
+            return (
               <div style={{
-                height: '44px',
+                marginTop: '12px',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
                 display: 'flex',
                 alignItems: 'center',
-                boxSizing: 'border-box'
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                fontSize: '12px',
+                color: '#1E40AF'
               }}>
-                <StatusBadge status={currentPayConfig.label} size="md" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Receipt size={18} style={{ color: '#2563EB', flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontWeight: '800', color: '#1E3A8A' }}>
+                      Customer Credit Terms: {cDays} Days Credit Cycle
+                    </div>
+                    {prevUnsettledCredit > 0 && (
+                      <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '700', backgroundColor: '#FEF3C7', padding: '1px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '3px' }}>
+                        ⚠️ ₹ {prevUnsettledCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })} Previous Unsettled Credit
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>Total Customer Credit:</div>
+                  <strong style={{ fontSize: '15px', color: '#1E3A8A', fontWeight: '800' }}>
+                    {totalCreditRisk > 0 ? `₹ ${totalCreditRisk.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Order Total'}
+                  </strong>
+                  {prevUnsettledCredit > 0 && totalVal > 0 && (
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                      (₹{prevUnsettledCredit.toLocaleString('en-IN')} Prev + ₹{totalVal.toLocaleString('en-IN')} Current)
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Payment Proof Document & Remittance Slip Image Inspection */}
           {(() => {
@@ -869,41 +1009,61 @@ export default function AccountsVerificationModal({
               accountsVerificationModal.payments?.balanceProofDoc ||
               accountsVerificationModal.proofDoc ||
               accountsVerificationModal.salesPoDetails?.proofDocObj ||
-              accountsVerificationModal.salesPoDetails?.balanceProofDocObj;
-            
-            let docName = null;
+              accountsVerificationModal.salesPoDetails?.balanceProofDocObj ||
+              null;
+
+            let fallbackDocName = null;
             if (rawProof) {
               if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
-                docName = rawProof;
+                fallbackDocName = rawProof;
               } else if (rawProof.name) {
-                docName = rawProof.name;
+                fallbackDocName = rawProof.name;
               } else if (rawProof.originalName) {
-                docName = rawProof.originalName;
+                fallbackDocName = rawProof.originalName;
               }
             }
-            if (!docName && accountsVerificationModal.paymentProofDocName) {
-              docName = accountsVerificationModal.paymentProofDocName;
+            if (!fallbackDocName && accountsVerificationModal.paymentProofDocName) {
+              fallbackDocName = accountsVerificationModal.paymentProofDocName;
             }
-            if (!docName && accountsVerificationModal.payments?.proofDoc) {
-              docName = accountsVerificationModal.payments.proofDoc;
+            if (!fallbackDocName && accountsVerificationModal.payments?.proofDoc) {
+              fallbackDocName = accountsVerificationModal.payments.proofDoc;
             }
-            if (!docName && accountsVerificationModal.payments?.balanceProofDoc) {
-              docName = accountsVerificationModal.payments.balanceProofDoc;
-            }
-
-            let pDocDataUrl = resolvedProofDataUrl || ((typeof rawProof === 'string' && rawProof.startsWith('data:'))
-              ? rawProof
-              : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || accountsVerificationModal.proofDocData || accountsVerificationModal.payments?.proofDocData || null));
-            
-            if (!pDocDataUrl && docName) {
-              pDocDataUrl = getMediaFromCache(docName);
+            if (!fallbackDocName && accountsVerificationModal.payments?.balanceProofDoc) {
+              fallbackDocName = accountsVerificationModal.payments.balanceProofDoc;
             }
 
-            const isDocPdf = Boolean(
-              (docName && docName.toLowerCase().endsWith('.pdf')) ||
-              (rawProof && (rawProof.type === 'application/pdf' || rawProof.mimeType === 'application/pdf')) ||
-              (pDocDataUrl && (pDocDataUrl.toLowerCase().includes('.pdf') || pDocDataUrl.startsWith('data:application/pdf')))
-            );
+            const docName = fallbackDocName || (rawProof ? 'Payment_Proof' : null);
+            const pDocDataUrl = resolvedProofDataUrl ||
+              resolveDocumentUrl(rawProof) ||
+              ((typeof rawProof === 'string' && rawProof.startsWith('data:')) ? rawProof : null) ||
+              (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || accountsVerificationModal.proofDocData || accountsVerificationModal.payments?.proofDocData || null) ||
+              (fallbackDocName ? getMediaFromCache(fallbackDocName) : null);
+
+            const allPaymentDocs = (() => {
+              if (Array.isArray(accountsVerificationModal.paymentProofDocs) && accountsVerificationModal.paymentProofDocs.length > 0) {
+                return accountsVerificationModal.paymentProofDocs;
+              }
+              if (Array.isArray(accountsVerificationModal.uploadedDocuments) && accountsVerificationModal.uploadedDocuments.length > 0) {
+                const pDocs = accountsVerificationModal.uploadedDocuments.filter(d => 
+                  (d.category && d.category.includes('payment')) ||
+                  (d.type && d.type.includes('payment')) ||
+                  (d.name && d.name.toLowerCase().includes('payment'))
+                );
+                if (pDocs.length > 0) return pDocs;
+              }
+              if (Array.isArray(accountsVerificationModal.payments?.proofDocObjs) && accountsVerificationModal.payments.proofDocObjs.length > 0) {
+                return accountsVerificationModal.payments.proofDocObjs;
+              }
+              if (Array.isArray(accountsVerificationModal.payments?.proofDocs) && accountsVerificationModal.payments.proofDocs.length > 0) {
+                return accountsVerificationModal.payments.proofDocs;
+              }
+              if (rawProof) {
+                return [typeof rawProof === 'object' ? rawProof : { name: rawProof }];
+              }
+              return [];
+            })();
+
+            const hasAnyPaymentProof = allPaymentDocs.length > 0 || hasUploadedPaymentProof;
 
             return (
               <div style={{
@@ -913,150 +1073,170 @@ export default function AccountsVerificationModal({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                   <label style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                    <Image size={15} style={{ color: '#2563EB' }} /> Payment Proof Document & Remittance Slip
+                    <Image size={15} style={{ color: '#2563EB' }} /> Payment Proof Documents & Remittance Slips ({allPaymentDocs.length})
                   </label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => setViewingProofDocModal({
-                        ...accountsVerificationModal,
-                        targetDoc: rawProof,
-                        targetDocUrl: pDocDataUrl,
-                        targetDocName: docName,
-                        docTitle: 'Payment Proof Document & Remittance Slip'
-                      })}
-                      style={{
-                        backgroundColor: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#1D4ED8',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        padding: '4px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <Eye size={12} /> View Document
-                    </button>
-                    {(pDocDataUrl || docName) && (
-                      <a
-                        href={pDocDataUrl || (docName ? `/api/uploads/${encodeURIComponent(docName)}` : '#')}
-                        download={docName || 'payment_proof.jpg'}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          backgroundColor: '#F8FAFC',
-                          border: '1px solid #CBD5E1',
-                          color: '#334155',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          textDecoration: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Download size={12} /> Download
-                      </a>
-                    )}
-                  </div>
+                  {allPaymentDocs.length > 0 && (
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
+                      ✓ Verified & Attached by Sales ({allPaymentDocs.length} {allPaymentDocs.length > 1 ? 'Files' : 'File'})
+                    </span>
+                  )}
                 </div>
 
-                {(pDocDataUrl || hasUploadedPaymentProof) ? (
+                {hasAnyPaymentProof ? (
                   <div style={{
                     backgroundColor: '#F8FAFC',
                     border: '1.5px dashed #CBD5E1',
                     borderRadius: '12px',
                     padding: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    flexWrap: 'wrap'
+                    display: 'grid',
+                    gridTemplateColumns: allPaymentDocs.length > 1 ? 'repeat(auto-fill, minmax(180px, 1fr))' : '1fr',
+                    gap: '12px'
                   }}>
-                    <div
-                      onClick={() => setViewingProofDocModal({
-                        ...accountsVerificationModal,
-                        targetDoc: rawProof,
-                        targetDocUrl: pDocDataUrl,
-                        targetDocName: docName,
-                        docTitle: 'Payment Proof Document & Remittance Slip'
-                      })}
-                      style={{
-                        cursor: 'pointer',
-                        width: '140px',
-                        height: '95px',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                        flexShrink: 0,
-                        padding: '4px'
-                      }}
-                      title="Click to view full payment slip"
-                    >
-                      {isDocPdf ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
-                          <FileText size={32} />
-                          <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
-                          <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
-                        </div>
-                      ) : pDocDataUrl ? (
-                        <img
-                          src={pDocDataUrl}
-                          alt="Payment Proof"
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          onError={(e) => {
-                            if (docName) {
-                              const cleanName = encodeURIComponent(docName);
-                              if (!e.currentTarget.src.includes(`/api/uploads/${cleanName}`)) {
-                                e.currentTarget.src = `/api/uploads/${cleanName}`;
-                                return;
-                              }
-                            }
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : !isResolvingProof ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#2563EB', textAlign: 'center', padding: '4px' }}>
-                          <FileText size={28} />
-                          <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {docName || 'Payment Slip'}
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#2563EB', fontWeight: '700' }}>Click to View</span>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#0E7490' }}>
-                          <Loader2 className="animate-spin" size={20} />
-                          <span style={{ fontSize: '10px', fontWeight: '700' }}>Loading Slip...</span>
-                        </div>
-                      )}
-                    </div>
+                    {allPaymentDocs.map((docItem, dIdx) => {
+                      const docName = typeof docItem === 'string' ? docItem : (docItem?.originalName || docItem?.name || `Payment_Proof_${dIdx + 1}`);
+                      const directUrl = (typeof docItem === 'string' && docItem.startsWith('data:'))
+                        ? docItem
+                        : (docItem?.dataUrl || docItem?.fileData || docItem?.url || null);
+                      const pDocDataUrl = directUrl || getMediaFromCache(docName) || resolveDocumentUrl(docItem);
+                      const isDocPdf = Boolean(
+                        (docName && docName.toLowerCase().endsWith('.pdf')) ||
+                        (docItem && (docItem.type === 'application/pdf' || docItem.mimeType === 'application/pdf')) ||
+                        (pDocDataUrl && (pDocDataUrl.toLowerCase().includes('.pdf') || pDocDataUrl.startsWith('data:application/pdf')))
+                      );
 
-                    <div style={{ flex: 1, minWidth: '220px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span>{docName || 'Payment Advice Slip'}</span>
-                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
-                          ✓ Attached by Sales
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', lineHeight: '1.4' }}>
-                        Official payment proof document submitted by sales team. Click thumbnail or "View Document" to inspect the transaction reference number, remittance amount, and bank stamp.
-                      </div>
-                      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#475569' }}>
-                        <span><strong>Payment Terms:</strong> {payTypeText}</span>
-                        <span>•</span>
-                        <span><strong>BOM Reference:</strong> {bomCodeText}</span>
-                      </div>
-                    </div>
+                      return (
+                        <div key={dIdx} style={{
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
+                        }}>
+                          <div
+                            onClick={() => setViewingProofDocModal({
+                              ...accountsVerificationModal,
+                              targetDoc: docItem,
+                              targetDocUrl: pDocDataUrl,
+                              targetDocName: docName,
+                              docTitle: `Payment Proof #${dIdx + 1}: ${docName}`
+                            })}
+                            style={{
+                              cursor: 'pointer',
+                              width: '100%',
+                              height: '110px',
+                              borderRadius: '6px',
+                              overflow: 'hidden',
+                              backgroundColor: '#F8FAFC',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: '1px solid #F1F5F9'
+                            }}
+                            title="Click to view full payment slip"
+                          >
+                            {isDocPdf ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
+                                <FileText size={30} />
+                                <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
+                                <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
+                              </div>
+                            ) : pDocDataUrl ? (
+                              <img
+                                src={pDocDataUrl}
+                                alt={docName}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                onError={(e) => {
+                                  if (docName) {
+                                    const cleanName = encodeURIComponent(docName);
+                                    if (!e.currentTarget.src.includes(`/api/uploads/${cleanName}`)) {
+                                      e.currentTarget.src = `/api/uploads/${cleanName}`;
+                                      return;
+                                    }
+                                  }
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#2563EB', textAlign: 'center', padding: '4px' }}>
+                                <FileText size={26} />
+                                <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {docName}
+                                </span>
+                                <span style={{ fontSize: '9px', color: '#2563EB', fontWeight: '700' }}>Click to View</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '11.5px', fontWeight: '800', color: '#0F172A', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={docName}>
+                              {docName}
+                            </div>
+                            {docItem?.size && (
+                              <span style={{ fontSize: '10px', color: '#64748B' }}>
+                                {(docItem.size / 1024).toFixed(0)} KB • Verified Slip
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '6px', marginTop: 'auto' }}>
+                            <button
+                              type="button"
+                              onClick={() => setViewingProofDocModal({
+                                ...accountsVerificationModal,
+                                targetDoc: docItem,
+                                targetDocUrl: pDocDataUrl,
+                                targetDocName: docName,
+                                docTitle: `Payment Proof #${dIdx + 1}: ${docName}`
+                              })}
+                              style={{
+                                flex: 1,
+                                backgroundColor: '#EFF6FF',
+                                border: '1px solid #BFDBFE',
+                                color: '#1D4ED8',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              <Eye size={11} /> View
+                            </button>
+                            {(pDocDataUrl || docName) && (
+                              <a
+                                href={pDocDataUrl || `/api/uploads/${encodeURIComponent(docName)}`}
+                                download={docName}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  backgroundColor: '#F8FAFC',
+                                  border: '1px solid #CBD5E1',
+                                  color: '#334155',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  textDecoration: 'none',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '3px'
+                                }}
+                              >
+                                <Download size={11} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (isWhileDispatch && !hasUploadedPaymentProof) ? (
                   <div
@@ -1087,7 +1267,7 @@ export default function AccountsVerificationModal({
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : (docName || rawProof || pDocDataUrl) ? (
                   <div
                     onClick={() => setViewingProofDocModal({
                       ...accountsVerificationModal,
@@ -1169,6 +1349,47 @@ export default function AccountsVerificationModal({
                       }}>
                         <CheckCircle size={13} color="#0E7490" /> Verified via Bank Remittance
                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+                        <Receipt size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>Payment Terms: {currentPayConfig?.label || 'Credit / Standard Terms'}</span>
+                          <span style={{ fontSize: '10px', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Terms Confirmed</span>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                          Standard credit / agreed terms for {bomCodeText}. Payment slip will be collected upon credit cycle settlement.
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      backgroundColor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      color: '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <CheckCircle size={13} color="#0E7490" /> Verified via Terms
                     </div>
                   </div>
                 )}
@@ -1407,17 +1628,46 @@ export default function AccountsVerificationModal({
         const dynamicAccItems = rawAccItems.map((it, idx) => {
           const q = parseFloat(it.qty || it.bomQty || 1) || 1;
           const r = parseFloat(it.rate || it.unitPrice || 0) || 0;
+          const matchingPacked = (accountsVerificationModal.dispatchPacking || []).find(p => (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code));
+          const pQty = (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '')
+            ? it.packedQty
+            : (matchingPacked && matchingPacked.packedQty !== undefined && matchingPacked.packedQty !== null && matchingPacked.packedQty !== '' ? matchingPacked.packedQty : (it.packed ? q : 0));
           return {
+            ...it,
             code: it.code || `PRD-00${idx + 1}`,
             name: it.name || `Item ${idx + 1}`,
             desc: it.category || it.desc || 'Standard component',
             qty: q,
+            packedQty: pQty,
             uom: it.uom || 'Nos',
             rate: r,
             amt: q * r,
-            packed: it.packed !== undefined ? Boolean(it.packed) : true
+            packed: it.packed !== undefined ? Boolean(it.packed) : (matchingPacked ? Boolean(matchingPacked.packed) : true),
+            isPresetItem: Boolean(it.isPresetItem || matchingPacked?.isPresetItem),
+            presetGroupId: it.presetGroupId || matchingPacked?.presetGroupId || null
           };
         });
+
+        const rawPresetGroups = accountsVerificationModal.presetGroups || {};
+        const pGroups = (Array.isArray(rawPresetGroups) && rawPresetGroups.length > 0)
+          ? rawPresetGroups
+          : (typeof rawPresetGroups === 'object' && Object.keys(rawPresetGroups).length > 0)
+            ? Object.values(rawPresetGroups)
+            : (accountsVerificationModal.presetName || (cleanNum(accountsVerificationModal.presetKitPrice) > 0))
+              ? [{
+                  presetName: accountsVerificationModal.presetName || 'Pre-Engineered Structure Kit Package',
+                  setCount: parseInt(accountsVerificationModal.presetSetCount) || 1,
+                  kitPrice: cleanNum(accountsVerificationModal.presetKitPrice) || 0
+                }]
+              : [];
+
+        const PRESET_THEMES = [
+          { primary: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC', tagBg: '#CFFAFE', tagText: '#155E75', badge: 'SET 1' },
+          { primary: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE', tagBg: '#E0E7FF', tagText: '#3730A3', badge: 'SET 2' },
+          { primary: '#D97706', bg: '#FFFBEB', border: '#FDE68A', tagBg: '#FEF3C7', tagText: '#92400E', badge: 'SET 3' },
+          { primary: '#059669', bg: '#ECFDF5', border: '#A7F3D0', tagBg: '#D1FAE5', tagText: '#065F46', badge: 'SET 4' },
+          { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', tagBg: '#EDE9FE', tagText: '#5B21B6', badge: 'SET 5' },
+        ];
 
         const accSubTotal = dynamicAccItems.reduce((acc, curr) => acc + curr.amt, 0);
         const accCgst = accSubTotal * 0.09;
@@ -1455,7 +1705,7 @@ export default function AccountsVerificationModal({
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                      BOM Document & Items Inspection
+                      BOM Items & Pricing Verification
                     </h3>
                     <span style={{
                       padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800',
@@ -1463,124 +1713,240 @@ export default function AccountsVerificationModal({
                       color: '#166534',
                       border: '1px solid #BBF7D0'
                     }}>
-                      Official Order Record
+                      Official Pricing & Quantities
                     </span>
                   </div>
                   <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-                    Verify items, quantities, and rates against the finalized BOM and dispatch packing list.
+                    Verify individual product prices, kit package prices, ordered BOM quantities, and dispatch packed quantities.
                   </p>
                 </div>
               </div>
-
-              {/* View Switcher Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                <button
-                  onClick={() => setAccountsBomViewMode('paper')}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    border: 'none',
-                    backgroundColor: accountsBomViewMode === 'paper' ? '#FFFFFF' : 'transparent',
-                    color: accountsBomViewMode === 'paper' ? '#0F172A' : '#64748B',
-                    padding: '6px 14px', borderRadius: '8px',
-                    fontSize: '12px', fontWeight: accountsBomViewMode === 'paper' ? '800' : '600',
-                    cursor: 'pointer',
-                    boxShadow: accountsBomViewMode === 'paper' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <FileText style={{ width: '14px', height: '14px', color: accountsBomViewMode === 'paper' ? '#2563EB' : '#64748B' }} />
-                  Paper BOM Sheet View
-                </button>
-
-                <button
-                  onClick={() => setAccountsBomViewMode('table')}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    border: 'none',
-                    backgroundColor: accountsBomViewMode === 'table' ? '#FFFFFF' : 'transparent',
-                    color: accountsBomViewMode === 'table' ? '#0F172A' : '#64748B',
-                    padding: '6px 14px', borderRadius: '8px',
-                    fontSize: '12px', fontWeight: accountsBomViewMode === 'table' ? '800' : '600',
-                    cursor: 'pointer',
-                    boxShadow: accountsBomViewMode === 'table' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Layers style={{ width: '14px', height: '14px', color: accountsBomViewMode === 'table' ? '#2563EB' : '#64748B' }} />
-                  Itemized Table View
-                </button>
-              </div>
             </div>
 
-            {/* ─── VIEW 1: AUTHENTIC VRM BILL OF MATERIALS PRINT SHEET ─── */}
-            {accountsBomViewMode === 'paper' ? (
-              <div style={{ padding: '24px', backgroundColor: '#F8FAFC', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
-                <VRMBomPrintSheet
-                  bomData={{
-                    ...accountsVerificationModal,
-                    items: (dynamicAccItems && dynamicAccItems.length > 0)
-                      ? dynamicAccItems.map(it => ({
-                          code: it.code,
-                          name: it.name,
-                          category: it.desc,
-                          qty: it.qty,
-                          uom: it.uom,
-                          rate: it.rate,
-                          gstRate: '18%'
-                        }))
-                      : (accountsVerificationModal.items || [])
-                  }}
-                />
-              </div>
-            ) : (
-              /* ─── VIEW 2: INTERACTIVE BOM TABLE VIEW ─── */
-              <div style={{ overflowX: 'auto', width: '100%' }}>
+            {/* ─── INTERACTIVE BOM TABLE VIEW WITH KIT PRICING IN CENTER & PRODUCT PRICES ─── */}
+            <div style={{ overflowX: 'auto', width: '100%' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '13px 16px', width: '50px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                      <th style={{ padding: '13px 16px', width: '55px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Code</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Description</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Required Qty</th>
+                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
+                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Packed Qty</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Unit Rate (₹)</th>
                       <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Line Total (₹)</th>
                       <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Physical Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dynamicAccItems.map((it, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC' }}>
-                        <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>{idx + 1}</td>
-                        <td style={{ padding: '14px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>{it.desc}</div>
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
-                          {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'right', color: '#475569' }}>
-                          ₹ {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
-                          ₹ {it.amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
-                            backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
-                          }}>
-                            <CheckCircle style={{ width: '12px', height: '12px' }} />
-                            Packed in BOM
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {/* Render Kit / Preset Groups if present */}
+                    {pGroups.length > 0 && pGroups.map((grp, gIdx) => {
+                      const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
+                      const sCount = parseInt(grp.setCount) || 1;
+                      const kPrice = cleanNum(grp.kitPrice) || 0;
+                      const kTotal = sCount * kPrice;
+                      const unitType = grp.unitType || (grp.isKwBased ? 'kW' : 'Sets');
+
+                      const kitItems = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
+
+                      return (
+                        <React.Fragment key={`acc-kit-${gIdx}`}>
+                          {/* Centered Kit Header Row with GST Value */}
+                          <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                            <td colSpan={8} style={{ padding: '10px 20px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                                <span style={{
+                                  backgroundColor: theme.primary,
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '900',
+                                  padding: '3px 10px',
+                                  borderRadius: '6px',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  {theme.badge}
+                                </span>
+                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+                                  {grp.presetName || 'Pre-Engineered Structure Kit'} ({sCount} {unitType})
+                                </span>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>
+                                  Kit Rate: <strong style={{ color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {unitType}
+                                </span>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#166534' }}>
+                                  GST (18%): <strong>₹ {(kTotal * 0.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                </span>
+                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490' }}>
+                                  Total with GST: <strong>₹ {(kTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Kit Components with Vertically Centered Kit Price & GST Value */}
+                          {kitItems.map((it, kIdx) => (
+                            <tr key={`kit-item-${gIdx}-${kIdx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: theme.bg }}>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', color: theme.primary, fontWeight: '700' }}>{`${gIdx + 1}.${kIdx + 1}`}</td>
+                              <td style={{ padding: '12px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{it.desc}</div>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
+                                {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800' }}>
+                                <span style={{
+                                  backgroundColor: it.packedQty >= it.qty ? '#DCFCE7' : it.packedQty > 0 ? '#FEF3C7' : '#F1F5F9',
+                                  color: it.packedQty >= it.qty ? '#166534' : it.packedQty > 0 ? '#B45309' : '#64748B',
+                                  padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800'
+                                }}>
+                                  {it.packedQty} {it.uom}
+                                </span>
+                              </td>
+                              {kIdx === 0 && (
+                                <>
+                                  <td
+                                    rowSpan={kitItems.length}
+                                    style={{
+                                      padding: '12px 16px',
+                                      textAlign: 'center',
+                                      verticalAlign: 'middle',
+                                      backgroundColor: '#FFFFFF',
+                                      borderLeft: `1px solid ${theme.border}`,
+                                      borderRight: `1px solid ${theme.border}`
+                                    }}
+                                  >
+                                    <div style={{ fontSize: '13px', fontWeight: '800', color: theme.primary }}>
+                                      ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '600' }}>
+                                      per {unitType}
+                                    </div>
+                                  </td>
+                                  <td
+                                    rowSpan={kitItems.length}
+                                    style={{
+                                      padding: '12px 16px',
+                                      textAlign: 'center',
+                                      verticalAlign: 'middle',
+                                      backgroundColor: '#FFFFFF',
+                                      borderRight: `1px solid ${theme.border}`
+                                    }}
+                                  >
+                                    <div style={{ fontSize: '13px', fontWeight: '900', color: '#0F172A' }}>
+                                      ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700', marginTop: '3px' }}>
+                                      + 18% GST: ₹ {(kTotal * 0.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '800', marginTop: '2px', borderTop: '1px dashed #CBD5E1', paddingTop: '2px' }}>
+                                      Total: ₹ {(kTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                              <td style={{ padding: '12px 20px', textAlign: 'center' }}>
+                                {it.packed ? (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
+                                  }}>
+                                    <CheckCircle style={{ width: '12px', height: '12px' }} />
+                                    Packed
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
+                                  }}>
+                                    <Clock style={{ width: '12px', height: '12px' }} />
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* Loose / Individual Products */}
+                    {(() => {
+                      const looseItems = pGroups.length > 0
+                        ? dynamicAccItems.filter(it => !it.presetGroupId && !it.isPresetItem)
+                        : dynamicAccItems;
+
+                      if (looseItems.length === 0 && pGroups.length > 0) return null;
+
+                      return (
+                        <>
+                          {pGroups.length > 0 && looseItems.length > 0 && (
+                            <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                              <td colSpan={8} style={{ padding: '10px 18px' }}>
+                                <span style={{ padding: '3px 10px', borderRadius: '6px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '11px', fontWeight: '900', letterSpacing: '0.5px' }}>
+                                  INDIVIDUAL / STANDALONE PRODUCTS
+                                </span>
+                              </td>
+                            </tr>
+                          )}
+
+                          {looseItems.map((it, idx) => (
+                            <tr key={`loose-${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC' }}>
+                              <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>{idx + 1}</td>
+                              <td style={{ padding: '14px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B' }}>{it.desc}</div>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
+                                {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800' }}>
+                                <span style={{
+                                  backgroundColor: it.packedQty >= it.qty ? '#DCFCE7' : it.packedQty > 0 ? '#FEF3C7' : '#F1F5F9',
+                                  color: it.packedQty >= it.qty ? '#166534' : it.packedQty > 0 ? '#B45309' : '#64748B',
+                                  padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800'
+                                }}>
+                                  {it.packedQty} {it.uom}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                                ₹ {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '800', color: '#0E7490' }}>
+                                ₹ {it.amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                                {it.packed ? (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
+                                  }}>
+                                    <CheckCircle style={{ width: '12px', height: '12px' }} />
+                                    Packed
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
+                                  }}>
+                                    <Clock style={{ width: '12px', height: '12px' }} />
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </>
+                      );
+                    })()}
                   </tbody>
                 </table>
               </div>
-            )}
 
             {/* Document Section Footer */}
             <div style={{
@@ -1610,26 +1976,9 @@ export default function AccountsVerificationModal({
           display: 'flex', justifyContent: 'space-between', alignItems: 'center'
         }}>
           <span style={{ fontSize: '13px', color: '#64748B' }}>
-            Confirm payment date, total amount, and customer payment status to complete accounts clearance.
+            Confirm verified payment date and total amount to complete accounts clearance.
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {canCancelBom && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && !isCancelled && (
-              <button
-                onClick={() => handleCancelBomOrder(accountsVerificationModal)}
-                style={{
-                  border: '1px solid #FECACA',
-                  background: '#FEF2F2',
-                  color: '#DC2626', height: '42px', padding: '0 20px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                  boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
-                }}
-                title="Cancel BOM and release reserved inventory"
-              >
-                <XCircle style={{ width: '15px', height: '15px', color: '#DC2626' }} />
-                Cancel BOM & Release Stock
-              </button>
-            )}
             <button
               onClick={completeVerification}
               style={{
@@ -1654,7 +2003,7 @@ export default function AccountsVerificationModal({
               ) : (
                 <>
                   <CheckCircle style={{ width: '15px', height: '15px' }} />
-                  Approve Payment & Send to Invoice Team
+                  Complete Verification
                 </>
               )}
             </button>
@@ -1996,13 +2345,28 @@ function RecordedProofViewerModal({
                   alt="Document Proof Attachment"
                   style={{ maxWidth: '100%', maxHeight: '480px', objectFit: 'contain', borderRadius: '8px' }}
                   onError={(e) => {
-                    // Try alternative direct /api/uploads path if original failed
-                    if (docName) {
-                      const altUrl = `/api/uploads/${encodeURIComponent(docName)}`;
-                      if (e.currentTarget.src !== altUrl && !e.currentTarget.src.endsWith(encodeURIComponent(docName))) {
-                        e.currentTarget.src = altUrl;
-                        return;
-                      }
+                    if (!e.currentTarget.dataset.retried && docName) {
+                      e.currentTarget.dataset.retried = 'true';
+                      fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data?.found && data?.url) {
+                            const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                            setDocUrl(cleanUrl);
+                          } else if (!e.currentTarget.src.includes('/api/uploads/')) {
+                            e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                          } else {
+                            setImageError(true);
+                          }
+                        })
+                        .catch(() => {
+                          if (!e.currentTarget.src.includes('/api/uploads/')) {
+                            e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                          } else {
+                            setImageError(true);
+                          }
+                        });
+                      return;
                     }
                     setImageError(true);
                   }}

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
-  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User
+  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User, AlertTriangle, FileText
 } from "lucide-react";
 import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, getMediaFromCacheAsync, uploadMediaFile } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
@@ -58,7 +58,18 @@ function DispatchPhotoThumbnail({ ph, phIdx, bomCode, onPreview, onRemove, canRe
     setLoading(true);
 
     const resolveUrl = async () => {
-      // 1. If it has storageBucket/storagePath, ask documentResolver for signed URL
+      // 1. If it has storageBucket/storagePath, construct the direct static URL immediately
+      if (ph.storagePath) {
+        const directUrl = `/api/uploads/${ph.storageBucket || 'bom-documents'}/${ph.storagePath}`;
+        if (active) {
+          setSrc(directUrl);
+          setLoading(false);
+          setLoadError(false);
+          return;
+        }
+      }
+
+      // 2. Try documentResolver for signed URL if needed
       if (ph.storageBucket || ph.storagePath) {
         try {
           const signedUrl = await resolveDocumentUrlAsync(ph, bomCode);
@@ -186,6 +197,8 @@ export default function DispatchPackingModal({
   const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
   const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showPartialConfirmModal, setShowPartialConfirmModal] = useState(false);
+  const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
   const [dispatchCameraError, setDispatchCameraError] = useState('');
   const [localActiveMediaPreview, setLocalActiveMediaPreview] = useState(null);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -333,25 +346,45 @@ export default function DispatchPackingModal({
     dispatchPackingModal.tabGroup === 'Closed'
   );
 
+  const isOrderPartiallyPacked = Boolean(
+    dispatchPackingModal.status === 'Partially Packed' ||
+    dispatchPackingModal.status === 'Partially Packed - Sent to Accounts' ||
+    dispatchPackingModal.packingStatus === 'PARTIALLY_PACKED' ||
+    dispatchPackingModal.isPartialPacking ||
+    dispatchPackingModal.accountsVerification?.isPartialPacking ||
+    (Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0 &&
+      dispatchPackingModal.dispatchPacking.filter(p => p.packed).length > 0 &&
+      dispatchPackingModal.dispatchPacking.filter(p => p.packed).length < dispatchPackingModal.dispatchPacking.length)
+  );
+
+  const isPartiallySentToAccounts = Boolean(
+    isOrderPartiallyPacked && (
+      dispatchPackingModal.status === 'Partially Packed - Sent to Accounts' ||
+      dispatchPackingModal.accountsVerification?.readyForAccounts
+    )
+  );
+
   const isAlreadySentToAccounts = Boolean(
-    !isAccountsLocked && (
+    !isAccountsLocked && !isOrderPartiallyPacked && (
       dispatchPackingModal.status === 'Packed & Awaiting Accounts Verification' ||
       dispatchPackingModal.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
       dispatchPackingModal.status === 'Packing Verified - Sent to Accounts' ||
       dispatchPackingModal.tabGroup === 'Packed' ||
       dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
-      dispatchPackingModal.accountsVerification?.readyForAccounts
+      (dispatchPackingModal.accountsVerification?.readyForAccounts && !dispatchPackingModal.accountsVerification?.isPartialPacking)
     )
   );
 
   const rawItems = (dispatchPackingModal.items || []).map(it => {
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
     const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
+    const isPacked = Boolean(isAccountsLocked || isAlreadySentToAccounts);
     return {
       name: it.name || it.c2 || 'Item',
       code,
       bomQty: it.qty || 1,
-      packed: (isAccountsLocked || isAlreadySentToAccounts) ? true : false,
+      packed: isPacked,
+      packedQty: isPacked ? (it.qty || 1) : '',
       isPresetItem: Boolean(it.isPresetItem),
       presetGroupId: it.presetGroupId || null,
       presetName: it.presetName || null,
@@ -364,11 +397,16 @@ export default function DispatchPackingModal({
         const rawMatch = (dispatchPackingModal.items || [])[idx] || (dispatchPackingModal.items || []).find(it => (it.name && p.name && it.name.toLowerCase().trim() === p.name.toLowerCase().trim()) || (it.code && p.code && it.code === p.code)) || {};
         const nameStr = (p.name || p.itemName || '').toLowerCase().trim();
         const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || rawMatch.code || null));
-        const isPacked = isAccountsLocked ? (p.packed !== false) : Boolean(p.packed || p.scanned || p.packedQty > 0 || isAlreadySentToAccounts);
+        const isPacked = isAccountsLocked ? (p.packed !== false) : Boolean(p.packed || p.scanned || (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '' && Number(p.packedQty) > 0) || isAlreadySentToAccounts);
+        const resolvedPackedQty = (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '')
+          ? p.packedQty
+          : (isPacked ? (p.bomQty || p.qty || rawMatch.qty || 1) : '');
         return {
           ...p,
           code,
+          bomQty: p.bomQty || p.qty || rawMatch.qty || 1,
           packed: isPacked,
+          packedQty: resolvedPackedQty,
           isPresetItem: Boolean(p.isPresetItem || rawMatch.isPresetItem),
           presetGroupId: p.presetGroupId || rawMatch.presetGroupId || null,
           presetName: p.presetName || rawMatch.presetName || null,
@@ -431,7 +469,131 @@ export default function DispatchPackingModal({
   const progressPercent = isAlreadySentToAccounts ? 100 : (totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0);
   const isPartial = !isAlreadySentToAccounts && packedItemsCount > 0 && !allItemsPacked;
 
-  const savePackingData = (isPartialSave = false, proceedToLoading = false) => {
+  const isWhileDispatch = Boolean(
+    dispatchPackingModal?.paymentType === 'Payment While Dispatch' ||
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('while dispatch') ||
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('before dispatch')
+  );
+  const isPartialPaid = Boolean(
+    dispatchPackingModal?.paymentType === 'Partial Paid' ||
+    dispatchPackingModal?.paymentType === 'Partial Payment' ||
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('partial')
+  );
+
+  const hasPaymentProof = Boolean(
+    dispatchPackingModal?.paymentProofDoc ||
+    dispatchPackingModal?.payments?.proofDocObj ||
+    dispatchPackingModal?.payments?.proofDoc ||
+    dispatchPackingModal?.proofDoc ||
+    dispatchPackingModal?.paymentProofAttached ||
+    dispatchPackingModal?.hasPaymentProof
+  );
+
+  const needsSalesPaymentProof = (isWhileDispatch || isPartialPaid) && !hasPaymentProof;
+
+  const handleSaveDraft = () => {
+    if (uploadingCount > 0) {
+      alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds before saving.');
+      return;
+    }
+
+    try {
+      const rawMedia = dispatchPackingModal.dispatchPackingMedia;
+      const cleanMedia = rawMedia ? {
+        photos: (rawMedia.photos || []).map(p => {
+          const directStorageUrl = p.storagePath ? `/api/uploads/${p.storageBucket || 'bom-documents'}/${p.storagePath}` : '';
+          const bestUrl = (p.url && !p.url.startsWith('blob:'))
+            ? p.url
+            : (directStorageUrl || getMediaFromCache(p.id) || getMediaFromCache(p.name) || (p.dataUrl && !p.dataUrl.startsWith('blob:') ? p.dataUrl : (p.name ? `/api/uploads/${encodeURIComponent(p.name)}` : '')));
+          const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : (directStorageUrl || undefined);
+          return {
+            ...p,
+            url: cleanBestUrl,
+            dataUrl: (p.dataUrl && !p.dataUrl.startsWith('blob:')) ? p.dataUrl : cleanBestUrl
+          };
+        }),
+        videos: (rawMedia.videos || []).map(v => {
+          const directStorageUrl = v.storagePath ? `/api/uploads/${v.storageBucket || 'bom-documents'}/${v.storagePath}` : '';
+          const bestUrl = (v.url && !v.url.startsWith('blob:'))
+            ? v.url
+            : (directStorageUrl || getMediaFromCache(v.id) || getMediaFromCache(v.name) || (v.dataUrl && !v.dataUrl.startsWith('blob:') ? v.dataUrl : (v.name ? `/api/uploads/${encodeURIComponent(v.name)}` : '')));
+          const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : (directStorageUrl || undefined);
+          return {
+            ...v,
+            url: cleanBestUrl,
+            dataUrl: (v.dataUrl && !v.dataUrl.startsWith('blob:')) ? v.dataUrl : cleanBestUrl,
+            uploading: false
+          };
+        })
+      } : null;
+
+      const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
+      const matchingBom = (bomStore || []).find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
+
+      const resolvedCustomer = (dispatchPackingModal.customerName && dispatchPackingModal.customerName !== 'Customer' && dispatchPackingModal.customerName !== '-')
+        ? dispatchPackingModal.customerName
+        : (matchingBom?.customerName || 'Customer Order');
+
+      const confirmedDraftItems = itemsToPack.map(it => ({
+        ...it,
+        qty: it.bomQty || it.qty || 1,
+        packed: Boolean(it.packed),
+        packedQty: it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '' ? Number(it.packedQty) : (it.packed ? (it.bomQty || it.qty || 1) : '')
+      }));
+
+      const updatedDraftBom = {
+        ...dispatchPackingModal,
+        customerName: resolvedCustomer,
+        companyName: resolvedCustomer,
+        dispatchPacking: confirmedDraftItems,
+        dispatchPackingMedia: cleanMedia,
+        dispatchPackingDraft: true,
+        status: dispatchPackingModal.status || 'Draft Packing',
+        packingStatus: 'PACKING_IN_PROGRESS',
+        isPartialPacking: Boolean(packedItemsCount < totalItemsCount),
+        packedItemsCount: packedItemsCount,
+        totalItemsCount: totalItemsCount,
+        accountsVerification: {
+          ...(dispatchPackingModal.accountsVerification || {}),
+          readyForAccounts: false
+        },
+        isUpdate: true
+      };
+
+      // 1. Update React state immediately
+      if (typeof setBomStore === 'function') {
+        setBomStore(prev => (prev || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? { ...b, ...updatedDraftBom } : b));
+      }
+
+      // 2. Persist to storage & cloud
+      saveCloudBomRow(updatedDraftBom);
+      try {
+        const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+        const updatedLocal = currentLocal.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? { ...b, ...updatedDraftBom } : b);
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedLocal.map(stripDataUrlsFromRecord)));
+      } catch (_) {}
+
+      // 3. Dispatch global sync event
+      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedDraftBom } }));
+
+      // 4. Push to server
+      try {
+        fetch('/api/boms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedDraftBom), isUpdate: true })
+        }).catch(() => {});
+      } catch (_) {}
+
+      alert(`💾 Packing Progress Saved as Draft!\n\nAll checked products (${packedItemsCount}/${totalItemsCount}), entered quantities, and photos/videos have been securely saved.\n\nThis order remains in Dispatch and will NOT move to the next stage until you click "Complete Packing". You can re-open, edit, recheck, and add more photos anytime.`);
+      setDispatchPackingModal(null);
+    } catch (err) {
+      console.error('Error saving packing draft:', err);
+      alert('Unable to save draft. Please try again.');
+    }
+  };
+
+  const savePackingData = (isPartialSave = false, proceedToLoading = false, sendPartialToAccounts = false) => {
     if (uploadingCount > 0) {
       alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
       return;
@@ -451,47 +613,104 @@ export default function DispatchPackingModal({
       (dispatchPackingModal.c5 && dispatchPackingModal.c5.includes('100%'))
     );
 
-    if (isPartialSave) {
+    const isWhileDispatch = Boolean(
+      dispatchPackingModal.paymentType === 'Payment While Dispatch' ||
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('while dispatch') ||
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('before dispatch')
+    );
+    const isPartialPaid = Boolean(
+      dispatchPackingModal.paymentType === 'Partial Paid' ||
+      dispatchPackingModal.paymentType === 'Partial Payment' ||
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('partial')
+    );
+
+    const hasPaymentProof = Boolean(
+      dispatchPackingModal.paymentProofDoc ||
+      dispatchPackingModal.payments?.proofDocObj ||
+      dispatchPackingModal.payments?.proofDoc ||
+      dispatchPackingModal.proofDoc ||
+      dispatchPackingModal.paymentProofAttached ||
+      dispatchPackingModal.hasPaymentProof
+    );
+
+    const needsSalesPaymentProof = (isWhileDispatch || isPartialPaid) && !hasPaymentProof;
+
+    if (sendPartialToAccounts) {
+      // User confirmed partial packing
+      confirmedItems = itemsToPack.map(it => ({
+        ...it,
+        qty: it.bomQty || it.qty || 1,
+        packed: Boolean(it.packed),
+        packedQty: it.packed ? (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '' ? Number(it.packedQty) : (it.bomQty || it.qty || 1)) : 0
+      }));
+      nextStatus = needsSalesPaymentProof ? 'Partially Packed — Awaiting Sales Payment Proof' : 'Partially Packed - Sent to Accounts';
+      isFullyConfirmed = false;
+    } else if (isPartialSave) {
       // User explicitly saving partial packing progress without sending to Accounts yet
-      confirmedItems = itemsToPack;
+      confirmedItems = itemsToPack.map(it => ({
+        ...it,
+        qty: it.bomQty || it.qty || 1,
+        packed: Boolean(it.packed),
+        packedQty: it.packed ? (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '' ? Number(it.packedQty) : (it.bomQty || it.qty || 1)) : 0
+      }));
       nextStatus = 'Partially Packed';
       isFullyConfirmed = false;
     } else {
-      // User confirmed packing: all items marked packed and forwarded to Accounts verification
+      // User confirmed packing: all items marked packed
       confirmedItems = (itemsToPack && itemsToPack.length > 0)
-        ? itemsToPack.map(it => ({ ...it, qty: it.qty || it.bomQty || 1, packed: true }))
-        : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
+        ? itemsToPack.map(it => ({
+            ...it,
+            qty: it.bomQty || it.qty || 1,
+            packed: true,
+            packedQty: (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '' && Number(it.packedQty) > 0)
+              ? Number(it.packedQty)
+              : (it.bomQty || it.qty || 1)
+          }))
+        : (dispatchPackingModal.items || []).map(it => ({
+            code: it.code,
+            name: it.name,
+            bomQty: it.qty || it.bomQty || 1,
+            qty: it.qty || it.bomQty || 1,
+            packed: true,
+            packedQty: it.qty || it.bomQty || 1
+          }));
 
-      nextStatus = 'Packed & Awaiting Accounts Verification';
+      nextStatus = needsSalesPaymentProof ? 'Packed — Awaiting Sales Payment Proof' : 'Packed & Awaiting Accounts Verification';
       isFullyConfirmed = true;
     }
 
-    const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
-    const needsSalesPaymentNotification = isFullyConfirmed && isWhileDispatch;
+    const needsSalesPaymentNotification = (isFullyConfirmed || sendPartialToAccounts) && needsSalesPaymentProof;
+    const shouldSendToAccounts = (isFullyConfirmed || sendPartialToAccounts) && !needsSalesPaymentProof;
 
-    const accountsVerificationData = isFullyConfirmed
+    const accountsVerificationData = shouldSendToAccounts
       ? ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
           ? dispatchPackingModal.accountsVerification
           : {
-              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
+              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || null,
               hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
               softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
               verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
               readyForAccounts: true,
+              isPartialPacking: Boolean(sendPartialToAccounts || !isFullyConfirmed),
+              packedItemsCount: packedItemsCount,
+              totalItemsCount: totalItemsCount,
               packedAt: dispatchPackingModal.accountsVerification?.packedAt || new Date().toISOString()
             })
       : {
           ...(dispatchPackingModal.accountsVerification || {}),
-          readyForAccounts: false
+          readyForAccounts: false,
+          isPartialPacking: Boolean(sendPartialToAccounts || !isFullyConfirmed),
+          paymentStatus: needsSalesPaymentProof ? 'Awaiting Sales Payment Slip' : (dispatchPackingModal.accountsVerification?.paymentStatus || null)
         };
 
     const rawMedia = dispatchPackingModal.dispatchPackingMedia;
     const cleanMedia = rawMedia ? {
       photos: (rawMedia.photos || []).map(p => {
+        const directStorageUrl = p.storagePath ? `/api/uploads/${p.storageBucket || 'bom-documents'}/${p.storagePath}` : '';
         const bestUrl = (p.url && !p.url.startsWith('blob:'))
           ? p.url
-          : (getMediaFromCache(p.id) || getMediaFromCache(p.name) || (p.dataUrl && !p.dataUrl.startsWith('blob:') ? p.dataUrl : (p.name ? `/api/uploads/${p.name}` : '')));
-        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : undefined;
+          : (directStorageUrl || getMediaFromCache(p.id) || getMediaFromCache(p.name) || (p.dataUrl && !p.dataUrl.startsWith('blob:') ? p.dataUrl : (p.name ? `/api/uploads/${encodeURIComponent(p.name)}` : '')));
+        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : (directStorageUrl || undefined);
         return {
           ...p,
           url: cleanBestUrl,
@@ -499,10 +718,11 @@ export default function DispatchPackingModal({
         };
       }),
       videos: (rawMedia.videos || []).map(v => {
+        const directStorageUrl = v.storagePath ? `/api/uploads/${v.storageBucket || 'bom-documents'}/${v.storagePath}` : '';
         const bestUrl = (v.url && !v.url.startsWith('blob:'))
           ? v.url
-          : (getMediaFromCache(v.id) || getMediaFromCache(v.name) || (v.dataUrl && !v.dataUrl.startsWith('blob:') ? v.dataUrl : (v.name ? `/api/uploads/${v.name}` : '')));
-        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : undefined;
+          : (directStorageUrl || getMediaFromCache(v.id) || getMediaFromCache(v.name) || (v.dataUrl && !v.dataUrl.startsWith('blob:') ? v.dataUrl : (v.name ? `/api/uploads/${encodeURIComponent(v.name)}` : '')));
+        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : (directStorageUrl || undefined);
         return {
           ...v,
           url: cleanBestUrl,
@@ -558,6 +778,7 @@ export default function DispatchPackingModal({
       dispatchPackingMedia: cleanMedia,
       status: nextStatus,
       packingStatus: isFullyConfirmed ? 'PACKING_VERIFIED' : 'PARTIALLY_PACKED',
+      isPartialPacking: Boolean(sendPartialToAccounts || (!isFullyConfirmed && packedItemsCount > 0)),
       packedAt: packedAt,
       packedBy: packedByName,
       packedById: packedByUserId,
@@ -566,7 +787,8 @@ export default function DispatchPackingModal({
       salesPersonCode: resolvedSpCode,
       createdBy: resolvedCreatedBy,
       createdById: resolvedCreatedById,
-      pendingSalesDispatchPayment: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.pendingSalesDispatchPayment) : needsSalesPaymentNotification,
+      awaitingSalesPaymentProof: Boolean(needsSalesPaymentProof),
+      pendingSalesDispatchPayment: Boolean(needsSalesPaymentProof),
       reissuedByAccounts: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.reissuedByAccounts) : false,
       isAccountsDone: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.isAccountsDone) : false,
       accountsVerification: wasAlreadySentToAccounts
@@ -645,9 +867,15 @@ export default function DispatchPackingModal({
 
     addLiveNotification({
       id: `notif-pack-${targetBomCode}-${Date.now()}`,
-      title: isFullyConfirmed ? 'BOM Packing Verified' : 'BOM Packing Updated',
-      message: `BOM Order ${targetBomCode} for ${resolvedCustomer} is ${isFullyConfirmed ? '100% Packed & Ready' : 'Partially Packed'}. Status: ${nextStatus}`,
-      type: isFullyConfirmed ? 'success' : 'info',
+      title: isFullyConfirmed
+        ? 'BOM Packing Verified'
+        : (sendPartialToAccounts ? 'Partial Packing Sent to Accounts' : 'BOM Packing Updated'),
+      message: isFullyConfirmed
+        ? `BOM Order ${targetBomCode} for ${resolvedCustomer} is 100% Packed & Ready. Status: ${nextStatus}`
+        : (sendPartialToAccounts
+            ? `BOM Order ${targetBomCode} for ${resolvedCustomer} was partially packed (${packedItemsCount}/${totalItemsCount} items) and sent to Accounts for verification.`
+            : `BOM Order ${targetBomCode} for ${resolvedCustomer} is Partially Packed (${packedItemsCount}/${totalItemsCount} items). Status: ${nextStatus}`),
+      type: isFullyConfirmed ? 'success' : (sendPartialToAccounts ? 'warning' : 'info'),
       category: 'Dispatch',
       time: 'Just now',
       targetTab: 'BOM Orders',
@@ -661,7 +889,26 @@ export default function DispatchPackingModal({
       }
     });
 
-    if (isFullyConfirmed) {
+    if (needsSalesPaymentProof) {
+      addLiveNotification({
+        id: `notif-payment-req-${targetBomCode}-${Date.now()}`,
+        title: '⚠️ Attach Payment Slip (Goods Packed)',
+        message: `Goods for BOM ${targetBomCode} (${resolvedCustomer}) are packed. Payment terms are "${dispatchPackingModal.paymentType}". Please attach payment proof so the order can proceed to Accounts.`,
+        type: 'warning',
+        category: 'Sales',
+        time: 'Just now',
+        targetTab: 'BOM Orders',
+        targetRoles: [resolvedSalesPerson, resolvedSalesPersonCode, 'Sales Executive', 'Sales Head'].filter(Boolean),
+        metadata: {
+          bomCode: targetBomCode,
+          customerName: resolvedCustomer,
+          salesPerson: resolvedSalesPerson,
+          salesPersonCode: resolvedSalesPersonCode,
+          step: 'ATTACH_PAYMENT_PROOF'
+        }
+      });
+      alert(`📦 Packing Verified!\n\nAll goods are packed. Because payment terms are "${dispatchPackingModal.paymentType}", this order has NOT been sent to Accounts yet.\n\nAn automated indication and alert have been sent to the Salesperson (${resolvedSalesPerson}) to attach the payment proof slip.\n\nOnce Sales attaches the payment proof, this order will automatically forward to the Accounts team.`);
+    } else if (isFullyConfirmed || sendPartialToAccounts) {
       // Trigger Real-time Workflow Notifications with Porter order alert sound & voice for Sales & Accounts
       notifyBomPackedAndSentToAccounts({
         bomCode: targetBomCode,
@@ -671,6 +918,7 @@ export default function DispatchPackingModal({
         createdBy: resolvedSalesPerson,
         createdById: resolvedSalesPersonCode
       });
+      alert(`✅ Packing Verified!\n\nAll ${totalItemsCount} items verified and marked packed. Order successfully forwarded to the Accounts team for verification.`);
     }
   } catch (saveErr) {
     console.error('Error during savePackingData:', saveErr);
@@ -732,6 +980,41 @@ export default function DispatchPackingModal({
               }}>
                 {dispatchPackingModal.bomCode}
               </span>
+              {dispatchPackingModal.docType === 'DC' ? (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <Truck size={13} strokeWidth={2.2} />
+                  <span>DC (DELIVERY CHALLAN)</span>
+                </span>
+              ) : (
+                <span style={{
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '900',
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <FileText size={13} strokeWidth={2.2} />
+                  <span>TAX INVOICE</span>
+                </span>
+              )}
               {isCancelled ? (
                 <span style={{
                   backgroundColor: '#FEE2E2',
@@ -742,6 +1025,18 @@ export default function DispatchPackingModal({
                 }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }}></span>
                   CANCELLED (VIEW ONLY)
+                </span>
+              ) : isPartiallySentToAccounts ? (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FDE68A',
+                  padding: '3px 12px', borderRadius: '20px',
+                  fontSize: '11px', fontWeight: '800',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#D97706' }}></span>
+                  PARTIALLY PACKED • SENT TO ACCOUNTS ({packedItemsCount}/{totalItemsCount})
                 </span>
               ) : isAlreadySentToAccounts ? (
                 <span style={{
@@ -779,23 +1074,6 @@ export default function DispatchPackingModal({
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {canCancelBom && !isCancelled && !isAccountsLocked && !isAlreadySentToAccounts && dispatchPackingModal.status !== 'Cancelled & Stock Restored' && (
-            <button
-              onClick={() => handleCancelBomOrder(dispatchPackingModal)}
-              style={{
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                color: '#FEE2E2', height: '42px', padding: '0 18px',
-                borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                cursor: 'pointer', backdropFilter: 'blur(4px)',
-                display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-              title="Cancel BOM and restore blocked stock back into inventory"
-            >
-              <XCircle style={{ width: '15px', height: '15px', color: '#FCA5A5' }} />
-              Cancel BOM
-            </button>
-          )}
           {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
             <button
               type="button"
@@ -813,7 +1091,7 @@ export default function DispatchPackingModal({
               }}
             >
               <CheckCircle style={{ width: '16px', height: '16px' }} />
-              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed (Send to Accounts)')}
+              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : 'Packing Confirmed'}
             </button>
           )}
         </div>
@@ -982,7 +1260,11 @@ export default function DispatchPackingModal({
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => {
-                  const allPacked = itemsToPack.map(p => ({ ...p, packed: true }));
+                  const allPacked = itemsToPack.map(p => ({
+                    ...p,
+                    packed: true,
+                    packedQty: (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '') ? p.packedQty : (p.bomQty || p.qty || 1)
+                  }));
                   setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: allPacked });
                 }}
                 style={{
@@ -996,7 +1278,7 @@ export default function DispatchPackingModal({
               </button>
               <button
                 onClick={() => {
-                  const nonePacked = itemsToPack.map(p => ({ ...p, packed: false }));
+                  const nonePacked = itemsToPack.map(p => ({ ...p, packed: false, packedQty: '' }));
                   setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: nonePacked });
                 }}
                 style={{
@@ -1044,11 +1326,19 @@ export default function DispatchPackingModal({
             ];
 
             const renderRow = (pItem, origIdx, itemNumberStr) => {
+              const itemBomQty = pItem.bomQty || pItem.qty || 1;
+              const currentPackedQty = (pItem.packedQty !== undefined && pItem.packedQty !== null && pItem.packedQty !== '') ? pItem.packedQty : (pItem.packed ? itemBomQty : '');
+
               return (
                 <tr
                   key={origIdx}
                   onClick={isPackedAndReady ? undefined : () => {
-                    const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? { ...pi, packed: !pi.packed } : pi);
+                    const newPacked = !pItem.packed;
+                    const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
+                      ...pi,
+                      packed: newPacked,
+                      packedQty: newPacked ? (pi.packedQty ? pi.packedQty : (pi.bomQty || pi.qty || 1)) : ''
+                    } : pi);
                     setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
                   }}
                   style={{
@@ -1098,7 +1388,50 @@ export default function DispatchPackingModal({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '13px' }}>
-                    {pItem.bomQty || pItem.qty || 1} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
+                    {itemBomQty} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
+                  </td>
+                  <td style={{ padding: '10px 14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                    {isPackedAndReady ? (
+                      <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
+                        {currentPackedQty !== '' ? currentPackedQty : 0} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
+                      </span>
+                    ) : (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max={itemBomQty || 999999}
+                          placeholder={String(itemBomQty)}
+                          value={currentPackedQty}
+                          onChange={(e) => {
+                            const rawVal = e.target.value;
+                            const parsedVal = rawVal === '' ? '' : Math.max(0, parseInt(rawVal, 10) || 0);
+                            const isAutoPacked = parsedVal !== '' && parsedVal > 0;
+                            const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
+                              ...pi,
+                              packedQty: parsedVal,
+                              packed: isAutoPacked
+                            } : pi);
+                            setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                          }}
+                          style={{
+                            width: '75px',
+                            height: '32px',
+                            textAlign: 'center',
+                            borderRadius: '6px',
+                            border: pItem.packed ? '1.5px solid #10B981' : '1px solid #CBD5E1',
+                            backgroundColor: pItem.packed ? '#ECFDF5' : '#FFFFFF',
+                            fontSize: '13px',
+                            fontWeight: '800',
+                            color: pItem.packed ? '#065F46' : '#1E293B',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                          title="Enter the actual packed quantity"
+                        />
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: '14px 20px', textAlign: 'center' }}>
                     <span style={{
@@ -1125,6 +1458,7 @@ export default function DispatchPackingModal({
                     <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Code</th>
                     <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Description</th>
                     <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
+                    <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Packed Qty</th>
                     <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Status</th>
                   </tr>
                 </thead>
@@ -1154,7 +1488,7 @@ export default function DispatchPackingModal({
                           <React.Fragment key={`set-grp-${gid}`}>
                             {/* Set Header Row */}
                             <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1px solid ${theme.border}` }}>
-                              <td colSpan={5} style={{ padding: '10px 18px' }}>
+                              <td colSpan={6} style={{ padding: '10px 18px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <span style={{
@@ -1224,7 +1558,7 @@ export default function DispatchPackingModal({
                         return (
                           <React.Fragment key="loose-items-group">
                             <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                              <td colSpan={5} style={{ padding: '10px 18px' }}>
+                              <td colSpan={6} style={{ padding: '10px 18px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <span style={{
                                     padding: '3px 10px',
@@ -1466,26 +1800,6 @@ export default function DispatchPackingModal({
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {canCancelBom && !isCancelled && !isAlreadySentToAccounts && (
-              <button
-                type="button"
-                onClick={() => {
-                  handleCancelBomOrder(dispatchPackingModal);
-                  setDispatchPackingModal(null);
-                }}
-                style={{
-                  border: '1px solid #FCA5A5',
-                  background: '#FEF2F2',
-                  color: '#DC2626', height: '40px', padding: '0 16px',
-                  borderRadius: '10px', fontSize: '12px', fontWeight: '800',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                }}
-                title="Cancel BOM and restore blocked stock back into inventory"
-              >
-                <XCircle style={{ width: '15px', height: '15px', color: '#DC2626' }} />
-                Cancel BOM & Restore Stock
-              </button>
-            )}
             <button
               onClick={() => setDispatchPackingModal(null)}
               style={{
@@ -1519,6 +1833,34 @@ export default function DispatchPackingModal({
                 Save Proof Photos
               </button>
             )}
+            {/* UNIVERSAL SAVE AS DRAFT: Always available for dispatch personnel to save progress without advancing workflow */}
+            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
+              <button
+                type="button"
+                onClick={() => setShowSaveDraftModal(true)}
+                disabled={uploadingCount > 0}
+                style={{
+                  border: '1.5px solid #0E7490',
+                  background: '#ECFEFF',
+                  color: '#0E7490',
+                  height: '40px',
+                  padding: '0 18px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 6px rgba(14,116,144,0.1)'
+                }}
+                title="Save current progress as draft without advancing order to next process"
+              >
+                <Save style={{ width: '15px', height: '15px' }} />
+                Save as Draft {packedItemsCount > 0 ? `(${packedItemsCount}/${totalItemsCount})` : ''}
+              </button>
+            )}
+
             {/* Case 1: 0 items selected -> cannot proceed */}
             {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && packedItemsCount === 0 && (
               <button
@@ -1538,17 +1880,17 @@ export default function DispatchPackingModal({
                   alignItems: 'center',
                   gap: '8px'
                 }}
-                title="Please select at least 1 product to proceed"
+                title="Please select at least 1 product to complete packing"
               >
-                Select Products to Proceed
+                Select Products to Complete
               </button>
             )}
 
-            {/* Case 2: Partial packing -> show ONLY Packed Partially */}
+            {/* Case 2: Partial packing -> Confirm Partial Packing */}
             {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && packedItemsCount > 0 && packedItemsCount < totalItemsCount && (
               <button
                 type="button"
-                onClick={() => savePackingData(true)}
+                onClick={() => setShowPartialConfirmModal(true)}
                 disabled={uploadingCount > 0}
                 style={{
                   border: 'none',
@@ -1565,10 +1907,12 @@ export default function DispatchPackingModal({
                   alignItems: 'center',
                   gap: '8px'
                 }}
-                title="Save partial packing progress"
+                title="Confirm partial packing and forward to Accounts verification"
               >
-                <Save style={{ width: '15px', height: '15px' }} />
-                Packed Partially ({packedItemsCount}/{totalItemsCount})
+                <CheckCircle style={{ width: '15px', height: '15px' }} />
+                {isPartiallySentToAccounts
+                  ? `Update Partial in Accounts (${packedItemsCount}/${totalItemsCount})`
+                  : `Confirm Partial Packing`}
               </button>
             )}
 
@@ -1593,10 +1937,10 @@ export default function DispatchPackingModal({
                   alignItems: 'center',
                   gap: '8px'
                 }}
-                title="Confirm all goods packing and forward to Accounts"
+                title={needsSalesPaymentProof ? "Confirm packing and notify Sales to attach payment slip" : "Confirm all goods packing and forward to Accounts"}
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed')}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (needsSalesPaymentProof ? 'Confirm Packing (Notify Sales for Payment)' : 'Packing Confirmed')}
               </button>
             )}
           </div>
@@ -1816,7 +2160,17 @@ export default function DispatchPackingModal({
             <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
               Are you sure all <strong>{totalItemsCount} items</strong> and accessories are fully packed and verified?
               <br /><br />
-              This will mark packing as confirmed and forward the order to <strong>Accounts</strong> for payment & document verification.
+              {needsSalesPaymentProof ? (
+                <div style={{ backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', padding: '10px 12px', borderRadius: '8px', color: '#92400E', fontWeight: '600' }}>
+                  ℹ️ Payment terms are <strong>"{dispatchPackingModal.paymentType}"</strong> without an attached payment proof.
+                  <br />
+                  This will mark packing complete and notify the <strong>Sales Team</strong> to attach the payment slip. The order will <strong>not</strong> go to Accounts until Sales attaches the proof.
+                </div>
+              ) : (
+                <span>
+                  This will mark packing as confirmed and forward the order to <strong>Accounts</strong> for payment & document verification.
+                </span>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
@@ -1845,6 +2199,184 @@ export default function DispatchPackingModal({
                 }}
               >
                 <CheckCircle size={16} /> Yes, Confirm Packing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DISPATCH PARTIAL PACKING CONFIRMATION POPUP MODAL */}
+      {showPartialConfirmModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 999999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: '16px',
+            maxWidth: '520px', width: '100%', padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            display: 'flex', flexDirection: 'column', gap: '18px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px', height: '46px', borderRadius: '12px',
+                backgroundColor: '#FEF3C7', color: '#B45309',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>
+                  Confirm Partial Goods Packing
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  BOM Code: <strong>{targetCode}</strong> • Customer: <strong>{resolvedCustomer}</strong>
+                </p>
+              </div>
+            </div>
+
+            {/* Breakdown Card */}
+            <div style={{
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#92400E' }}>
+                  Packing Progress:
+                </span>
+                <span style={{
+                  fontSize: '12px', fontWeight: '800',
+                  backgroundColor: '#FEF3C7', color: '#B45309',
+                  padding: '2px 10px', borderRadius: '20px', border: '1px solid #FCD34D'
+                }}>
+                  {packedItemsCount} of {totalItemsCount} Items Packed ({progressPercent}%)
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ width: '100%', height: '8px', backgroundColor: '#FDE68A', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#D97706', borderRadius: '4px' }}></div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: '#78350F', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Packed: <strong>{packedItemsCount} items</strong></span>
+                <span>Remaining: <strong>{totalItemsCount - packedItemsCount} items</strong></span>
+              </div>
+            </div>
+
+            {/* Explanation / Verification Notice */}
+            <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              Are you sure you want to forward this <strong>partially packed order ({packedItemsCount}/{totalItemsCount} items)</strong> to <strong>Accounts Verification</strong>?
+              <br /><br />
+              • Accounts will verify payment & documentation for these packed items.
+              <br />
+              • The remaining <strong>{totalItemsCount - packedItemsCount} items</strong> can be packed and dispatched in a subsequent shipment.
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setShowPartialConfirmModal(false)}
+                style={{
+                  padding: '10px 18px', borderRadius: '8px', border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPartialConfirmModal(false);
+                  savePackingData(true, false, true);
+                }}
+                style={{
+                  padding: '10px 22px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#D97706', color: '#FFFFFF', fontSize: '13px', fontWeight: '800',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                  boxShadow: '0 4px 12px rgba(217,119,6,0.35)'
+                }}
+              >
+                <CheckCircle size={16} /> Yes, Send Partial to Accounts
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DISPATCH SAVE DRAFT CONFIRMATION POPUP MODAL */}
+      {showSaveDraftModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 999999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: '16px',
+            maxWidth: '480px', width: '100%', padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            display: 'flex', flexDirection: 'column', gap: '18px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px', height: '46px', borderRadius: '12px',
+                backgroundColor: '#ECFEFF', color: '#0E7490',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                <Save size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>
+                  Save Packing Progress as Draft?
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  BOM {dispatchPackingModal.bomCode || dispatchPackingModal.code} • {packedItemsCount} of {totalItemsCount} items checked
+                </p>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              This will save your checked items, quantities, and uploaded media as a draft without moving the order to the next stage.
+              <br /><br />
+              • The order will remain in <strong>Dispatch</strong> for you to resume packing anytime.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setShowSaveDraftModal(false)}
+                style={{
+                  padding: '10px 18px', borderRadius: '8px', border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSaveDraftModal(false);
+                  handleSaveDraft();
+                }}
+                style={{
+                  padding: '10px 22px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#0E7490', color: '#FFFFFF', fontSize: '13px', fontWeight: '800',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                  boxShadow: '0 4px 12px rgba(14,116,144,0.35)'
+                }}
+              >
+                <Save size={16} /> Yes, Save Draft
               </button>
             </div>
           </div>

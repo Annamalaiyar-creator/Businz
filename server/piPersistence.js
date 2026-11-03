@@ -59,6 +59,8 @@ export function toConsumerPi(row) {
     salesperson: row.sales_person || row.created_by || 'sales',
     salesPersonCode: row.sales_person_code || row.created_by_id || '',
     salesPersonEmail: row.sales_person_email || '',
+    assignedSalesperson: row.assigned_salesperson || '',
+    assignedSalespersonCode: row.assigned_salesperson_code || '',
     createdBy: row.created_by || row.sales_person || 'sales',
     createdById: row.created_by_id || row.sales_person_code || '',
     unitValue: parseFloat(row.unit_value || subTotal),
@@ -112,18 +114,75 @@ export async function loadDatabaseProformaInvoices(pool = defaultPool) {
 export async function getNextDatabasePiNumber(pool = defaultPool) {
   const fy = getFinancialYear();
   try {
-    const res = await pool.query(`
-      SELECT pi_no FROM public.proforma_invoices
-      WHERE pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
-    `);
+    const candidateStrings = [];
+
+    // 1. From relational public.proforma_invoices
+    try {
+      const res = await pool.query(`
+        SELECT pi_no, id FROM public.proforma_invoices
+        WHERE (pi_no ~ '^(VRMS/PI/|VRM-PI-)' OR id ~ '^(VRMS/PI/|VRM-PI-)')
+      `);
+      for (const row of res.rows) {
+        if (row.pi_no) candidateStrings.push(row.pi_no);
+        if (row.id) candidateStrings.push(row.id);
+      }
+    } catch (_) {}
+
+    // 2. From relational public.bom_orders source_pi_no (prevent colliding with existing BOM conversions)
+    try {
+      const bomRes = await pool.query(`
+        SELECT source_pi_no FROM public.bom_orders
+        WHERE source_pi_no IS NOT NULL AND (source_pi_no ~ '^(VRMS/PI/|VRM-PI-)')
+      `);
+      for (const row of bomRes.rows) {
+        if (row.source_pi_no) candidateStrings.push(row.source_pi_no);
+      }
+    } catch (_) {}
+
+    // 3. From public.controlroom_store keys: sales_pi_store, proforma_invoice_store, and bom_orders
+    try {
+      const storeRes = await pool.query(`
+        SELECT key, data FROM public.controlroom_store
+        WHERE key IN ('sales_pi_store', 'proforma_invoice_store', 'bom_orders', 'bom_store')
+      `);
+      for (const row of storeRes.rows) {
+        if (Array.isArray(row.data)) {
+          for (const item of row.data) {
+            if (item?.piNo) candidateStrings.push(item.piNo);
+            if (item?.id) candidateStrings.push(item.id);
+            if (item?.sourcePiNo) candidateStrings.push(item.sourcePiNo);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 4. From local disk JSON files
+    for (const f of ['sales_pi_store.json', 'proforma_invoice_store.json', 'bom_store.json']) {
+      try {
+        const fp = getStoreFilePath(f);
+        if (fs.existsSync(fp)) {
+          const list = JSON.parse(fs.readFileSync(fp, 'utf8'));
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              if (item?.piNo) candidateStrings.push(item.piNo);
+              if (item?.id) candidateStrings.push(item.id);
+              if (item?.sourcePiNo) candidateStrings.push(item.sourcePiNo);
+            }
+          }
+        }
+      } catch (_) {}
+    }
 
     let maxSeq = 0;
-    const regex = new RegExp(`^VRM-PI-${fy}-(\\d+)$`, 'i');
+    const yy = fy % 100;
+    const nextYy = (yy + 1) % 100;
+    const fyCode = `${String(yy).padStart(2, '0')}-${String(nextYy).padStart(2, '0')}`;
+    const regex = new RegExp(`^(?:VRMS\/PI\/(?:${fyCode}|${fy})\/(\\d+)|VRM-PI-${fy}-(\\d+))$`, 'i');
 
-    for (const row of res.rows) {
-      const match = (row.pi_no || '').match(regex);
-      if (match && match[1]) {
-        const val = parseInt(match[1], 10);
+    for (const str of candidateStrings) {
+      const match = String(str || '').trim().match(regex);
+      if (match) {
+        const val = parseInt(match[1] || match[2], 10);
         if (Number.isFinite(val) && val > maxSeq) {
           maxSeq = val;
         }
@@ -132,7 +191,7 @@ export async function getNextDatabasePiNumber(pool = defaultPool) {
 
     const nextNum = maxSeq + 1;
     const code = formatSequenceCode('PI', nextNum);
-    return { nextPiNo: code, nextEstimateNo: code, nextNum, fiscalYear: String(fy), financialYear: fy };
+    return { nextPiNo: code, nextEstimateNo: code, nextNum, fiscalYear: String(fy), financialYear: fy, fiscalYearCode: fyCode };
   } catch (err) {
     console.warn('[PI Next Number DB Warning]:', err.message);
     const code = formatSequenceCode('PI', 1);
@@ -166,6 +225,7 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
 
     // Verify existing record in database
     let existingRow = null;
+    let isCollisionWithExistingPiOrBom = false;
     if (cleanPiNo) {
       const existRes = await client.query(
         'SELECT * FROM public.proforma_invoices WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($1)) OR LOWER(TRIM(id)) = LOWER(TRIM($1))',
@@ -174,25 +234,26 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
       if (existRes.rows.length > 0) {
         existingRow = existRes.rows[0];
       }
+
+      // Check if this PI number is already used as a source_pi_no by an existing active BOM in public.bom_orders
+      if (!isEdit) {
+        try {
+          const bomCheck = await client.query(
+            'SELECT bom_code FROM public.bom_orders WHERE LOWER(TRIM(source_pi_no)) = LOWER(TRIM($1)) AND status NOT ILIKE \'%cancel%\' LIMIT 1',
+            [cleanPiNo]
+          );
+          if (bomCheck.rows.length > 0) {
+            isCollisionWithExistingPiOrBom = true;
+          }
+        } catch (_) {}
+      }
     }
 
-    // Auto-advance sequence if NOT an edit and PI number already taken
-    if (!isEdit && existingRow) {
-      const fy = getFinancialYear();
-      const allRows = await client.query('SELECT pi_no FROM public.proforma_invoices WHERE pi_no ~ $1', [`^VRM-PI-${fy}-[0-9]+$`]);
-      let maxSeq = 0;
-      const regex = new RegExp(`^VRM-PI-${fy}-(\\d+)$`, 'i');
-      for (const r of allRows.rows) {
-        const m = (r.pi_no || '').match(regex);
-        if (m && m[1]) {
-          const v = parseInt(m[1], 10);
-          if (v > maxSeq) maxSeq = v;
-        }
-      }
-      const nextNum = maxSeq + 1;
-      const advancedCode = formatSequenceCode('PI', nextNum);
-      console.warn(`[PI Concurrency Protection] PI number "${cleanPiNo}" is already taken in database. Auto-advancing to "${advancedCode}".`);
-      cleanPiNo = advancedCode;
+    // Auto-advance sequence if NOT an edit and PI number already taken or claimed by existing BOM
+    if (!isEdit && (existingRow || isCollisionWithExistingPiOrBom)) {
+      const seqInfo = await getNextDatabasePiNumber(pool);
+      console.warn(`[PI Concurrency Protection] PI number "${cleanPiNo}" is already taken or claimed by existing BOM. Auto-advancing to "${seqInfo.nextPiNo}".`);
+      cleanPiNo = seqInfo.nextPiNo;
       existingRow = null;
     }
 
@@ -202,10 +263,13 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
     }
 
     const subTotal = parseFloat(piData.subtotal ?? piData.sub_total ?? piData.unitValue ?? (existingRow?.sub_total || 0)) || 0;
-    const taxTotal = parseFloat(piData.taxTotal ?? piData.gst_amount ?? (existingRow?.gst_amount || 0)) || 0;
-    const cgst = parseFloat(piData.cgst ?? piData.cgst_amount ?? (taxTotal / 2)) || 0;
-    const sgst = parseFloat(piData.sgst ?? piData.sgst_amount ?? (taxTotal / 2)) || 0;
+    let taxTotal = parseFloat(piData.taxTotal ?? piData.gst_amount ?? (existingRow?.gst_amount || 0)) || 0;
     const grandTotal = parseFloat(piData.grandTotal ?? piData.grand_total ?? (subTotal + taxTotal)) || (subTotal + taxTotal);
+    if (taxTotal === 0 && grandTotal > subTotal) {
+      taxTotal = Math.round((grandTotal - subTotal) * 100) / 100;
+    }
+    const cgst = parseFloat(piData.cgst ?? piData.cgst_amount ?? (taxTotal / 2)) || (taxTotal / 2);
+    const sgst = parseFloat(piData.sgst ?? piData.sgst_amount ?? (taxTotal / 2)) || (taxTotal / 2);
 
     const billingObj = (piData.billingAddress && typeof piData.billingAddress === 'object')
       ? piData.billingAddress
@@ -535,4 +599,63 @@ export async function updatePiZohoSyncStatus(piNo, zohoStatus, pool = defaultPoo
     console.error(`[updatePiZohoSyncStatus Error for ${piNo}]:`, err.message);
   }
   return null;
+}
+
+/**
+ * Assigns or reassigns a Proforma Invoice to a sales representative.
+ * Updates public.proforma_invoices (1 targeted row UPDATE) and syncs single record to stores.
+ */
+export async function assignProformaInvoiceInDatabase(piNo, assigneeData, pool = defaultPool) {
+  if (!piNo || !assigneeData) return null;
+  const cleanPiNo = String(piNo).trim();
+  const { assignedToId, assignedToName, assignedToEmail, assignedBy, assignedByRole, reason } = assigneeData;
+
+  try {
+    const res = await pool.query(`
+      UPDATE public.proforma_invoices
+      SET sales_person = $1,
+          sales_person_code = $2,
+          sales_person_email = COALESCE($3, sales_person_email),
+          updated_at = NOW()
+      WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($4)) OR LOWER(TRIM(id)) = LOWER(TRIM($4))
+      RETURNING *;
+    `, [
+      assignedToName,
+      assignedToId,
+      assignedToEmail || null,
+      cleanPiNo
+    ]);
+
+    let updatedPi = null;
+    if (res.rows.length > 0) {
+      updatedPi = toConsumerPi(res.rows[0]);
+    }
+
+    const assignmentMeta = {
+      salesPerson: assignedToName,
+      salesperson: assignedToName,
+      salesRep: assignedToName,
+      salesPersonCode: assignedToId,
+      salesPersonEmail: assignedToEmail || (updatedPi ? updatedPi.salesPersonEmail : ''),
+      assignedSalesperson: assignedToName,
+      assignedSalespersonCode: assignedToId,
+      assignedToCode: assignedToId,
+      assignedToId: assignedToId,
+      assignedToName: assignedToName,
+      assignedBy: assignedBy || 'Tech Support',
+      assignedByRole: assignedByRole || 'Tech Support',
+      assignedAt: new Date().toISOString(),
+      assignmentReason: reason || 'Assigned by Tech Support'
+    };
+
+    if (updatedPi) {
+      updatedPi = { ...updatedPi, ...assignmentMeta };
+    }
+
+    await syncSinglePiToControlroomStore(updatedPi || { piNo: cleanPiNo, id: cleanPiNo, ...assignmentMeta }, pool);
+    return updatedPi;
+  } catch (err) {
+    console.error(`[assignProformaInvoiceInDatabase Error for ${piNo}]:`, err.message);
+    return null;
+  }
 }

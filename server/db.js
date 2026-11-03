@@ -9,6 +9,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { getStoreFilePath } from './runtimePaths.js';
+import {
+  isOptimizationTestMode,
+  validateDatabaseConfigForTestMode,
+  REQUIRED_TEST_DATABASE,
+  REQUIRED_TEST_DB_ROLE
+} from './optimizationTestGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,13 +25,29 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
+// Resolve default database name - strictly require dedicated test DB in test mode
+const isDevServer = process.env.PORT === '5002' || process.env.NODE_ENV === 'development' || process.env.APP_ENV === 'development';
+let defaultDbName = isDevServer ? 'businz_dev' : 'businz';
+if (isOptimizationTestMode()) {
+  defaultDbName = (process.env.BUSINZ_TEST_DATABASE || process.env.PGDATABASE || '').trim();
+}
+
 // PostgreSQL connection config for Hostinger VPS (Self-hosted)
-const connectionString = process.env.DATABASE_URL || 
-  process.env.PG_CONNECTION_STRING || 
-  `postgres://${process.env.PGUSER || 'postgres'}:${encodeURIComponent(process.env.PGPASSWORD || 'postgres')}@${process.env.PGHOST || '127.0.0.1'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'businz'}`;
+let resolvedConnString = process.env.DATABASE_URL || process.env.PG_CONNECTION_STRING;
+if (isDevServer && resolvedConnString && resolvedConnString.includes('/businz') && !resolvedConnString.includes('/businz_dev')) {
+  // Enforce dev database isolation on dev server port 5002 so it automatically connects to businz_dev
+  resolvedConnString = resolvedConnString.replace(/\/businz(\?|$)/, '/businz_dev$1');
+}
+const connectionString = resolvedConnString || 
+  (defaultDbName ? `postgres://${process.env.PGUSER || 'postgres'}:${encodeURIComponent(process.env.PGPASSWORD || 'postgres')}@${process.env.PGHOST || '127.0.0.1'}:${process.env.PGPORT || 5432}/${defaultDbName}` : '');
+
+// Fail closed immediately before creating pool if optimization test mode is active and database is unverified or forbidden
+if (isOptimizationTestMode()) {
+  validateDatabaseConfigForTestMode(connectionString);
+}
 
 export const pool = new Pool({
-  connectionString,
+  connectionString: connectionString || undefined,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
@@ -39,16 +61,135 @@ pool.on('connect', () => {
 });
 
 pool.on('error', (err) => {
-  console.warn('[PostgreSQL Pool Warning]:', err.message);
-  isConnected = false;
+  console.warn('[PostgreSQL Pool Warning (Idle client closed)]:', err.message);
+  // Do NOT permanently set isConnected to false on routine idle client disconnection.
+  // The pool automatically establishes a new client on the next query.
+  if (err?.code === 'ECONNREFUSED' || err?.code === '57P01' || err?.code === '57P02' || err?.code === '57P03') {
+    isConnected = false;
+  }
 });
 
 export async function query(text, params) {
-  return pool.query(text, params);
+  try {
+    const res = await pool.query(text, params);
+    isConnected = true;
+    return res;
+  } catch (err) {
+    if (err?.code === 'ECONNREFUSED' || err?.code === '57P01' || err?.code === '57P02' || err?.code === '57P03') {
+      isConnected = false;
+    }
+    throw err;
+  }
 }
 
 export function isDbConnected() {
-  return isConnected;
+  return Boolean(isConnected && pool && !pool.ending && !pool.ended);
+}
+
+/**
+ * Verifies database connectivity using an actual bounded PostgreSQL query (SELECT 1).
+ * Updates internal connection state and returns genuine health status.
+ *
+ * Hardened for Phase 6B:
+ * 1. Bounded connection acquisition (timeout 1) AND bounded query execution (timeout 2).
+ * 2. Guaranteed zero client leak on late-arriving connection: client is immediately released
+ *    if connection completes after the timeout has fired.
+ * 3. Guaranteed client release in all completion, error, and timeout paths.
+ * 4. Never reports connectivity success after a timeout has fired.
+ * 5. Preserves existing API response contract: { ok: boolean, latencyMs?: number, database?: string, error?: string }.
+ *
+ * @param {number} timeoutMs Maximum time to wait for database response (default: 3000ms)
+ * @returns {Promise<{ ok: boolean, latencyMs?: number, database?: string, error?: string }>}
+ */
+export async function verifyDbConnectivity(timeoutMs = 3000) {
+  if (!pool || pool.ending || pool.ended) {
+    isConnected = false;
+    return { ok: false, error: 'Database pool is not active or has ended' };
+  }
+
+  const start = Date.now();
+  let client = null;
+  let timer = null;
+  let hasTimedOut = false;
+
+  try {
+    // 1. Connection acquisition with late-arrival cleanup protection
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        hasTimedOut = true;
+        reject(new Error(`Database connectivity check timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    const connectPromise = pool.connect().then((acquiredClient) => {
+      if (hasTimedOut) {
+        // Late arriving client! Must release immediately to prevent pool leak
+        try {
+          acquiredClient.release();
+        } catch (_) {}
+        return null;
+      }
+      return acquiredClient;
+    }).catch((err) => {
+      if (hasTimedOut) {
+        // Late arriving error, swallow as timeout already handled the response
+        return null;
+      }
+      throw err;
+    });
+
+    client = await Promise.race([connectPromise, timeoutPromise]);
+    if (!client && hasTimedOut) {
+      throw new Error(`Database connectivity check timed out after ${timeoutMs}ms`);
+    }
+
+    // 2. Query execution bounded by remaining timeout
+    const elapsed = Date.now() - start;
+    const remainingTime = Math.max(500, timeoutMs - elapsed);
+
+    let queryTimer = null;
+    const queryTimeoutPromise = new Promise((_, reject) => {
+      queryTimer = setTimeout(() => {
+        hasTimedOut = true;
+        reject(new Error(`Database health-check query timed out after ${remainingTime}ms`));
+      }, remainingTime);
+    });
+
+    try {
+      const res = await Promise.race([
+        client.query('SELECT current_database() as db_name, 1 as health_check;'),
+        queryTimeoutPromise
+      ]);
+
+      if (hasTimedOut) {
+        throw new Error(`Database connectivity check timed out`);
+      }
+
+      isConnected = true;
+      const latencyMs = Date.now() - start;
+      return {
+        ok: true,
+        latencyMs,
+        database: res.rows[0]?.db_name || 'unknown'
+      };
+    } finally {
+      if (queryTimer) clearTimeout(queryTimer);
+    }
+  } catch (err) {
+    isConnected = false;
+    return {
+      ok: false,
+      error: err.message || String(err)
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (client) {
+      try {
+        client.release();
+      } catch (_) {}
+      client = null;
+    }
+  }
 }
 
 /**
@@ -57,9 +198,37 @@ export function isDbConnected() {
  */
 export async function initPostgresDatabase() {
   try {
+    if (isOptimizationTestMode()) {
+      validateDatabaseConfigForTestMode(connectionString);
+    }
+
     const client = await pool.connect();
     isConnected = true;
-    console.log('✅ [PostgreSQL] Connected successfully to self-hosted database on Hostinger VPS');
+
+    // Defense-in-depth: In test mode, verify database and role directly from PostgreSQL metadata
+    if (isOptimizationTestMode()) {
+      const auditRes = await client.query('SELECT current_database() as db_name, current_user as role_name;');
+      const activeDb = auditRes.rows[0]?.db_name;
+      const activeRole = auditRes.rows[0]?.role_name;
+
+      if (activeDb !== REQUIRED_TEST_DATABASE) {
+        client.release();
+        throw new Error(
+          `[DATABASE-ISOLATION-FAIL-CLOSED] Refusing schema initialization! ` +
+          `Active database is "${activeDb}", but optimization test mode requires "${REQUIRED_TEST_DATABASE}".`
+        );
+      }
+      if (activeRole !== REQUIRED_TEST_DB_ROLE) {
+        client.release();
+        throw new Error(
+          `[DATABASE-ISOLATION-FAIL-CLOSED] Refusing schema initialization! ` +
+          `Active role is "${activeRole}", but optimization test mode requires dedicated role "${REQUIRED_TEST_DB_ROLE}".`
+        );
+      }
+      console.log(`🛡️ [PostgreSQL] Verified isolated test database "${activeDb}" with test role "${activeRole}".`);
+    } else {
+      console.log('✅ [PostgreSQL] Connected successfully to self-hosted database on Hostinger VPS');
+    }
 
     // 1. Ensure controlroom_store key-value table exists immediately for VPS persistence
     await client.query(`
@@ -79,6 +248,7 @@ export async function initPostgresDatabase() {
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS invoice_no TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS sales_person_email TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed BOOLEAN DEFAULT false;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_at TIMESTAMPTZ;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_time_str TEXT;
@@ -91,6 +261,10 @@ export async function initPostgresDatabase() {
             
             -- 1-to-1 Sync order values, items, and salesperson from source PI if missing
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'proforma_invoices') THEN
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sales_person_email TEXT;
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS status_type TEXT DEFAULT 'issued';
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_code TEXT;
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_no TEXT;
               UPDATE public.bom_orders b
               SET grand_total = COALESCE(NULLIF(p.grand_total, 0), b.grand_total),
                   sub_total = COALESCE(NULLIF(p.sub_total, 0), b.sub_total),
@@ -232,127 +406,328 @@ export async function initPostgresDatabase() {
         CREATE INDEX IF NOT EXISTS idx_proforma_invoices_created_at ON public.proforma_invoices (created_at DESC);
       `);
       console.log('✅ [PostgreSQL] public.proforma_invoices table & idx_proforma_invoices_pi_no_lower verified.');
+
+      // Auto-heal any PIs that have active BOM conversions but were stuck in Draft
+      try {
+        await client.query(`
+          UPDATE public.proforma_invoices p
+          SET status = 'Converted to BOM',
+              status_type = 'converted',
+              converted_bom_no = COALESCE(p.converted_bom_no, b.bom_code),
+              converted_bom_code = COALESCE(p.converted_bom_code, b.bom_code),
+              updated_at = NOW()
+          FROM public.bom_orders b
+          WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+            AND b.status NOT ILIKE '%cancel%'
+            AND (p.status = 'Draft' OR p.status_type = 'draft' OR p.status = 'Draft Saved');
+        `);
+      } catch (healErr) {
+        console.warn('⚠️ [PI Auto-heal Notice]:', healErr.message);
+      }
     } catch (piTableErr) {
       console.warn('⚠️ [PostgreSQL proforma_invoices Table Warning]:', piTableErr.message);
     }
 
-    // Auto-seed existing historical PIs into relational public.proforma_invoices if table is empty
-    try {
-      const piCountRes = await client.query('SELECT COUNT(*) as count FROM public.proforma_invoices');
-      const count = parseInt(piCountRes.rows[0]?.count || 0, 10);
-      if (count === 0) {
-        const piFiles = ['sales_pi_store.json', 'proforma_invoice_store.json'];
-        const seedPis = new Map();
-        for (const pf of piFiles) {
-          const pPath = getStoreFilePath(pf);
-          if (fs.existsSync(pPath)) {
-            try {
-              const list = JSON.parse(fs.readFileSync(pPath, 'utf8'));
-              if (Array.isArray(list)) {
-                for (const item of list) {
-                  if (item && (item.piNo || item.id)) {
-                    const key = String(item.piNo || item.id).trim().toLowerCase();
-                    if (!seedPis.has(key)) seedPis.set(key, item);
+    // Auto-seed existing historical PIs into relational public.proforma_invoices if table is empty (disabled in test mode)
+    if (!isOptimizationTestMode()) {
+      try {
+        const piCountRes = await client.query('SELECT COUNT(*) as count FROM public.proforma_invoices');
+        const count = parseInt(piCountRes.rows[0]?.count || 0, 10);
+        if (count === 0) {
+          const piFiles = ['sales_pi_store.json', 'proforma_invoice_store.json'];
+          const seedPis = new Map();
+          for (const pf of piFiles) {
+            const pPath = getStoreFilePath(pf);
+            if (fs.existsSync(pPath)) {
+              try {
+                const list = JSON.parse(fs.readFileSync(pPath, 'utf8'));
+                if (Array.isArray(list)) {
+                  for (const item of list) {
+                    if (item && (item.piNo || item.id)) {
+                      const key = String(item.piNo || item.id).trim().toLowerCase();
+                      if (!seedPis.has(key)) seedPis.set(key, item);
+                    }
                   }
                 }
+              } catch (_) {}
+            }
+          }
+          if (seedPis.size > 0) {
+            console.log(`📦 [PostgreSQL] Seeding ${seedPis.size} Proforma Invoices into relational database...`);
+            const { saveProformaInvoiceToDatabase } = await import('./piPersistence.js');
+            for (const pi of seedPis.values()) {
+              await saveProformaInvoiceToDatabase(pi, pool).catch(e => console.warn(`[PI Seed Warning ${pi.piNo}]:`, e.message));
+            }
+            console.log(`✅ [PostgreSQL] Successfully seeded ${seedPis.size} Proforma Invoices into public.proforma_invoices.`);
+          }
+        }
+      } catch (seedErr) {
+        console.warn('[PI Seed Error]:', seedErr.message);
+      }
+    } else {
+      console.log('🛡️ [PostgreSQL] Optimization test mode: historical PI auto-seeding strictly disabled.');
+    }
+
+    // Safety reconciliation: Fix any falsely-converted PIs whose linked BOM has mismatched customer or items (disabled in test mode)
+    if (!isOptimizationTestMode()) {
+      try {
+        await client.query(`
+          UPDATE public.bom_orders b
+          SET source_pi_no = null,
+              updated_at = NOW()
+          WHERE (b.source_pi_no ILIKE '%122%')
+            AND NOT EXISTS (
+              SELECT 1 FROM public.proforma_invoices p
+              WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+                AND (
+                  LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                  OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                )
+            );
+        `);
+
+        await client.query(`
+          UPDATE public.proforma_invoices p
+          SET status = 'Issued',
+              status_type = 'issued',
+              converted_bom_no = null,
+              converted_bom_code = null,
+              updated_at = NOW()
+          WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
+            AND p.status = 'Converted to BOM'
+            AND NOT EXISTS (
+              SELECT 1 FROM public.bom_orders b
+              WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
+                AND (
+                  LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                  OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                )
+            );
+        `);
+        console.log('✅ [PostgreSQL] Verified PI/BOM conversion link integrity.');
+      } catch (auditErr) {
+        console.warn('[PI/BOM Integrity Audit Notice]:', auditErr.message);
+      }
+    }
+
+    // Ensure public.leads table and CRM columns (location, product_requirement, etc.) exist
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.leads (
+          id TEXT PRIMARY KEY,
+          lead_number TEXT UNIQUE,
+          company_name TEXT NOT NULL,
+          contact_person TEXT,
+          designation TEXT,
+          phone TEXT,
+          whatsapp TEXT,
+          email TEXT,
+          source TEXT DEFAULT 'Manual',
+          status TEXT DEFAULT 'New',
+          assigned_salesperson TEXT,
+          estimated_kw NUMERIC DEFAULT 0,
+          category TEXT,
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      const leadColumns = [
+        'location TEXT',
+        'product_requirement TEXT',
+        'lead_created_by_id TEXT',
+        'lead_created_by_name TEXT',
+        'assigned_by_user_id TEXT',
+        'assigned_by_name TEXT',
+        'assigned_by_role TEXT',
+        'assigned_to_user_id TEXT',
+        'assigned_to_name TEXT',
+        'assigned_to_role TEXT',
+        'assigned_at TIMESTAMPTZ',
+        "priority TEXT DEFAULT 'MEDIUM'",
+        'next_followup_date TIMESTAMPTZ',
+        'external_enquiry_id TEXT',
+        'external_payload JSONB',
+        'last_qualifying_activity_at TIMESTAMPTZ',
+        'last_activity_at TIMESTAMPTZ',
+        'last_activity_type TEXT',
+        'is_unattended_24h BOOLEAN DEFAULT false',
+        'is_unattended_2h BOOLEAN DEFAULT false',
+        'is_unattended_48h BOOLEAN DEFAULT false',
+        'is_converted BOOLEAN DEFAULT false',
+        'unattended_alert_sent_at TIMESTAMPTZ',
+        'escalation_alert_sent_at TIMESTAMPTZ',
+        'converted_customer_id TEXT',
+        'converted_customer_code TEXT'
+      ];
+
+      for (const col of leadColumns) {
+        try {
+          await client.query(`ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS ${col};`);
+        } catch (_) {}
+      }
+
+      const auxTables = [
+        `CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          assigned_by_user_id TEXT NOT NULL,
+          assigned_by_name TEXT NOT NULL,
+          assigned_by_role TEXT NOT NULL,
+          assigned_to_user_id TEXT NOT NULL,
+          assigned_to_name TEXT NOT NULL,
+          assigned_to_role TEXT NOT NULL,
+          previous_assigned_to_user_id TEXT,
+          previous_assigned_to_name TEXT,
+          assignment_reason TEXT,
+          assignment_type TEXT NOT NULL DEFAULT 'INITIAL',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_activities (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          activity_type TEXT NOT NULL,
+          is_qualifying_activity BOOLEAN NOT NULL DEFAULT false,
+          summary TEXT NOT NULL,
+          customer_response TEXT,
+          call_duration_seconds INT,
+          conducted_by_user_id TEXT NOT NULL,
+          conducted_by_name TEXT NOT NULL,
+          conducted_by_role TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_status_history (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          previous_status TEXT,
+          new_status TEXT NOT NULL,
+          remarks TEXT,
+          updated_by_user_id TEXT NOT NULL,
+          updated_by_name TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_followups (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          scheduled_at TIMESTAMPTZ NOT NULL,
+          notes TEXT,
+          status TEXT NOT NULL DEFAULT 'PENDING',
+          assigned_salesperson_id TEXT NOT NULL,
+          assigned_salesperson_name TEXT NOT NULL,
+          completed_at TIMESTAMPTZ,
+          outcome_remarks TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_inactivity_incidents (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          salesperson_id TEXT NOT NULL,
+          salesperson_name TEXT NOT NULL,
+          incident_type TEXT NOT NULL,
+          assigned_at TIMESTAMPTZ NOT NULL,
+          alerted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          resolved_at TIMESTAMPTZ,
+          resolved_by_user_id TEXT,
+          resolution_type TEXT,
+          details JSONB
+        );`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
+          ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);`,
+        `CREATE TABLE IF NOT EXISTS public.internal_notifications (
+          id TEXT PRIMARY KEY,
+          recipient_emp_code TEXT,
+          recipient_role TEXT,
+          event_type TEXT NOT NULL,
+          document_type TEXT NOT NULL,
+          document_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          actor_emp_code TEXT,
+          actor_name TEXT,
+          actor_role TEXT,
+          target_tab TEXT,
+          target_record_id TEXT,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          is_read BOOLEAN NOT NULL DEFAULT false,
+          read_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          dedup_id TEXT UNIQUE NOT NULL
+        );`,
+        `CREATE INDEX IF NOT EXISTS idx_internal_notifs_recipient 
+          ON public.internal_notifications(recipient_emp_code, is_read, created_at DESC);`,
+        `CREATE INDEX IF NOT EXISTS idx_internal_notifs_role 
+          ON public.internal_notifications(recipient_role, is_read, created_at DESC);`,
+        `CREATE INDEX IF NOT EXISTS idx_internal_notifs_doc 
+          ON public.internal_notifications(document_type, document_id);`
+      ];
+
+      for (const stmt of auxTables) {
+        try {
+          await client.query(stmt);
+        } catch (_) {}
+      }
+
+      try {
+        await client.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quotations') THEN
+              ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS lead_id TEXT;
+            END IF;
+          END $$;
+        `);
+      } catch (_) {}
+      console.log('✅ [PostgreSQL] Ensured public.leads columns (location, etc.) and CRM tables exist.');
+    } catch (leadsErr) {
+      console.warn('[PostgreSQL Leads Schema Notice]:', leadsErr.message);
+    }
+
+    // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database (disabled in test mode)
+    if (!isOptimizationTestMode()) {
+      const storesToSeed = [
+        'bom_store',
+        'employees_store',
+        'po_store',
+        'grn_store',
+        'raw_materials_store',
+        'item_store',
+        'workorder_store',
+        'vrm_prod_workorders',
+        'vendor_store',
+        'presets_store',
+        'company_branding_store',
+        'invoice_store',
+        'proforma_invoice_store',
+        'sales_pi_store',
+        'payment_store',
+        'customer_store',
+        'crm_customers'
+      ];
+
+      for (const storeKey of storesToSeed) {
+        const checkRes = await client.query(`SELECT key FROM controlroom_store WHERE key = $1`, [storeKey]);
+        if (checkRes.rows.length === 0) {
+          const filePath = getStoreFilePath(`${storeKey}.json`);
+          if (fs.existsSync(filePath)) {
+            try {
+              const raw = fs.readFileSync(filePath, 'utf8');
+              const parsed = JSON.parse(raw);
+              const hasData = Array.isArray(parsed) ? parsed.length > 0 : (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0);
+              if (hasData) {
+                await client.query(`
+                  INSERT INTO controlroom_store (key, data, updated_at)
+                  VALUES ($1, $2, NOW())
+                  ON CONFLICT (key) DO NOTHING
+                `, [storeKey, JSON.stringify(parsed)]);
+                console.log(`✅ [PostgreSQL] Seeded ${storeKey} into VPS database`);
               }
             } catch (_) {}
           }
         }
-        if (seedPis.size > 0) {
-          console.log(`📦 [PostgreSQL] Seeding ${seedPis.size} Proforma Invoices into relational database...`);
-          const { saveProformaInvoiceToDatabase } = await import('./piPersistence.js');
-          for (const pi of seedPis.values()) {
-            await saveProformaInvoiceToDatabase(pi, pool).catch(e => console.warn(`[PI Seed Warning ${pi.piNo}]:`, e.message));
-          }
-          console.log(`✅ [PostgreSQL] Successfully seeded ${seedPis.size} Proforma Invoices into public.proforma_invoices.`);
-        }
       }
-    } catch (seedErr) {
-      console.warn('[PI Seed Error]:', seedErr.message);
-    }
-
-    // Safety reconciliation: Fix any falsely-converted PIs whose linked BOM has mismatched customer or items (e.g. PI-122 accidental link)
-    try {
-      await client.query(`
-        UPDATE public.bom_orders b
-        SET source_pi_no = null,
-            updated_at = NOW()
-        WHERE (b.source_pi_no ILIKE '%122%')
-          AND NOT EXISTS (
-            SELECT 1 FROM public.proforma_invoices p
-            WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
-              AND (
-                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-              )
-          );
-      `);
-
-      await client.query(`
-        UPDATE public.proforma_invoices p
-        SET status = 'Issued',
-            status_type = 'issued',
-            converted_bom_no = null,
-            converted_bom_code = null,
-            updated_at = NOW()
-        WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
-          AND p.status = 'Converted to BOM'
-          AND NOT EXISTS (
-            SELECT 1 FROM public.bom_orders b
-            WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
-              AND (
-                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
-              )
-          );
-      `);
-      console.log('✅ [PostgreSQL] Verified PI/BOM conversion link integrity.');
-    } catch (auditErr) {
-      console.warn('[PI/BOM Integrity Audit Notice]:', auditErr.message);
-    }
-
-    // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
-    const storesToSeed = [
-      'bom_store',
-      'employees_store',
-      'po_store',
-      'grn_store',
-      'raw_materials_store',
-      'item_store',
-      'workorder_store',
-      'vrm_prod_workorders',
-      'vendor_store',
-      'presets_store',
-      'company_branding_store',
-      'invoice_store',
-      'proforma_invoice_store',
-      'sales_pi_store',
-      'payment_store',
-      'customer_store',
-      'crm_customers'
-    ];
-
-    for (const storeKey of storesToSeed) {
-      const checkRes = await client.query(`SELECT key FROM controlroom_store WHERE key = $1`, [storeKey]);
-      if (checkRes.rows.length === 0) {
-        const filePath = getStoreFilePath(`${storeKey}.json`);
-        if (fs.existsSync(filePath)) {
-          try {
-            const raw = fs.readFileSync(filePath, 'utf8');
-            const parsed = JSON.parse(raw);
-            const hasData = Array.isArray(parsed) ? parsed.length > 0 : (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0);
-            if (hasData) {
-              await client.query(`
-                INSERT INTO controlroom_store (key, data, updated_at)
-                VALUES ($1, $2, NOW())
-                ON CONFLICT (key) DO NOTHING
-              `, [storeKey, JSON.stringify(parsed)]);
-              console.log(`✅ [PostgreSQL] Seeded ${storeKey} into VPS database`);
-            }
-          } catch (_) {}
-        }
-      }
+    } else {
+      console.log('🛡️ [PostgreSQL] Optimization test mode: legacy business data seeding into controlroom_store strictly disabled.');
     }
 
     // 2. Ensure public.leaves has all required columns (used for key-value store & session registry)

@@ -149,29 +149,104 @@ export default function ProductionViewsEngine(props) {
   );
 
   const visibleBomStore = useMemo(() => {
-    const rawList = (bomStore || []).filter(Boolean);
+    const rawList = (bomStore || []).filter(b => {
+      if (!b) return false;
+      const code = String(b.bomCode || b.code || b.id || '').trim();
+      if (/^BOM-(STAGING|USER|POST|DEV-TEST)/i.test(code)) return false;
+      return true;
+    });
     if (!isRestrictedSalesUser) return rawList;
 
-    const curCode = currentEmpId.toUpperCase();
-    const curName = currentEmpName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-    const curEmail = currentLoggedEmail;
+    const curCode = (currentEmpId || '').trim().toUpperCase();
+    const curName = (currentEmpName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+    const curEmail = (currentLoggedEmail || '').trim().toLowerCase();
+
+    // Collect all employee aliases (e.g. SE-004, SE-VRM004, EMP-SE-004, Amit Verma)
+    const userAliases = new Set([curCode, curName, curEmail].filter(Boolean));
+    try {
+      const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const matchedEmp = emps.find(e => {
+        if (!e) return false;
+        const eCode = String(e.employee_code || e.code || '').trim().toUpperCase();
+        const eId = String(e.id || '').trim().toUpperCase();
+        const eEmail = String(e.email || '').trim().toLowerCase();
+        const eName = String(e.employee_name || e.name || '').trim().toLowerCase();
+        return (curCode && (eCode === curCode || eId === curCode)) ||
+               (curEmail && eEmail === curEmail) ||
+               (curName && eName === curName);
+      });
+      if (matchedEmp) {
+        if (matchedEmp.employee_code) userAliases.add(String(matchedEmp.employee_code).trim().toUpperCase());
+        if (matchedEmp.code) userAliases.add(String(matchedEmp.code).trim().toUpperCase());
+        if (matchedEmp.id) userAliases.add(String(matchedEmp.id).trim().toUpperCase());
+        if (matchedEmp.employee_name) userAliases.add(String(matchedEmp.employee_name).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+        if (matchedEmp.name) userAliases.add(String(matchedEmp.name).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+        if (matchedEmp.email) userAliases.add(String(matchedEmp.email).trim().toLowerCase());
+        if (Array.isArray(matchedEmp.aliases)) {
+          matchedEmp.aliases.forEach(a => userAliases.add(String(a).trim().toLowerCase()));
+        }
+      }
+    } catch (_) {}
+
+    const normA = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCurNorm = normA(curName);
+
+    const isCodeMatch = (testCode) => {
+      if (!testCode) return false;
+      const tc = String(testCode).trim().toUpperCase();
+      if (!tc) return false;
+      if (userAliases.has(tc)) return true;
+      if (curCode && (tc === curCode || tc.includes(curCode) || curCode.includes(tc))) return true;
+
+      if (curCode && curCode.includes('SE')) {
+        const curDigits = curCode.replace(/\D/g, '').replace(/^0+/, '');
+        const testDigits = tc.replace(/\D/g, '').replace(/^0+/, '');
+        if (tc.includes('SE') && curDigits && curDigits === testDigits) return true;
+      }
+      return false;
+    };
 
     return rawList.filter(b => {
       if (!b) return false;
-      const spCode = (b.salesPersonCode || b.createdById || '').trim().toUpperCase();
-      if (curCode && spCode && spCode === curCode) return true;
 
-      const spName = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      const creatorName = (b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      if (curName) {
-        if (spName && (spName === curName || spName.includes(curName) || curName.includes(spName))) return true;
-        if (creatorName && (creatorName === curName || creatorName.includes(curName) || curName.includes(creatorName))) return true;
-        const cleanCur = curName.replace(/\s+/g, '');
-        if (spName && spName.replace(/\s+/g, '').includes(cleanCur)) return true;
-        if (creatorName && creatorName.replace(/\s+/g, '').includes(cleanCur)) return true;
+      const bomCodes = [
+        b.salesPersonCode,
+        b.createdById,
+        b.convertedById,
+        b.sales_person_code,
+        b.created_by_id,
+        b.converted_by_id,
+        b._extra_data?.salesPersonCode,
+        b._extra_data?.createdById,
+        b._extra_data?.convertedById
+      ].filter(Boolean);
+
+      if (bomCodes.some(isCodeMatch)) {
+        return true;
       }
 
-      if (curEmail && (b.salesPersonEmail || b.email || '').toLowerCase() === curEmail) {
+      const bomEmails = [b.salesPersonEmail, b.email, b.creatorEmail].filter(Boolean).map(e => String(e).trim().toLowerCase());
+      if (curEmail && bomEmails.some(e => e === curEmail || userAliases.has(e))) {
+        return true;
+      }
+
+      const bomNames = [
+        b.salesPerson,
+        b.createdBy,
+        b.convertedBy,
+        b.sales_person,
+        b.created_by,
+        b.converted_by
+      ].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+
+      if (bomNames.some(n => {
+        if (userAliases.has(n)) return true;
+        if (cleanCurNorm) {
+          const normN = normA(n);
+          if (normN === cleanCurNorm || normN.includes(cleanCurNorm) || cleanCurNorm.includes(normN)) return true;
+        }
+        return false;
+      })) {
         return true;
       }
 
@@ -458,12 +533,19 @@ export default function ProductionViewsEngine(props) {
   const [bomFormErrors, setBomFormErrors] = useState({});
 
   // Permission Check for Cancel BOM (Strictly Dispatch, Accounts, Production, Billing, and Admin)
-  const canCancelBom = [
-    'Dispatch Head', 'Dispatch Executive',
-    'Accounts Head', 'Accounts Executive', 'Accounts Lead', 'Finance & Accounts', 'Accounts',
-    'Production Head', 'Technical Administrator', 'CEO', 'MD', 'Managing Director',
-    'Floor Supervisor', 'Billing', 'Invoice Executive', 'Billing & Invoice Executive'
-  ].includes(userRole);
+  const userRoleNormalized = String(userRole || localStorage.getItem('controlroom_user_role') || '').toLowerCase().trim();
+  const canCancelBom = (
+    userRoleNormalized.includes('dispatch') ||
+    userRoleNormalized.includes('account') ||
+    userRoleNormalized.includes('production') ||
+    userRoleNormalized.includes('billing') ||
+    userRoleNormalized.includes('invoice') ||
+    userRoleNormalized.includes('technical administrator') ||
+    userRoleNormalized.includes('administrator') ||
+    userRoleNormalized.includes('floor supervisor') ||
+    userRoleNormalized.includes('md') ||
+    userRoleNormalized.includes('ceo')
+  );
 
   // Helper to Restore / Unblock Inventory when a BOM is Cancelled
   const restoreInventoryForBom = (bomItems = [], bomCode = '') => {
@@ -500,7 +582,6 @@ export default function ProductionViewsEngine(props) {
 
       if (currentItems.length > 0) {
         localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
-        saveCloudStore('item_store', currentItems);
       }
       window.dispatchEvent(new Event('controlroom_items_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
@@ -701,7 +782,7 @@ export default function ProductionViewsEngine(props) {
     setBomCancelPromptModal(null);
     setCancellationReasonInput('');
 
-    alert(`✅ BOM (${bCode}) has been CANCELLED.\nReason: "${cleanReason}"\nSales person (${salesPerson.replace(/\\s*\\([^)]*\\)/g, '').trim()}) has been notified and all items have been restored to live inventory.`);
+    alert(`BOM (${bCode}) has been CANCELLED.\nReason: "${cleanReason}"\nSales person (${salesPerson.replace(/\\s*\\([^)]*\\)/g, '').trim()}) has been notified and all items have been restored to live inventory.`);
   };
 
   // Validation for Production BOM creation
@@ -724,6 +805,15 @@ export default function ProductionViewsEngine(props) {
         field: 'Delivery Date',
         message: 'Please select expected Delivery Date for Dispatch.',
         targetId: 'prod-field-newBomDeliveryDate'
+      });
+    }
+
+    if (!isDraft && (!newBomDocType || !newBomDocType.trim())) {
+      errors.docType = 'Document Type (DC or Invoice) is mandatory';
+      missingList.push({
+        field: 'Document Type (DC or Invoice) *',
+        message: 'Document Type is mandatory. Please select whether this order is for an Invoice or DC (Delivery Challan).',
+        targetId: 'prod-field-newBomDocType'
       });
     }
 
@@ -776,8 +866,18 @@ export default function ProductionViewsEngine(props) {
       String(newBomPaymentType || '').toLowerCase().includes('partial')
     );
 
-    if (!isDraft && isPaymentProofRequired) {
-      if (!newBomPaymentProofDoc) {
+    const isDcDocType = Boolean(
+      newBomDocType === 'DC' ||
+      newBomDocType === 'Delivery Challan' ||
+      String(newBomDocType || '').toUpperCase().includes('DC') ||
+      String(newBomDocType || '').toUpperCase().includes('CHALLAN')
+    );
+
+    if (!isDraft && !isDcDocType && isPaymentProofRequired) {
+      const hasPaymentProof = Array.isArray(newBomPaymentProofDoc)
+        ? newBomPaymentProofDoc.length > 0
+        : Boolean(newBomPaymentProofDoc);
+      if (!hasPaymentProof) {
         errors.paymentProof = `Payment Attachment / Slip * is strictly mandatory for ${newBomPaymentType}`;
         missingList.push({
           field: 'Payment Attachment / Slip *',
@@ -799,6 +899,7 @@ export default function ProductionViewsEngine(props) {
     setBomFormErrors(errors);
     return { isValid: missingList.length === 0, missingList, errors };
   };
+  const [newBomDocType, setNewBomDocType] = useState('Invoice');
   const [newBomBillingStreet, setNewBomBillingStreet] = useState('');
   const [newBomBillingCity, setNewBomBillingCity] = useState('');
   const [newBomBillingState, setNewBomBillingState] = useState('');
@@ -1212,6 +1313,9 @@ export default function ProductionViewsEngine(props) {
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setPendingDcModal={setPendingDcModal}
                 showCustomAlert={showCustomAlert}
+                newBomDocType={newBomDocType}
+                setNewBomDocType={setNewBomDocType}
+                validateProductionBomForm={validateProductionBomForm}
               />
             );
           }
@@ -1287,18 +1391,27 @@ export default function ProductionViewsEngine(props) {
           // Render Dispatch Head Packing Verification Screen (Full Size Page)
           if (dispatchPackingModal) {
             return (
-              <DispatchPackingModal
-                dispatchPackingModal={dispatchPackingModal}
-                setDispatchPackingModal={setDispatchPackingModal}
-                bomStore={bomStore}
-                setBomStore={setBomStore}
-                setInvoiceList={setInvoiceList}
-                canCancelBom={canCancelBom}
-                handleCancelBomOrder={handleCancelBomOrder}
-                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
-                setVehicleLoadingModal={setVehicleLoadingModal}
-                userRole={userRole}
-              />
+              <>
+                <DispatchPackingModal
+                  dispatchPackingModal={dispatchPackingModal}
+                  setDispatchPackingModal={setDispatchPackingModal}
+                  bomStore={bomStore}
+                  setBomStore={setBomStore}
+                  setInvoiceList={setInvoiceList}
+                  canCancelBom={canCancelBom}
+                  handleCancelBomOrder={handleCancelBomOrder}
+                  setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                  setVehicleLoadingModal={setVehicleLoadingModal}
+                  userRole={userRole}
+                />
+                {bomCancelPromptModal && (
+                  <BomCancelPromptModal
+                    bomCancelPromptModal={bomCancelPromptModal}
+                    onClose={() => setBomCancelPromptModal(null)}
+                    onConfirmCancel={(bom, reason) => executeCancelBom(bom, reason)}
+                  />
+                )}
+              </>
             );
           }
 
@@ -1319,21 +1432,30 @@ export default function ProductionViewsEngine(props) {
           // Render Accounts Team Payment & Document Verification Screen (Full Size Page)
           if (accountsVerificationModal) {
             return (
-              <AccountsVerificationModal
-                accountsVerificationModal={accountsVerificationModal}
-                setAccountsVerificationModal={setAccountsVerificationModal}
-                isAccountsViewOnly={isAccountsViewOnly}
-                setIsAccountsViewOnly={setIsAccountsViewOnly}
-                bomStore={bomStore}
-                setBomStore={setBomStore}
-                userRole={userRole}
-                setPreviewDocModal={setPreviewDocModal}
-                canCancelBom={canCancelBom}
-                handleCancelBomOrder={handleCancelBomOrder}
-                invoiceList={invoiceList}
-                setInvoiceList={setInvoiceList}
-                showCustomAlert={showCustomAlert}
-              />
+              <>
+                <AccountsVerificationModal
+                  accountsVerificationModal={accountsVerificationModal}
+                  setAccountsVerificationModal={setAccountsVerificationModal}
+                  isAccountsViewOnly={isAccountsViewOnly}
+                  setIsAccountsViewOnly={setIsAccountsViewOnly}
+                  bomStore={bomStore}
+                  setBomStore={setBomStore}
+                  userRole={userRole}
+                  setPreviewDocModal={setPreviewDocModal}
+                  canCancelBom={canCancelBom}
+                  handleCancelBomOrder={handleCancelBomOrder}
+                  invoiceList={invoiceList}
+                  setInvoiceList={setInvoiceList}
+                  showCustomAlert={showCustomAlert}
+                />
+                {bomCancelPromptModal && (
+                  <BomCancelPromptModal
+                    bomCancelPromptModal={bomCancelPromptModal}
+                    onClose={() => setBomCancelPromptModal(null)}
+                    onConfirmCancel={(bom, reason) => executeCancelBom(bom, reason)}
+                  />
+                )}
+              </>
             );
           }
 
@@ -1536,6 +1658,9 @@ export default function ProductionViewsEngine(props) {
                 bomConfirmModal={bomConfirmModal}
                 setBomConfirmModal={setBomConfirmModal}
                 showCustomAlert={showCustomAlert}
+                newBomDocType={newBomDocType}
+                setNewBomDocType={setNewBomDocType}
+                validateProductionBomForm={validateProductionBomForm}
               />
             );
           }
@@ -1564,11 +1689,17 @@ export default function ProductionViewsEngine(props) {
             tabs: [
               { id: 'All', label: 'All Entries', count: (bomStore || []).length, bg: '#e2e8f0', fg: '#475569' }
             ],
-            headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status', 'Action'],
-            rows: (bomStore || []).map(b => {
+            headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status'],
+            rows: (bomStore || []).filter(b => {
+              if (activeTab === 'Dispatch Orders') {
+                const s = String(b?.status || '').toLowerCase();
+                return b && Boolean(b.salesConfirmed) && b.status !== 'Draft' && b.status !== 'Pending Confirmation' && !s.includes('pending confirmation') && !s.includes('draft');
+              }
+              return true;
+            }).map(b => {
               let dispStatus = b.status || 'ACTIVE';
               if (activeTab === 'Dispatch Orders') {
-                if (['Sent to Production', 'Confirmed', 'In Production', 'Pending Confirmation', 'Draft', 'Pending', 'Edited / Pending Confirmation'].includes(b.status) || !b.status) {
+                if (['Sent to Production', 'Confirmed', 'In Production'].includes(b.status) || !b.status) {
                   dispStatus = 'Pending Packing';
                 }
               }
@@ -1619,6 +1750,20 @@ export default function ProductionViewsEngine(props) {
             const cleanStatus = rStatus.replace(/[^a-z0-9]/g, '');
             const cleanGroup = rTabGroup.replace(/[^a-z0-9]/g, '');
 
+            const isCancelledRecord = Boolean(
+              r.cancelled ||
+              r.status === 'CANCELLED' ||
+              r.status === 'Cancelled' ||
+              r.status === 'Cancelled & Stock Restored' ||
+              cleanStatus.includes('cancel') ||
+              cleanGroup.includes('cancel')
+            );
+
+            // User mandate: Cancelled BOMs must NEVER appear in "All Orders" or other active queues; strictly appear in "Cancelled" tab alone
+            if (isCancelledRecord) {
+              return matchesSearch && matchesDate && cleanSub.includes('cancel');
+            }
+
             const matchesTab = cleanSub === 'all' ||
               cleanSub === 'allboms' ||
               cleanSub === 'allorders' ||
@@ -1633,7 +1778,6 @@ export default function ProductionViewsEngine(props) {
               (cleanSub.includes('loading') && (cleanStatus.includes('loading') || cleanGroup.includes('loading'))) ||
               (cleanSub.includes('lr') && (cleanStatus.includes('lr') || cleanGroup.includes('lr'))) ||
               ((cleanSub.includes('closed') || cleanSub.includes('dispatched')) && (cleanStatus.includes('closed') || cleanStatus.includes('dispatched') || cleanStatus.includes('completed') || cleanGroup.includes('closed') || r.fullyCompleted)) ||
-              (cleanSub.includes('cancel') && (cleanStatus.includes('cancel') || cleanGroup.includes('cancel') || r.cancelled)) ||
               (cleanSub.includes('draft') && cleanStatus.includes('draft')) ||
               (cleanSub.includes('sent') && (cleanStatus.includes('sent') || cleanStatus.includes('confirm') || cleanStatus.includes('production')));
 

@@ -1,5 +1,6 @@
 import { dbQuery, withTransaction, createLeadNotification } from './leadManagementService.js';
 import { encryptApiKey, decryptApiKey } from './indiaMartCrypto.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 const INDIAMART_CRM_API_BASE = 'https://mapi.indiamart.com/wservce/crm/crmListing/v2/';
 
@@ -109,6 +110,15 @@ async function getDecryptedCredentials() {
  * Test IndiaMART Connection
  */
 export async function testIndiaMartConnection() {
+  if (isOptimizationTestMode()) {
+    return {
+      success: false,
+      testMode: true,
+      error: '[FAIL-CLOSED] External IndiaMART connection tests are blocked in optimization test mode.',
+      message: 'IndiaMART connection test is blocked in optimization test mode.'
+    };
+  }
+
   const creds = await getDecryptedCredentials();
   if (!creds || !creds.apiKey || !creds.mobile) {
     return {
@@ -193,6 +203,17 @@ export async function testIndiaMartConnection() {
  * Idempotently imports new leads into public.leads with source = 'IndiaMART'
  */
 export async function syncIndiaMartLeads(syncType = 'MANUAL') {
+  if (isOptimizationTestMode()) {
+    return {
+      success: false,
+      recordsImported: 0,
+      duplicatesSkipped: 0,
+      testMode: true,
+      error: '[FAIL-CLOSED] External IndiaMART lead synchronization is blocked in optimization test mode.',
+      message: 'IndiaMART sync is blocked in optimization test mode.'
+    };
+  }
+
   const logId = `IMLOG-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
   const creds = await getDecryptedCredentials();
 

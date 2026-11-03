@@ -1,5 +1,6 @@
 import React from "react";
 import { Check, FileText, ChevronLeft, Save, Truck, Users } from "lucide-react";
+import { getNextSequence } from "../../utils/sequenceGenerator";
 
 export default function CustomerFormView({
   showCustomerForm,
@@ -167,15 +168,35 @@ export default function CustomerFormView({
                 } : c));
                 setEditingCustomer(null);
               } else {
+                // Generate sequential customer code (VRM-CS-...)
+                const seq = getNextSequence('CS', customerList);
+                const assignedCode = seq?.code || `VRM-CS-${new Date().getFullYear()}-${String(customerList.length + 1).padStart(2, '0')}`;
+
+                const normStr = (s) => String(s || '').toLowerCase().replace(/\b(private|pvt|limited|ltd|llp|inc|corp)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
+                const cleanGst = String(gstNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+                const targetNorm = normStr(company);
+
+                const loggedInUserName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || '';
+                const loggedInEmpId = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
+                const activeUserRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '';
+                const repName = (loggedInUserName && loggedInUserName !== 'undefined' && loggedInUserName !== 'null') ? loggedInUserName : (activeUserRole.toLowerCase().includes('sales') ? 'Annamalaiyar' : 'Sales Executive');
+
                 const newCustObj = {
-                  code: name,
+                  id: assignedCode,
+                  customerCode: assignedCode,
+                  code: assignedCode,
+                  companyName: company,
                   c2: company,
                   gstNo: gstNo,
-                  c3: 'Primary Contact',
+                  gstNumber: gstNo,
+                  c3: name || 'Primary Contact',
+                  customerName: name,
                   c4: mobile,
+                  phone: mobile,
                   altPhone: custFormAltPhone,
                   altNumber: custFormAltPhone,
                   c5: email,
+                  email: email,
                   address1: b1,
                   address2: b2,
                   billingAddress1: b1,
@@ -196,10 +217,45 @@ export default function CustomerFormView({
                   stBg: '#dcfce7',
                   stFg: '#166534',
                   stBorder: '1px solid #bbf7d0',
-                  tabGroup: 'Active'
+                  tabGroup: 'Active',
+                  assignedSalesperson: repName,
+                  salesPerson: repName,
+                  salesperson: repName,
+                  salesRep: repName,
+                  createdBy: repName,
+                  c8: repName,
+                  createdById: loggedInEmpId || 'SE-1000',
+                  salesPersonCode: loggedInEmpId || 'SE-1000',
+                  createdAt: new Date().toISOString()
                 };
-                setCustomerList(prev => [newCustObj, ...prev]);
-                setNewBomProductName(name);
+
+                // Deduplicate in local state: update existing if company or GST matches, otherwise prepend
+                setCustomerList(prev => {
+                  const filtered = (prev || []).filter(c => {
+                    const cGst = String(c.gstNo || c.gstNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+                    if (cleanGst && cGst && cleanGst.length >= 10 && cleanGst === cGst) return false;
+                    const cNorm = normStr(c.c2 || c.companyName || c.customerName);
+                    if (targetNorm && cNorm && targetNorm === cNorm) return false;
+                    return true;
+                  });
+                  return [newCustObj, ...filtered];
+                });
+
+                // Sync new customer to central API database
+                try {
+                  fetch('/api/customers', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-user-emp-id': loggedInEmpId || 'SE-1000',
+                      'x-user-name': repName,
+                      'x-user-role': activeUserRole || 'Sales Executive'
+                    },
+                    body: JSON.stringify(newCustObj)
+                  }).catch(() => {});
+                } catch (_) {}
+
+                setNewBomProductName(company || name);
                 if (deliveryStr) {
                   setNewBomDeliveryAddress(deliveryStr);
                 } else if (billingStr) {
@@ -213,8 +269,10 @@ export default function CustomerFormView({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                      id: assignedCode,
+                      customerCode: assignedCode,
                       companyName: company,
-                      customerCode: name,
+                      customerName: name,
                       gstNumber: gstNo,
                       address1: b1,
                       address2: b2,

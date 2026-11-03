@@ -1,5 +1,6 @@
 import http from 'http';
 import { URL } from 'url';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
 
 /**
  * Tally Prime Automated Service Bridge (HTTP Port 9000)
@@ -13,6 +14,9 @@ const DEFAULT_TALLY_URL = process.env.TALLY_URL || 'http://127.0.0.1:9000';
  * Helper to make raw HTTP requests to Tally
  */
 export function sendTallyRequest(xmlPayload, tallyUrl = DEFAULT_TALLY_URL, timeoutMs = 8000) {
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] External Tally HTTP requests are blocked in optimization test mode.'));
+  }
   return new Promise((resolve, reject) => {
     let urlObj;
     try {
@@ -64,6 +68,15 @@ export function sendTallyRequest(xmlPayload, tallyUrl = DEFAULT_TALLY_URL, timeo
  * Also retrieves the list of open companies
  */
 export async function checkTallyStatus(tallyUrl = DEFAULT_TALLY_URL) {
+  if (isOptimizationTestMode()) {
+    return {
+      online: false,
+      message: 'Tally integration disabled in optimization test mode',
+      testMode: true,
+      companies: []
+    };
+  }
+
   const checkXml = `
 <ENVELOPE>
   <HEADER>
@@ -119,6 +132,14 @@ export async function checkTallyStatus(tallyUrl = DEFAULT_TALLY_URL) {
  * Request live Profit & Loss data from Tally Prime
  */
 export async function fetchTallyPnl(tallyUrl = DEFAULT_TALLY_URL, companyName = '', fromDate = '', toDate = '') {
+  if (isOptimizationTestMode()) {
+    return {
+      success: false,
+      message: 'Tally integration disabled in optimization test mode',
+      testMode: true
+    };
+  }
+
   const pnlXml = `
 <ENVELOPE>
   <HEADER>
@@ -194,6 +215,18 @@ export async function fetchTallyPnl(tallyUrl = DEFAULT_TALLY_URL, companyName = 
  * Direct voucher synchronization (No XML file download needed)
  */
 export async function pushDirectVoucher(xmlPayload, tallyUrl = DEFAULT_TALLY_URL) {
+  if (isOptimizationTestMode()) {
+    return {
+      success: false,
+      created: 0,
+      altered: 0,
+      errors: 1,
+      testMode: true,
+      error: '[FAIL-CLOSED] External Tally synchronization is blocked in optimization test mode.',
+      message: 'Tally synchronization is blocked in optimization test mode.'
+    };
+  }
+
   try {
     const resp = await sendTallyRequest(xmlPayload, tallyUrl, 10000);
     const body = resp.body || '';

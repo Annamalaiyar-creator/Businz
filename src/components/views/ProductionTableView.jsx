@@ -163,7 +163,17 @@ export default function ProductionTableView({
       </div>
 
       {/* 3. STATUS SUB-TABS ROW */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid #e2e8f0',
+        gap: '20px',
+        padding: '4px 0',
+        alignItems: 'center',
+        flexWrap: 'nowrap',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'thin'
+      }}>
         {pageConfig.tabs.map(tab => (
           <button
             key={tab.id}
@@ -179,7 +189,9 @@ export default function ProductionTableView({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              flexShrink: 0,
+              whiteSpace: 'nowrap'
             }}
           >
             {tab.label}
@@ -198,69 +210,73 @@ export default function ProductionTableView({
       </div>
 
       {/* 4. MAIN DATA TABLE (EXACT MATCH FOR PI & PO DESIGN) */}
-      <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', width: '100%', boxSizing: 'border-box', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }}>
-        <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ color: '#334155', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: '700', height: '48px' }}>
-                <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input id="production-table-select-row" name="selectRow" aria-label="SelectRow"
-                    type="checkbox"
-                    style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    checked={filteredRows.length > 0 && selectedRows.length === filteredRows.length}
-                    onChange={(e) => handleSelectAllGeneric(e, filteredRows, 'code')}
-                   />
-                </th>
-                {pageConfig.headers.map((h, i) => {
-                  const isRight = h.includes('Amount') || h.includes('Cost') || h.includes('Value') || h.includes('Price') || h.includes('Spend');
-                  const isCenter = h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status' || h === 'Action';
-                  let colWidth = 'auto';
-                  let minColWidth = '140px';
-                  if (i === 0) { colWidth = '160px'; minColWidth = '150px'; }
-                  else if (i === 1) { minColWidth = '200px'; }
-                  else if (isCenter) { colWidth = '160px'; minColWidth = '150px'; }
-                  else if (isRight) { colWidth = '150px'; minColWidth = '140px'; }
-                  else if (h.includes('Date') || h.includes('Time')) { colWidth = '145px'; minColWidth = '140px'; }
-                  else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '140px'; }
-
-                  return (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '12px 16px',
-                        textAlign: isRight ? 'right' : (isCenter ? 'center' : 'left'),
-                        width: colWidth,
-                        minWidth: minColWidth,
-                        boxSizing: 'border-box',
-                        whiteSpace: 'nowrap',
-                        color: '#334155',
-                        fontWeight: '700',
-                        fontSize: '12px',
-                        letterSpacing: '0.01em'
-                      }}
-                    >
-                      {h}
+      {(() => {
+        const visibleHeaders = (pageConfig.headers || []).filter(h => h !== 'Action' && h !== 'Actions');
+        return (
+          <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', width: '100%', boxSizing: 'border-box', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }}>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ color: '#334155', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: '700', height: '48px' }}>
+                    <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
+                      <input id="production-table-select-row" name="selectRow" aria-label="SelectRow"
+                        type="checkbox"
+                        style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
+                        checked={filteredRows.length > 0 && selectedRows.length === filteredRows.length}
+                        onChange={(e) => handleSelectAllGeneric(e, filteredRows, 'code')}
+                       />
                     </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
-                const indexOfLastRow = currentPage * rowsPerPage;
-                const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-                const currentRows = filteredRows.slice(indexOfFirstRow, indexOfLastRow);
+                    {visibleHeaders.map((h, i) => {
+                      const isRight = h.includes('Amount') || h.includes('Cost') || h.includes('Value') || h.includes('Price') || h.includes('Spend');
+                      const isCenter = h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status' || h === 'Document';
+                      let colWidth = 'auto';
+                      let minColWidth = '140px';
+                      if (i === 0) { colWidth = '160px'; minColWidth = '150px'; }
+                      else if (i === 1) { minColWidth = '200px'; }
+                      else if (h === 'Document') { colWidth = '125px'; minColWidth = '115px'; }
+                      else if (isCenter) { colWidth = '160px'; minColWidth = '150px'; }
+                      else if (isRight) { colWidth = '150px'; minColWidth = '140px'; }
+                      else if (h.includes('Date') || h.includes('Time')) { colWidth = '145px'; minColWidth = '140px'; }
+                      else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '140px'; }
 
-                if (currentRows.length === 0) {
-                  return (
-                    <tr>
-                      <td colSpan={pageConfig.headers.length + 1} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                        No records found matching your filters.
-                      </td>
-                    </tr>
-                  );
-                }
+                      return (
+                        <th
+                          key={h}
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: isRight ? 'right' : (isCenter ? 'center' : 'left'),
+                            width: colWidth,
+                            minWidth: minColWidth,
+                            boxSizing: 'border-box',
+                            whiteSpace: 'nowrap',
+                            color: '#334155',
+                            fontWeight: '700',
+                            fontSize: '12px',
+                            letterSpacing: '0.01em'
+                          }}
+                        >
+                          {h}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+                    const indexOfLastRow = currentPage * rowsPerPage;
+                    const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+                    const currentRows = filteredRows.slice(indexOfFirstRow, indexOfLastRow);
+
+                    if (currentRows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={visibleHeaders.length + 1} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                            No records found matching your filters.
+                          </td>
+                        </tr>
+                      );
+                    }
 
                 return currentRows.map((row, idx) => {
                   const isChecked = selectedRows.includes(row.code);
@@ -291,15 +307,26 @@ export default function ProductionTableView({
                         onClick={() => onRowClick(row)}
                         style={{ padding: '14px 16px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
-                        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px' }}>
-                          <span>{row.code}</span>
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '800' }}>{row.code}</span>
+                          {(row.createdDateFormatted || row.date || row.createdAt || row.bomDate) && (
+                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                              {row.createdDateFormatted || (() => {
+                                try {
+                                  const raw = row.date || row.createdAt || row.bomDate;
+                                  const d = new Date(raw);
+                                  return !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : String(raw).slice(0, 10);
+                                } catch (_) { return String(row.date || row.createdAt || '').slice(0, 10); }
+                              })()}
+                            </span>
+                          )}
                           {activeTab === 'Dispatch Orders' && (
                             row.dispatchPrinted ? (
                               <span
                                 title={
                                   row.dispatchPrintCount > 1
-                                    ? `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd Print: ${row.secondPrintTimeStr || row.dispatchPrintTimeStr}${row.dispatchPrintCount > 2 ? ` (Total Prints: ${row.dispatchPrintCount})` : ''} by ${row.dispatchPrintedBy || 'Dispatch / Production Team'}`
-                                    : `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} on ${row.dispatchPrintedDateStr || ''} by ${row.dispatchPrintedBy || 'Dispatch / Production Team'}`
+                                    ? `Reprinted at ${row.dispatchPrintTimeStr || ''}${row.dispatchPrintedBy ? ` by ${row.dispatchPrintedBy}` : ''}`
+                                    : `Printed at ${row.dispatchPrintTimeStr || ''} on ${row.dispatchPrintedDateStr || ''}${row.dispatchPrintedBy ? ` by ${row.dispatchPrintedBy}` : ''}`
                                 }
                                 style={{
                                   backgroundColor: row.dispatchPrintCount > 1 ? '#EFF6FF' : '#F0FDF4',
@@ -321,15 +348,9 @@ export default function ProductionTableView({
                                 ) : (
                                   <Printer size={10} strokeWidth={2.5} />
                                 )}
-                                <span>{row.dispatchPrintCount > 1 ? `Reprinted ×${row.dispatchPrintCount}` : 'Printed'}</span>
-                                {row.dispatchPrintCount > 1 ? (
-                                  <span style={{ opacity: 0.9, fontWeight: '600', whiteSpace: 'nowrap' }}>
-                                    (1st: {row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd: {row.secondPrintTimeStr || row.dispatchPrintTimeStr})
-                                  </span>
-                                ) : (
-                                  row.dispatchPrintTimeStr && (
-                                    <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
-                                  )
+                                <span>{row.dispatchPrintCount > 1 ? 'Reprinted' : 'Printed'}</span>
+                                {row.dispatchPrintTimeStr && (
+                                  <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
                                 )}
                               </span>
                             ) : (
@@ -363,8 +384,48 @@ export default function ProductionTableView({
                       >
                         {row.c2 || row.name}
                       </td>
-                      <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
-                        {activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
+                      <td style={{
+                        padding: '14px 16px',
+                        color: '#475569',
+                        fontWeight: '500',
+                        whiteSpace: 'nowrap',
+                        textAlign: activeTab === 'Accounts Verification' ? 'center' : 'left'
+                      }}>
+                        {activeTab === 'Accounts Verification' ? (
+                          (row.docType === 'DC' || row.c3 === 'DC') ? (
+                            <span style={{
+                              backgroundColor: '#FEF3C7',
+                              color: '#92400E',
+                              border: '1px solid #FCD34D',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11.5px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              <Truck size={13} strokeWidth={2.2} />
+                              <span>DC</span>
+                            </span>
+                          ) : (
+                            <span style={{
+                              backgroundColor: '#EFF6FF',
+                              color: '#1D4ED8',
+                              border: '1px solid #BFDBFE',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11.5px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              <FileText size={13} strokeWidth={2.2} />
+                              <span>Invoice</span>
+                            </span>
+                          )
+                        ) : activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
                           <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
                             <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
                             {row.dateTimeObj.time && (
@@ -375,8 +436,33 @@ export default function ProductionTableView({
                           row.c3 || row.date1
                         )}
                       </td>
-                      <td style={{ padding: '14px 16px', color: '#64748B', fontWeight: '500', whiteSpace: 'nowrap' }}>{row.c4 || row.date2}</td>
-                      {row.c5 !== undefined && (
+                      <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                        {activeTab === 'Accounts Verification' ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', lineHeight: '1.2' }}>
+                            <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
+                              {row.paymentType || row.c4 || '100% Paid'}
+                            </span>
+                            {(row.paymentStatusText || row.c7) && (
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '#15803D' : ((row.paymentStatusText || row.c7).includes('Credit') ? '#1D4ED8' : '#B45309'),
+                                backgroundColor: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '#DCFCE7' : ((row.paymentStatusText || row.c7).includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                                border: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '1px solid #BBF7D0' : ((row.paymentStatusText || row.c7).includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                display: 'inline-block',
+                                width: 'fit-content'
+                              }}>
+                                {row.paymentStatusText || row.c7}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          row.c4 || row.date2
+                        )}
+                      </td>
+                      {row.c5 !== undefined && activeTab !== 'Dispatch Orders' && !pageConfig.headers[4]?.includes('Status') && (
                         <td style={{
                           padding: '14px 16px',
                           fontWeight: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value') || pageConfig.headers[4]?.includes('Qty') || pageConfig.headers[4]?.includes('Price')) ? '700' : '600',
@@ -409,6 +495,18 @@ export default function ProductionTableView({
                             }}>
                               {row.c6}
                             </span>
+                          ) : activeTab === 'Accounts Verification' ? (
+                            <span style={{
+                              color: row.c6?.includes('Nil') ? '#94A3B8' : '#B45309',
+                              fontWeight: row.c6?.includes('Nil') ? '500' : '700',
+                              backgroundColor: row.c6?.includes('Nil') ? 'transparent' : '#FFFBEB',
+                              padding: row.c6?.includes('Nil') ? '0' : '3px 8px',
+                              borderRadius: '6px',
+                              border: row.c6?.includes('Nil') ? 'none' : '1px solid #FDE68A',
+                              display: 'inline-block'
+                            }}>
+                              {row.c6}
+                            </span>
                           ) : (
                             row.c6
                           )}
@@ -419,10 +517,26 @@ export default function ProductionTableView({
                           padding: '14px 16px',
                           fontWeight: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '700' : '500',
                           color: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '#0F172A' : '#475569',
-                          textAlign: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? 'right' : 'left',
+                          textAlign: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? 'right' : (activeTab === 'Accounts Verification' ? 'center' : 'left'),
                           whiteSpace: 'nowrap'
                         }}>
-                          {row.c7}
+                          {activeTab === 'Accounts Verification' ? (
+                            <span style={{
+                              backgroundColor: row.c7?.includes('Received') ? '#DCFCE7' : (row.c7?.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                              color: row.c7?.includes('Received') ? '#166534' : (row.c7?.includes('Credit') ? '#1D4ED8' : '#B45309'),
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              {row.c7}
+                            </span>
+                          ) : (
+                            row.c7
+                          )}
                         </td>
                       )}
                       {(pageConfig.headers.includes('Status') || pageConfig.headers.includes('Dispatch Packing Status') || pageConfig.headers.includes('Fulfillment Status')) && (
@@ -554,6 +668,8 @@ export default function ProductionTableView({
           );
         })()}
       </div>
+    );
+  })()}
 
       {/* 5. FLOATING BOTTOM ACTION BAR (RULE 6: FIXED BOTTOM CENTER, SINGLE LINE, VISIBLE BUTTONS) */}
       {selectedRows.length > 0 && (
@@ -595,6 +711,19 @@ export default function ProductionTableView({
                 (typeof targetRow.status === 'string' && targetRow.status.toLowerCase().includes('cancel'))
               )
             );
+
+            if (activeTab === 'Accounts Verification') {
+              const targetCode = selectedRows[0];
+              const targetRow = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode);
+              const isAccDone = targetRow && Boolean(
+                targetRow.isAccountsDone ||
+                targetRow.accountsVerification?.verified ||
+                targetRow.tabGroup === 'Verified' ||
+                targetRow.status === 'ACCOUNTS VERIFIED' ||
+                String(targetRow.status || '').toLowerCase().includes('verified')
+              );
+              if (isAccDone) return null;
+            }
 
             return (
               <button
@@ -705,7 +834,7 @@ export default function ProductionTableView({
                   })()
                 ) : activeTab === 'Accounts Verification' ? (
                   <>
-                    <CheckCircle size={14} style={{ color: '#0E7490' }} /> Verify Accounts & Pass to Invoice
+                    <CheckCircle size={14} style={{ color: '#0E7490' }} /> Verify Accounts
                   </>
                 ) : activeTab === 'Invoice Management' ? (
                   <>
@@ -817,90 +946,110 @@ export default function ProductionTableView({
             </button>
           )}
 
-          {/* Export and Print */}
-          <button
-            onClick={() => {
-              if (activeTab === 'Invoice Management') {
-                const targetCode = selectedRows[0];
-                const rec = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode || r.invNo === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id || b.invNo) === targetCode);
-                if (onPrintTaxInvoice) {
-                  onPrintTaxInvoice(rec || { invNo: targetCode });
+          {/* Export and Print - Excluded for Accounts Verification & Document Control */}
+          {activeTab !== 'Accounts Verification' && pageConfig?.title !== 'Accounts Verification & Document Control' && !String(pageConfig?.title || '').toLowerCase().includes('accounts verification') && (
+            <button
+              onClick={() => {
+                if (activeTab === 'Invoice Management') {
+                  const targetCode = selectedRows[0];
+                  const rec = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode || r.invNo === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id || b.invNo) === targetCode);
+                  if (onPrintTaxInvoice) {
+                    onPrintTaxInvoice(rec || { invNo: targetCode });
+                  } else {
+                    window.print();
+                  }
                 } else {
-                  window.print();
-                }
-              } else {
-                const targetCode = selectedRows[0];
-                const fullBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.piNo === targetCode));
-                const rowRec = (filteredRows || []).find(r => r && (r.code === targetCode || r.id === targetCode || r.bomCode === targetCode));
+                  const targetCode = selectedRows[0];
+                  const fullBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.piNo === targetCode));
+                  const rowRec = (filteredRows || []).find(r => r && (r.code === targetCode || r.id === targetCode || r.bomCode === targetCode));
 
-                const resolvedCustomerName = (() => {
-                  const list = [rowRec?.customerName, fullBom?.customerName, rowRec?.companyName, fullBom?.companyName, rowRec?.c2];
-                  return list.find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(s.trim())) || rowRec?.customerName || fullBom?.customerName || 'Valued Customer';
-                })();
+                  const resolvedCustomerName = (() => {
+                    const list = [rowRec?.customerName, fullBom?.customerName, rowRec?.companyName, fullBom?.companyName, rowRec?.c2];
+                    return list.find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(s.trim())) || rowRec?.customerName || fullBom?.customerName || 'Valued Customer';
+                  })();
 
-                const resolvedSalesPerson = (() => {
-                  const isDisp = (s) => {
-                    const l = String(s || '').toLowerCase();
-                    return l === 'anu' || l.includes('dispatch') || l.includes('fulfillment');
+                  const resolvedSalesPerson = (() => {
+                    const isDisp = (s) => {
+                      const l = String(s || '').toLowerCase();
+                      return l === 'anu' || l.includes('dispatch') || l.includes('fulfillment');
+                    };
+                    const list = [rowRec?.salesPerson, fullBom?.salesPerson, rowRec?.c4, rowRec?.createdBy, fullBom?.createdBy];
+                    return list.find(s => s && typeof s === 'string' && s.trim() && !['Sales Department', 'Sales', '—', '-'].includes(s.trim()) && !isDisp(s)) || rowRec?.salesPerson || fullBom?.salesPerson || 'Annamalaiyar';
+                  })();
+
+                  const resolvedTransporterName = (() => {
+                    const list = [
+                      rowRec?.transporterName,
+                      fullBom?.transporterName,
+                      rowRec?.transporter,
+                      fullBom?.transporter,
+                      fullBom?.transporter_name,
+                      fullBom?.vehicleLoading?.transporter,
+                      fullBom?.vehicleLoading?.transporterName,
+                      fullBom?.vehicleLoadingData?.transporter,
+                      fullBom?.transportMode,
+                      rowRec?.transportMode
+                    ];
+                    return list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase())) || '';
+                  })();
+
+                  const targetRow = {
+                    ...(fullBom || {}),
+                    ...(rowRec || {}),
+                    customerName: resolvedCustomerName,
+                    companyName: resolvedCustomerName,
+                    salesPerson: resolvedSalesPerson,
+                    transporterName: resolvedTransporterName || fullBom?.transporterName || rowRec?.transporterName || '',
+                    transporter: resolvedTransporterName || fullBom?.transporter || rowRec?.transporter || '',
+                    items: (Array.isArray(fullBom?.items) && fullBom.items.length > 0)
+                      ? fullBom.items
+                      : (Array.isArray(rowRec?.items) && rowRec.items.length > 0)
+                        ? rowRec.items
+                        : (Array.isArray(fullBom?.lineItems) && fullBom.lineItems.length > 0)
+                          ? fullBom.lineItems
+                          : (Array.isArray(fullBom?.materials) && fullBom.materials.length > 0)
+                            ? fullBom.materials
+                            : (Array.isArray(fullBom?.dispatchPacking) && fullBom.dispatchPacking.length > 0)
+                              ? fullBom.dispatchPacking
+                              : (rowRec?.dispatchPacking || []),
+                    presetGroups: (Array.isArray(fullBom?.presetGroups) && fullBom.presetGroups.length > 0)
+                      ? fullBom.presetGroups
+                      : (rowRec?.presetGroups || []),
+                    presetName: fullBom?.presetName || rowRec?.presetName || '',
+                    presetSetCount: fullBom?.presetSetCount || rowRec?.presetSetCount || null
                   };
-                  const list = [rowRec?.salesPerson, fullBom?.salesPerson, rowRec?.c4, rowRec?.createdBy, fullBom?.createdBy];
-                  return list.find(s => s && typeof s === 'string' && s.trim() && !['Sales Department', 'Sales', '—', '-'].includes(s.trim()) && !isDisp(s)) || rowRec?.salesPerson || fullBom?.salesPerson || 'Annamalaiyar';
-                })();
 
-                const targetRow = {
-                  ...(fullBom || {}),
-                  ...(rowRec || {}),
-                  customerName: resolvedCustomerName,
-                  companyName: resolvedCustomerName,
-                  salesPerson: resolvedSalesPerson,
-                  items: (Array.isArray(fullBom?.items) && fullBom.items.length > 0)
-                    ? fullBom.items
-                    : (Array.isArray(rowRec?.items) && rowRec.items.length > 0)
-                      ? rowRec.items
-                      : (Array.isArray(fullBom?.lineItems) && fullBom.lineItems.length > 0)
-                        ? fullBom.lineItems
-                        : (Array.isArray(fullBom?.materials) && fullBom.materials.length > 0)
-                          ? fullBom.materials
-                          : (Array.isArray(fullBom?.dispatchPacking) && fullBom.dispatchPacking.length > 0)
-                            ? fullBom.dispatchPacking
-                            : (rowRec?.dispatchPacking || []),
-                  presetGroups: (Array.isArray(fullBom?.presetGroups) && fullBom.presetGroups.length > 0)
-                    ? fullBom.presetGroups
-                    : (rowRec?.presetGroups || []),
-                  presetName: fullBom?.presetName || rowRec?.presetName || '',
-                  presetSetCount: fullBom?.presetSetCount || rowRec?.presetSetCount || null
-                };
-
-                setSelectedRows([]);
-                if (onPrintBom) {
-                  onPrintBom(targetRow);
-                } else {
-                  window.print();
+                  setSelectedRows([]);
+                  if (onPrintBom) {
+                    onPrintBom(targetRow);
+                  } else {
+                    window.print();
+                  }
                 }
-              }
-            }}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <Printer size={14} style={{ color: '#059669' }} /> Export &amp; Print
-          </button>
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#1E293B',
+                borderRadius: '10px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+            >
+              <Printer size={14} style={{ color: '#059669' }} /> Export &amp; Print
+            </button>
+          )}
 
           {/* Cancel BOM Order Button - Excluded for Delivery Challans */}
           {canCancelBom && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (() => {
@@ -958,23 +1107,27 @@ export default function ProductionTableView({
                   flexShrink: 0,
                   boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
                 }}
-                title="Cancel BOM and restore blocked stock back into inventory"
+                title={activeTab === 'Dispatch Orders' ? "Cancel packing verification and restore blocked stock" : "Cancel BOM and restore blocked stock back into inventory"}
               >
-                <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
+                <XCircle size={14} style={{ color: '#DC2626' }} /> {activeTab === 'Dispatch Orders' ? 'Cancel Verification' : 'Cancel BOM'}
               </button>
             );
           })()}
 
-          {/* Delete Button - Excluded for BOM Orders, Dispatch Orders, Invoice Ledger, and Delivery Challans per user request */}
+          {/* Delete Button - Excluded for Accounts Verification, BOM Orders, Dispatch Orders, Invoice Ledger, and Delivery Challans per user request */}
           {!isSuperUser &&
+            activeTab !== 'Accounts Verification' &&
             activeTab !== 'Dispatch Orders' &&
             activeTab !== 'Invoice Management' &&
             activeTab !== 'Delivery Challans' &&
             activeTab !== 'BOM Orders & Client Specifications' &&
             activeTab !== 'Sales BOM' &&
+            pageConfig?.title !== 'Accounts Verification & Document Control' &&
             pageConfig?.title !== 'BOM Orders & Client Specifications' &&
             pageConfig?.title !== 'Invoice Ledger & 3-Way Matching' &&
             pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' &&
+            !String(activeTab || '').toLowerCase().includes('accounts') &&
+            !String(pageConfig?.title || '').toLowerCase().includes('accounts') &&
             !String(pageConfig?.title || '').toLowerCase().includes('bom') &&
             !String(pageConfig?.title || '').toLowerCase().includes('invoice') &&
             !String(pageConfig?.title || '').toLowerCase().includes('3-way matching') &&

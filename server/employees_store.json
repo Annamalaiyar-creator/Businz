@@ -2,78 +2,28 @@
   {
     "role": "Technical Administrator",
     "email": "arannamalaiyar@gmail.com",
-    "prefix": "TA",
+    "prefix": "SE",
     "status": "Active",
     "password": "Efx@1234",
-    "employee_code": "TA-VRM001",
+    "employee_code": "TA-001",
     "employee_name": "Ar.Annamalaiyar",
-    "dashboard_type": "Technical Administrator"
-  },
-  {
-    "role": "Sales Head",
-    "email": "sales@vrm.com",
-    "prefix": "SH",
-    "status": "Active",
-    "password": "12345",
-    "created_at": "2026-10-12T10:00:00.000Z",
-    "last_login": "2026-10-12T10:00:00.000Z",
-    "employee_code": "SH-VRM001",
-    "employee_name": "Vijay",
-    "dashboard_type": "Sales Head"
-  },
-  {
-    "role": "Sales Head",
-    "email": "vijay@vrmstructures.in",
-    "prefix": "SH",
-    "status": "Active",
-    "password": "12345",
-    "created_at": "2026-10-12T10:00:00.000Z",
-    "last_login": "2026-10-12T10:00:00.000Z",
-    "employee_code": "SH-1000",
-    "employee_name": "Vijay",
-    "dashboard_type": "Sales Head"
-  },
-  {
-    "role": "Sales Executive",
-    "email": "sales@gmail.com",
-    "prefix": "SE",
-    "status": "Pending Approval",
-    "password": "12345",
-    "created_at": "2026-10-07T18:18:04.346Z",
-    "last_login": "2026-10-07T18:18:04.346Z",
-    "employee_code": "SE-1000",
-    "employee_name": "sales",
-    "dashboard_type": "Sales Executive"
-  },
-  {
-    "role": "Dispatch Head",
-    "email": "dispatchhead@gmail.com",
-    "prefix": "DH",
-    "status": "Pending Approval",
-    "password": "12345",
-    "created_at": "2026-10-07T18:19:43.450Z",
-    "last_login": "2026-10-07T18:19:43.450Z",
-    "employee_code": "DH-1000",
-    "employee_name": "Dispatch",
-    "dashboard_type": "Dispatch Head"
-  },
-  {
-    "role": "Accounts Head",
-    "email": "ah@gmail.com",
-    "prefix": "AH",
-    "status": "Pending Approval",
-    "password": "12345",
-    "created_at": "2026-10-09T10:38:17.677Z",
-    "last_login": "2026-10-09T10:38:17.677Z",
-    "employee_code": "AH-1000",
-    "employee_name": "Accounts",
-    "dashboard_type": "Accounts Head"
+    "dashboard_type": "Technical Administrator",
+    "code": "TA-001",
+    "name": "Ar.Annamalaiyar",
+    "department": "IT & Administration",
+    "alias_codes": [
+      "TA-VRM001",
+      "TA-VRM002",
+      "SE-1000"
+    ],
+    "created_at": "2026-10-30T05:31:38.214Z",
+    "last_login": "2026-10-30T05:31:38.214Z"
   },
   {
     "role": "Billing",
     "email": "bi@gmail.com",
     "prefix": "BI",
-    "status": "Pending Approval",
+    "status": "Active",
     "password": "12345",
     "created_at": "2026-10-09T10:42:27.105Z",
     "last_login": "2026-10-09T10:42:27.105Z",
@@ -82,39 +32,246 @@
     "dashboard_type": "Billing"
   },
   {
-    "role": "Procurement Head",
-    "email": "pr@gmail.com",
-    "prefix": "PR",
-    "status": "Pending Approval",
-    "password": "12345",
-    "created_at": "2026-10-10T05:07:06.216Z",
-    "last_login": "2026-10-10T05:07:06.216Z",
-    "employee_code": "PR-1000",
-    "employee_name": "Pr",
-    "dashboard_type": "Procurement Head"
-  },
-  {
     "role": "CEO",
-    "email": "ceo@gmail.com",
+    "email": "admin@businz.com",
     "prefix": "CEO",
     "status": "Active",
-    "password": "12345",
-    "created_at": "2026-10-10T05:15:49.364Z",
-    "last_login": "2026-10-10T05:15:49.364Z",
-    "employee_code": "CEO-1000",
-    "employee_name": "CEO",
+    "password": "password",
+    "created_at": "2026-10-23T15:55:19.761Z",
+    "last_login": "2026-10-23T15:55:19.761Z",
+    "employee_code": "CEO-001",
+    "employee_name": "Admin User",
     "dashboard_type": "CEO"
   },
   {
-    "role": "Tech Support",
-    "email": "ts@gmail.com",
-    "prefix": "TS",
-    "status": "Pending Approval",
+    "role": "Accounts",
+    "email": "keerthana@vrmstructures.in",
+    "prefix": "AH",
+    "status": "Active",
     "password": "12345",
-    "created_at": "2026-10-10T07:22:31.209Z",
-    "last_login": "2026-10-10T07:22:31.209Z",
-    "employee_code": "TS-1000",
-    "employee_name": "Tech Support",
-    "dashboard_type": "Tech Support"
+    "created_at": "2026-10-30T10:48:20.543Z",
+    "last_login": "2026-10-30T10:48:20.543Z",
+    "employee_code": "AC-001",
+    "employee_name": "Keerthana",
+    "dashboard_type": "Accounts",
+    "code": "AC-001",
+    "name": "Keerthana",
+    "department": "Finance & Accounts",
+    "alias_codes": [
+      "AH-001",
+      "AH-1000",
+      "AE-001",
+      "AH-VRM001"
+    ]
+  },
+  {
+    "employee_code": "CEO-002",
+    "code": "CEO-002",
+    "employee_name": "Kumar",
+    "name": "Kumar",
+    "email": "ceo@gmail.com",
+    "phone": "",
+    "mobile": "",
+    "role": "CEO",
+    "password": "12345",
+    "status": "Active",
+    "department": "Executive Leadership",
+    "prefix": "CEO",
+    "created_at": "2026-10-31T04:00:47.977Z",
+    "last_login": "2026-10-31T04:00:47.977Z"
+  },
+  {
+    "employee_code": "SE-001",
+    "code": "SE-001",
+    "employee_name": "Manojraj Selvaraj",
+    "name": "Manojraj Selvaraj",
+    "email": "sales.s1@vrmstructures.in",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SH-001",
+      "SH-VRM001"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-002",
+    "code": "SE-002",
+    "employee_name": "Sanjai kumar",
+    "name": "Sanjai kumar",
+    "email": "sanjaikumar3a@gmail.com",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SE-001",
+      "SE-VRM002"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-003",
+    "code": "SE-003",
+    "employee_name": "Vasanth Kumar S",
+    "name": "Vasanth Kumar S",
+    "email": "vasanthkumarsaravanan.work@gmail.com",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SE-004",
+      "SE-VRM006"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-004",
+    "code": "SE-004",
+    "employee_name": "Mohith JV",
+    "name": "Mohith JV",
+    "email": "sales.s4@vrmstructures.in",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SE-015",
+      "SE-VRM002",
+      "SE-VRM006",
+      "SE-003"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-005",
+    "code": "SE-005",
+    "employee_name": "Shanthi",
+    "name": "Shanthi",
+    "email": "sales.s3@vrmstructures.in",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SE-002",
+      "SE-VRM003"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-006",
+    "code": "SE-006",
+    "employee_name": "Dhana Sekar",
+    "name": "Dhana Sekar",
+    "email": "dhanasekar@gmail.com",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SE-020"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-007",
+    "code": "SE-007",
+    "employee_name": "PRASHANTH",
+    "name": "PRASHANTH",
+    "email": "sales.s2@vrmstructures.in",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-008",
+    "code": "SE-008",
+    "employee_name": "Pavithra",
+    "name": "Pavithra",
+    "email": "projectsales@jashsun.com",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SE-010"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "SE-009",
+    "code": "SE-009",
+    "employee_name": "KALAISELVI T",
+    "name": "KALAISELVI T",
+    "email": "mms@vrmstructures.in",
+    "role": "Sales",
+    "dashboard_type": "Sales",
+    "status": "Active",
+    "alias_codes": [
+      "SE-VRM090",
+      "SE-VRM005"
+    ],
+    "department": "Sales & Marketing"
+  },
+  {
+    "employee_code": "TS-001",
+    "code": "TS-001",
+    "employee_name": "KalpanaRam",
+    "name": "KalpanaRam",
+    "email": "kalpanaram17@vrmstructures.in",
+    "role": "Tech Support",
+    "dashboard_type": "Tech Support",
+    "department": "Technical Support",
+    "status": "Active",
+    "alias_codes": [
+      "TS-VRM002",
+      "TS-VRM001",
+      "DH-VRM001"
+    ]
+  },
+  {
+    "employee_code": "TS-002",
+    "code": "TS-002",
+    "employee_name": "Vasanth",
+    "name": "Vasanth",
+    "email": "vasanth.support@vrmstructures.in",
+    "role": "Tech Support",
+    "dashboard_type": "Tech Support",
+    "department": "Technical Support",
+    "status": "Active",
+    "alias_codes": [
+      "TS-VRM003"
+    ]
+  },
+  {
+    "employee_code": "AC-002",
+    "code": "AC-002",
+    "employee_name": "Vaishnavi",
+    "name": "Vaishnavi",
+    "email": "vaishnavi@vrmstructures.in",
+    "role": "Accounts",
+    "dashboard_type": "Accounts",
+    "department": "Finance & Accounts",
+    "status": "Active",
+    "alias_codes": [
+      "AH-002",
+      "AE-002",
+      "AH-VRM002"
+    ]
+  },
+  {
+    "employee_code": "AC-003",
+    "code": "AC-003",
+    "employee_name": "AJITH R",
+    "name": "AJITH R",
+    "email": "ajith@vrmstructures.in",
+    "role": "Accounts",
+    "dashboard_type": "Accounts",
+    "department": "Finance & Accounts",
+    "status": "Active",
+    "alias_codes": [
+      "AH-003",
+      "AE-003",
+      "AH-VRM003"
+    ]
   }
 ]

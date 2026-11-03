@@ -8,7 +8,8 @@ import {
   Search, HelpCircle, MessageSquare, Rocket, Sparkles, ChevronUp,
   CheckCircle, ClipboardList, Truck, Warehouse, ShieldCheck, Activity, FileCheck,
   Calendar, Wrench, Calculator, RefreshCw, Scale, Building2, BarChart3,
-  Zap, CreditCard, Layers, Briefcase, Palette, Factory, Mail, Share2, Globe
+  Zap, CreditCard, Layers, Briefcase, Palette, Factory, Mail, Share2, Globe,
+  Lock, HardDrive, Clock
 } from 'lucide-react';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { fetchCloudStore } from '../utils/supabaseDataSync';
@@ -24,6 +25,56 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const [realAccountsGrnCount, setRealAccountsGrnCount] = useState(0);
   const [realPendingDispatchCount, setRealPendingDispatchCount] = useState(0);
   const [realAccountsVerificationCount, setRealAccountsVerificationCount] = useState(0);
+
+  // Selected Sidebar Item Tracker (Guarantees only ONE unique item is selected at any time)
+  const [activeItemLabel, setActiveItemLabel] = useState(() => {
+    return localStorage.getItem('controlroom_sidebar_active_item') || 'Company Overview';
+  });
+
+  // CEO Accordion Navigation State
+  const [openCategories, setOpenCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_ceo_sidebar_open_cats');
+      return saved ? JSON.parse(saved) : ['1. Executive Dashboard'];
+    } catch {
+      return ['1. Executive Dashboard'];
+    }
+  });
+
+  const toggleCategory = (catName) => {
+    setOpenCategories(prev => {
+      const isAlready = prev.includes(catName);
+      const next = isAlready ? prev.filter(c => c !== catName) : [...prev, catName];
+      try { localStorage.setItem('controlroom_ceo_sidebar_open_cats', JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  };
+
+  // Synchronize activeItemLabel with activeTab when changed externally
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('controlroom_sidebar_active_item');
+      if (stored) {
+        const currentSections = getSectionsForRole(userRole);
+        const allItems = currentSections.flatMap(s => s.items || []);
+        const currentItem = allItems.find(it => it.label === stored);
+        if (currentItem) {
+          const itemTarget = currentItem.targetTab || currentItem.label;
+          if (normalizeTab(itemTarget) === normalizeTab(activeTab)) {
+            setActiveItemLabel(stored);
+            return;
+          }
+        }
+      }
+      const currentSections = getSectionsForRole(userRole);
+      const allItems = currentSections.flatMap(s => s.items || []);
+      const matched = allItems.find(it => normalizeTab(it.targetTab || it.label) === normalizeTab(activeTab));
+      if (matched) {
+        setActiveItemLabel(matched.label);
+        localStorage.setItem('controlroom_sidebar_active_item', matched.label);
+      }
+    } catch (_) {}
+  }, [activeTab, userRole]);
 
   useEffect(() => {
     const unsubscribe = prodModuleEngine.subscribe(() => {
@@ -54,7 +105,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             const st = String(b.status || '').toLowerCase();
             const isCancelled = st.includes('cancel') || Boolean(b.cancelled);
             const isClosed = st.includes('closed') || st.includes('completed') || st.includes('delivered');
-            return !isCancelled && !isClosed;
+            const isConfirmedForDispatch = Boolean(b.salesConfirmed) && b.status !== 'Pending Confirmation' && !st.includes('pending confirmation') && b.status !== 'Draft' && !st.includes('draft');
+            return isConfirmedForDispatch && !isCancelled && !isClosed;
           });
           setRealPendingDispatchCount(pendingDispatch.length);
 
@@ -139,8 +191,13 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         { label: 'Goods Receipt Note', icon: FileCheck },
         { label: 'Vendor Management', icon: Building2 },
         { label: 'Vendor Performance', icon: Award },
-        { label: 'Material Reorder', icon: RefreshCw, badge: '3' },
         { label: 'Price Comparison', icon: Scale }
+      ]
+    },
+    {
+      category: 'REPORTS & ANALYTICS',
+      items: [
+        { label: 'Procurement Reports', targetTab: 'Procurement Reports', icon: FileBarChart }
       ]
     }
   ];
@@ -181,9 +238,9 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const getSectionsForRole = (role) => {
     let sections = [];
 
-    if (role === 'Production Head' || role === 'Production Admin') {
+    if (role === 'Production' || role === 'Production Head' || role === 'Production Admin') {
       sections = [...productionSections];
-    } else if (role === 'Dispatch Head' || role === 'Dispatch' || role === 'Dispatch Executive' || String(role || '').toLowerCase().includes('dispatch')) {
+    } else if (role === 'Dispatch' || role === 'Dispatch Head' || role === 'Dispatch Executive' || String(role || '').toLowerCase().includes('dispatch')) {
       sections = [
         {
           category: 'MAIN MENU',
@@ -220,7 +277,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         }
       ];
-    } else if (role === 'Floor Employee') {
+    } else if (role === 'Floor Employee' || role === 'Floor Executive') {
       sections = [
         {
           category: 'MAIN MENU',
@@ -231,7 +288,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         }
       ];
-    } else if (role === 'Accounts Head' || role === 'Accounts Executive' || role === 'Finance & Accounts') {
+    } else if (role === 'Accounts' || role === 'Accounts Head' || role === 'Accounts Executive' || role === 'Finance & Accounts') {
       sections = [
         {
           category: 'MAIN MENU',
@@ -241,11 +298,12 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Goods Receipt Note (GRN)', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined },
             { label: 'Store Inventory', targetTab: 'Inventory Stores', icon: Warehouse },
             { label: 'Raw Material Inventory', targetTab: 'Raw Material Directory', icon: Layers },
-            { label: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined }
+            { label: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined },
+            { label: 'Invoice Management', targetTab: 'Invoice Management', icon: Receipt }
           ]
         }
       ];
-    } else if (role === 'Sales Head' || role === 'Sales Executive') {
+    } else if (role === 'Sales' || role === 'Sales Head' || role === 'Sales Executive') {
       sections = [
         {
           category: 'SALES & CRM',
@@ -253,8 +311,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'Leads', icon: Users, badge: 'New' },
             { label: 'Customers', icon: Building2 },
-            { label: 'Opportunities', icon: Briefcase },
-            { label: 'Follow-ups', icon: Calendar },
+            { label: 'New Monthly Customers', targetTab: 'Monthly Customers by Rep', icon: UserCheck },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
             { label: 'Quotations', icon: FileText }
           ]
@@ -268,6 +325,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Raw Material Directory', icon: Layers }
           ]
         },
+
         {
           category: 'ANALYTICS',
           items: [
@@ -275,7 +333,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         }
       ];
-    } else if (role === 'Design Engineer' || role === 'Design Executive') {
+    } else if (role === 'Design' || role === 'Design Engineer' || role === 'Design Executive') {
       sections = [
         {
           category: 'MAIN MENU',
@@ -300,12 +358,13 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SUPPORT CHANNELS & CRM',
           items: [
             { label: 'Leads Directory', targetTab: 'Leads', icon: Users },
-            { label: 'IndiaMART Integration', targetTab: 'IndiaMART', icon: Globe },
+            { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
             { label: 'Mail Inbox', icon: Mail },
             { label: 'Facebook & Meta', icon: Share2 }
           ]
-        }
+        },
+
       ];
     } else if (role === 'Invoice Executive' || role === 'Billing') {
       sections = [
@@ -313,7 +372,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'MAIN MENU',
           items: [
             { label: 'Billing Dashboard', icon: LayoutDashboard },
-            { label: 'Billing', targetTab: 'Invoice Management', icon: Receipt },
+            { label: 'Invoice Management', targetTab: 'Invoice Management', icon: Receipt },
             { label: 'Delivery Challans', icon: FileCheck }
           ]
         }
@@ -332,23 +391,106 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     } else if (role === 'CEO' || role === 'MD' || role === 'Managing Director') {
       sections = [
         {
-          category: 'MAIN MENU',
+          category: '1. Executive Dashboard',
+          id: 'executive_dashboard',
+          dashboardSubTab: 'overview',
           items: [
-            { label: 'Executive Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
-            { 
-              label: 'Purchase Order Approvals', 
-              targetTab: 'Purchase Orders', 
-              icon: ShoppingCart, 
-              badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined 
-            },
-            { label: 'Leads Directory', targetTab: 'Leads', icon: Users }
+            { label: 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard }
           ]
         },
         {
-          category: 'INTEGRATIONS & CONFIG',
+          category: '2. CRM & Leads',
+          id: 'crm_leads',
+          dashboardSubTab: 'crm-dashboard',
           items: [
-            { label: 'IndiaMART Integration', targetTab: 'IndiaMART', icon: Globe },
-            { label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck }
+            { label: 'CRM & Leads Dashboard', targetTab: 'Dashboard', subTabTarget: 'crm-dashboard', icon: LayoutDashboard },
+            { label: 'All Leads', targetTab: 'Leads', icon: Users },
+            { label: 'Customer Management', targetTab: 'Customers', icon: Building2 }
+          ]
+        },
+        {
+          category: '3. Sales Management',
+          id: 'sales_management',
+          dashboardSubTab: 'sales',
+          items: [
+            { label: 'Sales Dashboard', targetTab: 'Dashboard', subTabTarget: 'sales', icon: LayoutDashboard },
+            { label: 'Quotations', targetTab: 'Quotations', icon: FileText },
+            { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
+            { label: 'New Monthly Customers', targetTab: 'Monthly Customers by Rep', icon: UserCheck }
+          ]
+        },
+        {
+          category: '4. BOM & Production',
+          id: 'bom_production',
+          dashboardSubTab: 'production',
+          items: [
+            { label: 'BOM & Production Dashboard', targetTab: 'Dashboard', subTabTarget: 'production', icon: LayoutDashboard },
+            { label: 'All BOMs', targetTab: 'BOM Orders', icon: GitBranch, badge: realBOMCount > 0 ? String(realBOMCount) : undefined }
+          ]
+        },
+        {
+          category: '5. Dispatch & Logistics',
+          id: 'dispatch_logistics',
+          dashboardSubTab: 'dispatch',
+          items: [
+            { label: 'Dispatch Dashboard', targetTab: 'Dashboard', subTabTarget: 'dispatch', icon: LayoutDashboard },
+            { label: 'Delivery Challans', targetTab: 'Delivery Challans', icon: FileText }
+          ]
+        },
+        {
+          category: '6. Inventory',
+          id: 'inventory',
+          dashboardSubTab: 'inventory-dashboard',
+          items: [
+            { label: 'Inventory Dashboard', targetTab: 'Dashboard', subTabTarget: 'inventory-dashboard', icon: LayoutDashboard },
+            { label: 'Items Directory', targetTab: 'Items Directory', icon: Boxes },
+            { label: 'Stock Status', targetTab: 'Stock Status', icon: Layers }
+          ]
+        },
+        {
+          category: '7. Purchase & Procurement',
+          id: 'purchase_procurement',
+          dashboardSubTab: 'procurement',
+          items: [
+            { label: 'Procurement Dashboard', targetTab: 'Dashboard', subTabTarget: 'procurement', icon: LayoutDashboard },
+            { label: 'Purchase Orders (PO Approval)', targetTab: 'Purchase Orders', poTabTarget: 'WAITING FOR APPROVAL', icon: ShoppingCart, badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined },
+            { label: 'Vendor Management', targetTab: 'Vendor Management', icon: Building2 },
+            { label: 'Goods Receipt Notes', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined }
+          ]
+        },
+        {
+          category: '8. Accounts & Finance',
+          id: 'accounts_finance',
+          dashboardSubTab: 'accounts',
+          items: [
+            { label: 'Accounts & Finance Dashboard', targetTab: 'Dashboard', subTabTarget: 'accounts', icon: LayoutDashboard },
+            { label: 'Accounts Verification', targetTab: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined },
+            { label: 'Invoices', targetTab: 'Invoice Management', icon: Receipt },
+            { label: 'Payments', targetTab: 'Payments', icon: Wallet }
+          ]
+        },
+        {
+          category: '9. Reports & Analytics',
+          id: 'reports_analytics',
+          dashboardSubTab: 'reports-dashboard',
+          items: [
+            { label: 'Reports & Analytics Dashboard', targetTab: 'Dashboard', subTabTarget: 'reports-dashboard', icon: LayoutDashboard },
+            { label: 'Sales Reports', targetTab: 'Sales Reports', icon: BarChart3 },
+            { label: 'Procurement Reports', targetTab: 'Procurement Reports', icon: FileBarChart }
+          ]
+        }
+      ];
+      return sections;
+    } else if (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA')) {
+      sections = [
+        {
+          category: 'SYSTEM ADMINISTRATION',
+          items: [
+            { label: 'Admin Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
+            { label: 'User & Access Control', targetTab: 'User Management', icon: Users },
+            { label: 'Database & DB Health', targetTab: 'System Health', icon: Activity },
+            { label: 'Active Sessions', targetTab: 'Active Sessions', icon: Lock },
+            { label: 'Backup Vault', targetTab: 'Backup Vault', icon: HardDrive }
           ]
         }
       ];
@@ -375,22 +517,15 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const templateBadge = isProcurementRole ? 'PO' : 'Studio';
 
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.label === 'PO Template' || i.targetTab === 'Templates'));
-    const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
     const showTemplates = !hasTemplates && !isCeo && !isTechSupport && !isAccounts;
 
     if (sysSection) {
       if (showTemplates) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
-      if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck });
-    } else {
-      const sysItems = [];
-      if (showTemplates) {
-        sysItems.push({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
-      }
-      sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck });
+    } else if (showTemplates) {
       sections.push({
         category: 'SYSTEM & CONFIG',
-        items: sysItems
+        items: [{ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge }]
       });
     }
 
@@ -429,6 +564,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes' || tab === 'PO Template') return 'Templates';
     if (tab === 'Store Inventory' || tab === 'Inventory Stores') return 'Store Inventory';
     if (tab === 'Raw Material Inventory' || tab === 'Raw Material Directory') return 'Raw Material Inventory';
+    if (tab === 'IndiaMART' || tab === 'IndiaMART Integration' || tab === 'IndiaMART CRM Integration') return 'IndiaMART';
     return tab;
   };
 
@@ -657,63 +793,135 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           paddingRight: '2px'
         }}
       >
-        {filteredSections.map((sec, sIdx) => (
-          <div key={sIdx} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            {/* Category Header */}
-            {!collapsed && (
-              <span style={{
-                fontSize: '11px',
-                fontWeight: '800',
-                color: '#64748B',
-                letterSpacing: '0.04em',
-                padding: '4px 8px 2px 8px',
-                textTransform: 'none'
-              }}>
-                {sec.category}
-              </span>
-            )}
+        {filteredSections.map((sec, sIdx) => {
+          const isCategoryOpen = !collapsed && (
+            Boolean(searchQuery) ||
+            openCategories.includes(sec.category) ||
+            (activeItemLabel ? sec.items.some(it => it.label === activeItemLabel) : (sIdx === 0))
+          );
+          const hasBadges = sec.items.some(i => Boolean(i.badge));
 
-            {/* Nav Items */}
-            {sec.items.map((item, iIdx) => {
-              const ItemIcon = item.icon;
-              const actualTarget = item.targetTab || item.label;
-              const isActive = normalizeTab(item.label) === normalizeTab(activeTab) || normalizeTab(actualTarget) === normalizeTab(activeTab);
-
-              return (
-                <div 
-                  key={iIdx}
-                  title={collapsed ? item.label : undefined}
+          return (
+            <div key={sIdx} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              {/* Category Header */}
+              {!collapsed && (
+                <div
                   onClick={() => {
-                    const targetTab = actualTarget === 'Proforma Invoice' ? 'Performa Invoice' : actualTarget;
-                    onChangeTab(targetTab, null, item.poTabTarget || null);
-                    if (typeof window !== 'undefined' && window.innerWidth <= 768 && typeof onToggle === 'function' && !collapsed) {
-                      onToggle();
+                    if (sec.dashboardSubTab) {
+                      setOpenCategories(prev => {
+                        const next = prev.includes(sec.category) ? prev : [...prev, sec.category];
+                        try { localStorage.setItem('controlroom_ceo_sidebar_open_cats', JSON.stringify(next)); } catch (_) {}
+                        return next;
+                      });
+                      const firstDashboardItem = sec.items?.[0];
+                      const nextActiveLabel = firstDashboardItem?.label || sec.category;
+                      setActiveItemLabel(nextActiveLabel);
+                      try {
+                        localStorage.setItem('controlroom_sidebar_active_item', nextActiveLabel);
+                        localStorage.setItem('controlroom_ceo_sub_tab', sec.dashboardSubTab);
+                        window.dispatchEvent(new CustomEvent('controlroom_ceo_subtab_change', { detail: { subTab: sec.dashboardSubTab } }));
+                      } catch (_) {}
+                      onChangeTab('Dashboard', null, null);
+                    } else {
+                      toggleCategory(sec.category);
                     }
                   }}
-                  onMouseEnter={(e) => {
-                    setHoveredItem(item.label);
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setHoveredItemPos({ label: item.label, top: rect.top + (rect.height / 2) });
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredItem(null);
-                    setHoveredItemPos(null);
-                  }}
                   style={{
-                    height: '40px',
-                    borderRadius: '20px',
-                    padding: collapsed ? '0' : '0 14px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: collapsed ? 'center' : 'space-between',
+                    justifyContent: 'space-between',
+                    padding: '6px 8px 4px 8px',
                     cursor: 'pointer',
-                    backgroundColor: isActive ? '#FFFFFF' : hoveredItem === item.label ? 'rgba(255, 255, 255, 0.55)' : 'transparent',
-                    border: isActive ? '1px solid rgba(255, 255, 255, 0.9)' : '1px solid transparent',
-                    boxShadow: isActive ? '0 4px 14px rgba(15, 23, 42, 0.06)' : 'none',
-                    transition: 'all 0.15s ease',
-                    position: 'relative'
+                    userSelect: 'none',
+                    borderRadius: '8px',
+                    transition: 'background 0.15s ease'
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.4)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    color: (sec.dashboardSubTab && sec.items?.some(it => it.label === activeItemLabel)) ? '#0E7490' : '#475569',
+                    letterSpacing: '0.03em',
+                    textTransform: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    {sec.category}
+                  </span>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCategory(sec.category);
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px' }}
+                    title={isCategoryOpen ? 'Collapse section' : 'Expand section'}
+                  >
+                    {hasBadges && !isCategoryOpen && (
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#0E7490' }} />
+                    )}
+                    {isCategoryOpen ? (
+                      <ChevronDown size={13} style={{ color: '#64748B' }} />
+                    ) : (
+                      <ChevronRight size={13} style={{ color: '#94A3B8' }} />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Nav Items (Rendered if category open or collapsed sidebar) */}
+              {(collapsed || isCategoryOpen) && sec.items.map((item, iIdx) => {
+                const ItemIcon = item.icon;
+                const actualTarget = item.targetTab || item.label;
+                const isActive = activeItemLabel 
+                  ? (item.label === activeItemLabel)
+                  : (normalizeTab(item.label) === normalizeTab(activeTab) || normalizeTab(actualTarget) === normalizeTab(activeTab));
+
+                return (
+                  <div 
+                    key={iIdx}
+                    title={collapsed ? item.label : undefined}
+                    onClick={() => {
+                      setActiveItemLabel(item.label);
+                      try { localStorage.setItem('controlroom_sidebar_active_item', item.label); } catch (_) {}
+                      const targetTab = actualTarget === 'Proforma Invoice' ? 'Performa Invoice' : actualTarget;
+                      if (item.subTabTarget) {
+                        try {
+                          localStorage.setItem('controlroom_ceo_sub_tab', item.subTabTarget);
+                          window.dispatchEvent(new CustomEvent('controlroom_ceo_subtab_change', { detail: { subTab: item.subTabTarget } }));
+                        } catch (_) {}
+                      }
+                      onChangeTab(targetTab, null, item.poTabTarget || null);
+                      if (typeof window !== 'undefined' && window.innerWidth <= 768 && typeof onToggle === 'function' && !collapsed) {
+                        onToggle();
+                      }
+                    }}
+                    onMouseEnter={(e) => {
+                      setHoveredItem(item.label);
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setHoveredItemPos({ label: item.label, top: rect.top + (rect.height / 2) });
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredItem(null);
+                      setHoveredItemPos(null);
+                    }}
+                    style={{
+                      height: '38px',
+                      borderRadius: '16px',
+                      padding: collapsed ? '0' : '0 12px 0 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: collapsed ? 'center' : 'space-between',
+                      cursor: 'pointer',
+                      backgroundColor: isActive ? '#FFFFFF' : hoveredItem === item.label ? 'rgba(255, 255, 255, 0.55)' : 'transparent',
+                      border: isActive ? '1px solid rgba(255, 255, 255, 0.9)' : '1px solid transparent',
+                      boxShadow: isActive ? '0 4px 14px rgba(15, 23, 42, 0.06)' : 'none',
+                      transition: 'all 0.15s ease',
+                      position: 'relative'
+                    }}
+                  >
                   <div style={{ display: 'flex', alignItems: 'center', gap: collapsed ? '0' : '10px', minWidth: 0 }}>
                     <ItemIcon style={{ 
                       width: '16px', 
@@ -766,7 +974,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
               <div style={{ height: '1px', backgroundColor: 'rgba(203, 213, 225, 0.4)', margin: '6px 0' }} />
             )}
           </div>
-        ))}
+          );
+        })}
 
 
       </div>

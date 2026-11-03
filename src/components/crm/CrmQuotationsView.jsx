@@ -5,7 +5,8 @@ import {
   Building2, Printer, X, DollarSign, Calendar, Tag, ChevronRight,
   RotateCcw, Edit3, Trash2, CheckCircle, Clock, AlertCircle, Layers,
   Truck, ArrowRight, Copy, RefreshCw, Send, Mail, Boxes, User, Landmark,
-  AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap
+  AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap,
+  ChevronDown, ChevronUp, GripVertical
 } from 'lucide-react';
 import HdgStructureConfiguratorModal from './HdgStructureConfiguratorModal';
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
@@ -23,6 +24,8 @@ import {
   getWhatsAppStatus,
   sendDirectWhatsApp
 } from '../../utils/whatsappDispatchService';
+import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
+export { is5PctSolarProduct };
 
 const QUOTATION_TERMS_PRESETS = [
   {
@@ -165,27 +168,6 @@ Best regards,
 VRM Structures India Pvt Ltd`
   }
 ];
-
-export const is5PctSolarProduct = (name = '', cat = '') => {
-  const text = `${name} ${cat}`.toLowerCase();
-  return (
-    text.includes('inverter') ||
-    text.includes('solar panel') ||
-    text.includes('solar module') ||
-    text.includes('pv module') ||
-    text.includes('panel') ||
-    text.includes('module') ||
-    text.includes('topcon') ||
-    text.includes('bifacial') ||
-    text.includes('monocrystalline') ||
-    text.includes('polycrystalline') ||
-    text.includes('dcr') ||
-    text.includes('ongrid') ||
-    text.includes('offgrid') ||
-    text.includes('hybrid inverter') ||
-    text.includes('waaree')
-  );
-};
 
 export default function CrmQuotationsView({
   quotations = [],
@@ -373,6 +355,8 @@ export default function CrmQuotationsView({
 
   // Line items
   const [quoteItems, setQuoteItems] = useState([]);
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+  const [dragOverItemIndex, setDragOverItemIndex] = useState(null);
   const [validationAlert, setValidationAlert] = useState(null);
 
   // Transport & Logistics
@@ -468,8 +452,8 @@ export default function CrmQuotationsView({
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
   const isRestrictedSalesUser = Boolean(
     userRole &&
-    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
-    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
   );
 
   const visibleQuotes = useMemo(() => {
@@ -569,14 +553,14 @@ export default function CrmQuotationsView({
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         kitSubtotal += (unitPrice * multiplier);
       }
     });
 
     // 2. Individual items subtotal
     const itemsSub = (quoteItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       return acc + (q * r);
@@ -586,7 +570,7 @@ export default function CrmQuotationsView({
 
     // 3. GST: Custom item GSTs + Preset kits GST (dynamically from preset's selected gstRate)
     const itemsGst = (quoteItems || []).reduce((acc, item) => {
-      if (item.isPresetItem) return acc;
+      if (item.isPresetItem || item.presetGroupId) return acc;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       const rowTot = q * r;
@@ -599,24 +583,12 @@ export default function CrmQuotationsView({
       const grp = presetGroups[grpId];
       if (grp) {
         const unitPrice = parseFloat(grp.kitPrice) || 0;
-        const multiplier = parseInt(grp.setCount) || 1;
+        const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         const groupTotal = unitPrice * multiplier;
-
-        const groupItems = (quoteItems || []).filter(it => (it.presetGroupId || 'legacy_default') === grpId);
-        const totalQty = groupItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 1), 0);
-
-        if (totalQty > 0) {
-          groupItems.forEach(it => {
-            const itQty = parseFloat(it.qty) || 1;
-            const itemShare = groupTotal * (itQty / totalQty);
-            const itGstRate = parseFloat(String(it.gstRate || grp.gstRate || '18%').replace('%', '')) || 0;
-            kitGst += itemShare * (itGstRate / 100);
-          });
-        } else {
-          const gRateStr = grp?.gstRate || '18%';
-          const gPct = parseFloat(String(gRateStr).replace('%', '')) || 0;
-          kitGst += groupTotal * (gPct / 100);
-        }
+        if (groupTotal <= 0) return;
+        const gRateStr = grp?.gstRate || '18%';
+        const gPct = parseFloat(String(gRateStr).replace('%', '')) || 18;
+        kitGst += groupTotal * (gPct / 100);
       }
     });
 
@@ -639,7 +611,7 @@ export default function CrmQuotationsView({
 
   // Helper handlers for Presets and Items
   const handleAddMaterialRow = () => {
-    setQuoteItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%' }]);
+    setQuoteItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
   };
 
   const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
@@ -666,6 +638,7 @@ export default function CrmQuotationsView({
         presetId,
         presetName,
         setCount: multiplier,
+        unit: targetPreset.unit || 'Sets',
         kitPrice: defaultPrice,
         gstRate: initialGstRate,
         isFixedKit
@@ -673,15 +646,18 @@ export default function CrmQuotationsView({
     }));
 
     const newItems = targetPreset.items.map(it => {
-      const baseQ = parseFloat(it.qty) || 1;
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+      const baseQ = hasQty ? parseFloat(rawQ) : '';
       return {
         ...it,
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
+        qty: hasQty ? String(baseQ) : '',
         rate: '0',
         gstRate: is5PctSolarProduct(it.name, it.category || it.specs) ? '5%' : (it.gstRate || initialGstRate),
+        hsn: it.hsn || it.hsn_or_sac || getHsnCode(it),
         isPresetItem: true
       };
     });
@@ -751,6 +727,55 @@ export default function CrmQuotationsView({
         }
       }
       return updated;
+    });
+  };
+
+  const handleReorderQuoteItem = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    setQuoteItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handleMoveQuoteItemStep = (fromIndex, direction) => {
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= quoteItems.length) return;
+    handleReorderQuoteItem(fromIndex, toIndex);
+  };
+
+  const handleMovePresetGroupBlock = (groupId, direction) => {
+    setQuoteItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const distinctGroups = [];
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        if (!distinctGroups.includes(g)) distinctGroups.push(g);
+      });
+      const curIdx = distinctGroups.indexOf(groupId);
+      if (curIdx === -1) return prev;
+      const targetIdx = curIdx + direction;
+      if (targetIdx < 0 || targetIdx >= distinctGroups.length) return prev;
+
+      const groupItemsMap = {};
+      distinctGroups.forEach(g => { groupItemsMap[g] = []; });
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        groupItemsMap[g].push(it);
+      });
+
+      const newOrder = [...distinctGroups];
+      const [movedGroup] = newOrder.splice(curIdx, 1);
+      newOrder.splice(targetIdx, 0, movedGroup);
+
+      const result = [];
+      newOrder.forEach(g => {
+        if (groupItemsMap[g]) result.push(...groupItemsMap[g]);
+      });
+      return result;
     });
   };
 
@@ -1046,6 +1071,7 @@ export default function CrmQuotationsView({
       deliveryPincode: sameAsBilling ? billingPincode : deliveryPincode,
       items: quoteItems.map(it => ({
         ...it,
+        hsn: it.hsn || getHsnCode(it),
         description: it.category || it.name,
         amount: (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)
       })),
@@ -1829,7 +1855,7 @@ export default function CrmQuotationsView({
                   }}
                 >
                   <Layers size={13} style={{ color: '#0E7490' }} />
-                  {grp.presetName} (Total Quantity: {grp.setCount || 1} Set{(grp.setCount || 1) > 1 ? 's' : ''})
+                  {grp.presetName} ({grp.unit === 'kW' ? `Total Capacity: ${grp.setCount || 1} kW` : `Total Quantity: ${grp.setCount || 1} Set${(grp.setCount || 1) > 1 ? 's' : ''}`})
                   <button
                     type="button"
                     onClick={() => handleRemovePresetGroup(grp.groupId)}
@@ -1867,10 +1893,13 @@ export default function CrmQuotationsView({
           {/* Clean Modern Items Table */}
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+              <table style={{ width: '100%', minWidth: quoteItems.some(it => it.isPresetItem) ? '1380px' : '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                    <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
+                    <th style={{ padding: '12px 4px', width: '38px', minWidth: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
+                      <GripVertical size={14} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                    </th>
+                    <th style={{ padding: '12px 8px', width: '42px', minWidth: '42px', textAlign: 'center' }}>
                       <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={quoteItems.length > 0 && selectedItemIndexes.length === quoteItems.length}
@@ -1884,25 +1913,26 @@ export default function CrmQuotationsView({
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                        />
                     </th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
                     {quoteItems.some(it => it.isPresetItem) && (
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '130px', minWidth: '130px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
                         Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                       </th>
                     )}
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px', textAlign: 'right' }}>Taxable (₹)</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'right' }}>Total (₹)</th>
+                    <th style={{ padding: '12px 6px', fontWeight: '700', width: '48px', minWidth: '48px', textAlign: 'center' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {quoteItems.length === 0 ? (
                     <tr>
-                      <td colSpan={quoteItems.some(it => it.isPresetItem) ? 10 : 9} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
+                      <td colSpan={quoteItems.some(it => it.isPresetItem) ? 12 : 11} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
                         No items added yet. Pick a preset above or click <strong>+ Add Product / Item</strong> below.
                       </td>
                     </tr>
@@ -1931,7 +1961,100 @@ export default function CrmQuotationsView({
                       };
 
                       return (
-                        <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#ECFEFF' : (i % 2 === 1 ? '#FAFBFC' : 'white') }}>
+                        <tr
+                          key={i}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('text/plain', String(i));
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggedItemIndex(i);
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            if (dragOverItemIndex !== i) setDragOverItemIndex(i);
+                          }}
+                          onDragLeave={() => {
+                            if (dragOverItemIndex === i) setDragOverItemIndex(null);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const fromIdx = draggedItemIndex !== null ? draggedItemIndex : parseInt(e.dataTransfer.getData('text/plain'), 10);
+                            if (!isNaN(fromIdx) && fromIdx !== i) {
+                              handleReorderQuoteItem(fromIdx, i);
+                            }
+                            setDraggedItemIndex(null);
+                            setDragOverItemIndex(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedItemIndex(null);
+                            setDragOverItemIndex(null);
+                          }}
+                          style={{
+                            borderBottom: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex < i)
+                              ? '3px solid #0E7490'
+                              : '1px solid #F1F5F9',
+                            borderTop: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex > i)
+                              ? '3px solid #0E7490'
+                              : 'none',
+                            backgroundColor: draggedItemIndex === i
+                              ? '#F8FAFC'
+                              : (dragOverItemIndex === i
+                                ? '#ECFEFF'
+                                : (isChecked ? '#ECFEFF' : (i % 2 === 1 ? '#FAFBFC' : 'white'))),
+                            opacity: draggedItemIndex === i ? 0.35 : 1,
+                            transition: 'background-color 0.15s ease, opacity 0.15s ease'
+                          }}
+                        >
+                          <td
+                            style={{
+                              padding: '8px 4px',
+                              textAlign: 'center',
+                              cursor: 'grab',
+                              userSelect: 'none',
+                              verticalAlign: 'middle',
+                              borderLeft: (draggedItemIndex === i || dragOverItemIndex === i) ? '3px solid #0E7490' : 'none'
+                            }}
+                            title="Click and drag to reorder / align product, or use arrows"
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                              <GripVertical size={16} style={{ color: '#94A3B8', cursor: 'grab' }} />
+                              <div style={{ display: 'flex', gap: '2px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleMoveQuoteItemStep(i, -1); }}
+                                  disabled={i === 0}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: i === 0 ? 'not-allowed' : 'pointer',
+                                    padding: '1px',
+                                    color: i === 0 ? '#CBD5E1' : '#64748B',
+                                    lineHeight: 1
+                                  }}
+                                  title="Move product up"
+                                >
+                                  <ChevronUp size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleMoveQuoteItemStep(i, 1); }}
+                                  disabled={i === quoteItems.length - 1}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: i === quoteItems.length - 1 ? 'not-allowed' : 'pointer',
+                                    padding: '1px',
+                                    color: i === quoteItems.length - 1 ? '#CBD5E1' : '#64748B',
+                                    lineHeight: 1
+                                  }}
+                                  title="Move product down"
+                                >
+                                  <ChevronDown size={11} />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
                           <td style={{ padding: '12px 10px', textAlign: 'center', borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent' }}>
                             <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                               type="checkbox"
@@ -1952,16 +2075,29 @@ export default function CrmQuotationsView({
                                 placeholder="Type or select product / item..."
                                 accentColor="#4F46E5"
                                 onChange={(val, matched) => {
-                                  const pName = matched ? matched.name : val;
-                                  const pCat = matched ? (matched.category || matched.description || item.category) : item.category;
-                                  const isSolar5 = is5PctSolarProduct(pName, pCat);
+                                  if (!matched) {
+                                    const dynamicHsn = getHsnCode({ name: val, category: item.category });
+                                    const isSolar5 = is5PctSolarProduct(val, item.category, dynamicHsn);
+                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? {
+                                      ...mat,
+                                      name: val,
+                                      hsn: dynamicHsn,
+                                      gstRate: isSolar5 ? '5%' : mat.gstRate
+                                    } : mat));
+                                    return;
+                                  }
+                                  const pName = matched.name;
+                                  const pCat = matched.category || matched.description || item.category;
+                                  const pHsn = matched.hsn || matched.hsn_or_sac || getHsnCode(matched || { name: pName, category: pCat });
+                                  const isSolar5 = is5PctSolarProduct(pName, pCat, pHsn);
                                   setQuoteItems(prev => prev.map((mat, idx) => idx === i ? {
                                     ...mat,
                                     name: pName,
                                     rate: matched ? String(matched.price || matched.rate || mat.rate) : mat.rate,
                                     uom: matched ? (matched.uom || matched.unit || mat.uom) : mat.uom,
                                     category: pCat,
-                                    gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
+                                    gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%'),
+                                    hsn: pHsn
                                   } : mat));
                                 }}
                               />
@@ -1975,16 +2111,44 @@ export default function CrmQuotationsView({
                                    setQuoteItems(prev => prev.map((mat, idx) => {
                                      if (idx !== i) return mat;
                                      const isSolar5 = is5PctSolarProduct(mat.name, val);
+                                     const dynamicHsn = getHsnCode({ name: mat.name, category: val }) || mat.hsn;
                                      return {
                                        ...mat,
                                        category: val,
-                                       gstRate: isSolar5 ? '5%' : mat.gstRate
+                                       gstRate: isSolar5 ? '5%' : mat.gstRate,
+                                       hsn: dynamicHsn
                                      };
                                    }));
                                  }}
                                  style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', cursor: 'text' }}
                                 />
                              </div>
+                           </td>
+                           <td style={{ padding: '12px 6px' }}>
+                             <input id={`crm-quotations-hsn-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hsn_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HSN / SAC"
+                               type="text"
+                               readOnly
+                               tabIndex={-1}
+                               placeholder={getHsnCode(item) || 'HSN Code'}
+                               value={item.hsn !== undefined && item.hsn !== '' ? item.hsn : (item.name ? getHsnCode(item) : '')}
+                               style={{
+                                 width: '100%',
+                                 minWidth: '100px',
+                                 height: '38px',
+                                 borderRadius: '8px',
+                                 border: '1px solid #E2E8F0',
+                                 padding: '0 6px',
+                                 fontSize: '12px',
+                                 fontWeight: '700',
+                                 color: '#475569',
+                                 backgroundColor: '#F8FAFC',
+                                 outline: 'none',
+                                 boxSizing: 'border-box',
+                                 textAlign: 'center',
+                                 cursor: 'not-allowed'
+                               }}
+                               title="HSN / SAC Code (Auto-populated from master catalog; read-only)"
+                             />
                            </td>
                            <td style={{ padding: '12px 10px' }}>
                              <input id={`crm-quotations-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
@@ -1996,7 +2160,7 @@ export default function CrmQuotationsView({
                                  const val = e.target.value;
                                  setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                }}
-                               style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600', cursor: 'text' }}
+                               style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700', cursor: 'text' }}
                               />
                              <datalist id={`uom-list-${i}`}>
                                <option value="NOS" />
@@ -2019,7 +2183,7 @@ export default function CrmQuotationsView({
                                    const val = e.target.value;
                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                                  }}
-                                 style={{ width: '100%', height: '34px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white', cursor: 'text', fontWeight: '600' }}
+                                 style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white', cursor: 'text', fontWeight: '700' }}
                                 />
                              </div>
                            </td>
@@ -2048,10 +2212,10 @@ export default function CrmQuotationsView({
                               }}
                               style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
                             >
-                              <option value="18%">18% GST</option>
-                              <option value="12%">12% GST</option>
-                              <option value="5%">5% GST</option>
-                              <option value="0%">0% Exempt</option>
+                              <option value="18%">18%</option>
+                              <option value="12%">12%</option>
+                              <option value="5%">5%</option>
+                              <option value="0%">0%</option>
                             </select>
                           </td>
                           {hasAnyPreset && (() => {
@@ -2133,7 +2297,7 @@ export default function CrmQuotationsView({
                                               }
                                               return;
                                             }
-                                            const parsed = parseInt(rawVal);
+                                            const parsed = parseFloat(rawVal);
                                             const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
                                             if (groupId) {
                                               setPresetGroups(prev => ({
@@ -2141,44 +2305,48 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                               }));
                                             }
-                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
-                                            const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
-                                            setQuoteItems(prev => prev.map(mat => {
-                                              if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
-                                              }
-                                              return mat;
-                                            }));
                                           }}
                                           onBlur={() => {
                                             const current = currentGroup.setCount;
-                                            const finalCount = (current === '' || isNaN(parseInt(current)) || parseInt(current) < 0) ? 1 : Math.max(0, parseInt(current));
+                                            const finalCount = (current === '' || isNaN(parseFloat(current)) || parseFloat(current) < 0) ? 1 : Math.max(0, parseFloat(current));
                                             if (groupId) {
                                               setPresetGroups(prev => ({
                                                 ...prev,
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                               }));
                                             }
-                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
-                                            const effectiveMultiplier = isFixedKit ? 1 : finalCount;
-                                            setQuoteItems(prev => prev.map(mat => {
-                                              if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * effectiveMultiplier)) };
-                                              }
-                                              return mat;
-                                            }));
                                           }}
                                           style={{
-                                            width: '42px', height: '26px', borderRadius: '6px',
-                                            border: '1.5px solid #818CF8', fontSize: '13px',
+                                            width: '50px', height: '26px', borderRadius: '6px',
+                                            border: '1.5px solid #818CF8', fontSize: '12px',
                                             fontWeight: '800', color: '#312E81', textAlign: 'center',
                                             padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box', cursor: 'text'
                                           }}
-                                          title="Sets multiplier for this preset"
+                                          title={(currentGroup.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this preset"}
                                          />
-                                        <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
-                                          set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
-                                        </span>
+                                        <select
+                                          value={currentGroup.unit || 'Sets'}
+                                          onChange={(e) => {
+                                            const newUnit = e.target.value;
+                                            if (groupId) {
+                                              setPresetGroups(prev => ({
+                                                ...prev,
+                                                [groupId]: { ...(prev[groupId] || currentGroup), unit: newUnit }
+                                              }));
+                                            }
+                                          }}
+                                          style={{
+                                            height: '26px', borderRadius: '6px',
+                                            border: '1.5px solid #818CF8', padding: '0 2px',
+                                            fontSize: '11px', fontWeight: '800',
+                                            color: '#312E81', backgroundColor: '#FFFFFF',
+                                            outline: 'none', cursor: 'pointer'
+                                          }}
+                                          title="Choose unit: Sets or kW"
+                                        >
+                                          <option value="Sets">Sets</option>
+                                          <option value="kW">kW</option>
+                                        </select>
                                       </div>
 
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
@@ -2216,24 +2384,65 @@ export default function CrmQuotationsView({
                                       </div>
 
                                       {groupId && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemovePresetGroup(groupId)}
-                                          style={{
-                                            border: 'none',
-                                            backgroundColor: 'transparent',
-                                            color: '#EF4444',
-                                            fontSize: '10px',
-                                            fontWeight: '700',
-                                            cursor: 'pointer',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            marginTop: '2px'
-                                          }}
-                                          title={`Remove entire ${currentGroup.presetName} preset`}
-                                        >
-                                          Remove Kit
-                                        </button>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleMovePresetGroupBlock(groupId, -1)}
+                                            style={{
+                                              border: '1px solid #C7D2FE',
+                                              backgroundColor: '#FFFFFF',
+                                              color: '#4338CA',
+                                              fontSize: '10px',
+                                              fontWeight: '700',
+                                              cursor: 'pointer',
+                                              padding: '2px 5px',
+                                              borderRadius: '4px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '2px'
+                                            }}
+                                            title={`Move ${currentGroup.presetName} preset block up`}
+                                          >
+                                            <ChevronUp size={10} /> Up
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleMovePresetGroupBlock(groupId, 1)}
+                                            style={{
+                                              border: '1px solid #C7D2FE',
+                                              backgroundColor: '#FFFFFF',
+                                              color: '#4338CA',
+                                              fontSize: '10px',
+                                              fontWeight: '700',
+                                              cursor: 'pointer',
+                                              padding: '2px 5px',
+                                              borderRadius: '4px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '2px'
+                                            }}
+                                            title={`Move ${currentGroup.presetName} preset block down`}
+                                          >
+                                            <ChevronDown size={10} /> Down
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemovePresetGroup(groupId)}
+                                            style={{
+                                              border: 'none',
+                                              backgroundColor: 'transparent',
+                                              color: '#EF4444',
+                                              fontSize: '10px',
+                                              fontWeight: '700',
+                                              cursor: 'pointer',
+                                              padding: '2px 6px',
+                                              borderRadius: '4px'
+                                            }}
+                                            title={`Remove entire ${currentGroup.presetName} preset`}
+                                          >
+                                            Remove Kit
+                                          </button>
+                                        </div>
                                       )}
                                     </div>
                                   </td>
@@ -2493,11 +2702,11 @@ export default function CrmQuotationsView({
                   <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #BAE6FD', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: '10px', color: '#0284C7', fontWeight: '700', textTransform: 'uppercase' }}>Account Number</div>
-                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0369A1', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0369A1', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629</div>
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
+                      onClick={() => handleCopyBankDetail('50200031629', 'Account Number')}
                       title="Copy Account Number"
                       style={{ border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', color: '#0284C7', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                     >
@@ -2523,7 +2732,7 @@ export default function CrmQuotationsView({
 
                 {/* Branch Location */}
                 <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span><strong>Branch:</strong> Vinayagapuram Branch</span>
+                  <span><strong>Branch:</strong> VINAYAGAPURAM</span>
                   <span style={{ color: '#64748B', fontSize: '10px' }}>Settlement: INR (₹)</span>
                 </div>
               </div>
@@ -3567,12 +3776,14 @@ export default function CrmQuotationsView({
                       || (Array.isArray(rawPresetGroups) && rawPresetGroups.find(g => g.groupId === gid))
                       || null;
                     const name = it.presetName || (savedGrp && savedGrp.presetName) || 'Pre-Engineered MMS Kit Package';
-                    const setCount = (savedGrp && parseInt(savedGrp.setCount)) || 1;
+                    const unit = (savedGrp && savedGrp.unit) || 'Sets';
+                    const setCount = (savedGrp && parseFloat(savedGrp.setCount)) || 1;
                     const kitPrice = savedGrp && savedGrp.kitPrice !== undefined ? parseFloat(savedGrp.kitPrice) : (parseFloat(selectedQuote.kitSubtotal) || 0);
                     groupMeta[gid] = {
                       groupId: gid,
                       name,
                       setCount,
+                      unit,
                       kitPrice,
                       totalAmount: kitPrice * setCount,
                       itemsCount: 0,
@@ -3633,10 +3844,10 @@ export default function CrmQuotationsView({
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                   <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 6px', borderRadius: '4px' }}>
-                                    Total Quantity: {gInfo.setCount} Set{gInfo.setCount > 1 ? 's' : ''}
+                                    {gInfo.unit === 'kW' ? `Total Capacity: ${gInfo.setCount} kW` : `Total Quantity: ${gInfo.setCount} Set${gInfo.setCount !== 1 ? 's' : ''}`}
                                   </span>
                                   <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
-                                    ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}{gInfo.unit === 'kW' ? ' / kW' : ''}
                                   </span>
                                 </div>
                               </td>
@@ -3750,11 +3961,11 @@ export default function CrmQuotationsView({
                       <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #BAE6FD', borderRadius: '8px', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ color: '#0284C7', fontSize: '10px', fontWeight: '700' }}>Account Number:</div>
-                          <strong style={{ color: '#0369A1', fontFamily: 'monospace', fontSize: '13px' }}>50200031629272</strong>
+                          <strong style={{ color: '#0369A1', fontFamily: 'monospace', fontSize: '13px' }}>50200031629</strong>
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
+                          onClick={() => handleCopyBankDetail('50200031629', 'Account Number')}
                           title="Copy Account Number"
                           style={{ border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', color: '#0284C7', padding: '4px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                         >
@@ -3779,7 +3990,7 @@ export default function CrmQuotationsView({
                     </div>
 
                     <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', color: '#475569', fontSize: '11px' }}>
-                      <strong>Branch:</strong> Vinayagapuram Branch
+                      <strong>Branch:</strong> VINAYAGAPURAM
                     </div>
                   </div>
                 </div>

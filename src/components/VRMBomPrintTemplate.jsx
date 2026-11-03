@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { VRM_OFFICIAL_LOGO } from '../utils/vrmOfficialAssets';
-import { isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 
 // Helper to clean, deduplicate and format addresses into neat lines
 function formatAddressLines(rawAddr, city, state, pin) {
@@ -223,11 +222,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         const grpMeta = (item.presetGroupId && presetGroupsObj[item.presetGroupId]) || {};
         const pName = grpMeta.presetName || item.presetName || b.presetName || matchedPi?.presetName || 'Preset Kit';
         const sCount = grpMeta.setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1;
+        const pUnit = grpMeta.unit || item.unit || b.presetUnit || matchedPi?.presetUnit || 'Sets';
         kitGroupsMap.set(key, {
           groupId: key,
           presetId: grpMeta.presetId || item.presetId || null,
           presetName: pName,
           setCount: sCount,
+          unit: pUnit,
           items: []
         });
       }
@@ -245,33 +246,14 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   const hasMultipleKits = kitGroups.length > 1;
   const hasAnyKits = kitGroups.length > 0;
 
-  // Helper to determine the actual total quantity for BOM printout
+  // Helper to determine the exact quantity for BOM printout — decoupled from Set count, strictly matching PI and BOM
   const getItemQty = (item) => {
-    return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
-  };
-
-  // Helper to determine the entire quantity for fixed-quantity presets (12 presets)
-  const getEntireKitItemQty = (item, setCount) => {
-    const sCount = parseInt(setCount) || 1;
-    const baseQ = parseFloat(item.baseQty) || (parseFloat(item.qty || item.bomQty || item.quantity) || 1);
-    const entireQty = Math.round(baseQ * sCount * 100) / 100;
-    return entireQty > 0 ? entireQty : (parseFloat(item.qty) || sCount);
-  };
-
-  // Helper to determine strictly the 1-set quantity for BOM printout (Option 2)
-  const getItemPerSetQty = (item, setCount) => {
-    // 1. Check if explicit baseQty (quantity per 1 set) is available
-    if (item.baseQty !== undefined && item.baseQty !== null && item.baseQty !== '' && !isNaN(parseFloat(item.baseQty))) {
-      const bq = parseFloat(item.baseQty);
-      if (bq > 0) return Math.round(bq * 100) / 100;
-    }
-    // 2. If setCount is greater than 1, calculate baseQty = totalQty / setCount
-    const sCount = Number(setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1);
-    const total = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
-    if (sCount > 1 && total > 0) {
-      return Math.round((total / sCount) * 100) / 100;
-    }
-    return total;
+    const rawVal = item.qty !== undefined && item.qty !== null ? item.qty : (item.bomQty !== undefined && item.bomQty !== null ? item.bomQty : (item.quantity !== undefined && item.quantity !== null ? item.quantity : (item.targetQty !== undefined && item.targetQty !== null ? item.targetQty : (item.orderedQty !== undefined && item.orderedQty !== null ? item.orderedQty : (item.packedQty !== undefined && item.packedQty !== null ? item.packedQty : (item.itemQty !== undefined && item.itemQty !== null ? item.itemQty : ''))))));
+    if (rawVal === '' || rawVal === null || rawVal === undefined) return '';
+    const cleanVal = typeof rawVal === 'string' ? rawVal.replace(/,/g, '').trim() : rawVal;
+    if (cleanVal === '' || cleanVal === '0') return '';
+    const p = parseFloat(cleanVal);
+    return isNaN(p) || p === 0 ? '' : p;
   };
 
   // Extract clean addresses
@@ -311,10 +293,38 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   const rawBomDate = b.date || b.bomDate || b.piDate || b.salesConfirmedAt || (b.createdAt ? String(b.createdAt).substring(0, 10) : new Date().toISOString().split('T')[0]);
   const orderDateFormatted = formatDateDDMMYYYY(rawBomDate);
 
-  const rawTransportMode = b.transportMode || b.transport_mode || 'Transport';
-  const transporterName = b.transporterName || b.transporter_name || '';
-  const transportDisplay = transporterName && !rawTransportMode.toLowerCase().includes(transporterName.toLowerCase())
-    ? `${rawTransportMode} (${transporterName})`
+  const rawTransportMode = b.transportMode || b.transport_mode || 'By Road';
+  const resolvedTransporterName = (() => {
+    const list = [
+      b.transporterName,
+      b.transporter,
+      b.transporter_name,
+      b.vehicleLoading?.transporter,
+      b.vehicleLoading?.transporterName,
+      b.vehicleLoadingData?.transporter,
+      matchedPi?.transporterName,
+      matchedPi?.transporter,
+      matchedPi?.transporter_name
+    ];
+    const found = list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'to be arranged', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase()));
+    return found ? found.trim() : (b.transportMode || 'To be arranged');
+  })();
+
+  const resolvedVehicleNo = (() => {
+    const list = [
+      b.vehicleNo,
+      b.vehicle_no,
+      b.vehicleNumber,
+      b.vehicleLoading?.vehicleNo,
+      b.vehicleLoading?.vehicle_no,
+      matchedPi?.vehicleNo
+    ];
+    const found = list.find(s => s && typeof s === 'string' && s.trim() && !['—', '-', 'none', 'null', 'undefined'].includes(s.trim().toLowerCase()));
+    return found ? found.trim() : '';
+  })();
+
+  const transportDisplay = resolvedTransporterName && !rawTransportMode.toLowerCase().includes(resolvedTransporterName.toLowerCase())
+    ? `${rawTransportMode} (${resolvedTransporterName})`
     : rawTransportMode;
 
   const destinationDisplay = (b.destination && String(b.destination).trim() && !['—', '-'].includes(String(b.destination).trim()))
@@ -350,15 +360,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   }
 
   const totalQuantity = Math.round(
-    enrichedItems.reduce((sum, it) => {
-      const itSetCount = it.setCount || (it.presetGroupId && kitGroupsMap.get(it.presetGroupId)?.setCount) || b.presetSetCount || matchedPi?.presetSetCount || 1;
-      const isFixed = isFixedQuantityPreset(it.presetGroupId || it.presetId, it.presetName || it.name) ||
-        (it.presetGroupId && kitGroupsMap.has(it.presetGroupId) && isFixedQuantityPreset(kitGroupsMap.get(it.presetGroupId).presetId, kitGroupsMap.get(it.presetGroupId).presetName));
-      if (isFixed) {
-        return sum + getEntireKitItemQty(it, itSetCount);
-      }
-      return sum + getItemPerSetQty(it, itSetCount);
-    }, 0) * 100
+    enrichedItems.reduce((sum, it) => sum + getItemQty(it), 0) * 100
   ) / 100;
   const totalQuantityTaken = items.reduce((sum, item) => sum + (parseFloat(item.quantityTaken || item.qtyTaken || item.takenQty || 0) || 0), 0);
 
@@ -580,7 +582,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
       {/* 2. DEDICATED METADATA BAR (NEVER OVERLAPS) */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1.2fr 1fr 1.2fr 1.2fr 1.1fr',
+        gridTemplateColumns: '1.1fr 0.95fr 1fr 1.35fr 1.05fr 1.05fr',
         border: '1px solid #CBD5E1',
         borderRadius: '5px',
         backgroundColor: '#F8FAFC',
@@ -591,25 +593,31 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         pageBreakInside: 'avoid',
         breakInside: 'avoid'
       }}>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Number</span>
-          <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '12px' }}>{bomNumber}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Number</span>
+          <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '11.5px' }}>{bomNumber}</span>
         </div>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Date</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{orderDateFormatted}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Date</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{orderDateFormatted}</span>
         </div>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Transport Mode</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{transportDisplay}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Transport Mode</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{rawTransportMode}</span>
         </div>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Destination</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{destinationDisplay}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Transporter Name</span>
+          <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '11.5px', wordBreak: 'break-word' }}>
+            {resolvedTransporterName}{resolvedVehicleNo ? ` (${resolvedVehicleNo})` : ''}
+          </span>
         </div>
-        <div style={{ padding: '6px 10px' }}>
-          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sales Person</span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{salesPersonName}</span>
+        <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Destination</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{destinationDisplay}</span>
+        </div>
+        <div style={{ padding: '6px 8px' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sales Person</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11px' }}>{salesPersonName}</span>
         </div>
       </div>
 
@@ -695,11 +703,14 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                 <div key={idx} style={{ lineHeight: '1.3' }}>{line}</div>
               ))}
             </div>
-            {(b.siteContact || b.contactPerson || b.mobile) && (b.siteContact !== '—' && b.mobile !== '—') && (
-              <div style={{ marginTop: '2px', fontSize: '11px', color: '#334155' }}>
-                <strong>Site Contact:</strong> {b.siteContact || b.contactPerson || b.mobile}
-              </div>
-            )}
+            <div style={{ marginTop: '4px', fontSize: '11px', color: '#0F172A', display: 'flex', flexWrap: 'wrap', gap: '10px', borderTop: '1px dashed #E2E8F0', paddingTop: '4px' }}>
+              {(b.siteContact || b.contactPerson || b.mobile) && (b.siteContact !== '—' && b.mobile !== '—') && (
+                <div><strong>Site Contact:</strong> {b.siteContact || b.contactPerson || b.mobile}</div>
+              )}
+              {resolvedTransporterName && resolvedTransporterName !== 'To be arranged' && (
+                <div><strong>Transporter:</strong> <span style={{ color: '#0E7490', fontWeight: '800' }}>{resolvedTransporterName}</span></div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -715,12 +726,12 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
       }}>
         <thead>
           <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
-            <th style={{ padding: '8px 6px', width: '38px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>#</th>
+            <th style={{ padding: '8px 6px', width: '45px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>S.No</th>
             <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Product / Material Name</th>
-            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>Set</th>
+            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{hasAnyKits && kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set'}</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
             <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
-              Quantity
+              Total Quantity
             </th>
             <th style={{ padding: '8px 6px', width: '125px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Quantity Taken</th>
           </tr>
@@ -762,21 +773,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                backgroundColor: kitColor,
-                                color: '#FFFFFF',
-                                padding: '3px 10px',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                fontWeight: '900',
-                                letterSpacing: '0.4px',
-                                textTransform: 'uppercase'
-                              }}
-                            >
-                              KIT {kIdx + 1}
-                            </span>
                             <span style={{ color: '#0F172A', fontSize: '14px', fontWeight: '800' }}>
                               {kg.presetName}
                             </span>
@@ -792,7 +788,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                                 fontWeight: '800'
                               }}
                             >
-                              Total Quantity: {kg.setCount || 1} {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
+                              {kg.unit === 'kW' ? `${kg.setCount || 1} kW` : `${kg.setCount || 1} ${Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}`}
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#475569', fontWeight: '700' }}>
@@ -804,8 +800,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
 
                     {/* Items in this kit */}
                     {kg.items.map((item, itemIdx) => {
-                      const isFixedKit = isFixedQuantityPreset(kg.presetId || kg.groupId, kg.presetName) || isFixedQuantityPreset(item.presetGroupId, item.presetName || item.name);
-                      const qty = isFixedKit ? getEntireKitItemQty(item, kg.setCount) : getItemPerSetQty(item, kg.setCount);
+                      const qty = getItemQty(item);
                       const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                         ? item.quantityTaken
                         : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -831,20 +826,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                             {hasMultipleKits ? `${kIdx + 1}.${itemIdx + 1}` : itemIdx + 1}
                           </td>
                           <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', wordBreak: 'break-word' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                              <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
-                              {hasMultipleKits && (
-                                <span style={{ fontSize: '10.5px', padding: '1px 6px', borderRadius: '4px', backgroundColor: kitBg, color: kitColor, fontWeight: '800', border: `1px solid ${kitBorder}` }}>
-                                  Kit {kIdx + 1}
-                                </span>
-                              )}
-                            </div>
+                            <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
                           </td>
 
-                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside; completely empty for fixed-quantity presets */}
+                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside */}
                           <td
                             style={{
-                              padding: (isMiddle && !isFixedKit) ? '4px 6px' : '0',
+                              padding: isMiddle ? '4px 6px' : '0',
                               textAlign: 'center',
                               verticalAlign: 'middle',
                               color: '#0E7490',
@@ -856,13 +844,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                               whiteSpace: 'nowrap'
                             }}
                           >
-                            {(isMiddle && !isFixedKit) ? (
+                            {isMiddle ? (
                               <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                 <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                                   {kg.setCount || 1}
                                 </span>
                                 <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                                  {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
+                                  {kg.unit === 'kW' ? 'kW' : (Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets')}
                                 </span>
                               </div>
                             ) : null}
@@ -979,12 +967,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             enrichedItems.map((item, idx) => {
               const fallbackMid = Math.floor(enrichedItems.length / 2);
               const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
-              const isFixed = isFixedQuantityPreset(item.presetGroupId || item.presetId, item.presetName || item.name);
-              const qty = isFixed
-                ? getEntireKitItemQty(item, fallbackSetVal)
-                : (fallbackSetVal && Number(fallbackSetVal) > 1
-                  ? getItemPerSetQty(item, fallbackSetVal)
-                  : getItemQty(item));
+              const qty = getItemQty(item);
               const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                 ? item.quantityTaken
                 : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -1009,7 +992,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                   </td>
                   <td
                     style={{
-                      padding: (idx === fallbackMid && fallbackSetVal && !isFixed) ? '4px 6px' : '0',
+                      padding: (idx === fallbackMid && fallbackSetVal) ? '4px 6px' : '0',
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       color: '#0E7490',
@@ -1023,7 +1006,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {idx === fallbackMid && fallbackSetVal && !isFixed ? (
+                    {idx === fallbackMid && fallbackSetVal ? (
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                         <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                           {fallbackSetVal}
@@ -1048,21 +1031,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             })
           )}
         </tbody>
-        {items.length > 0 && (
-          <tfoot style={{ display: 'table-row-group' }}>
-            <tr style={{ backgroundColor: '#F1F5F9', borderTop: '2px solid #0E7490', fontWeight: '800', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-              <td colSpan={4} style={{ padding: '8px 12px', textAlign: 'right', color: '#475569', fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Total (Qty / Set):
-              </td>
-              <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900', borderRight: '1px solid #CBD5E1' }}>
-                {totalQuantity}
-              </td>
-              <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900' }}>
-                {totalQuantityTaken > 0 ? totalQuantityTaken : ''}
-              </td>
-            </tr>
-          </tfoot>
-        )}
       </table>
 
       {/* 5. PACKAGING CONTAINERS (NO. OF BOXES, NO. OF BUNDLES, NO. OF BAGS) */}

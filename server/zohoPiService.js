@@ -3,13 +3,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { zohoRequest } from './zohoAuthService.js';
 import { query, isDbConnected } from './db.js';
+import { isOptimizationTestMode } from './optimizationTestGuard.js';
+import { getStoreFilePath } from './runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-function getStoreFilePath(filename) {
-  return path.join(__dirname, filename);
-}
 
 /**
  * Parse any raw address (object or string) into a structured Zoho Books address object.
@@ -302,6 +300,10 @@ function determineIsIntraState(piData) {
  * Push a single Proforma Invoice to Zoho Books as an Estimate / Quote.
  */
 export async function pushPiToZoho(piData) {
+  if (isOptimizationTestMode()) {
+    return Promise.reject(new Error('[FAIL-CLOSED] External Zoho PI synchronization is blocked in optimization test mode.'));
+  }
+
   if (!piData || !piData.piNo) {
     throw new Error('Valid PI record with piNo is required.');
   }
