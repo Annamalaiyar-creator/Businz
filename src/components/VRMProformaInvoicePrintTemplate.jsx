@@ -887,6 +887,18 @@ export function VRMProformaInvoicePrintSheet({
     onUpdatePiData?.({ presetGroups: currentGroups });
   };
 
+  // Helper to normalize item UOM display (e.g. Numbers/no/pcs -> NOS, Meter/m -> MT)
+  const normalizeUomDisplay = (rawUom, fallback = 'NOS') => {
+    if (!rawUom) return fallback;
+    const s = String(rawUom).trim();
+    if (/^(mtr|meter|meters|mt|m)$/i.test(s)) return 'MT';
+    if (/^(nos|no|no's|numbers?|pcs|pieces?)$/i.test(s)) return 'NOS';
+    if (/^(kg|kgs|kilogram|kilograms)$/i.test(s)) return 'KG';
+    if (/^(sqm|sq\.m|sqmtr)$/i.test(s)) return 'SQM';
+    if (/^(set|sets)$/i.test(s)) return fallback;
+    return s.toUpperCase();
+  };
+
   // Compute item totals
   const items = rawItems.map((it, idx) => {
     const q = parseFloat(it.qty) || 1;
@@ -936,6 +948,9 @@ export function VRMProformaInvoicePrintSheet({
     const gstAmt = isPreset ? 0 : (taxable * (gRate / 100));
     const lineTotal = taxable + gstAmt;
 
+    const rawUom = String(it.uom || it.unit || '').trim();
+    const cleanUom = normalizeUomDisplay(rawUom, 'NOS');
+
     return {
       rawIndex: idx,
       grpId,
@@ -948,7 +963,8 @@ export function VRMProformaInvoicePrintSheet({
       description: it.description || it.specifications || '',
       hsn: it.hsn || getHsnCode(it),
       qty: q,
-      uom: it.uom || it.unit || 'Nos',
+      uom: cleanUom,
+      unit: cleanUom,
       rate: r,
       discPct,
       taxable,
@@ -961,7 +977,7 @@ export function VRMProformaInvoicePrintSheet({
       groupCount,
       presetName: grpMeta?.presetName || grpMeta?.name || '',
       setCount: grpMeta?.setCount || 1,
-      unit: grpMeta?.unit || 'Sets',
+      groupUnit: grpMeta?.unit || 'Sets',
       groupPrice: grpMeta?.kitPrice || grpMeta?.groupSubtotal || 0,
       groupTaxable: grpMeta?.groupSubtotal || grpMeta?.taxable || 0,
       groupGst: grpMeta?.groupGst || 0,
@@ -1236,7 +1252,7 @@ export function VRMProformaInvoicePrintSheet({
                   {it.isPresetItem && it.isFirstInGroup && (
                     <tr style={{ backgroundColor: '#F0F7FF', borderTop: '2px solid #0B3B60', borderBottom: '1px solid #CBD5E1' }}>
                       <td colSpan={isIntra ? 7 : 6} style={{ padding: '6px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '10px' }}>
-                        📦 {it.presetName || 'Solar Structure MMS Kit'} ({it.unit === 'kW' ? `Total Capacity: ${it.setCount || 1} kW` : `Total Quantity: ${it.setCount || 1} Set${(it.setCount || 1) > 1 ? 's' : ''}`} — {it.groupCount} Components)
+                        {it.presetName || 'Solar Structure MMS Kit'}
                       </td>
                     </tr>
                   )}
@@ -1250,7 +1266,7 @@ export function VRMProformaInvoicePrintSheet({
                       ) : null}
                     </td>
                     <td style={{ padding: '7px 6px', textAlign: 'center', verticalAlign: 'top', color: '#0F172A' }}>
-                      {it.qty} {it.unit || it.uom || 'Nos'}
+                      {it.qty} {it.uom || 'NOS'}
                     </td>
 
                     {/* RATE COLUMN: Merged vertically in middle for Preset Kit */}
@@ -1271,7 +1287,7 @@ export function VRMProformaInvoicePrintSheet({
                         >
                           <div>{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           <div style={{ fontSize: '7.5px', color: '#64748B', fontWeight: '500', marginTop: '1px' }}>
-                            {it.unit === 'kW' ? 'per kW' : 'per set'}
+                            {it.groupUnit === 'kW' ? 'per kW' : 'per set'}
                           </div>
                         </td>
                       ) : null
@@ -2522,7 +2538,6 @@ export function VRMProformaInvoicePrintSheet({
                                     if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
                                   }}
                                 />
-                                {' '}({it.unit === 'kW' ? `Total Capacity: ${it.setCount || 1} kW` : `Total Quantity: ${it.setCount || 1} Set${(it.setCount || 1) > 1 ? 's' : ''}`} — {it.groupCount} Components)
                               </span>
                             </div>
                           </td>
@@ -2633,7 +2648,7 @@ export function VRMProformaInvoicePrintSheet({
                                   />
                                 </div>
                                 <div style={{ fontSize: '8px', color: '#64748B', fontWeight: '500', marginTop: '2px' }}>
-                                  {it.unit === 'kW' ? 'per kW' : 'per set'}
+                                  {it.groupUnit === 'kW' ? 'per kW' : 'per set'}
                                 </div>
                               </td>
                             ) : null
