@@ -425,15 +425,68 @@ export default function ProductionTableView({
                               <span>Invoice</span>
                             </span>
                           )
-                        ) : activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
-                            <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
-                            {row.dateTimeObj.time && (
-                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
-                            )}
-                          </div>
+                        ) : (activeTab === 'Dispatch Orders' || String(activeTab || '').toLowerCase().includes('dispatch') || pageConfig.headers[2]?.includes('Date') || row.dateTimeObj) ? (
+                          (() => {
+                            const dObj = (row.dateTimeObj && typeof row.dateTimeObj === 'object') ? row.dateTimeObj : (typeof row.c3 === 'object' ? row.c3 : null);
+                            let dateStr = '';
+                            let timeStr = '';
+
+                            if (dObj) {
+                              if (typeof dObj.date === 'string' && dObj.date !== '[object Object]') {
+                                dateStr = dObj.date;
+                              }
+                              if (typeof dObj.time === 'string' && dObj.time !== '[object Object]') {
+                                timeStr = dObj.time;
+                              }
+                            }
+
+                            if (!dateStr || dateStr === '[object Object]') {
+                              const rawVal = (typeof row.c3 === 'string' && row.c3 !== '[object Object]') 
+                                ? row.c3 
+                                : (typeof row.dateTime === 'string' && row.dateTime !== '[object Object]' ? row.dateTime : '');
+
+                              if (rawVal) {
+                                if (rawVal.includes(',')) {
+                                  const parts = rawVal.split(',');
+                                  dateStr = parts[0].trim();
+                                  timeStr = parts.slice(1).join(',').trim();
+                                } else {
+                                  dateStr = rawVal;
+                                }
+                              } else {
+                                const fallbackRaw = row.salesConfirmedAt || row.createdAt || row.date || row.date1;
+                                if (fallbackRaw && typeof fallbackRaw === 'string') {
+                                  try {
+                                    const parsed = new Date(fallbackRaw);
+                                    if (!isNaN(parsed.getTime())) {
+                                      dateStr = parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                                      if (fallbackRaw.includes('T') || fallbackRaw.includes(':')) {
+                                        timeStr = parsed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                                      }
+                                    } else {
+                                      dateStr = fallbackRaw;
+                                    }
+                                  } catch (_) {
+                                    dateStr = String(fallbackRaw);
+                                  }
+                                }
+                              }
+                            }
+
+                            const safeDate = (dateStr && dateStr !== '[object Object]') ? dateStr : '—';
+                            const safeTime = (timeStr && timeStr !== '[object Object]') ? timeStr : '';
+
+                            return (
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
+                                <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{safeDate}</span>
+                                {safeTime && (
+                                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{safeTime}</span>
+                                )}
+                              </div>
+                            );
+                          })()
                         ) : (
-                          row.c3 || row.date1
+                          typeof row.c3 === 'object' ? (row.c3?.combined || row.c3?.date || '—') : (row.c3 || row.date1 || '—')
                         )}
                       </td>
                       <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
