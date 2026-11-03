@@ -389,14 +389,16 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         }
       ];
-    } else if (role === 'CEO' || role === 'MD' || role === 'Managing Director') {
+    } else if (role === 'CEO' || role === 'MD' || role === 'Managing Director' || role === 'HR') {
       sections = [
         {
           category: '1. Executive Dashboard',
           id: 'executive_dashboard',
-          dashboardSubTab: 'overview',
+          dashboardSubTab: role === 'HR' ? 'kit-analytics' : 'overview',
           items: [
-            { label: 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard }
+            ...(role === 'HR' ? [{ label: 'Kit & Materials Analytics', targetTab: 'Dashboard', subTabTarget: 'kit-analytics', icon: Boxes }] : []),
+            { label: role === 'HR' ? 'Operations Overview' : 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard },
+            ...(role !== 'HR' ? [{ label: 'Kit & Materials Analytics', targetTab: 'Dashboard', subTabTarget: 'kit-analytics', icon: Boxes }] : [])
           ]
         },
         {
@@ -459,19 +461,21 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Goods Receipt Notes', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined }
           ]
         },
+        ...(role !== 'HR' ? [
+          {
+            category: '8. Accounts & Finance',
+            id: 'accounts_finance',
+            dashboardSubTab: 'accounts',
+            items: [
+              { label: 'Accounts & Finance Dashboard', targetTab: 'Dashboard', subTabTarget: 'accounts', icon: LayoutDashboard },
+              { label: 'Accounts Verification', targetTab: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined },
+              { label: 'Invoices', targetTab: 'Invoice Management', icon: Receipt },
+              { label: 'Payments', targetTab: 'Payments', icon: Wallet }
+            ]
+          }
+        ] : []),
         {
-          category: '8. Accounts & Finance',
-          id: 'accounts_finance',
-          dashboardSubTab: 'accounts',
-          items: [
-            { label: 'Accounts & Finance Dashboard', targetTab: 'Dashboard', subTabTarget: 'accounts', icon: LayoutDashboard },
-            { label: 'Accounts Verification', targetTab: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined },
-            { label: 'Invoices', targetTab: 'Invoice Management', icon: Receipt },
-            { label: 'Payments', targetTab: 'Payments', icon: Wallet }
-          ]
-        },
-        {
-          category: '9. Reports & Analytics',
+          category: role === 'HR' ? '8. Reports & Analytics' : '9. Reports & Analytics',
           id: 'reports_analytics',
           dashboardSubTab: 'reports-dashboard',
           items: [
@@ -500,7 +504,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
       sections = [...procurementSections];
     }
 
-    const isCeo = (role === 'CEO' || role === 'MD' || role === 'Managing Director');
+    const isCeo = (role === 'CEO' || role === 'MD' || role === 'Managing Director' || role === 'HR');
     const isTa = (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA'));
     const isTechSupport = (role === 'Tech Support' || role === 'Technical Support' || (role || '').toLowerCase().includes('tech support'));
     const isAccounts = (

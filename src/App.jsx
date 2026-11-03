@@ -390,6 +390,9 @@ function App() {
       } else if (norm.includes('sales')) {
         localStorage.setItem('controlroom_logged_emp_id', 'SE-1000');
         localStorage.setItem('controlroom_logged_user_name', 'Annamalaiyar');
+      } else if (norm === 'hr' || norm.startsWith('hr')) {
+        localStorage.setItem('controlroom_logged_emp_id', 'HR-001');
+        localStorage.setItem('controlroom_logged_user_name', 'HR Operations');
       } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
         localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
         localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
@@ -772,7 +775,7 @@ function App() {
               <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts' || userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts' || (userRole || '').toLowerCase().includes('account')))) ? (
               <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
-            ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
+            ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'HR')) ? (
               <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : ((activeTab === 'Dashboard' || activeTab === 'Tech Support Dashboard') && (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support'))) ? (
               <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
