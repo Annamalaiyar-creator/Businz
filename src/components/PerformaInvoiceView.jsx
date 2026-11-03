@@ -200,8 +200,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   // Two-way helper to find all BOMs generated from this PI (Strict 1-to-1 mapping)
   const getConvertedBomsForPi = (pi) => {
     if (!pi) return [];
-    // STRICT DRAFT GUARD: A Draft PI is work-in-progress and can never be converted or linked to a BOM
-    if (pi.status === 'Draft' || pi.statusType === 'draft') return [];
 
     const piNum = String(pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
     if (!piNum) return [];
@@ -1107,12 +1105,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete sanitized.deliveryProofDoc;
       delete sanitized.deliveryAddressProofDoc;
       sanitized.isEdit = true;
-      fetch('/api/estimates', {
+      const resp = await fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sanitized)
-      }).catch(err => console.warn('Background PI release sync:', err));
-    } catch (_) {}
+      });
+      if (!resp.ok) {
+        console.warn('PI release sync response not OK:', resp.status);
+      }
+    } catch (err) {
+      console.warn('PI release sync error:', err);
+    }
   };
 
   const handleConvertToBom = (pi) => {
@@ -3530,7 +3533,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             String(pi.productName || '').toLowerCase().includes(searchLower) ||
             bomCodesStr.includes(searchLower);
 
-          const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
           const isExplicitConverted = Boolean(
             pi.status === 'Converted to BOM' || 
             pi.statusType === 'converted' || 
@@ -3538,11 +3540,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             pi.convertedBomCode || 
             pi.convertedBomNo
           );
-          const isConverted = !isDraft && hasSavedBom && (isExplicitConverted || pi.status === 'Converted to BOM');
-          const currentStatus = isDraft
-            ? 'Draft'
-            : (isConverted
-              ? 'Converted to BOM'
+          const isConverted = (hasSavedBom || isExplicitConverted) && pi.status !== 'Cancelled';
+          const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft') && !isConverted;
+          const currentStatus = isConverted
+            ? 'Converted to BOM'
+            : (isDraft
+              ? 'Draft'
               : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
                 ? 'Issued'
                 : (pi.status || 'Issued')));
@@ -3997,7 +4000,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       currentRows.map((pi, idx) => {
                         const isChecked = selectedPIs.includes(pi.piNo);
 
-                        const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
                         const matchedBoms = getConvertedBomsForPi(pi);
                         const hasSavedBom = matchedBoms.length > 0;
                         const isExplicitConverted = Boolean(
@@ -4007,11 +4009,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           pi.convertedBomCode || 
                           pi.convertedBomNo
                         );
-                        const isConverted = !isDraft && hasSavedBom && (isExplicitConverted || pi.status === 'Converted to BOM');
-                        const currentStatus = isDraft
-                          ? 'Draft'
-                          : (isConverted
-                            ? 'Converted to BOM'
+                        const isConverted = (hasSavedBom || isExplicitConverted) && pi.status !== 'Cancelled';
+                        const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft') && !isConverted;
+                        const currentStatus = isConverted
+                          ? 'Converted to BOM'
+                          : (isDraft
+                            ? 'Draft'
                             : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
                               ? 'Issued'
                               : (pi.status || 'Issued')));

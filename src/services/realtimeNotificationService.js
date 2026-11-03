@@ -194,6 +194,19 @@ class RealtimeNotificationService {
     if (currentEmp && actorEmp && currentEmp === actorEmp) return;
     if (currentName && actorName && currentName === actorName) return;
 
+    // Recipient Targeting Safeguard: If targeted to a specific employee code, do NOT process or speak on another employee's device
+    const targetEmp = String(notif.recipient_emp_code || '').toUpperCase().trim();
+    if (targetEmp && currentEmp && targetEmp !== currentEmp) {
+      let isAlias = false;
+      try {
+        const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const myRecord = storedEmps.find(e => (e.employee_code || e.code || '').toUpperCase() === currentEmp);
+        const aliases = (myRecord?.alias_codes || []).map(a => String(a).toUpperCase().trim());
+        isAlias = aliases.includes(targetEmp);
+      } catch (_) {}
+      if (!isAlias) return;
+    }
+
     // Check if already in list (deduplication)
     const exists = this.notifications.some(n => n.id === notif.id || (n.dedup_id && n.dedup_id === notif.dedup_id));
     if (exists) return;

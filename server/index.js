@@ -6286,14 +6286,66 @@ app.post('/api/boms', async (req, res) => {
           }
         } catch (_) {}
 
-        // 7. Synchronize source PI in-memory cache and broadcast if applicable
+        // 7. Synchronize source PI in PostgreSQL database and file stores
         if (bom.sourcePiNo) {
           try {
-            const piStoreRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`).catch(() => null);
-            if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
-              supabaseMemoryStore['sales_pi_store'] = piStoreRes.rows[0].data;
-              broadcastRealtimeEvent('pi_updated', { action: 'converted_to_bom', recordId: bom.sourcePiNo, piNo: bom.sourcePiNo, convertedBomCode: finalCode });
-            }
+            const cleanSrcPi = String(bom.sourcePiNo).trim();
+            // Single targeted row update directly to PostgreSQL public.proforma_invoices
+            await query(`
+              UPDATE public.proforma_invoices
+              SET status = 'Converted to BOM',
+                  status_type = 'converted',
+                  converted_bom_no = $1,
+                  converted_bom_code = $1,
+                  updated_at = NOW()
+              WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($2)) OR LOWER(TRIM(id)) = LOWER(TRIM($2))
+            `, [finalCode, cleanSrcPi]).catch(e => console.warn('[BOM source PI DB update warning]:', e.message));
+
+            // Sync disk files as secondary fallback
+            const updatePiDiskFile = (fileName) => {
+              try {
+                const fPath = getStoreFilePath(fileName);
+                if (fs.existsSync(fPath)) {
+                  const raw = fs.readFileSync(fPath, 'utf8');
+                  const list = JSON.parse(raw);
+                  if (Array.isArray(list)) {
+                    let changed = false;
+                    const updated = list.map(p => {
+                      if (!p) return p;
+                      const pNo = String(p.piNo || p.id || '').trim().toLowerCase();
+                      if (pNo === cleanSrcPi.toLowerCase()) {
+                        changed = true;
+                        return {
+                          ...p,
+                          status: 'Converted to BOM',
+                          statusType: 'converted',
+                          convertedToBom: true,
+                          isConverted: true,
+                          convertedBomCode: finalCode,
+                          convertedBomNo: finalCode,
+                          convertedDate: new Date().toISOString()
+                        };
+                      }
+                      return p;
+                    });
+                    if (changed) {
+                      fs.writeFileSync(fPath, JSON.stringify(updated, null, 2), 'utf8');
+                    }
+                  }
+                }
+              } catch (_) {}
+            };
+            updatePiDiskFile('sales_pi_store.json');
+            updatePiDiskFile('proforma_invoice_store.json');
+
+            broadcastRealtimeEvent('pi_updated', {
+              action: 'converted_to_bom',
+              recordId: cleanSrcPi,
+              piNo: cleanSrcPi,
+              status: 'Converted to BOM',
+              statusType: 'converted',
+              convertedBomCode: finalCode
+            });
           } catch (_) {}
         }
 

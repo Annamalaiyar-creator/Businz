@@ -81,6 +81,7 @@ export async function ensureLeadsSchema() {
         ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false,
         ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false,
         ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false,
         ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS converted_customer_id TEXT,

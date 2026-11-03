@@ -217,7 +217,36 @@ export default function CrmLeadsView({
       }
     };
 
+    const handleCrmUpdated = (e) => {
+      const detail = e.detail;
+      if (detail && detail.leadId) {
+        // Targeted real-time update in local state without full reload
+        setLeads(prev => (prev || []).map(l => {
+          if (l.id === detail.leadId || l.lead_number === detail.leadId) {
+            return {
+              ...l,
+              status: detail.newStatus || detail.status || l.status,
+              is_converted: detail.is_converted !== undefined ? detail.is_converted : l.is_converted
+            };
+          }
+          return l;
+        }));
+        setActiveLead(curr => {
+          if (curr && (curr.id === detail.leadId || curr.lead_number === detail.leadId)) {
+            return {
+              ...curr,
+              status: detail.newStatus || detail.status || curr.status,
+              is_converted: detail.is_converted !== undefined ? detail.is_converted : curr.is_converted
+            };
+          }
+          return curr;
+        });
+      }
+      fetchLeads();
+    };
+
     window.addEventListener('businz_notification_received', handleRealtimeNotif);
+    window.addEventListener('controlroom_crm_updated', handleCrmUpdated);
 
     // Periodic Refresh every 45s
     const timer = setInterval(() => {
@@ -228,6 +257,7 @@ export default function CrmLeadsView({
     return () => {
       clearInterval(timer);
       window.removeEventListener('businz_notification_received', handleRealtimeNotif);
+      window.removeEventListener('controlroom_crm_updated', handleCrmUpdated);
     };
   }, [userRole, loggedInEmpId]);
 
@@ -466,6 +496,22 @@ export default function CrmLeadsView({
       alert(`Stages cannot be reversed. Lead stage can only progress forward from "${activeLead.status}".`);
       return;
     }
+
+    const previousStatus = activeLead.status;
+    const previousActiveLead = { ...activeLead };
+
+    // Optimistic UI update: instantly update UI so user sees the change in real-time
+    const updatedLead = {
+      ...activeLead,
+      status: newStatus,
+      is_converted: ['Converted', 'Won'].includes(newStatus) ? true : activeLead.is_converted
+    };
+    setActiveLead(updatedLead);
+    setLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? { ...l, status: newStatus } : l));
+    if (leadDetailData && (leadDetailData.id === activeLead.id || leadDetailData.lead_number === activeLead.id)) {
+      setLeadDetailData(prev => prev ? { ...prev, status: newStatus } : prev);
+    }
+
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -481,7 +527,7 @@ export default function CrmLeadsView({
       const data = await res.json();
       if (data?.success) {
         showToast(`Lead status updated to "${newStatus}"!`);
-        await fetchLeads();
+        fetchLeads();
         const detRes = await fetch(`/api/crm/leads/${activeLead.id}`);
         const detJson = await detRes.json();
         if (detJson?.success && detJson.data) {
@@ -489,9 +535,15 @@ export default function CrmLeadsView({
           setActiveLead(detJson.data);
         }
       } else {
+        // Rollback on server failure
+        setActiveLead(previousActiveLead);
+        setLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
         alert(data.error || 'Failed to update status');
       }
     } catch (err) {
+      // Rollback on network failure
+      setActiveLead(previousActiveLead);
+      setLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
       alert(err.message);
     }
   };

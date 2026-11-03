@@ -2697,21 +2697,42 @@ export default function CreateBomFormPage(props) {
                               const updated = list.map(pi => (pi.piNo === srcPi || pi.id === srcPi) ? {
                                 ...pi,
                                 status: 'Converted to BOM',
+                                statusType: 'converted',
                                 convertedToBom: true,
                                 isConverted: true,
                                 convertedBomCode: finalAssignedCode,
+                                convertedBomNo: finalAssignedCode,
                                 convertedDate: new Date().toISOString()
                               } : pi);
                               localStorage.setItem(storeKey, JSON.stringify(updated));
-                              saveCloudStore(storeKey.replace('controlroom_', ''), updated);
                             }
                           }
                         } catch (_) {}
                       };
                       updatePiList('controlroom_sales_pi_store');
                       updatePiList('controlroom_procurement_pi_store');
+
+                      // Targeted single-record persistence to PostgreSQL public.proforma_invoices
+                      try {
+                        fetch('/api/estimates', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            piNo: srcPi,
+                            status: 'Converted to BOM',
+                            statusType: 'converted',
+                            convertedBomCode: finalAssignedCode,
+                            convertedBomNo: finalAssignedCode,
+                            isConverted: true,
+                            convertedToBom: true,
+                            isEdit: true
+                          })
+                        }).catch(err => console.warn('PI conversion status update error:', err));
+                      } catch (_) {}
+
                       try {
                         window.dispatchEvent(new CustomEvent('controlroom_pi_store_updated', { detail: { piNo: srcPi, bomCode: finalAssignedCode } }));
+                        window.dispatchEvent(new CustomEvent('controlroom_pi_updated', { detail: { piNo: srcPi, status: 'Converted to BOM', convertedBomCode: finalAssignedCode } }));
                       } catch (_) {}
                     }
 

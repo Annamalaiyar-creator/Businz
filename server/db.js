@@ -401,6 +401,24 @@ export async function initPostgresDatabase() {
         CREATE INDEX IF NOT EXISTS idx_proforma_invoices_created_at ON public.proforma_invoices (created_at DESC);
       `);
       console.log('✅ [PostgreSQL] public.proforma_invoices table & idx_proforma_invoices_pi_no_lower verified.');
+
+      // Auto-heal any PIs that have active BOM conversions but were stuck in Draft
+      try {
+        await client.query(`
+          UPDATE public.proforma_invoices p
+          SET status = 'Converted to BOM',
+              status_type = 'converted',
+              converted_bom_no = COALESCE(p.converted_bom_no, b.bom_code),
+              converted_bom_code = COALESCE(p.converted_bom_code, b.bom_code),
+              updated_at = NOW()
+          FROM public.bom_orders b
+          WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+            AND b.status NOT ILIKE '%cancel%'
+            AND (p.status = 'Draft' OR p.status_type = 'draft' OR p.status = 'Draft Saved');
+        `);
+      } catch (healErr) {
+        console.warn('⚠️ [PI Auto-heal Notice]:', healErr.message);
+      }
     } catch (piTableErr) {
       console.warn('⚠️ [PostgreSQL proforma_invoices Table Warning]:', piTableErr.message);
     }
@@ -531,6 +549,7 @@ export async function initPostgresDatabase() {
           ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false,
           ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false,
           ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false,
           ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS converted_customer_id TEXT,

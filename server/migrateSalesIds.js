@@ -289,6 +289,36 @@ async function runMigration() {
     client = await pool.connect();
     hasPg = true;
     console.log('✅ Connected to PostgreSQL database.');
+
+    try {
+      console.log('--- Applying Database Schema Migrations ---');
+      await client.query(`
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_id TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
+
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS status_type TEXT DEFAULT 'issued';
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_code TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_no TEXT;
+
+        UPDATE public.proforma_invoices p
+        SET status = 'Converted to BOM',
+            status_type = 'converted',
+            converted_bom_no = COALESCE(p.converted_bom_no, b.bom_code),
+            converted_bom_code = COALESCE(p.converted_bom_code, b.bom_code),
+            updated_at = NOW()
+        FROM public.bom_orders b
+        WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+          AND b.status NOT ILIKE '%cancel%'
+          AND (p.status = 'Draft' OR p.status_type = 'draft' OR p.status = 'Draft Saved');
+      `);
+      console.log('✅ Database schema verified and converted PIs healed.');
+    } catch (dbErr) {
+      console.warn('⚠️ DB Schema check notice:', dbErr.message);
+    }
   } catch (err) {
     console.log('ℹ️  PostgreSQL not directly reachable on this run, operating on file stores.');
   }

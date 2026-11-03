@@ -77,12 +77,12 @@ function isClientRecipient(client, notification) {
   const targetEmp = String(notification.recipient_emp_code || '').toUpperCase().trim();
   const targetRole = String(notification.recipient_role || '').toLowerCase().trim();
 
-  // Specific user targeted by employee code
-  if (targetEmp && clientEmp && targetEmp === clientEmp) {
-    return true;
+  // Specific user targeted by employee code: ONLY that specific employee receives it
+  if (targetEmp) {
+    return Boolean(clientEmp && targetEmp === clientEmp);
   }
 
-  // Department / Role queue targeted
+  // Department / Role queue targeted (only when no specific employee code is targeted)
   if (targetRole) {
     if (targetRole === 'all') return true;
     if (clientRole === targetRole) return true;
