@@ -623,6 +623,19 @@ async function runMigration() {
       try { await pgClient.query(ddl); } catch (_) {}
     }
 
+    try {
+      await pgClient.query(`
+        UPDATE public.proforma_invoices
+        SET converted_bom_code = NULL,
+            converted_bom_no = NULL,
+            status = CASE WHEN status = 'Converted to BOM' THEN 'Issued' ELSE status END,
+            status_type = CASE WHEN status_type = 'converted' THEN 'issued' ELSE status_type END
+        WHERE (pi_no ILIKE '%495%' OR id ILIKE '%495%')
+          AND (converted_bom_code ILIKE '%381%' OR converted_bom_no ILIKE '%381%');
+      `);
+      console.log(`  ✓ Relational PG [${dbLabel}]: Cleaned up accidental BOM-381 link on PI-495.`);
+    } catch (_) {}
+
     for (const m of SALES_MAPPINGS) {
       try {
         const nameChecks = (m.matchNames || [m.name]).map(n => `LOWER(TRIM(COALESCE(sales_person, created_by, ''))) ILIKE '%${n.trim().toLowerCase()}%'`).join(' OR ');

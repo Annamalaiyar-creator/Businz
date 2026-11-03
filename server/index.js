@@ -5306,6 +5306,19 @@ async function repairBomSequences() {
           converted_bom_code: null,
           converted_bom_no: null
         };
+      } else if (pNo.toLowerCase().includes('495') && (String(pi.convertedBomCode || '').includes('381') || String(pi.convertedBomNo || '').includes('381'))) {
+        piUpdatedCount++;
+        piListChanged = true;
+        return {
+          ...pi,
+          status: 'Issued',
+          statusType: 'issued',
+          convertedToBom: false,
+          convertedBomCode: null,
+          convertedBomNo: null,
+          converted_bom_code: null,
+          converted_bom_no: null
+        };
       }
       return pi;
     });
@@ -5412,6 +5425,18 @@ async function repairBomSequences() {
                 OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
               )
           );
+      `).catch(() => {});
+
+      // Safely detach accidental BOM-381 from PI-495
+      await query(`
+        UPDATE public.proforma_invoices p
+        SET converted_bom_code = NULL,
+            converted_bom_no = NULL,
+            status = 'Issued',
+            status_type = 'issued',
+            updated_at = NOW()
+        WHERE (p.pi_no ILIKE '%495%' OR p.id ILIKE '%495%')
+          AND (p.converted_bom_code ILIKE '%381%' OR p.converted_bom_no ILIKE '%381%');
       `).catch(() => {});
     } catch (_) {}
 
