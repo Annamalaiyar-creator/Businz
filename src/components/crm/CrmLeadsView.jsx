@@ -139,10 +139,12 @@ export default function CrmLeadsView({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Fetch Authoritative Leads from Backend
-  const fetchLeads = async () => {
+  // Fetch Authoritative Leads from Backend (Supports silent background updates to prevent UI blinking)
+  const fetchLeads = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent && (!dbLeads || dbLeads.length === 0)) {
+        setIsLoading(true);
+      }
       const headers = {
         'x-user-role': effectiveRole || userRole,
         'x-user-emp-id': loggedInEmpId,
@@ -157,7 +159,9 @@ export default function CrmLeadsView({
     } catch (err) {
       console.error('Failed to load leads from database:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -210,7 +214,7 @@ export default function CrmLeadsView({
       const notif = e.detail;
       if (notif) {
         setNotifications(prev => [notif, ...(prev || []).filter(n => n.id !== notif.id)]);
-        fetchLeads();
+        fetchLeads(true);
         if (typeof showToast === 'function' && notif.title) {
           showToast(notif.title);
         }
@@ -221,7 +225,7 @@ export default function CrmLeadsView({
       const detail = e.detail;
       if (detail && detail.leadId) {
         // Targeted real-time update in local state without full reload
-        setLeads(prev => (prev || []).map(l => {
+        setDbLeads(prev => (prev || []).map(l => {
           if (l.id === detail.leadId || l.lead_number === detail.leadId) {
             return {
               ...l,
@@ -242,15 +246,15 @@ export default function CrmLeadsView({
           return curr;
         });
       }
-      fetchLeads();
+      fetchLeads(true);
     };
 
     window.addEventListener('businz_notification_received', handleRealtimeNotif);
     window.addEventListener('controlroom_crm_updated', handleCrmUpdated);
 
-    // Periodic Refresh every 45s
+    // Periodic Refresh every 45s (silent background fetch to prevent UI blinking)
     const timer = setInterval(() => {
-      fetchLeads();
+      fetchLeads(true);
       fetchNotifications();
     }, 45000);
 
@@ -507,7 +511,7 @@ export default function CrmLeadsView({
       is_converted: ['Converted', 'Won'].includes(newStatus) ? true : activeLead.is_converted
     };
     setActiveLead(updatedLead);
-    setLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? { ...l, status: newStatus } : l));
+    setDbLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? { ...l, status: newStatus } : l));
     if (leadDetailData && (leadDetailData.id === activeLead.id || leadDetailData.lead_number === activeLead.id)) {
       setLeadDetailData(prev => prev ? { ...prev, status: newStatus } : prev);
     }
@@ -527,7 +531,7 @@ export default function CrmLeadsView({
       const data = await res.json();
       if (data?.success) {
         showToast(`Lead status updated to "${newStatus}"!`);
-        fetchLeads();
+        fetchLeads(true);
         const detRes = await fetch(`/api/crm/leads/${activeLead.id}`);
         const detJson = await detRes.json();
         if (detJson?.success && detJson.data) {
@@ -537,13 +541,13 @@ export default function CrmLeadsView({
       } else {
         // Rollback on server failure
         setActiveLead(previousActiveLead);
-        setLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
+        setDbLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
         alert(data.error || 'Failed to update status');
       }
     } catch (err) {
       // Rollback on network failure
       setActiveLead(previousActiveLead);
-      setLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
+      setDbLeads(prev => (prev || []).map(l => (l.id === activeLead.id || l.lead_number === activeLead.id) ? previousActiveLead : l));
       alert(err.message);
     }
   };

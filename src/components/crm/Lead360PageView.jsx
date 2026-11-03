@@ -243,15 +243,46 @@ export default function Lead360PageView({
   // Interactive Tasks & Notes inputs
   const [newTaskInput, setNewTaskInput] = useState('');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
-  const [newNoteInput, setNewNoteInput] = useState('');
+
+  const leadKey = lead?.lead_number || lead?.id || 'lead_default_key';
+
+  // Auto-restore draft note for this lead if user was typing previously
+  const [newNoteInput, setNewNoteInput] = useState(() => {
+    try {
+      const k = lead?.lead_number || lead?.id;
+      return (k && localStorage.getItem(`lead_draft_note_${k}`)) || '';
+    } catch (_) {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const k = lead?.lead_number || lead?.id;
+      const draft = (k && localStorage.getItem(`lead_draft_note_${k}`)) || '';
+      setNewNoteInput(draft);
+    } catch (_) {}
+  }, [lead?.id, lead?.lead_number]);
+
+  const handleNoteInputChange = (val) => {
+    setNewNoteInput(val);
+    try {
+      const k = lead?.lead_number || lead?.id;
+      if (k) {
+        if (val) {
+          localStorage.setItem(`lead_draft_note_${k}`, val);
+        } else {
+          localStorage.removeItem(`lead_draft_note_${k}`);
+        }
+      }
+    } catch (_) {}
+  };
 
   // Quick Inline Call Log input state
   const [callSummary, setCallSummary] = useState('');
   const [callResponse, setCallResponse] = useState('');
   const [callDuration, setCallDuration] = useState('180');
   const [isSubmittingCall, setIsSubmittingCall] = useState(false);
-
-  const leadKey = lead?.lead_number || lead?.id || 'lead_default_key';
 
   // Resolved Converted Customer ID & Status
   const resolvedCustCode = useMemo(() => {
@@ -284,9 +315,18 @@ export default function Lead360PageView({
     }));
   };
 
-  // Lead Tasks & Notes store
+  // Lead Tasks & Notes store with synchronous localStorage initialization
+  const getInitialLeadNotes = () => {
+    try {
+      const raw = localStorage.getItem('controlroom_crm_lead_notes');
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      return {};
+    }
+  };
+
   const [leadTasks, setLeadTasks] = useState({});
-  const [leadNotes, setLeadNotes] = useState({});
+  const [leadNotes, setLeadNotes] = useState(getInitialLeadNotes);
 
   useEffect(() => {
     let active = true;
@@ -296,7 +336,25 @@ export default function Lead360PageView({
     ]).then(([tasks, notes]) => {
       if (active) {
         if (tasks && typeof tasks === 'object' && !Array.isArray(tasks)) setLeadTasks(tasks);
-        if (notes && typeof notes === 'object' && !Array.isArray(notes)) setLeadNotes(notes);
+        if (notes && typeof notes === 'object' && !Array.isArray(notes)) {
+          setLeadNotes(prev => {
+            const merged = { ...prev };
+            Object.keys(notes).forEach(k => {
+              const existingList = merged[k] || [];
+              const incomingList = notes[k] || [];
+              const map = new Map();
+              [...incomingList, ...existingList].forEach(item => {
+                if (item && item.id) map.set(item.id, item);
+                else if (item && item.text) map.set(item.text, item);
+              });
+              merged[k] = Array.from(map.values());
+            });
+            try {
+              localStorage.setItem('controlroom_crm_lead_notes', JSON.stringify(merged));
+            } catch (_) {}
+            return merged;
+          });
+        }
       }
     });
 
@@ -383,22 +441,57 @@ export default function Lead360PageView({
     saveCloudStore('crm_lead_tasks', updated);
   };
 
-  const handleAddLeadNote = (id) => {
+  const handleAddLeadNote = async (id) => {
     if (!newNoteInput.trim()) return;
+    const noteText = newNoteInput.trim();
     const noteObj = {
       id: 'note_' + Date.now(),
-      text: newNoteInput.trim(),
+      text: noteText,
       author: activeAccountUser || 'Sales Executive',
       date: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
       createdAt: new Date().toISOString()
     };
+    const key1 = lead?.lead_number || id;
+    const key2 = lead?.id || id;
     const updated = {
       ...leadNotes,
-      [id]: [noteObj, ...(leadNotes[id] || [])]
+      [key1]: [noteObj, ...(leadNotes[key1] || [])],
+      ...(key2 && key2 !== key1 ? { [key2]: [noteObj, ...(leadNotes[key2] || [])] } : {})
     };
     setLeadNotes(updated);
-    saveCloudStore('crm_lead_notes', updated);
+    try {
+      localStorage.setItem('controlroom_crm_lead_notes', JSON.stringify(updated));
+      localStorage.removeItem(`lead_draft_note_${key1}`);
+      localStorage.removeItem(`lead_draft_note_${key2}`);
+    } catch (_) {}
     setNewNoteInput('');
+
+    // Persist to PostgreSQL database as a permanent lead activity
+    try {
+      const targetLeadId = lead?.id || lead?.lead_number || id;
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-role': userRole,
+        'x-user-emp-id': localStorage.getItem('controlroom_logged_emp_id') || '',
+        'x-user-name': activeAccountUser || 'Sales Representative'
+      };
+      await fetch(`/api/crm/leads/${targetLeadId}/activity`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          activityType: 'NOTE',
+          summary: noteText,
+          customerResponse: ''
+        })
+      });
+      if (typeof onRefreshLead === 'function') {
+        onRefreshLead();
+      }
+    } catch (err) {
+      console.warn('Note backend sync notice:', err);
+    }
+
+    saveCloudStore('crm_lead_notes', updated);
   };
 
   const handleSubmitInlineCall = async (e) => {
@@ -451,7 +544,64 @@ export default function Lead360PageView({
     return [...local, ...dbFollowups];
   }, [leadTasks, leadKey, lead.followups]);
 
-  const currentNotes = leadNotes[leadKey] || [];
+  // Comprehensive Notes Resolution: Combines local state, PostgreSQL activities, and lead notes
+  const currentNotes = useMemo(() => {
+    const list = [];
+    const seenTexts = new Set();
+
+    // 1. From local & cloud leadNotes
+    const key1 = lead?.lead_number;
+    const key2 = lead?.id;
+    const rawNotes = [
+      ...(leadNotes[leadKey] || []),
+      ...(key1 && leadNotes[key1] ? leadNotes[key1] : []),
+      ...(key2 && leadNotes[key2] ? leadNotes[key2] : [])
+    ];
+    rawNotes.forEach(n => {
+      if (n && n.text) {
+        const t = n.text.trim().toLowerCase();
+        if (!seenTexts.has(t)) {
+          seenTexts.add(t);
+          list.push(n);
+        }
+      }
+    });
+
+    // 2. From PostgreSQL database lead.activities where activity_type === 'NOTE'
+    (lead.activities || []).forEach(act => {
+      const type = String(act.activity_type || act.activityType || '').toUpperCase();
+      if (type === 'NOTE' && act.summary) {
+        const t = act.summary.trim().toLowerCase();
+        if (!seenTexts.has(t)) {
+          seenTexts.add(t);
+          list.push({
+            id: act.id || ('act_' + act.created_at),
+            text: act.summary,
+            author: act.created_by_name || act.createdByName || 'Sales Executive',
+            date: act.created_at ? new Date(act.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Note',
+            createdAt: act.created_at
+          });
+        }
+      }
+    });
+
+    // 3. From lead.notes column if present
+    if (lead.notes && typeof lead.notes === 'string' && lead.notes.trim()) {
+      const t = lead.notes.trim().toLowerCase();
+      if (!seenTexts.has(t)) {
+        seenTexts.add(t);
+        list.push({
+          id: 'lead_initial_note',
+          text: lead.notes.trim(),
+          author: lead.lead_created_by_name || 'System / Inbound',
+          date: lead.created_at ? new Date(lead.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Initial Note',
+          createdAt: lead.created_at
+        });
+      }
+    }
+
+    return list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }, [leadNotes, leadKey, lead.activities, lead.notes, lead.id, lead.lead_number]);
 
   // Match Linked Quotations (from database detail or passed props)
   const linkedQuotes = useMemo(() => {
@@ -1061,7 +1211,7 @@ export default function Lead360PageView({
                     rows={3}
                     placeholder="Write an internal sales note, site visit summary, or technical observation for this lead..."
                     value={newNoteInput}
-                    onChange={(e) => setNewNoteInput(e.target.value)}
+                    onChange={(e) => handleNoteInputChange(e.target.value)}
                     style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
