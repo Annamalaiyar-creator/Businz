@@ -2,15 +2,29 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
+import dotenv from 'dotenv';
+
 const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load environment variables in proper priority
+dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config();
+
 // PostgreSQL connection config
+const baseHost = process.env.PGHOST || '127.0.0.1';
+const basePort = process.env.PGPORT || 5432;
+const baseUser = process.env.PGUSER || 'postgres';
+const basePassword = process.env.PGPASSWORD || 'postgres';
+const defaultDb = process.env.PGDATABASE || 'businz';
+
 const connectionString = process.env.DATABASE_URL || 
   process.env.PG_CONNECTION_STRING || 
-  `postgres://${process.env.PGUSER || 'postgres'}:${encodeURIComponent(process.env.PGPASSWORD || 'postgres')}@${process.env.PGHOST || '127.0.0.1'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'businz'}`;
+  `postgres://${baseUser}:${encodeURIComponent(basePassword)}@${baseHost}:${basePort}/${defaultDb}`;
 
 const pool = new Pool({
   connectionString,
@@ -292,29 +306,42 @@ async function runMigration() {
 
     try {
       console.log('--- Applying Database Schema Migrations ---');
-      await client.query(`
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_id TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
+      const ddlStatements = [
+        'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;',
+        'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false;',
+        'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false;',
+        'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false;',
+        'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_id TEXT;',
+        'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;',
+        'ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS sales_person_email TEXT;',
+        'ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sales_person_email TEXT;',
+        "ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS status_type TEXT DEFAULT 'issued';",
+        'ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_code TEXT;',
+        'ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_no TEXT;'
+      ];
 
-        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS status_type TEXT DEFAULT 'issued';
-        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_code TEXT;
-        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_no TEXT;
+      for (const ddl of ddlStatements) {
+        try {
+          await client.query(ddl);
+        } catch (e) {
+          console.warn(`DDL Notice (${ddl.slice(0, 40)}...):`, e.message);
+        }
+      }
 
-        UPDATE public.proforma_invoices p
-        SET status = 'Converted to BOM',
-            status_type = 'converted',
-            converted_bom_no = COALESCE(p.converted_bom_no, b.bom_code),
-            converted_bom_code = COALESCE(p.converted_bom_code, b.bom_code),
-            updated_at = NOW()
-        FROM public.bom_orders b
-        WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
-          AND b.status NOT ILIKE '%cancel%'
-          AND (p.status = 'Draft' OR p.status_type = 'draft' OR p.status = 'Draft Saved');
-      `);
+      try {
+        await client.query(`
+          UPDATE public.proforma_invoices p
+          SET status = 'Converted to BOM',
+              status_type = 'converted',
+              converted_bom_no = COALESCE(p.converted_bom_no, b.bom_code),
+              converted_bom_code = COALESCE(p.converted_bom_code, b.bom_code),
+              updated_at = NOW()
+          FROM public.bom_orders b
+          WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+            AND b.status NOT ILIKE '%cancel%'
+            AND (p.status = 'Draft' OR p.status_type = 'draft' OR p.status = 'Draft Saved');
+        `);
+      } catch (_) {}
       console.log('✅ Database schema verified and converted PIs healed.');
     } catch (dbErr) {
       console.warn('⚠️ DB Schema check notice:', dbErr.message);
@@ -562,15 +589,23 @@ async function runMigration() {
   console.log(`  ✓ CRM: ${qRes.count} quotes, ${leadRes.count} leads, ${oppRes.count} opportunities re-keyed.`);
 
   // 5. DIRECT POSTGRESQL TABLE MIGRATION FOR PROFORMA_INVOICES & BOM_ORDERS
-  if (hasPg && client) {
-    console.log('\n--- 5. Migrating PostgreSQL public.proforma_invoices & public.bom_orders ---');
+  async function migratePgRelational(pgClient, dbLabel) {
+    console.log(`\n--- 5. Migrating PostgreSQL public.proforma_invoices & public.bom_orders [${dbLabel}] ---`);
+    for (const ddl of [
+      'ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS sales_person_email TEXT;',
+      'ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sales_person_email TEXT;',
+      'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;'
+    ]) {
+      try { await pgClient.query(ddl); } catch (_) {}
+    }
+
     for (const m of SALES_MAPPINGS) {
       try {
         const nameChecks = (m.matchNames || [m.name]).map(n => `LOWER(TRIM(COALESCE(sales_person, created_by, ''))) ILIKE '%${n.trim().toLowerCase()}%'`).join(' OR ');
         const emailChecks = (m.matchEmails || [m.email]).filter(Boolean).map(e => `LOWER(TRIM(COALESCE(sales_person_email, email, ''))) ILIKE '%${e.trim().toLowerCase()}%'`).join(' OR ');
         const fullCondition = emailChecks ? `(${nameChecks}) OR (${emailChecks})` : `(${nameChecks})`;
 
-        const piRes = await client.query(`
+        const piRes = await pgClient.query(`
           UPDATE public.proforma_invoices
           SET sales_person_code = $1,
               sales_person = $2,
@@ -580,7 +615,7 @@ async function runMigration() {
           WHERE ${fullCondition}
         `, [m.newCode, m.name, m.email]);
 
-        const bomRes = await client.query(`
+        const bomRes = await pgClient.query(`
           UPDATE public.bom_orders
           SET sales_person_code = $1,
               sales_person = $2,
@@ -590,10 +625,29 @@ async function runMigration() {
           WHERE ${fullCondition}
         `, [m.newCode, m.name, m.email]);
 
-        console.log(`  ✓ Relational PG: ${m.name} (${m.newCode}) updated ${piRes.rowCount} PIs and ${bomRes.rowCount} BOMs.`);
+        console.log(`  ✓ Relational PG [${dbLabel}]: ${m.name} (${m.newCode}) updated ${piRes.rowCount} PIs and ${bomRes.rowCount} BOMs.`);
       } catch (err) {
-        console.warn(`  ⚠️ Error updating ${m.name} in PG:`, err.message);
+        console.warn(`  ⚠️ Error updating ${m.name} in PG [${dbLabel}]:`, err.message);
       }
+    }
+  }
+
+  if (hasPg && client) {
+    await migratePgRelational(client, defaultDb);
+
+    // Also migrate the sibling database if available
+    const siblingDb = defaultDb === 'businz' ? 'businz_dev' : 'businz';
+    try {
+      const siblingPool = new Pool({
+        connectionString: `postgres://${baseUser}:${encodeURIComponent(basePassword)}@${baseHost}:${basePort}/${siblingDb}`,
+        connectionTimeoutMillis: 3000
+      });
+      const siblingClient = await siblingPool.connect();
+      await migratePgRelational(siblingClient, siblingDb);
+      siblingClient.release();
+      await siblingPool.end().catch(() => {});
+    } catch (_) {
+      // Sibling database not present or not accessible, harmless
     }
   }
 

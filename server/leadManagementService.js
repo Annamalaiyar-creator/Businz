@@ -39,7 +39,8 @@ let schemaEnsured = false;
 export async function ensureLeadsSchema() {
   if (schemaEnsured) return;
   try {
-    await dbQuery(`
+    // 1. Ensure public.leads table exists
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS public.leads (
         id TEXT PRIMARY KEY,
         lead_number TEXT UNIQUE,
@@ -58,38 +59,49 @@ export async function ensureLeadsSchema() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
 
-      ALTER TABLE public.leads 
-        ADD COLUMN IF NOT EXISTS location TEXT,
-        ADD COLUMN IF NOT EXISTS product_requirement TEXT,
-        ADD COLUMN IF NOT EXISTS lead_created_by_id TEXT,
-        ADD COLUMN IF NOT EXISTS lead_created_by_name TEXT,
-        ADD COLUMN IF NOT EXISTS assigned_by_user_id TEXT,
-        ADD COLUMN IF NOT EXISTS assigned_by_name TEXT,
-        ADD COLUMN IF NOT EXISTS assigned_by_role TEXT,
-        ADD COLUMN IF NOT EXISTS assigned_to_user_id TEXT,
-        ADD COLUMN IF NOT EXISTS assigned_to_name TEXT,
-        ADD COLUMN IF NOT EXISTS assigned_to_role TEXT,
-        ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'MEDIUM',
-        ADD COLUMN IF NOT EXISTS next_followup_date TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS external_enquiry_id TEXT,
-        ADD COLUMN IF NOT EXISTS external_payload JSONB,
-        ADD COLUMN IF NOT EXISTS last_qualifying_activity_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS last_activity_type TEXT,
-        ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false,
-        ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false,
-        ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false,
-        ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false,
-        ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS converted_customer_id TEXT,
-        ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
+    // 2. Ensure each column exists individually to prevent multi-statement failure
+    const columns = [
+      'location TEXT',
+      'product_requirement TEXT',
+      'lead_created_by_id TEXT',
+      'lead_created_by_name TEXT',
+      'assigned_by_user_id TEXT',
+      'assigned_by_name TEXT',
+      'assigned_by_role TEXT',
+      'assigned_to_user_id TEXT',
+      'assigned_to_name TEXT',
+      'assigned_to_role TEXT',
+      'assigned_at TIMESTAMPTZ',
+      "priority TEXT DEFAULT 'MEDIUM'",
+      'next_followup_date TIMESTAMPTZ',
+      'external_enquiry_id TEXT',
+      'external_payload JSONB',
+      'last_qualifying_activity_at TIMESTAMPTZ',
+      'last_activity_at TIMESTAMPTZ',
+      'last_activity_type TEXT',
+      'is_unattended_24h BOOLEAN DEFAULT false',
+      'is_unattended_2h BOOLEAN DEFAULT false',
+      'is_unattended_48h BOOLEAN DEFAULT false',
+      'is_converted BOOLEAN DEFAULT false',
+      'unattended_alert_sent_at TIMESTAMPTZ',
+      'escalation_alert_sent_at TIMESTAMPTZ',
+      'converted_customer_id TEXT',
+      'converted_customer_code TEXT'
+    ];
 
-      CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
+    for (const col of columns) {
+      try {
+        await pool.query(`ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS ${col};`);
+      } catch (_) {}
+    }
+
+    // 3. Auxiliary tables individually
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
         id TEXT PRIMARY KEY,
-        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        lead_id TEXT NOT NULL,
         assigned_by_user_id TEXT NOT NULL,
         assigned_by_name TEXT NOT NULL,
         assigned_by_role TEXT NOT NULL,
@@ -101,11 +113,10 @@ export async function ensureLeadsSchema() {
         assignment_reason TEXT,
         assignment_type TEXT NOT NULL DEFAULT 'INITIAL',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS public.lead_activities (
+      );`,
+      `CREATE TABLE IF NOT EXISTS public.lead_activities (
         id TEXT PRIMARY KEY,
-        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        lead_id TEXT NOT NULL,
         activity_type TEXT NOT NULL,
         is_qualifying_activity BOOLEAN NOT NULL DEFAULT false,
         summary TEXT NOT NULL,
@@ -115,22 +126,20 @@ export async function ensureLeadsSchema() {
         conducted_by_name TEXT NOT NULL,
         conducted_by_role TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS public.lead_status_history (
+      );`,
+      `CREATE TABLE IF NOT EXISTS public.lead_status_history (
         id TEXT PRIMARY KEY,
-        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        lead_id TEXT NOT NULL,
         previous_status TEXT,
         new_status TEXT NOT NULL,
         remarks TEXT,
         updated_by_user_id TEXT NOT NULL,
         updated_by_name TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS public.lead_followups (
+      );`,
+      `CREATE TABLE IF NOT EXISTS public.lead_followups (
         id TEXT PRIMARY KEY,
-        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        lead_id TEXT NOT NULL,
         scheduled_at TIMESTAMPTZ NOT NULL,
         notes TEXT,
         status TEXT NOT NULL DEFAULT 'PENDING',
@@ -139,11 +148,10 @@ export async function ensureLeadsSchema() {
         completed_at TIMESTAMPTZ,
         outcome_remarks TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS public.lead_inactivity_incidents (
+      );`,
+      `CREATE TABLE IF NOT EXISTS public.lead_inactivity_incidents (
         id TEXT PRIMARY KEY,
-        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        lead_id TEXT NOT NULL,
         salesperson_id TEXT NOT NULL,
         salesperson_name TEXT NOT NULL,
         incident_type TEXT NOT NULL,
@@ -153,11 +161,22 @@ export async function ensureLeadsSchema() {
         resolved_by_user_id TEXT,
         resolution_type TEXT,
         details JSONB
-      );
+      );`
+    ];
 
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
+    for (const tbl of tables) {
+      try {
+        await pool.query(tbl);
+      } catch (_) {}
+    }
+
+    try {
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
         ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);
-    `);
+      `);
+    } catch (_) {}
+
     schemaEnsured = true;
     console.log('✅ [PostgreSQL] Ensured public.leads columns and CRM tables exist.');
   } catch (err) {
@@ -911,17 +930,44 @@ export async function updateLeadStatus({ leadId, newStatus, remarks = '', conver
     const isConvertedState = ['Converted', 'Customer', 'Won'].includes(newStatus);
 
     // 1. Update status, converted flags and customer references
-    await client.query(`
-      UPDATE public.leads SET
-        status = $1,
-        converted_customer_id = COALESCE($2, converted_customer_id),
-        converted_customer_code = COALESCE($3, converted_customer_code),
-        is_converted = CASE WHEN $5 = true THEN true ELSE is_converted END,
-        is_unattended_24h = CASE WHEN $6 = true THEN false ELSE is_unattended_24h END,
-        is_unattended_48h = CASE WHEN $6 = true THEN false ELSE is_unattended_48h END,
-        updated_at = NOW()
-      WHERE id = $4 OR lead_number = $4
-    `, [newStatus, convertedCustomerId, convertedCustomerCode, leadId, isConvertedState, isTerminalState]);
+    try {
+      await client.query(`
+        UPDATE public.leads SET
+          status = $1,
+          converted_customer_id = COALESCE($2, converted_customer_id),
+          converted_customer_code = COALESCE($3, converted_customer_code),
+          is_converted = CASE WHEN $5 = true THEN true ELSE is_converted END,
+          is_unattended_24h = CASE WHEN $6 = true THEN false ELSE is_unattended_24h END,
+          is_unattended_48h = CASE WHEN $6 = true THEN false ELSE is_unattended_48h END,
+          updated_at = NOW()
+        WHERE id = $4 OR lead_number = $4
+      `, [newStatus, convertedCustomerId, convertedCustomerCode, leadId, isConvertedState, isTerminalState]);
+    } catch (updateErr) {
+      if (updateErr.message && (updateErr.message.includes('is_converted') || updateErr.message.includes('column'))) {
+        try {
+          await client.query(`
+            ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;
+            ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false;
+            ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false;
+            ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_id TEXT;
+            ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
+          `);
+        } catch (_) {}
+        await client.query(`
+          UPDATE public.leads SET
+            status = $1,
+            converted_customer_id = COALESCE($2, converted_customer_id),
+            converted_customer_code = COALESCE($3, converted_customer_code),
+            is_converted = CASE WHEN $5 = true THEN true ELSE is_converted END,
+            is_unattended_24h = CASE WHEN $6 = true THEN false ELSE is_unattended_24h END,
+            is_unattended_48h = CASE WHEN $6 = true THEN false ELSE is_unattended_48h END,
+            updated_at = NOW()
+          WHERE id = $4 OR lead_number = $4
+        `, [newStatus, convertedCustomerId, convertedCustomerCode, leadId, isConvertedState, isTerminalState]);
+      } else {
+        throw updateErr;
+      }
+    }
 
     // If terminal state (Converted or Dropped/Rejected), resolve any open inactivity incidents immediately
     if (isTerminalState) {

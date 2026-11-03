@@ -248,6 +248,7 @@ export async function initPostgresDatabase() {
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS invoice_no TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS sales_person_email TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed BOOLEAN DEFAULT false;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_at TIMESTAMPTZ;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_time_str TEXT;
@@ -260,6 +261,10 @@ export async function initPostgresDatabase() {
             
             -- 1-to-1 Sync order values, items, and salesperson from source PI if missing
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'proforma_invoices') THEN
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sales_person_email TEXT;
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS status_type TEXT DEFAULT 'issued';
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_code TEXT;
+              ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_no TEXT;
               UPDATE public.bom_orders b
               SET grand_total = COALESCE(NULLIF(p.grand_total, 0), b.grand_total),
                   sub_total = COALESCE(NULLIF(p.sub_total, 0), b.sub_total),
@@ -527,33 +532,32 @@ export async function initPostgresDatabase() {
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
 
-        ALTER TABLE public.leads 
-          ADD COLUMN IF NOT EXISTS location TEXT,
-          ADD COLUMN IF NOT EXISTS product_requirement TEXT,
-          ADD COLUMN IF NOT EXISTS lead_created_by_id TEXT,
-          ADD COLUMN IF NOT EXISTS lead_created_by_name TEXT,
-          ADD COLUMN IF NOT EXISTS assigned_by_user_id TEXT,
-          ADD COLUMN IF NOT EXISTS assigned_by_name TEXT,
-          ADD COLUMN IF NOT EXISTS assigned_by_role TEXT,
-          ADD COLUMN IF NOT EXISTS assigned_to_user_id TEXT,
-          ADD COLUMN IF NOT EXISTS assigned_to_name TEXT,
-          ADD COLUMN IF NOT EXISTS assigned_to_role TEXT,
-          ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'MEDIUM',
-          ADD COLUMN IF NOT EXISTS next_followup_date TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS external_enquiry_id TEXT,
-          ADD COLUMN IF NOT EXISTS external_payload JSONB,
-          ADD COLUMN IF NOT EXISTS last_qualifying_activity_at TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS last_activity_type TEXT,
-          ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS converted_customer_id TEXT,
-          ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS location TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS product_requirement TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS lead_created_by_id TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS lead_created_by_name TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_by_user_id TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_by_name TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_by_role TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_to_user_id TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_to_name TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_to_role TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'MEDIUM';
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS next_followup_date TIMESTAMPTZ;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS external_enquiry_id TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS external_payload JSONB;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS last_qualifying_activity_at TIMESTAMPTZ;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS last_activity_type TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_id TEXT;
+        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
 
         CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
           id TEXT PRIMARY KEY,
