@@ -952,14 +952,42 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const formattedAmt = `₹ ${Number(totalAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
                   const resolveDateTime = (order, fallbackPi) => {
-                    let rawTs = order?.salesConfirmedAt || order?.createdAt || order?.timestamp || fallbackPi?.salesConfirmedAt || fallbackPi?.createdAt;
+                    const extractRaw = (val) => {
+                      if (!val) return '';
+                      if (typeof val === 'string') {
+                        const trimmed = val.trim();
+                        return (trimmed === '[object Object]' || trimmed.includes('[object')) ? '' : trimmed;
+                      }
+                      if (val instanceof Date && !isNaN(val.getTime())) {
+                        return val.toISOString();
+                      }
+                      if (typeof val === 'object') {
+                        if (typeof val.combined === 'string' && val.combined !== '[object Object]') return val.combined;
+                        if (typeof val.date === 'string' && val.date !== '[object Object]') {
+                          return (val.time && typeof val.time === 'string' && val.time !== '[object Object]') ? `${val.date} ${val.time}` : val.date;
+                        }
+                        if (val.seconds) {
+                          try { return new Date(val.seconds * 1000).toISOString(); } catch (_) {}
+                        }
+                      }
+                      return '';
+                    };
+
+                    let rawTs = extractRaw(order?.salesConfirmedAt) ||
+                                extractRaw(order?.createdAt) ||
+                                extractRaw(order?.timestamp) ||
+                                extractRaw(order?.dateTime) ||
+                                extractRaw(order?.dateTimeObj) ||
+                                extractRaw(fallbackPi?.salesConfirmedAt) ||
+                                extractRaw(fallbackPi?.createdAt);
+
                     let s = rawTs ? String(rawTs).trim() : '';
 
                     const isDateOnlySeed = !s || /^\d{4}-\d{2}-\d{2}$/.test(s) || /T00:00:00(?:\.000)?Z?$/i.test(s) || /T05:30:00(?:\.\d+)?Z?$/i.test(s);
 
                     // If missing or date-only seed, look for fallback with real time (updatedAt, fallbackPi, etc.)
                     if (isDateOnlySeed) {
-                      const candidate = order?.updatedAt || order?.updated_at || fallbackPi?.updatedAt || fallbackPi?.createdAt;
+                      const candidate = extractRaw(order?.updatedAt) || extractRaw(order?.updated_at) || extractRaw(fallbackPi?.updatedAt) || extractRaw(fallbackPi?.createdAt);
                       if (candidate) {
                         const candStr = String(candidate).trim();
                         if (!/^\d{4}-\d{2}-\d{2}$/.test(candStr) && !/T00:00:00(?:\.000)?Z?$/i.test(candStr) && !/T05:30:00(?:\.\d+)?Z?$/i.test(candStr)) {
@@ -970,7 +998,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     }
 
                     if (!rawTs) {
-                      rawTs = order?.date || fallbackPi?.date;
+                      rawTs = extractRaw(order?.date) || extractRaw(fallbackPi?.date);
                       s = rawTs ? String(rawTs).trim() : '';
                     }
 
@@ -979,7 +1007,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     }
 
                     // Base date preference: if order explicitly has a calendar date like 2026-10-21
-                    const explicitDateStr = order?.date || fallbackPi?.date;
+                    const explicitDateStr = extractRaw(order?.date) || extractRaw(fallbackPi?.date);
                     let explicitDateObj = null;
                     if (explicitDateStr && /^\d{4}-\d{2}-\d{2}$/.test(String(explicitDateStr).trim())) {
                       const parts = String(explicitDateStr).trim().split('-');
@@ -999,7 +1027,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                     const d = new Date(rawTs);
                     if (isNaN(d.getTime())) {
-                      return { date: s, time: '', combined: s };
+                      const safeS = (s === '[object Object]' || s.includes('[object')) ? '—' : s;
+                      return { date: safeS, time: '', combined: safeS };
                     }
 
                     const dStr = (explicitDateObj && !isNaN(explicitDateObj.getTime()))
@@ -1008,7 +1037,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                     const tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-                    return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
+                    const finalDate = (typeof dStr === 'string' && dStr !== '[object Object]') ? dStr : '—';
+                    const finalTime = (typeof tStr === 'string' && tStr !== '[object Object]') ? tStr : '';
+
+                    return { date: finalDate, time: finalTime, combined: finalTime ? `${finalDate}, ${finalTime}` : finalDate };
                   };
 
                   const dt = resolveDateTime(b, matchedPi);
@@ -1045,8 +1077,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     transporterName: resolvedTransporter,
                     transporter: resolvedTransporter,
                     dateTimeObj: dt,
-                    dateTime: dt.combined,
-                    c3: dt.combined,
+                    dateTime: String(dt.combined || dt.date || '—'),
+                    c3: String(dt.combined || dt.date || '—'),
                     salesPerson: salesPersonName,
                     salesPersonName: salesPersonName,
                     c4: salesPersonName,
