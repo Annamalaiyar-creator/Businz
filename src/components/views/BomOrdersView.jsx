@@ -92,18 +92,40 @@ export default function BomOrdersView(props) {
     };
   };
 
+  // Canonical Salesperson Code Normalizer
+  const canonicalizeSalespersonCode = (rawCode, name) => {
+    const c = String(rawCode || '').trim().toUpperCase();
+    if (c === 'SE-015' || (c === 'SE-VRM002' && String(name || '').toLowerCase().includes('mohith'))) return 'SE-004';
+    if (c === 'SH-001' || c === 'SH-VRM001') return 'SE-001';
+    if (c === 'SE-020') return 'SE-006';
+    if (c === 'SE-010') return 'SE-008';
+    if (c === 'SE-VRM090') return 'SE-009';
+    if (String(name || '').toLowerCase().includes('mohith')) return 'SE-004';
+    if (String(name || '').toLowerCase().includes('sanjai') || String(name || '').toLowerCase().includes('sanjay')) return 'SE-002';
+    if (String(name || '').toLowerCase().includes('manoj')) return 'SE-001';
+    if (String(name || '').toLowerCase().includes('vasanth')) return 'SE-003';
+    return c || '';
+  };
+
   // Helper to resolve salesperson actual human name rather than role title
   const getCleanSalesPersonName = (rawName, code) => {
     let name = String(rawName || '').replace(/\s*\([^)]*\)/g, '').trim();
     const genericTerms = ['sales executive', 'sales', 'sales department', 'salesperson', 'sales rep', 'se', 'sls', 'admin', 'user', 'undefined', 'null'];
 
+    const cleanCode = String(code || '').trim().toUpperCase();
+    if (cleanCode === 'SE-015' || (!name && cleanCode === 'SE-004') || String(rawName || '').includes('SE-015')) return 'Mohith JV';
+    if (cleanCode === 'SH-001' || cleanCode === 'SH-VRM001') return 'Manojraj Selvaraj';
+    if (cleanCode === 'SE-020') return 'Dhana Sekar';
+    if (cleanCode === 'SE-010') return 'Pavithra';
+    if (cleanCode === 'SE-VRM090') return 'KALAISELVI T';
+
     if (!name || genericTerms.includes(name.toLowerCase())) {
       try {
         const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-        if (code) {
+        if (cleanCode) {
           const found = emps.find(e => {
             const c = String(e.employee_code || e.code || e.id || '').trim().toUpperCase();
-            return c === String(code).trim().toUpperCase();
+            return c === cleanCode;
           });
           if (found && (found.employee_name || found.name)) return found.employee_name || found.name;
         }

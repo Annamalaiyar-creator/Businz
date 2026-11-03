@@ -715,36 +715,45 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               const isDispatchEligible = (b) => {
                 if (!b) return false;
                 const s = String(b.status || '').toLowerCase().trim();
+                const hasEnteredPipeline = Boolean(
+                  b.salesConfirmed ||
+                  b.isSentToDispatch ||
+                  b.dispatchPackingVerified ||
+                  b.dispatchPrinted ||
+                  b.isPrinted ||
+                  b.accountsVerification?.verified ||
+                  b.vehicleLoading?.verified ||
+                  s.includes('sent to dispatch') ||
+                  s.includes('sent to production') ||
+                  s.includes('confirmed') ||
+                  s.includes('dispatch') ||
+                  s.includes('packed') ||
+                  s.includes('accounts') ||
+                  s.includes('invoice') ||
+                  s.includes('loading') ||
+                  s.includes('completed') ||
+                  s.includes('closed')
+                );
+
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') {
-                  return Boolean(b.salesConfirmed && (b.isSentToDispatch || s.includes('dispatch') || s.includes('packed')));
+                  return Boolean(hasEnteredPipeline);
                 }
-                // Orders pending sales reconfirmation or drafts must NEVER appear in Dispatch
+
+                // Orders strictly in draft or pending sales confirmation stage must NOT appear in Dispatch
                 const isDraftOrPending = Boolean(
-                  !b.salesConfirmed ||
-                  b.status === 'Draft' || s === 'draft' ||
-                  b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
-                  s === 'pending sales confirmation'
+                  (b.status === 'Draft' || s === 'draft' ||
+                   b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
+                   s === 'pending sales confirmation') &&
+                  !b.isSentToDispatch &&
+                  !s.includes('sent to dispatch') &&
+                  !s.includes('packed') &&
+                  !s.includes('completed')
                 );
                 if (isDraftOrPending) {
                   return false;
                 }
 
-                const hasEnteredDispatch = Boolean(
-                  b.salesConfirmed && (
-                    b.isSentToDispatch ||
-                    s.includes('sent to dispatch') ||
-                    s.includes('sent to production') ||
-                    s.includes('confirmed') ||
-                    s.includes('dispatch') ||
-                    s.includes('packed') ||
-                    s.includes('accounts') ||
-                    s.includes('invoice') ||
-                    s.includes('loading') ||
-                    s.includes('completed') ||
-                    s.includes('closed')
-                  )
-                );
-                return hasEnteredDispatch;
+                return hasEnteredPipeline;
               };
 
               const allDispatchBoms = (bomStore || []).filter(isDispatchEligible);
@@ -931,14 +940,32 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   };
 
                   let rawSales = b.salesPerson || b.sales_person || '';
+                  const repCode = String(b.salesPersonCode || b.createdById || matchedPi?.salesPersonCode || matchedPi?.createdById || '').trim().toUpperCase();
+                  if (repCode === 'SE-015' || String(rawSales).includes('SE-015')) {
+                    rawSales = 'Mohith JV';
+                  } else if (repCode === 'SH-001' || repCode === 'SH-VRM001') {
+                    rawSales = 'Manojraj Selvaraj';
+                  } else if (repCode === 'SE-020') {
+                    rawSales = 'Dhana Sekar';
+                  } else if (repCode === 'SE-010') {
+                    rawSales = 'Pavithra';
+                  } else if (repCode === 'SE-VRM090') {
+                    rawSales = 'KALAISELVI T';
+                  }
+
                   if (!rawSales || rawSales === 'Sales Department' || isDispatchUser(rawSales)) {
                     if (b.createdBy && !isDispatchUser(b.createdBy)) {
                       rawSales = b.createdBy;
                     } else if (matchedPi && (matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy)) {
                       rawSales = matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy;
+                    } else if (repCode === 'SE-004' || repCode === 'SE-015') {
+                      rawSales = 'Mohith JV';
                     } else {
                       rawSales = 'Annamalaiyar';
                     }
+                  }
+                  if (String(rawSales).includes('SE-015')) {
+                    rawSales = 'Mohith JV';
                   }
                   const salesPersonName = (rawSales && !isDispatchUser(rawSales) ? rawSales : 'Annamalaiyar').trim();
                   

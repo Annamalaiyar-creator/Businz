@@ -105,7 +105,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             const st = String(b.status || '').toLowerCase();
             const isCancelled = st.includes('cancel') || Boolean(b.cancelled);
             const isClosed = st.includes('closed') || st.includes('completed') || st.includes('delivered');
-            const isConfirmedForDispatch = Boolean(b.salesConfirmed) && b.status !== 'Pending Confirmation' && !st.includes('pending confirmation') && b.status !== 'Draft' && !st.includes('draft');
+            const isDraftOrPending = (b.status === 'Draft' || st === 'draft' || b.status === 'Pending Confirmation' || st.includes('pending confirmation')) && !b.isSentToDispatch && !st.includes('dispatch') && !st.includes('packed');
+            const isConfirmedForDispatch = !isDraftOrPending && (Boolean(b.salesConfirmed) || b.isSentToDispatch || st.includes('dispatch') || st.includes('production') || st.includes('confirmed') || st.includes('packed'));
             return isConfirmedForDispatch && !isCancelled && !isClosed;
           });
           setRealPendingDispatchCount(pendingDispatch.length);

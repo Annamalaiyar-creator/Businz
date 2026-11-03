@@ -2471,9 +2471,23 @@ export default function CreateBomFormPage(props) {
                       (explicitSourcePi && pendingPiFromStorage?.createdBy && pendingPiFromStorage.createdBy.trim()) ||
                       loggedInOperatorName;
 
-                    const effectiveSalesPersonCode = (explicitSourcePi && pendingPiFromStorage?.salesPersonCode && pendingPiFromStorage.salesPersonCode.trim()) ||
+                    const rawSalesPersonCode = (explicitSourcePi && pendingPiFromStorage?.salesPersonCode && pendingPiFromStorage.salesPersonCode.trim()) ||
                       (explicitSourcePi && pendingPiFromStorage?.createdById && pendingPiFromStorage.createdById.trim()) ||
                       loggedInOperatorId;
+                    const canonicalizeCode = (c, n) => {
+                      const uc = String(c || '').trim().toUpperCase();
+                      if (uc === 'SE-015' || (uc === 'SE-VRM002' && String(n || '').toLowerCase().includes('mohith'))) return 'SE-004';
+                      if (uc === 'SH-001' || uc === 'SH-VRM001') return 'SE-001';
+                      if (uc === 'SE-020') return 'SE-006';
+                      if (uc === 'SE-010') return 'SE-008';
+                      if (uc === 'SE-VRM090') return 'SE-009';
+                      if (String(n || '').toLowerCase().includes('mohith')) return 'SE-004';
+                      if (String(n || '').toLowerCase().includes('sanjai') || String(n || '').toLowerCase().includes('sanjay')) return 'SE-002';
+                      if (String(n || '').toLowerCase().includes('manoj')) return 'SE-001';
+                      if (String(n || '').toLowerCase().includes('vasanth')) return 'SE-003';
+                      return uc || '';
+                    };
+                    const effectiveSalesPersonCode = canonicalizeCode(rawSalesPersonCode, effectiveSalesPersonName);
 
                     const effectiveCreatorName = loggedInOperatorName;
                     const effectiveCreatedById = loggedInOperatorId || effectiveSalesPersonCode;

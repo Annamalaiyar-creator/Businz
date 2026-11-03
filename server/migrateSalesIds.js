@@ -534,6 +534,9 @@ async function runMigration() {
       if (docCode === 'SH-001' || docCode === 'SH-VRM001') {
         return SALES_MAPPINGS.find(m => m.newCode === 'SE-001'); // Manojraj Selvaraj was the sole Sales Head
       }
+      if (docCode === 'SE-015') {
+        return SALES_MAPPINGS.find(m => m.newCode === 'SE-004'); // Mohith JV
+      }
       if (docCode === 'SE-020') {
         return SALES_MAPPINGS.find(m => m.newCode === 'SE-006'); // Dhana Sekar
       }
