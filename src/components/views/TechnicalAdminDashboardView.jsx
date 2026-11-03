@@ -188,7 +188,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
 
     // Show verified current active TA session
     const currentName = localStorage.getItem('controlroom_logged_user_name') || 'Ar.Annamalaiyar';
-    const currentCode = localStorage.getItem('controlroom_logged_user_code') || 'TA-VRM001';
+    const currentCode = localStorage.getItem('controlroom_logged_user_code') || 'TA-001';
     setActiveSessions([
       {
         sessionId: localStorage.getItem('controlroom_device_session_id') || 'sess_live_current',
@@ -296,30 +296,33 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
   const getSuggestedRolePrefix = (role) => {
     const r = String(role || '').toLowerCase();
     if (r.includes('managing director') || r === 'md') return 'MD-001';
-    if (r.includes('ceo')) return 'CEO-002';
-    if (r.includes('technical administrator') || r.includes('tech admin')) return 'TA-VRM002';
-    if (r.includes('sales head')) return 'SH-1001';
-    if (r.includes('sales')) return 'SE-1001';
-    if (r.includes('dispatch head')) return 'DH-1001';
-    if (r.includes('dispatch')) return 'DI-1001';
-    if (r.includes('accounts head')) return 'AH-1001';
-    if (r.includes('accounts')) return 'AE-1001';
-    if (r.includes('billing') || r.includes('invoice')) return 'BI-1001';
-    if (r.includes('procurement') || r.includes('purchase')) return 'PE-1001';
-    if (r.includes('production')) return 'PS-1001';
-    return 'EMP-1001';
+    if (r.includes('ceo')) return 'CEO-001';
+    if (r.includes('technical administrator') || r.includes('tech admin')) return 'TA-001';
+    if (r.includes('tech support')) return 'TS-001';
+    if (r.includes('sales')) return 'SE-001';
+    if (r.includes('floor executive') || r.includes('floor')) return 'FE-001';
+    if (r.includes('dispatch')) return 'DH-001';
+    if (r.includes('accounts')) return 'AC-001';
+    if (r.includes('billing') || r.includes('invoice')) return 'BI-001';
+    if (r.includes('procurement') || r.includes('purchase')) return 'PR-001';
+    if (r.includes('production')) return 'PH-001';
+    if (r.includes('design')) return 'DE-001';
+    return 'EMP-001';
   };
 
   const getSuggestedDepartment = (role) => {
     const r = String(role || '').toLowerCase();
     if (r.includes('managing director') || r.includes('ceo') || r === 'md') return 'Executive Leadership';
     if (r.includes('technical') || r.includes('admin')) return 'IT & Administration';
+    if (r.includes('tech support')) return 'Technical Support';
     if (r.includes('sales')) return 'Sales & Marketing';
     if (r.includes('dispatch')) return 'Dispatch & Logistics';
-    if (r.includes('accounts')) return 'Finance & Accounts';
+    if (r.includes('accounts') || r.includes('finance')) return 'Finance & Accounts';
     if (r.includes('billing') || r.includes('invoice')) return 'Billing & Invoicing';
     if (r.includes('procurement') || r.includes('purchase')) return 'Procurement';
+    if (r.includes('floor')) return 'Shop Floor Operations';
     if (r.includes('production')) return 'Production & Manufacturing';
+    if (r.includes('design')) return 'Design & Engineering';
     return 'Operations';
   };
 
@@ -331,7 +334,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
     const rawEmail = String(creatingUser.email || '').trim().toLowerCase();
     const rawName = String(creatingUser.employee_name || creatingUser.name || '').trim();
     const rawPass = String(creatingUser.password || '').trim();
-    const rawRole = String(creatingUser.role || 'Sales Executive').trim();
+    const rawRole = String(creatingUser.role || 'Sales').trim();
     const rawPhone = String(creatingUser.phone || creatingUser.mobile || '').trim();
     const rawStatus = creatingUser.status || 'Active';
     const rawDept = creatingUser.department || getSuggestedDepartment(rawRole);
@@ -915,7 +918,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                 { label: 'Node.js Backend', val: 'Port 5001', status: 'Active Service' },
                 { label: 'Vite Frontend Dev', val: 'Port 3000', status: 'HMR Running' },
                 { label: 'Real-time Gateway', val: 'Server-Sent Events', status: 'Sub-second' },
-                { label: 'Active Administrator', val: 'TA-VRM001 (Ar.Annamalaiyar)', status: 'Verified' }
+                { label: 'Active Administrator', val: 'TA-001 (Ar.Annamalaiyar)', status: 'Verified' }
               ].map((p, i) => (
                 <div key={i} style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>{p.label}</div>
@@ -1399,7 +1402,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                   <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                     <td style={{ padding: '12px 16px', fontWeight: '700', color: '#0F172A' }}>
                       <div>{sess.employee_name || 'Technical Administrator'}</div>
-                      <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#0E7490' }}>{sess.employee_code || 'TA-VRM001'}</div>
+                      <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#0E7490' }}>{sess.employee_code || 'TA-001'}</div>
                     </td>
                     <td style={{ padding: '12px 14px', color: '#475569', fontWeight: '600' }}>
                       {sess.role || 'Technical Administrator'}
@@ -2081,6 +2084,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                     <option value="CEO">CEO / MD</option>
                     <option value="Sales">Sales</option>
                     <option value="Production">Production</option>
+                    <option value="Floor Executive">Floor Executive</option>
                     <option value="Dispatch">Dispatch</option>
                     <option value="Procurement">Procurement</option>
                     <option value="Accounts">Accounts</option>
@@ -2088,13 +2092,6 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                     <option value="Design">Design</option>
                     <option value="Tech Support">Tech Support</option>
                     <option value="Technical Administrator">Technical Administrator</option>
-                    {/* Backward-compatible legacy roles */}
-                    <option value="Sales Executive">Sales Executive (Legacy)</option>
-                    <option value="Sales Head">Sales Head (Legacy)</option>
-                    <option value="Production Head">Production Head (Legacy)</option>
-                    <option value="Dispatch Head">Dispatch Head (Legacy)</option>
-                    <option value="Accounts Head">Accounts Head (Legacy)</option>
-                    <option value="Accounts Executive">Accounts Executive (Legacy)</option>
                   </select>
                 </div>
 
@@ -2304,6 +2301,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                     <option value="CEO">CEO / MD</option>
                     <option value="Sales">Sales</option>
                     <option value="Production">Production</option>
+                    <option value="Floor Executive">Floor Executive</option>
                     <option value="Dispatch">Dispatch</option>
                     <option value="Procurement">Procurement</option>
                     <option value="Accounts">Accounts</option>

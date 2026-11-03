@@ -73,7 +73,8 @@ export const normalizeDepartmentRole = (role) => {
   const lower = r.toLowerCase();
   if (lower === 'sales' || lower.includes('sales')) return 'Sales';
   if (lower === 'dispatch' || lower.includes('dispatch')) return 'Dispatch';
-  if (lower === 'production' || lower.includes('production') || lower.includes('floor')) return 'Production';
+  if (lower === 'floor executive' || lower.includes('floor')) return 'Floor Executive';
+  if (lower === 'production' || lower.includes('production')) return 'Production';
   if (lower === 'procurement' || lower.includes('procurement') || lower.includes('purchase')) return 'Procurement';
   if (lower === 'accounts' || lower.includes('account') || lower.includes('finance')) return 'Accounts';
   if (lower === 'billing' || lower.includes('billing') || lower.includes('invoice')) return 'Billing';
@@ -193,6 +194,8 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
     cleanEmpCodeNorm.startsWith('SH') || 
     cleanEmpCodeNorm.startsWith('SE') || 
     cleanEmpCodeNorm.startsWith('PH') || 
+    cleanEmpCodeNorm.startsWith('FE') || 
+    cleanEmpCodeNorm.startsWith('AC') || 
     cleanEmpCodeNorm.startsWith('AH') || 
     cleanEmpCodeNorm.startsWith('AE') || 
     cleanUsername === 'maniskremo@gmail.com' ||

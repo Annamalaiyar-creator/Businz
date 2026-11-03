@@ -59,6 +59,15 @@ export const USER_ROLES_CONFIG = [
     desc: 'Work Orders, Master Production Schedule & Plant Efficiency.'
   },
   {
+    role: 'Floor Executive',
+    prefix: 'FE',
+    allowedPrefixes: ['FE', 'FS'],
+    category: 'Shop Floor Operations',
+    icon: Factory,
+    color: '#7c3aed',
+    desc: 'Floor operations, machine tracking & daily work execution.'
+  },
+  {
     role: 'Dispatch',
     prefix: 'DH',
     allowedPrefixes: ['DH', 'DSP'],
@@ -78,8 +87,8 @@ export const USER_ROLES_CONFIG = [
   },
   {
     role: 'Accounts',
-    prefix: 'AH',
-    allowedPrefixes: ['AH', 'AE', 'ACC'],
+    prefix: 'AC',
+    allowedPrefixes: ['AC', 'AH', 'AE', 'ACC'],
     category: 'Accounts & Finance',
     icon: CreditCard,
     color: '#059669',
@@ -193,7 +202,7 @@ export default function LoginScreen({ onLoginSuccess }) {
     const matchedRole = USER_ROLES_CONFIG.find(r => r.prefix === prefix || (r.allowedPrefixes && r.allowedPrefixes.includes(prefix)));
 
     if (!matchedRole) {
-      setErrorMsg(`Invalid prefix "${prefix}". Code must start with a valid department prefix (TA, CEO, SE, DH, PH, PR, AH, BI, DE, TS).`);
+      setErrorMsg(`Invalid prefix "${prefix}". Code must start with a valid department prefix (TA, CEO, SE, DH, PH, FE, PR, AC, AH, BI, DE, TS).`);
       setIsCodeVerified(false);
       setDetectedRole(null);
       return;
@@ -423,7 +432,7 @@ export default function LoginScreen({ onLoginSuccess }) {
         } else {
           setShowSuccessBanner(false);
           setIsSignUpMode(false);
-          setErrorMsg(`Account Request Submitted! Employee Code ${cleanCode} is pending approval from the Developer / Technical Administrator (TA-VRM001). Once granted, you can sign in.`);
+          setErrorMsg(`Account Request Submitted! Employee Code ${cleanCode} is pending approval from the Developer / Technical Administrator (TA-001). Once granted, you can sign in.`);
         }
       }, 2500);
       return;

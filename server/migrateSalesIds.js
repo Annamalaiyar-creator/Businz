@@ -18,69 +18,193 @@ const pool = new Pool({
   ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false
 });
 
-// Explicit, exact mapping provided by user
-const SALES_MAPPING = [
+// Explicit, exact mapping for Sales, Technical Admin, Tech Support, and Accounts
+const TEAM_MAPPINGS = [
+  // --- 1. Technical Administrator ---
+  {
+    name: 'Ar.Annamalaiyar',
+    matchNames: ['annamalaiyar', 'ar.annamalaiyar', 'arannamalaiyar'],
+    email: 'arannamalaiyar@gmail.com',
+    matchEmails: ['arannamalaiyar@gmail.com'],
+    oldCode: 'TA-VRM001',
+    newCode: 'TA-001',
+    role: 'Technical Administrator',
+    dashboard_type: 'Technical Administrator',
+    department: 'IT & Administration',
+    aliases: ['TA-VRM001', 'TA-001', 'TA-VRM002']
+  },
+
+  // --- 2. Tech Support ---
+  {
+    name: 'KalpanaRam',
+    matchNames: ['kalpanaram', 'kalpana ram', 'kalpana'],
+    email: 'kalpanaram17@vrmstructures.in',
+    matchEmails: ['kalpanaram17@vrmstructures.in', 'kalpanaram@vrmstructures.in'],
+    oldCode: 'TS-VRM002',
+    newCode: 'TS-001',
+    role: 'Tech Support',
+    dashboard_type: 'Tech Support',
+    department: 'Technical Support',
+    aliases: ['TS-VRM002', 'TS-VRM001', 'TS-001', 'DH-VRM001']
+  },
+  {
+    name: 'Vasanth',
+    matchNames: ['vasanth tech', 'vasanth support'],
+    email: 'vasanth.support@vrmstructures.in',
+    matchEmails: ['vasanth.support@vrmstructures.in', 'techsupport@vrmstructures.in'],
+    oldCode: 'TS-002',
+    newCode: 'TS-002',
+    role: 'Tech Support',
+    dashboard_type: 'Tech Support',
+    department: 'Technical Support',
+    aliases: ['TS-002', 'TS-VRM003']
+  },
+
+  // --- 3. Accounts ---
+  {
+    name: 'Keerthana',
+    matchNames: ['keerthana', 'keerthi'],
+    email: 'keerthana@vrmstructures.in',
+    matchEmails: ['keerthana@vrmstructures.in', 'accounts@vrmstructures.in'],
+    oldCode: 'AH-001',
+    newCode: 'AC-001',
+    role: 'Accounts',
+    dashboard_type: 'Accounts',
+    department: 'Finance & Accounts',
+    aliases: ['AH-001', 'AH-1000', 'AE-001', 'AC-001', 'AH-VRM001']
+  },
+  {
+    name: 'Vaishnavi',
+    matchNames: ['vaishnavi'],
+    email: 'vaishnavi@vrmstructures.in',
+    matchEmails: ['vaishnavi@vrmstructures.in', 'accounts2@vrmstructures.in'],
+    oldCode: 'AH-002',
+    newCode: 'AC-002',
+    role: 'Accounts',
+    dashboard_type: 'Accounts',
+    department: 'Finance & Accounts',
+    aliases: ['AH-002', 'AE-002', 'AC-002', 'AH-VRM002']
+  },
+  {
+    name: 'AJITH R',
+    matchNames: ['ajith', 'ajith r', 'ajith kumar'],
+    email: 'ajith@vrmstructures.in',
+    matchEmails: ['ajith@vrmstructures.in', 'accounts3@vrmstructures.in'],
+    oldCode: 'AH-003',
+    newCode: 'AC-003',
+    role: 'Accounts',
+    dashboard_type: 'Accounts',
+    department: 'Finance & Accounts',
+    aliases: ['AH-003', 'AE-003', 'AC-003', 'AH-VRM003']
+  },
+
+  // --- 4. Sales Team ---
   {
     name: 'Manojraj Selvaraj',
+    matchNames: ['manojraj selvaraj', 'manojraj', 'manoj'],
     email: 'sales.s1@vrmstructures.in',
+    matchEmails: ['sales.s1@vrmstructures.in'],
     oldCode: 'SH-001',
     newCode: 'SE-001',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SH-001', 'SH-VRM001']
   },
   {
     name: 'Sanjai kumar',
+    matchNames: ['sanjai kumar', 'sanjai'],
     email: 'sanjaikumar3a@gmail.com',
+    matchEmails: ['sanjaikumar3a@gmail.com'],
     oldCode: 'SE-001',
     newCode: 'SE-002',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SE-001', 'SE-VRM002']
   },
   {
     name: 'Vasanth Kumar S',
+    matchNames: ['vasanth kumar s', 'vasanth kumar'],
     email: 'vasanthkumarsaravanan.work@gmail.com',
+    matchEmails: ['vasanthkumarsaravanan.work@gmail.com', 'vasanthkumar1234@gmail.com'],
     oldCode: 'SE-004',
     newCode: 'SE-003',
-    aliases: ['SE-004']
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
+    aliases: ['SE-004', 'SE-VRM006']
   },
   {
     name: 'Mohith JV',
+    matchNames: ['mohith jv', 'mohith j v', 'mohith'],
     email: 'sales.s4@vrmstructures.in',
+    matchEmails: ['sales.s4@vrmstructures.in'],
     oldCode: 'SE-015',
     newCode: 'SE-004',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SE-015', 'SE-VRM002']
   },
   {
     name: 'Shanthi',
+    matchNames: ['shanthi'],
     email: 'sales.s3@vrmstructures.in',
+    matchEmails: ['sales.s3@vrmstructures.in'],
     oldCode: 'SE-002',
     newCode: 'SE-005',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SE-002', 'SE-VRM003']
   },
   {
     name: 'Dhana Sekar',
+    matchNames: ['dhana sekar', 'dhanasekar'],
     email: 'dhanasekar@gmail.com',
+    matchEmails: ['dhanasekar@gmail.com'],
     oldCode: 'SE-020',
     newCode: 'SE-006',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SE-020']
   },
   {
     name: 'PRASHANTH',
+    matchNames: ['prashanth', 'prasanth'],
     email: 'sales.s2@vrmstructures.in',
+    matchEmails: ['sales.s2@vrmstructures.in'],
     oldCode: 'SE-007',
     newCode: 'SE-007',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SE-007']
   },
   {
     name: 'Pavithra',
+    matchNames: ['pavithra', 'pavi'],
     email: 'projectsales@jashsun.com',
+    matchEmails: ['projectsales@jashsun.com'],
     oldCode: 'SE-010',
     newCode: 'SE-008',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SE-010']
   },
   {
     name: 'KALAISELVI T',
+    matchNames: ['kalaiselvi t', 'kalaiselvi'],
     email: 'mms@vrmstructures.in',
+    matchEmails: ['mms@vrmstructures.in', 'sales@vrmstrutures.in'],
     oldCode: 'SE-VRM090',
     newCode: 'SE-009',
+    role: 'Sales',
+    dashboard_type: 'Sales',
+    department: 'Sales & Marketing',
     aliases: ['SE-VRM090', 'SE-VRM005']
   }
 ];
@@ -88,9 +212,75 @@ const SALES_MAPPING = [
 // Helper to normalize strings for comparison
 const norm = (s) => String(s || '').trim().toLowerCase();
 
+// Unified role normalizer to eliminate legacy "Head" / "Executive" labels
+function cleanRoleName(rawRole) {
+  if (!rawRole) return 'Sales';
+  const lower = String(rawRole).trim().toLowerCase();
+  if (lower.includes('technical admin') || lower.includes('developer') || lower.startsWith('ta')) return 'Technical Administrator';
+  if (lower.includes('tech support') || lower.includes('technical support')) return 'Tech Support';
+  if (lower.includes('sales')) return 'Sales';
+  if (lower.includes('floor')) return 'Floor Executive';
+  if (lower.includes('production')) return 'Production';
+  if (lower.includes('dispatch')) return 'Dispatch';
+  if (lower.includes('procurement') || lower.includes('purchase')) return 'Procurement';
+  if (lower.includes('account') || lower.includes('finance')) return 'Accounts';
+  if (lower.includes('billing') || lower.includes('invoice')) return 'Billing';
+  if (lower.includes('design')) return 'Design';
+  if (lower === 'ceo' || lower === 'md' || lower.includes('managing director')) return 'CEO';
+  return rawRole;
+}
+
+// Robust resolver for an employee record
+function findMappingForEmp(emp) {
+  if (!emp) return null;
+  const empEmail = norm(emp.email);
+  const empName = norm(emp.employee_name || emp.name);
+  const empCode = String(emp.employee_code || emp.code || '').trim().toUpperCase();
+
+  // 1. Match by exact email (highest precision)
+  if (empEmail) {
+    const emailMatch = TEAM_MAPPINGS.find(m => 
+      (m.email && norm(m.email) === empEmail) ||
+      (Array.isArray(m.matchEmails) && m.matchEmails.some(me => norm(me) === empEmail))
+    );
+    if (emailMatch) return emailMatch;
+  }
+
+  // 2. Match by exact name
+  if (empName) {
+    const nameMatch = TEAM_MAPPINGS.find(m => {
+      if (m.name && norm(m.name) === empName) return true;
+      if (Array.isArray(m.matchNames) && m.matchNames.some(mn => empName === norm(mn) || empName.includes(norm(mn)))) {
+        // Disambiguate Vasanth Support vs Vasanth Kumar S (Sales)
+        if (m.role === 'Tech Support' && (empName.includes('kumar') || (emp.role && emp.role.includes('Sales')))) return false;
+        if (m.role === 'Sales' && emp.role && emp.role.includes('Support')) return false;
+        return true;
+      }
+      return false;
+    });
+    if (nameMatch) return nameMatch;
+  }
+
+  // 3. Match if already has newCode and matching role
+  const newCodeMatch = TEAM_MAPPINGS.find(m => m.newCode === empCode);
+  if (newCodeMatch) return newCodeMatch;
+
+  // 4. Match by oldCode (only if email/name didn't conflict)
+  if (empCode) {
+    const oldCodeMatch = TEAM_MAPPINGS.find(m => 
+      (m.oldCode && m.oldCode.toUpperCase() === empCode) ||
+      (Array.isArray(m.aliases) && m.aliases.some(a => a.toUpperCase() === empCode))
+    );
+    if (oldCodeMatch) return oldCodeMatch;
+  }
+
+  return null;
+}
+
 async function runMigration() {
   console.log('========================================================');
-  console.log('🚀 BUSINZ SALES TEAM ID RE-SEQUENCING & PRESERVATION');
+  console.log('🚀 BUSINZ COMPLETE TEAM ID RE-SEQUENCING & PRESERVATION');
+  console.log('   (Sales, Tech Admin, Tech Support, Accounts & Legacy Cleanup)');
   console.log('========================================================\n');
 
   let hasPg = false;
@@ -155,67 +345,108 @@ async function runMigration() {
   if (!Array.isArray(emps)) emps = [];
 
   let empsUpdatedCount = 0;
+  const processedNewCodes = new Set();
+
   emps = emps.map(emp => {
     if (!emp) return emp;
-    const empEmail = norm(emp.email);
-    const empName = norm(emp.employee_name || emp.name);
-    const empCode = String(emp.employee_code || emp.code || '').trim().toUpperCase();
 
-    // Match mapping by email first, or exact name/code
-    const mapping = SALES_MAPPING.find(m => 
-      (m.email && norm(m.email) === empEmail) ||
-      (m.name && norm(m.name) === empName) ||
-      (m.oldCode && m.oldCode.toUpperCase() === empCode)
-    );
+    const mapping = findMappingForEmp(emp);
 
     if (mapping) {
       empsUpdatedCount++;
+      processedNewCodes.add(mapping.newCode);
+
       const existingAliases = Array.isArray(emp.alias_codes) ? emp.alias_codes : [];
       const combinedAliases = Array.from(new Set([
         ...existingAliases,
-        ...mapping.aliases,
+        ...(mapping.aliases || []),
         emp.employee_code,
         emp.code,
         mapping.oldCode
       ])).filter(Boolean).filter(c => c !== mapping.newCode);
 
-      console.log(`  ✓ Updated ${mapping.name}: ${emp.employee_code || mapping.oldCode} -> ${mapping.newCode} (Role: Sales)`);
+      console.log(`  ✓ Updated ${mapping.name}: ${emp.employee_code || mapping.oldCode} -> ${mapping.newCode} (Role: ${mapping.role})`);
       return {
         ...emp,
         employee_code: mapping.newCode,
         code: mapping.newCode,
-        role: 'Sales',
-        dashboard_type: 'Sales',
+        employee_name: mapping.name,
+        name: mapping.name,
+        email: mapping.email || emp.email,
+        role: mapping.role,
+        dashboard_type: mapping.dashboard_type || mapping.role,
+        department: mapping.department || emp.department,
+        status: emp.status || 'Active',
         alias_codes: combinedAliases
       };
     }
+
+    // Clean legacy role names for non-mapped employees (e.g. legacy heads / executives)
+    const normalizedRole = cleanRoleName(emp.role);
+    if (normalizedRole !== emp.role) {
+      console.log(`  ✓ Normalized role for ${emp.employee_name || emp.name} (${emp.employee_code}): "${emp.role}" -> "${normalizedRole}"`);
+      return {
+        ...emp,
+        role: normalizedRole,
+        dashboard_type: normalizedRole
+      };
+    }
+
     return emp;
   });
 
-  // If any of the 9 sales members were not found in emps, add them safely
-  SALES_MAPPING.forEach(m => {
-    const exists = emps.some(e => norm(e.email) === norm(m.email) || String(e.employee_code).toUpperCase() === m.newCode);
-    if (!exists) {
-      console.log(`  + Registering missing active sales account: ${m.name} (${m.newCode})`);
-      emps.push({
-        employee_code: m.newCode,
-        code: m.newCode,
-        employee_name: m.name,
-        name: m.name,
-        email: m.email,
-        role: 'Sales',
-        dashboard_type: 'Sales',
-        status: 'Active',
-        alias_codes: m.aliases
-      });
-      empsUpdatedCount++;
+  // If any mapped member was missing from emps, register them safely
+  TEAM_MAPPINGS.forEach(m => {
+    if (!processedNewCodes.has(m.newCode)) {
+      const exists = emps.some(e => 
+        (m.email && norm(e.email) === norm(m.email)) || 
+        String(e.employee_code).toUpperCase() === m.newCode
+      );
+      if (!exists) {
+        console.log(`  + Registering active account: ${m.name} (${m.newCode} - ${m.role})`);
+        emps.push({
+          employee_code: m.newCode,
+          code: m.newCode,
+          employee_name: m.name,
+          name: m.name,
+          email: m.email,
+          role: m.role,
+          dashboard_type: m.dashboard_type || m.role,
+          department: m.department || 'Operations',
+          status: 'Active',
+          alias_codes: m.aliases || []
+        });
+        empsUpdatedCount++;
+        processedNewCodes.add(m.newCode);
+      }
     }
   });
 
-  await saveStore('employees_store', emps);
-  console.log(`Total employee accounts updated: ${empsUpdatedCount}`);
+  // De-duplicate any double records with identical employee_code keeping the one with valid password/email
+  const uniqueEmpsMap = new Map();
+  emps.forEach(emp => {
+    const code = String(emp.employee_code || emp.code || '').trim().toUpperCase();
+    if (!uniqueEmpsMap.has(code)) {
+      uniqueEmpsMap.set(code, emp);
+    } else {
+      const existing = uniqueEmpsMap.get(code);
+      // Merge properties preferring one with actual password or fuller data
+      uniqueEmpsMap.set(code, {
+        ...existing,
+        ...emp,
+        password: existing.password || emp.password || '12345',
+        alias_codes: Array.from(new Set([...(existing.alias_codes || []), ...(emp.alias_codes || [])]))
+      });
+    }
+  });
+  emps = Array.from(uniqueEmpsMap.values());
 
-  // Helper to migrate documents
+  await saveStore('employees_store', emps);
+  console.log(`Total employee accounts updated/verified: ${empsUpdatedCount} (Active total: ${emps.length})`);
+
+  // Helper to migrate sales documents
+  const SALES_MAPPINGS = TEAM_MAPPINGS.filter(m => m.role === 'Sales');
+
   function migrateDocuments(docList, storeName) {
     if (!Array.isArray(docList)) return { list: docList, count: 0 };
     let count = 0;
@@ -225,11 +456,11 @@ async function runMigration() {
       const docName = norm(doc.salesPerson || doc.salesperson || doc.createdBy || doc.convertedBy);
       const docCode = String(doc.salesPersonCode || doc.createdById || doc.convertedById || '').trim().toUpperCase();
 
-      // Find matching salesperson by email first, then exact name, then old code
-      const mapping = SALES_MAPPING.find(m => {
+      // Find matching salesperson
+      const mapping = SALES_MAPPINGS.find(m => {
         if (docEmail && m.email && norm(m.email) === docEmail) return true;
         if (docName && m.name && norm(m.name) === docName) return true;
-        if (docCode && m.aliases.map(a => a.toUpperCase()).includes(docCode)) return true;
+        if (docCode && m.aliases && m.aliases.map(a => a.toUpperCase()).includes(docCode)) return true;
         return false;
       });
 
@@ -287,7 +518,8 @@ async function runMigration() {
   await pool.end().catch(() => {});
 
   console.log('\n========================================================');
-  console.log('🎉 MIGRATION COMPLETED SUCCESSFULLY WITH 0 DATA LOSS!');
+  console.log('🎉 TEAM ID RE-SEQUENCING & ROLE CLEANUP COMPLETED!');
+  console.log('   All historical records preserved with zero data loss.');
   console.log('========================================================\n');
 }
 

@@ -277,7 +277,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         }
       ];
-    } else if (role === 'Floor Employee') {
+    } else if (role === 'Floor Employee' || role === 'Floor Executive') {
       sections = [
         {
           category: 'MAIN MENU',
