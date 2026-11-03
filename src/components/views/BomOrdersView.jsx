@@ -939,26 +939,25 @@ export default function BomOrdersView(props) {
     const normA = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanCurNorm = normA(curName);
 
-    // Helper to resolve the unambiguous salesperson owner by Name or Email
-    const resolveBomOwner = (b) => {
-      const spName = String(
-        b.salesPerson || b.createdBy || b.convertedBy || 
-        b.sales_person || b.created_by || b.converted_by || ''
-      ).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      const spEmail = String(b.salesPersonEmail || b.email || b.creatorEmail || '').trim().toLowerCase();
+    // Canonical Sales Team Definitions with Name matchers
+    const SALES_TEAM = [
+      { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
+      { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
+      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar', 'vasanth'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-004'] },
+      { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
+      { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
+      { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },
+      { code: 'SE-007', name: 'PRASHANTH', matchNames: ['prashanth', 'prasanth'], emails: ['sales.s2@'], oldCodes: [] },
+      { code: 'SE-008', name: 'Pavithra', matchNames: ['pavithra', 'pavitra'], emails: ['projectsales'], oldCodes: ['SE-010'] },
+      { code: 'SE-009', name: 'KALAISELVI T', matchNames: ['kalaiselvi', 'kalai'], emails: ['mms@'], oldCodes: ['SE-VRM090'] }
+    ];
 
-      if (spEmail.includes('sales.s1@') || spName.includes('manoj')) return 'SE-001';
-      if (spEmail.includes('sanjaikumar') || spName.includes('sanjai')) return 'SE-002';
-      if (spEmail.includes('vasanthkumar') || (spName.includes('vasanth') && !spName.includes('support'))) return 'SE-003';
-      if (spEmail.includes('sales.s4@') || spName.includes('mohith')) return 'SE-004';
-      if (spEmail.includes('sales.s3@') || spName.includes('shanthi')) return 'SE-005';
-      if (spEmail.includes('dhanasekar') || spName.includes('dhana')) return 'SE-006';
-      if (spEmail.includes('sales.s2@') || spName.includes('prashanth') || spName.includes('prasanth')) return 'SE-007';
-      if (spEmail.includes('projectsales') || spName.includes('pavithra')) return 'SE-008';
-      if (spEmail.includes('mms@') || spName.includes('kalaiselvi')) return 'SE-009';
-
-      return null;
-    };
+    // Detect which sales rep is currently logged in (Name-First, then Code)
+    const activeRep = SALES_TEAM.find(rep => 
+      (curName && rep.matchNames.some(m => curName.includes(m) && (!rep.excludeNames || !rep.excludeNames.some(ex => curName.includes(ex))))) ||
+      (curCode && rep.code === curCode) ||
+      (curEmail && rep.emails.some(e => curEmail.includes(e)))
+    );
 
     return rawList.filter(b => {
       if (!b) return false;
@@ -975,44 +974,49 @@ export default function BomOrdersView(props) {
         if (sPi === tPi) return true;
       }
 
-      // 0. Primary check: Unambiguous salesperson owner resolution by Name or Email
-      const resolvedOwnerCode = resolveBomOwner(b);
-      if (resolvedOwnerCode) {
-        return curCode === resolvedOwnerCode;
-      }
+      // Extract all identifying names and text from the BOM
+      const bomNameText = [
+        b.salesPerson, b.createdBy, b.convertedBy,
+        b.sales_person, b.created_by, b.converted_by
+      ].filter(Boolean).join(' ').toLowerCase();
 
-      // 1. Exact Email match
-      const bomEmails = [b.salesPersonEmail, b.email, b.creatorEmail].filter(Boolean).map(e => String(e).trim().toLowerCase());
-      if (curEmail && bomEmails.some(e => e === curEmail)) {
-        return true;
-      }
+      const bomEmail = String(b.salesPersonEmail || b.email || b.creatorEmail || '').toLowerCase().trim();
+      const bomCode = String(b.salesPersonCode || b.createdById || b.convertedById || b.sales_person_code || b.created_by_id || '').toUpperCase().trim();
 
-      // 2. Exact Name match
-      const bomNames = [
-        b.salesPerson,
-        b.createdBy,
-        b.convertedBy,
-        b.sales_person,
-        b.created_by,
-        b.converted_by
-      ].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+      if (activeRep) {
+        // 1. Primary Rule: NAME MATCHING
+        const matchesActiveRepName = activeRep.matchNames.some(m => 
+          bomNameText.includes(m) && (!activeRep.excludeNames || !activeRep.excludeNames.some(ex => bomNameText.includes(ex)))
+        );
+        if (matchesActiveRepName) {
+          return true;
+        }
 
-      if (cleanCurNorm && bomNames.some(n => normA(n) === cleanCurNorm)) {
-        return true;
-      }
+        // If BOM explicitly belongs to ANOTHER sales rep by Name, exclude it immediately!
+        const matchesOtherRepName = SALES_TEAM.some(other => 
+          other.code !== activeRep.code && 
+          other.matchNames.some(m => bomNameText.includes(m) && (!other.excludeNames || !other.excludeNames.some(ex => bomNameText.includes(ex))))
+        );
+        if (matchesOtherRepName) {
+          return false;
+        }
 
-      // 3. Exact Code match fallback (strictly exact, NO digits substring matching)
-      const bomCodes = [
-        b.salesPersonCode,
-        b.createdById,
-        b.convertedById,
-        b.sales_person_code,
-        b.created_by_id,
-        b.converted_by_id
-      ].filter(Boolean).map(c => String(c).trim().toUpperCase());
+        // 2. Email matching
+        if (bomEmail && activeRep.emails.some(e => bomEmail.includes(e))) {
+          return true;
+        }
 
-      if (curCode && bomCodes.includes(curCode)) {
-        return true;
+        // 3. Old code matching (e.g. SH-001 for Manojraj)
+        if (activeRep.oldCodes && activeRep.oldCodes.includes(bomCode)) {
+          return true;
+        }
+
+        // 4. Code match
+        if (bomCode === activeRep.code) {
+          return true;
+        }
+
+        return false;
       }
 
       // 4. Source PI ownership check

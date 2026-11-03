@@ -569,63 +569,85 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     // If no specific employee profile is configured, show all records safely
     if (!curCode && !curName && !curEmail) return raw;
 
-    // Helper to resolve the unambiguous salesperson owner by Name or Email
-    const resolvePiOwner = (pi) => {
-      const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
+    // Canonical Sales Team Definitions with Name matchers
+    const SALES_TEAM = [
+      { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
+      { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
+      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar', 'vasanth'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-004'] },
+      { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
+      { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
+      { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },
+      { code: 'SE-007', name: 'PRASHANTH', matchNames: ['prashanth', 'prasanth'], emails: ['sales.s2@'], oldCodes: [] },
+      { code: 'SE-008', name: 'Pavithra', matchNames: ['pavithra', 'pavitra'], emails: ['projectsales'], oldCodes: ['SE-010'] },
+      { code: 'SE-009', name: 'KALAISELVI T', matchNames: ['kalaiselvi', 'kalai'], emails: ['mms@'], oldCodes: ['SE-VRM090'] }
+    ];
 
-      if (spEmail.includes('sales.s1@') || spName.includes('manoj')) return 'SE-001';
-      if (spEmail.includes('sanjaikumar') || spName.includes('sanjai')) return 'SE-002';
-      if (spEmail.includes('vasanthkumar') || (spName.includes('vasanth') && !spName.includes('support'))) return 'SE-003';
-      if (spEmail.includes('sales.s4@') || spName.includes('mohith')) return 'SE-004';
-      if (spEmail.includes('sales.s3@') || spName.includes('shanthi')) return 'SE-005';
-      if (spEmail.includes('dhanasekar') || spName.includes('dhana')) return 'SE-006';
-      if (spEmail.includes('sales.s2@') || spName.includes('prashanth') || spName.includes('prasanth')) return 'SE-007';
-      if (spEmail.includes('projectsales') || spName.includes('pavithra')) return 'SE-008';
-      if (spEmail.includes('mms@') || spName.includes('kalaiselvi')) return 'SE-009';
-
-      return null;
-    };
+    // Detect which sales rep is currently logged in (Name-First, then Code)
+    const activeRep = SALES_TEAM.find(rep => 
+      (curName && rep.matchNames.some(m => curName.includes(m) && (!rep.excludeNames || !rep.excludeNames.some(ex => curName.includes(ex))))) ||
+      (curCode && rep.code === curCode) ||
+      (curEmail && rep.emails.some(e => curEmail.includes(e)))
+    );
 
     return raw.filter(pi => {
       if (!pi) return false;
-      const assignedCode = String(pi.assignedSalespersonCode || pi.assignedToCode || pi.assignedToId || '').trim().toUpperCase();
-      const assignedName = String(pi.assignedSalesperson || pi.assignedToName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
 
-      // -1. If PI is explicitly assigned to another salesperson, exclude
-      if (assignedCode && assignedCode !== curCode) {
+      // Extract all identifying names and text from the PI
+      const piNameText = [
+        pi.salesPerson, pi.salesperson, pi.salesRep, pi.createdBy,
+        pi.assignedSalesperson, pi.assignedToName
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      const piEmail = String(pi.salesPersonEmail || pi.email || '').toLowerCase().trim();
+      const piCode = String(pi.salesPersonCode || pi.createdById || '').toUpperCase().trim();
+      const assignedCode = String(pi.assignedSalespersonCode || pi.assignedToCode || pi.assignedToId || '').toUpperCase().trim();
+
+      if (activeRep) {
+        // 1. Primary Rule: NAME MATCHING
+        // If PI contains activeRep's name keywords:
+        const matchesActiveRepName = activeRep.matchNames.some(m => 
+          piNameText.includes(m) && (!activeRep.excludeNames || !activeRep.excludeNames.some(ex => piNameText.includes(ex)))
+        );
+        if (matchesActiveRepName) {
+          return true;
+        }
+
+        // If PI explicitly contains ANOTHER sales rep's name keywords, strictly exclude it!
+        const matchesOtherRepName = SALES_TEAM.some(other => 
+          other.code !== activeRep.code && 
+          other.matchNames.some(m => piNameText.includes(m) && (!other.excludeNames || !other.excludeNames.some(ex => piNameText.includes(ex))))
+        );
+        if (matchesOtherRepName) {
+          return false;
+        }
+
+        // 2. Email matching
+        if (piEmail && activeRep.emails.some(e => piEmail.includes(e))) {
+          return true;
+        }
+
+        // 3. Old code matching (e.g. SH-001 for Manojraj)
+        if (activeRep.oldCodes && activeRep.oldCodes.includes(piCode)) {
+          return true;
+        }
+
+        // 4. Directly assigned to activeRep
+        if (assignedCode && assignedCode === activeRep.code) {
+          return true;
+        }
+
+        // 5. Explicit new code match ONLY IF the PI has no conflicting other name
+        if (piCode === activeRep.code) {
+          return true;
+        }
+
         return false;
       }
-      if (assignedName && curName && assignedName !== curName && !assignedName.includes(curName) && !curName.includes(assignedName)) {
-        if (assignedCode) return false;
-      }
 
-      // 0. Direct match on assigned salesperson code or assigned name
-      if (curCode && assignedCode && assignedCode === curCode) {
-        return true;
-      }
-      if (curName && assignedName && (curName === assignedName || assignedName.includes(curName) || curName.includes(assignedName))) {
-        return true;
-      }
-
-      // 1. Resolve owner by person's Name or Email
-      const resolvedOwnerCode = resolvePiOwner(pi);
-      if (resolvedOwnerCode) {
-        return curCode === resolvedOwnerCode;
-      }
-
-      // 2. Strict Email matching fallback
-      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
-      if (curEmail && spEmail && spEmail === curEmail) {
-        return true;
-      }
-
-      // 3. Strict Code matching fallback
-      const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
-      if (curCode && spCode && spCode === curCode) {
-        return true;
-      }
-
+      // Fallback for non-mapped sales users
+      if (curName && piNameText.includes(curName)) return true;
+      if (curCode && (piCode === curCode || assignedCode === curCode)) return true;
+      if (curEmail && piEmail === curEmail) return true;
       return false;
     });
   }, [piList, isRestrictedSalesUser, isStrictTechSupport, currentEmpId, currentEmpName, currentLoggedEmail]);

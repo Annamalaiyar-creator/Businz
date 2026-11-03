@@ -528,6 +528,23 @@ async function runMigration() {
       if (matchByName) return matchByName;
     }
 
+    // 3. Match unique historical codes that have zero collision risk
+    const docCode = String(doc.salesPersonCode || doc.createdById || doc.sales_person_code || doc.created_by_id || '').toUpperCase().trim();
+    if (docCode) {
+      if (docCode === 'SH-001' || docCode === 'SH-VRM001') {
+        return SALES_MAPPINGS.find(m => m.newCode === 'SE-001'); // Manojraj Selvaraj was the sole Sales Head
+      }
+      if (docCode === 'SE-020') {
+        return SALES_MAPPINGS.find(m => m.newCode === 'SE-006'); // Dhana Sekar
+      }
+      if (docCode === 'SE-010') {
+        return SALES_MAPPINGS.find(m => m.newCode === 'SE-008'); // Pavithra
+      }
+      if (docCode === 'SE-VRM090') {
+        return SALES_MAPPINGS.find(m => m.newCode === 'SE-009'); // Kalaiselvi
+      }
+    }
+
     // NOTE: Strictly avoid fallback to swapped employee codes (e.g. SE-001/SE-002/SE-004) to prevent cross-contamination
     return null;
   }
@@ -544,9 +561,13 @@ async function runMigration() {
           ...doc,
           salesPerson: mapping.name,
           salesperson: mapping.name,
+          sales_person: mapping.name,
           salesPersonCode: mapping.newCode,
+          sales_person_code: mapping.newCode,
           createdById: mapping.newCode,
-          salesPersonEmail: doc.salesPersonEmail || mapping.email
+          created_by_id: mapping.newCode,
+          salesPersonEmail: doc.salesPersonEmail || mapping.email,
+          sales_person_email: doc.salesPersonEmail || mapping.email
         };
       }
       return doc;
@@ -603,7 +624,23 @@ async function runMigration() {
       try {
         const nameChecks = (m.matchNames || [m.name]).map(n => `LOWER(TRIM(COALESCE(sales_person, created_by, ''))) ILIKE '%${n.trim().toLowerCase()}%'`).join(' OR ');
         const emailChecks = (m.matchEmails || [m.email]).filter(Boolean).map(e => `LOWER(TRIM(COALESCE(sales_person_email, email, ''))) ILIKE '%${e.trim().toLowerCase()}%'`).join(' OR ');
-        const fullCondition = emailChecks ? `(${nameChecks}) OR (${emailChecks})` : `(${nameChecks})`;
+        
+        let codeCheck = '';
+        if (m.oldCode === 'SH-001') {
+          codeCheck = " OR sales_person_code = 'SH-001' OR created_by_id = 'SH-001'";
+        } else if (m.oldCode && !['SE-001', 'SE-002', 'SE-004'].includes(m.oldCode)) {
+          codeCheck = ` OR sales_person_code = '${m.oldCode}' OR created_by_id = '${m.oldCode}'`;
+        }
+
+        let excludeCheck = '';
+        if (m.newCode === 'SE-002') { // Sanjai kumar
+          excludeCheck = " AND LOWER(TRIM(COALESCE(sales_person, created_by, ''))) NOT ILIKE '%manoj%'";
+        } else if (m.newCode === 'SE-001') { // Manojraj Selvaraj
+          excludeCheck = " AND LOWER(TRIM(COALESCE(sales_person, created_by, ''))) NOT ILIKE '%sanjai%' AND LOWER(TRIM(COALESCE(sales_person, created_by, ''))) NOT ILIKE '%sanjay%'";
+        }
+
+        const baseCond = emailChecks ? `(${nameChecks}) OR (${emailChecks})` : `(${nameChecks})`;
+        const fullCondition = `((${baseCond})${codeCheck})${excludeCheck}`;
 
         const piRes = await pgClient.query(`
           UPDATE public.proforma_invoices
