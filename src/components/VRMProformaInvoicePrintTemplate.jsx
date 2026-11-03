@@ -1064,13 +1064,14 @@ export function VRMProformaInvoicePrintSheet({
   const hiddenElements = ALL_ELEMENTS.filter(item => cfg[item.key] === false);
 
   const renderRedesignedProformaInvoice = () => {
-    const phoneVal = (pi.phone || pi.contactPhone || pi.customerPhone || pi.mobileNumber || pi.mobile || '').toString().replace(/[()]/g, '').trim();
-    const roundOffVal = Math.round(grandTotal) - grandTotal;
-    const hasRoundOff = Math.abs(roundOffVal) > 0.001;
-    const repName = pi.salesPerson || pi.salesperson || pi.sales_person_name || pi.createdByName || 'Sanjai Kumar';
-    const docDateStr = formatDocumentDate(pi.piDate || pi.date);
-    const docNoStr = pi.piNo || pi.proformaInvoiceNo || pi.invoiceNo || 'VRM-PI-2026-288';
-    const primaryTitle = (cfg.documentTitle || 'PROFORMA INVOICE').toUpperCase();
+    try {
+      const phoneVal = (pi.phone || pi.contactPhone || pi.customerPhone || pi.mobileNumber || pi.mobile || '').toString().replace(/[()]/g, '').trim();
+      const roundOffVal = Math.round(grandTotal) - grandTotal;
+      const hasRoundOff = Math.abs(roundOffVal) > 0.001;
+      const repName = pi.salesPerson || pi.salesperson || pi.sales_person_name || pi.createdByName || 'Sanjai Kumar';
+      const docDateStr = formatDocumentDate(pi.piDate || pi.date);
+      const docNoStr = pi.piNo || pi.proformaInvoiceNo || pi.invoiceNo || 'VRM-PI-2026-288';
+      const primaryTitle = (cfg.documentTitle || 'PROFORMA INVOICE').toUpperCase();
 
     return (
       <div
@@ -1486,6 +1487,17 @@ export function VRMProformaInvoicePrintSheet({
         </div>
       </div>
     );
+    } catch (err) {
+      console.warn('[VRMProformaInvoicePrintTemplate] Graceful render catch:', err);
+      return (
+        <div style={{ padding: '24px', backgroundColor: '#FFFFFF', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0F3D6E' }}>Proforma Invoice</div>
+          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px' }}>
+            {pi?.piNo || 'VRM-PI'} | {pi?.customerName || pi?.vendor || 'Customer'}
+          </div>
+        </div>
+      );
+    }
   };
 
   return (

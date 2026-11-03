@@ -7,6 +7,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import zlib from 'zlib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1790,6 +1791,37 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-file-name', 'X-File-Name']
 }));
 
+// 3a. Native GZIP Response Compression for JSON and text payloads > 1KB (Massive speedup for low-end devices & slow networks)
+app.use((req, res, next) => {
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  if (!acceptEncoding.includes('gzip')) return next();
+  if (req.path === '/api/realtime-events') return next(); // Never buffer SSE streams
+
+  const origSend = res.send;
+  res.send = function (body) {
+    let payload = body;
+    if (typeof body === 'object' && !(body instanceof Buffer)) {
+      payload = JSON.stringify(body);
+      if (!res.getHeader('content-type')) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      }
+    }
+    if (typeof payload === 'string' && payload.length > 1024) {
+      try {
+        const compressed = zlib.gzipSync(Buffer.from(payload, 'utf-8'));
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Vary', 'Accept-Encoding');
+        res.setHeader('Content-Length', compressed.length);
+        return origSend.call(this, compressed);
+      } catch (_) {
+        return origSend.call(this, payload);
+      }
+    }
+    return origSend.call(this, body);
+  };
+  next();
+});
+
 // 3b. Route-aware request-size enforcement: enforce 15 MB strictly for /api/store before global body parsers (Phase 9R Issue 2)
 // Protects against oversized Content-Length as well as streaming chunked transfer encoding without Content-Length
 const STORE_PAYLOAD_LIMIT_BYTES = 15 * 1024 * 1024; // 15 MB
@@ -3434,6 +3466,16 @@ app.get('/api/store/:key', async (req, res) => {
         count: 0,
         data: []
       });
+    }
+
+    if (key === 'vrm_prod_ledger') {
+      const data = await getDatabaseStore(key);
+      const list = Array.isArray(data) ? data : [];
+      if (req.query.all === 'true' || req.query.limit === 'all') {
+        return res.json({ success: true, data: list });
+      }
+      const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+      return res.json({ success: true, data: list.slice(0, limit), totalCount: list.length });
     }
 
     const data = await getDatabaseStore(key);
@@ -5571,15 +5613,49 @@ app.post('/api/repair-bom-sequences', async (req, res) => {
   });
 });
 
+// Recursive helper to sanitize heavy base64 data URLs & redundant snapshots from list items
+const deepStripDataUrls = (val, depth = 0) => {
+  if (!val || depth > 8) return val;
+  if (typeof val === 'string') {
+    if (val.startsWith('data:') && val.length > 200) {
+      const mime = val.slice(5, val.indexOf(';')) || 'image/jpeg';
+      return { hasDoc: true, isLightweightRef: true, type: mime };
+    }
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val.map(item => deepStripDataUrls(item, depth + 1));
+  }
+  if (typeof val === 'object') {
+    const out = {};
+    for (const k of Object.keys(val)) {
+      if (k === 'auditLog' && Array.isArray(val[k])) {
+        // Truncate heavy historical snapshots in auditLog for list views
+        out[k] = val[k].slice(-5).map(entry => {
+          if (entry && typeof entry === 'object') {
+            const { snapshot, previousState, fullBom, ...cleanEntry } = entry;
+            return cleanEntry;
+          }
+          return entry;
+        });
+      } else {
+        out[k] = deepStripDataUrls(val[k], depth + 1);
+      }
+    }
+    return out;
+  }
+  return val;
+};
+
 // Helper to strip heavy base64 dataUrls from BOM list responses while keeping all metadata
 const stripHeavyDocsFromBom = (b) => {
   if (!b || typeof b !== 'object') return b;
-  const stripped = { ...b };
+  let stripped = { ...b };
 
   const stripDoc = (doc) => {
     if (!doc) return null;
     if (typeof doc === 'string') {
-      if (doc.startsWith('data:') && doc.length > 300) {
+      if (doc.startsWith('data:') && doc.length > 200) {
         return { hasDoc: true, isLightweightRef: true, type: doc.slice(5, doc.indexOf(';')) || 'image/jpeg' };
       }
       return doc;
@@ -5618,6 +5694,9 @@ const stripHeavyDocsFromBom = (b) => {
       isLightweightRef: true
     };
   }
+
+  // Deep recursive pass to sanitize nested base64 in dispatchPacking, items, accountsVerification, etc.
+  stripped = deepStripDataUrls(stripped);
 
   return stripped;
 };

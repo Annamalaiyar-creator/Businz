@@ -1258,6 +1258,19 @@ export async function fetchBomAccountsVerification(orderId) {
   return null;
 }
 
+// Rapid In-Flight Request Deduplication & Short-Lived In-Memory Cache (Eliminates parallel duplicate network fetches)
+const inFlightCloudStoreRequests = new Map();
+const recentCloudStoreCache = new Map();
+const CLOUD_STORE_DEDUP_TTL_MS = 3500;
+
+export function invalidateCloudStoreCache(storeKey) {
+  if (storeKey) {
+    recentCloudStoreCache.delete(String(storeKey));
+  } else {
+    recentCloudStoreCache.clear();
+  }
+}
+
 /**
  * Fetch a data collection DIRECTLY from Supabase cloud database
  * @param {string} storeKey - Unique identifier (e.g. 'bom_store', 'invoice_store', 'customer_store', 'crm_opportunities')
@@ -1266,6 +1279,36 @@ export async function fetchBomAccountsVerification(orderId) {
  */
 export async function fetchCloudStore(storeKey, fallbackData = []) {
   if (isIsolatedNodeTestMode()) return fallbackData;
+
+  const keyStr = String(storeKey);
+  const now = Date.now();
+
+  // 1. Instant return from short-lived memory cache if recent (< 3.5s old)
+  const cached = recentCloudStoreCache.get(keyStr);
+  if (cached && (now - cached.timestamp < CLOUD_STORE_DEDUP_TTL_MS)) {
+    return cached.data;
+  }
+
+  // 2. If identical fetch is currently in-flight, await the same promise (Zero duplicate network calls)
+  if (inFlightCloudStoreRequests.has(keyStr)) {
+    return inFlightCloudStoreRequests.get(keyStr);
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const data = await executeFetchCloudStore(storeKey, fallbackData);
+      recentCloudStoreCache.set(keyStr, { data, timestamp: Date.now() });
+      return data;
+    } finally {
+      inFlightCloudStoreRequests.delete(keyStr);
+    }
+  })();
+
+  inFlightCloudStoreRequests.set(keyStr, fetchPromise);
+  return fetchPromise;
+}
+
+async function executeFetchCloudStore(storeKey, fallbackData = []) {
   // CANONICAL CUSTOMER READ PATH: Query local backend proxy first (Zero PostgREST egress)
   if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
     // 1. Try local server memory cache first with request deduplication and scoped in-memory caching (Phase B1 & B2)
@@ -1457,6 +1500,7 @@ const pendingSaveData = {};
 export async function saveCloudStoreImmediate(storeKey, storeData) {
   if (storeData === undefined || storeData === null) return;
   if (isIsolatedNodeTestMode()) return;
+  invalidateCloudStoreCache(storeKey);
 
   // Direct persistence for employees to Supabase users table
   if (storeKey === 'employees_store' && Array.isArray(storeData)) {

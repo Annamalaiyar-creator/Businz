@@ -7,6 +7,7 @@
 // ===================================================================================
 
 import { speakNotificationVoice } from './notificationService';
+import { handleIncomingRealtimeMessage, getLastReceivedSeq, closeRealtimeSyncStream } from './realtimeSyncService';
 
 class RealtimeNotificationService {
   constructor() {
@@ -115,17 +116,22 @@ class RealtimeNotificationService {
         this.eventSource = null;
       }
 
+      // Close duplicate standalone stream and designate unified stream (Zero redundant connections)
+      closeRealtimeSyncStream();
+      if (typeof window !== 'undefined') window.__unifiedSseActive = true;
+
       const empCode = encodeURIComponent(this.getEmpCode());
       const role = encodeURIComponent(this.getUserRole());
       const userName = encodeURIComponent(this.getUserName());
-      const url = `/api/realtime-events?empCode=${empCode}&role=${role}&userName=${userName}`;
+      const lastSeq = getLastReceivedSeq();
+      const url = `/api/realtime-events?empCode=${empCode}&role=${role}&userName=${userName}${lastSeq > 0 ? `&lastEventId=${lastSeq}` : ''}`;
 
       this.eventSource = new EventSource(url);
 
       this.eventSource.onopen = () => {
         this.isConnecting = false;
         this.reconnectAttempts = 0;
-        console.log('[RealtimeNotifs] ⚡ Connected to BUSINZ real-time notification gateway');
+        console.log('[RealtimeNotifs] ⚡ Connected to BUSINZ real-time unified gateway');
       };
 
       // Listen for dedicated workflow/lead notification events
@@ -140,10 +146,13 @@ class RealtimeNotificationService {
         }
       });
 
-      // Also listen on general message channel for broadcast events
+      // Also listen on general message channel for broadcast events & data synchronization
       this.eventSource.onmessage = (e) => {
         try {
           const parsed = JSON.parse(e.data);
+          // Pass broadcast events (inventory, boms, pos, pis, leads) to real-time data sync handler
+          handleIncomingRealtimeMessage(parsed);
+
           if (parsed?.type === 'NOTIFICATION_RECEIVED' && parsed.notification) {
             this.handleIncomingNotification(parsed.notification);
           } else if (parsed?.type === 'INTERNAL_NOTIFICATION' && parsed.payload) {

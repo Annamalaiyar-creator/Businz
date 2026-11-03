@@ -7,6 +7,19 @@ let sseSupported = null;
 let storageUpdateTimer = null;
 let lastReceivedSeq = 0;
 
+export const getLastReceivedSeq = () => lastReceivedSeq;
+
+export const closeRealtimeSyncStream = () => {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (activeEventSource) {
+    try { activeEventSource.close(); } catch (_) {}
+    activeEventSource = null;
+  }
+};
+
 const emitStorageUpdate = () => {
   if (storageUpdateTimer) return;
   storageUpdateTimer = setTimeout(() => {
@@ -17,11 +30,207 @@ const emitStorageUpdate = () => {
   }, 300);
 };
 
+export const handleIncomingRealtimeMessage = (data) => {
+  if (!data || typeof data !== 'object') return;
+  if (data.seq) {
+    lastReceivedSeq = Math.max(lastReceivedSeq, data.seq);
+  }
+
+  const { type, payload, action, recordId } = data;
+
+  if (type === 'connected') return;
+
+  // If missed event gap exceeded buffer or server rebooted, trigger authoritative resync
+  if (type === 'resync_required') {
+    console.warn('⚡ [Real-Time Sync] Resync required from server:', data.reason || data.message);
+    lastReceivedSeq = data.seq || 0;
+    emitStorageUpdate();
+    return;
+  }
+
+  // 1. Inventory & Raw Materials Stock balance
+  if (type === 'inventory_updated' || (type === 'store_updated' && payload?.key === 'raw_materials_store')) {
+    const mats = payload?.rawMaterials || (Array.isArray(payload?.storeData) ? payload.storeData : null);
+    if (Array.isArray(mats) && mats.length > 0) {
+      try {
+        localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(mats));
+      } catch (_) {}
+    } else if (payload?.item && payload.item.code) {
+      // Direct targeted single-item delta update
+      try {
+        const existing = JSON.parse(localStorage.getItem('controlroom_raw_materials_store') || '[]');
+        const idx = existing.findIndex(m => m && (m.code === payload.item.code || m.id === payload.item.id));
+        if (idx !== -1) {
+          existing[idx] = { ...existing[idx], ...payload.item };
+        } else {
+          existing.unshift(payload.item);
+        }
+        localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(existing));
+      } catch (_) {}
+    } else if (payload?.deletedCodes && Array.isArray(payload.deletedCodes)) {
+      try {
+        const existing = JSON.parse(localStorage.getItem('controlroom_raw_materials_store') || '[]');
+        const remaining = existing.filter(m => m && !payload.deletedCodes.includes(m.code));
+        localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(remaining));
+      } catch (_) {}
+    }
+    window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update', { detail: payload }));
+    window.dispatchEvent(new Event('central_inventory_updated'));
+  }
+
+  // 2. Finished Goods & Component Catalog
+  else if (type === 'item_store_updated' || (type === 'store_updated' && (payload?.key === 'item_store' || payload?.key === 'vrm_prod_inventory'))) {
+    const items = payload?.items || (Array.isArray(payload?.storeData) ? payload.storeData : null);
+    if (Array.isArray(items) && items.length > 0) {
+      try {
+        localStorage.setItem('controlroom_items_list', JSON.stringify(items));
+      } catch (_) {}
+    } else if (payload?.item && (payload.item.code || payload.item.itemId || payload.item.id)) {
+      // Direct targeted single-item delta update
+      try {
+        const existing = JSON.parse(localStorage.getItem('controlroom_items_list') || '[]');
+        const targetCode = payload.item.code || payload.item.itemId || payload.item.id;
+        const idx = existing.findIndex(it => it && (it.code === targetCode || it.itemId === targetCode || it.id === targetCode));
+        if (idx !== -1) {
+          existing[idx] = { ...existing[idx], ...payload.item };
+        } else {
+          existing.unshift(payload.item);
+        }
+        localStorage.setItem('controlroom_items_list', JSON.stringify(existing));
+      } catch (_) {}
+    } else if (payload?.deletedIds && Array.isArray(payload.deletedIds)) {
+      try {
+        const existing = JSON.parse(localStorage.getItem('controlroom_items_list') || '[]');
+        const remaining = existing.filter(it => it && !payload.deletedIds.includes(it.id) && !payload.deletedIds.includes(it.itemId) && !payload.deletedIds.includes(it.code));
+        localStorage.setItem('controlroom_items_list', JSON.stringify(remaining));
+      } catch (_) {}
+    }
+    window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: payload }));
+    window.dispatchEvent(new Event('central_inventory_updated'));
+  }
+
+  // 3. BOM Orders & Routing
+  else if (type === 'bom_updated' || (type === 'store_updated' && payload?.key === 'bom_store')) {
+    if (payload?.printData?.bomCode) {
+      window.dispatchEvent(new CustomEvent('vrm_bom_printed', { detail: payload.printData }));
+    } else if (payload?.bom?.dispatchPrinted && (payload?.bom?.bomCode || payload?.bom?.id)) {
+      window.dispatchEvent(new CustomEvent('vrm_bom_printed', {
+        detail: {
+          bomCode: payload.bom.bomCode || payload.bom.code || payload.bom.id,
+          dispatchPrinted: true,
+          dispatchPrintedAt: payload.bom.dispatchPrintedAt,
+          dispatchPrintTimeStr: payload.bom.dispatchPrintTimeStr,
+          dispatchPrintedDateStr: payload.bom.dispatchPrintedDateStr,
+          dispatchPrintedBy: payload.bom.dispatchPrintedBy,
+          dispatchPrintCount: payload.bom.dispatchPrintCount,
+          firstPrintTimeStr: payload.bom.firstPrintTimeStr,
+          secondPrintTimeStr: payload.bom.secondPrintTimeStr,
+          dispatchPrintHistory: payload.bom.dispatchPrintHistory
+        }
+      }));
+    }
+
+    // Direct targeted single BOM delta update into local cache
+    if (payload?.bom && typeof payload.bom === 'object') {
+      try {
+        const existingBoms = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+        const single = payload.bom;
+        const k = single.bomCode || single.code || single.id;
+        if (k) {
+          const filtered = existingBoms.filter(b => b && b.bomCode !== k && b.code !== k && b.id !== k);
+          localStorage.setItem('controlroom_bom_store', JSON.stringify([single, ...filtered]));
+        }
+      } catch (_) {}
+    } else if ((action === 'delete' || payload?.action === 'delete') && (recordId || payload?.id)) {
+      try {
+        const targetId = recordId || payload?.id;
+        const existingBoms = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+        const remaining = existingBoms.filter(b => b && b.id !== targetId && b.bomCode !== targetId && b.code !== targetId);
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(remaining));
+      } catch (_) {}
+    }
+
+    window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: payload }));
+    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: payload }));
+  }
+
+  // 4. Production Work Orders
+  else if (type === 'workorder_updated' || (type === 'store_updated' && (payload?.key === 'workorder_store' || payload?.key === 'vrm_prod_workorders'))) {
+    window.dispatchEvent(new CustomEvent('controlroom_workorder_updated', { detail: payload }));
+  }
+
+  // 5. Purchase Orders & Approvals
+  else if (type === 'po_updated' || (type === 'store_updated' && payload?.key === 'po_store')) {
+    window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: payload }));
+  }
+
+  // 6. Goods Receipt Notes (GRN)
+  else if (type === 'grn_updated' || (type === 'store_updated' && payload?.key === 'grn_store')) {
+    window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: payload }));
+  }
+
+  // 7. Proforma Invoices & Invoices
+  else if (type === 'pi_created' || type === 'pi_updated' || type === 'sales_pi_assigned' || type === 'invoice_updated' || (type === 'store_updated' && (payload?.key === 'sales_pi_store' || payload?.key === 'proforma_invoice_store' || payload?.key === 'invoice_store'))) {
+    const updatedPi = payload?.updatedPi || payload?.pi;
+    if (updatedPi && (updatedPi.piNo || updatedPi.id)) {
+      const k = String(updatedPi.piNo || updatedPi.id).trim().toLowerCase();
+      for (const storeKey of ['controlroom_sales_pi_store', 'controlroom_proforma_invoice_store', 'controlroom_procurement_pi_store']) {
+        try {
+          const existing = JSON.parse(localStorage.getItem(storeKey) || '[]');
+          if (Array.isArray(existing)) {
+            const idx = existing.findIndex(p => p && (String(p.piNo || p.id).trim().toLowerCase() === k));
+            if (idx !== -1) {
+              existing[idx] = {
+                ...existing[idx],
+                ...updatedPi,
+                salesPerson: updatedPi.salesPerson || updatedPi.assignedSalesperson || existing[idx].salesPerson,
+                salesPersonCode: updatedPi.salesPersonCode || updatedPi.assignedSalespersonCode || existing[idx].salesPersonCode,
+                assignedSalesperson: updatedPi.assignedSalesperson || updatedPi.salesPerson || existing[idx].assignedSalesperson,
+                assignedSalespersonCode: updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode || existing[idx].assignedSalespersonCode,
+                assignedToCode: updatedPi.assignedToCode || updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode,
+                assignedToId: updatedPi.assignedToId || updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode,
+                assignedToName: updatedPi.assignedToName || updatedPi.assignedSalesperson || updatedPi.salesPerson
+              };
+            } else {
+              existing.unshift(updatedPi);
+            }
+            localStorage.setItem(storeKey, JSON.stringify(existing));
+          }
+        } catch (_) {}
+      }
+    }
+    window.dispatchEvent(new CustomEvent('controlroom_pi_updated', { detail: payload }));
+    window.dispatchEvent(new CustomEvent('controlroom_sales_pi_assigned', { detail: payload }));
+    window.dispatchEvent(new CustomEvent('controlroom_invoice_updated', { detail: payload }));
+  }
+
+  // 8. CRM Leads, Opportunities, Quotations, and Customers
+  else if (type === 'crm_updated' || type === 'crm_lead_created' || type === 'crm_lead_updated' || type === 'crm_lead_assigned' || type === 'crm_lead_activity_logged' || type === 'crm_lead_status_updated' || (type === 'store_updated' && (payload?.key?.startsWith('crm_') || payload?.key === 'customer_store'))) {
+    window.dispatchEvent(new CustomEvent('controlroom_crm_updated', { detail: payload }));
+    window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: payload }));
+  }
+
+  // 9. Instant WhatsApp Messages, Session Updates & Chats Sync
+  else if (type === 'whatsapp_message') {
+    window.dispatchEvent(new CustomEvent('controlroom_whatsapp_message', { detail: payload }));
+  } else if (type === 'whatsapp_session_update') {
+    window.dispatchEvent(new CustomEvent('controlroom_whatsapp_session_update', { detail: payload }));
+  } else if (type === 'whatsapp_chats_updated') {
+    window.dispatchEvent(new CustomEvent('controlroom_whatsapp_chats_updated', { detail: payload }));
+  }
+
+  // Global broadcast for any custom listeners
+  window.dispatchEvent(new CustomEvent('controlroom_realtime_event', { detail: data }));
+};
+
 export const initRealtimeSync = () => {
   if (typeof window === 'undefined') return;
+  // If unified notification gateway is active, it handles SSE message reception (Zero duplicate connections)
+  if (window.__unifiedSseActive) return;
   if (activeEventSource) return;
 
   const connect = () => {
+    if (window.__unifiedSseActive) return;
     if (sseSupported === false && consecutiveErrors >= 5) {
       return;
     }
@@ -48,200 +257,8 @@ export const initRealtimeSync = () => {
         try {
           if (!event.data) return;
           const data = JSON.parse(event.data);
-          if (data.seq) {
-            lastReceivedSeq = Math.max(lastReceivedSeq, data.seq);
-          }
-
-          const { type, payload, action, recordId } = data;
-
-          if (type === 'connected') return;
-
-          // If missed event gap exceeded buffer or server rebooted, trigger authoritative resync
-          if (type === 'resync_required') {
-            console.warn('⚡ [Real-Time Sync] Resync required from server:', data.reason || data.message);
-            lastReceivedSeq = data.seq || 0;
-            emitStorageUpdate();
-            return;
-          }
-
-          // 1. Inventory & Raw Materials Stock balance
-          if (type === 'inventory_updated' || (type === 'store_updated' && payload?.key === 'raw_materials_store')) {
-            const mats = payload?.rawMaterials || (Array.isArray(payload?.storeData) ? payload.storeData : null);
-            if (Array.isArray(mats) && mats.length > 0) {
-              try {
-                localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(mats));
-              } catch (_) {}
-            } else if (payload?.item && payload.item.code) {
-              // Direct targeted single-item delta update
-              try {
-                const existing = JSON.parse(localStorage.getItem('controlroom_raw_materials_store') || '[]');
-                const idx = existing.findIndex(m => m && (m.code === payload.item.code || m.id === payload.item.id));
-                if (idx !== -1) {
-                  existing[idx] = { ...existing[idx], ...payload.item };
-                } else {
-                  existing.unshift(payload.item);
-                }
-                localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(existing));
-              } catch (_) {}
-            } else if (payload?.deletedCodes && Array.isArray(payload.deletedCodes)) {
-              try {
-                const existing = JSON.parse(localStorage.getItem('controlroom_raw_materials_store') || '[]');
-                const remaining = existing.filter(m => m && !payload.deletedCodes.includes(m.code));
-                localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(remaining));
-              } catch (_) {}
-            }
-            window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update', { detail: payload }));
-            window.dispatchEvent(new Event('central_inventory_updated'));
-            // Targeted event dispatched directly to inventory listeners; no generic storage update needed
-          }
-
-          // 2. Finished Goods & Component Catalog
-          else if (type === 'item_store_updated' || (type === 'store_updated' && (payload?.key === 'item_store' || payload?.key === 'vrm_prod_inventory'))) {
-            const items = payload?.items || (Array.isArray(payload?.storeData) ? payload.storeData : null);
-            if (Array.isArray(items) && items.length > 0) {
-              try {
-                localStorage.setItem('controlroom_items_list', JSON.stringify(items));
-              } catch (_) {}
-            } else if (payload?.item && (payload.item.code || payload.item.itemId || payload.item.id)) {
-              // Direct targeted single-item delta update
-              try {
-                const existing = JSON.parse(localStorage.getItem('controlroom_items_list') || '[]');
-                const targetCode = payload.item.code || payload.item.itemId || payload.item.id;
-                const idx = existing.findIndex(it => it && (it.code === targetCode || it.itemId === targetCode || it.id === targetCode));
-                if (idx !== -1) {
-                  existing[idx] = { ...existing[idx], ...payload.item };
-                } else {
-                  existing.unshift(payload.item);
-                }
-                localStorage.setItem('controlroom_items_list', JSON.stringify(existing));
-              } catch (_) {}
-            } else if (payload?.deletedIds && Array.isArray(payload.deletedIds)) {
-              try {
-                const existing = JSON.parse(localStorage.getItem('controlroom_items_list') || '[]');
-                const remaining = existing.filter(it => it && !payload.deletedIds.includes(it.id) && !payload.deletedIds.includes(it.itemId) && !payload.deletedIds.includes(it.code));
-                localStorage.setItem('controlroom_items_list', JSON.stringify(remaining));
-              } catch (_) {}
-            }
-            window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: payload }));
-            window.dispatchEvent(new Event('central_inventory_updated'));
-            // Targeted event dispatched directly to item listeners; no generic storage update needed
-          }
-
-          // 3. BOM Orders & Routing
-          else if (type === 'bom_updated' || (type === 'store_updated' && payload?.key === 'bom_store')) {
-            if (payload?.printData?.bomCode) {
-              window.dispatchEvent(new CustomEvent('vrm_bom_printed', { detail: payload.printData }));
-            } else if (payload?.bom?.dispatchPrinted && (payload?.bom?.bomCode || payload?.bom?.id)) {
-              window.dispatchEvent(new CustomEvent('vrm_bom_printed', {
-                detail: {
-                  bomCode: payload.bom.bomCode || payload.bom.code || payload.bom.id,
-                  dispatchPrinted: true,
-                  dispatchPrintedAt: payload.bom.dispatchPrintedAt,
-                  dispatchPrintTimeStr: payload.bom.dispatchPrintTimeStr,
-                  dispatchPrintedDateStr: payload.bom.dispatchPrintedDateStr,
-                  dispatchPrintedBy: payload.bom.dispatchPrintedBy,
-                  dispatchPrintCount: payload.bom.dispatchPrintCount,
-                  firstPrintTimeStr: payload.bom.firstPrintTimeStr,
-                  secondPrintTimeStr: payload.bom.secondPrintTimeStr,
-                  dispatchPrintHistory: payload.bom.dispatchPrintHistory
-                }
-              }));
-            }
-
-            // Direct targeted single BOM delta update into local cache
-            if (payload?.bom && typeof payload.bom === 'object') {
-              try {
-                const existingBoms = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
-                const single = payload.bom;
-                const k = single.bomCode || single.code || single.id;
-                if (k) {
-                  const filtered = existingBoms.filter(b => b && b.bomCode !== k && b.code !== k && b.id !== k);
-                  localStorage.setItem('controlroom_bom_store', JSON.stringify([single, ...filtered]));
-                }
-              } catch (_) {}
-            } else if ((action === 'delete' || payload?.action === 'delete') && (recordId || payload?.id)) {
-              try {
-                const targetId = recordId || payload?.id;
-                const existingBoms = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
-                const remaining = existingBoms.filter(b => b && b.id !== targetId && b.bomCode !== targetId && b.code !== targetId);
-                localStorage.setItem('controlroom_bom_store', JSON.stringify(remaining));
-              } catch (_) {}
-            }
-
-            window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: payload }));
-            window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: payload }));
-          }
-
-          // 4. Production Work Orders
-          else if (type === 'workorder_updated' || (type === 'store_updated' && (payload?.key === 'workorder_store' || payload?.key === 'vrm_prod_workorders'))) {
-            window.dispatchEvent(new CustomEvent('controlroom_workorder_updated', { detail: payload }));
-          }
-
-          // 5. Purchase Orders & Approvals
-          else if (type === 'po_updated' || (type === 'store_updated' && payload?.key === 'po_store')) {
-            window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: payload }));
-          }
-
-          // 6. Goods Receipt Notes (GRN)
-          else if (type === 'grn_updated' || (type === 'store_updated' && payload?.key === 'grn_store')) {
-            window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: payload }));
-          }
-
-          // 7. Proforma Invoices & Invoices
-          else if (type === 'pi_created' || type === 'pi_updated' || type === 'sales_pi_assigned' || type === 'invoice_updated' || (type === 'store_updated' && (payload?.key === 'sales_pi_store' || payload?.key === 'proforma_invoice_store' || payload?.key === 'invoice_store'))) {
-            const updatedPi = payload?.updatedPi || payload?.pi;
-            if (updatedPi && (updatedPi.piNo || updatedPi.id)) {
-              const k = String(updatedPi.piNo || updatedPi.id).trim().toLowerCase();
-              for (const storeKey of ['controlroom_sales_pi_store', 'controlroom_proforma_invoice_store', 'controlroom_procurement_pi_store']) {
-                try {
-                  const existing = JSON.parse(localStorage.getItem(storeKey) || '[]');
-                  if (Array.isArray(existing)) {
-                    const idx = existing.findIndex(p => p && (String(p.piNo || p.id).trim().toLowerCase() === k));
-                    if (idx !== -1) {
-                      existing[idx] = {
-                        ...existing[idx],
-                        ...updatedPi,
-                        salesPerson: updatedPi.salesPerson || updatedPi.assignedSalesperson || existing[idx].salesPerson,
-                        salesPersonCode: updatedPi.salesPersonCode || updatedPi.assignedSalespersonCode || existing[idx].salesPersonCode,
-                        assignedSalesperson: updatedPi.assignedSalesperson || updatedPi.salesPerson || existing[idx].assignedSalesperson,
-                        assignedSalespersonCode: updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode || existing[idx].assignedSalespersonCode,
-                        assignedToCode: updatedPi.assignedToCode || updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode,
-                        assignedToId: updatedPi.assignedToId || updatedPi.assignedSalespersonCode || updatedPi.salesPersonCode,
-                        assignedToName: updatedPi.assignedToName || updatedPi.assignedSalesperson || updatedPi.salesPerson
-                      };
-                    } else {
-                      existing.unshift(updatedPi);
-                    }
-                    localStorage.setItem(storeKey, JSON.stringify(existing));
-                  }
-                } catch (_) {}
-              }
-            }
-            window.dispatchEvent(new CustomEvent('controlroom_pi_updated', { detail: payload }));
-            window.dispatchEvent(new CustomEvent('controlroom_sales_pi_assigned', { detail: payload }));
-            window.dispatchEvent(new CustomEvent('controlroom_invoice_updated', { detail: payload }));
-          }
-
-          // 8. CRM Leads, Opportunities, Quotations, and Customers
-          else if (type === 'crm_updated' || type === 'crm_lead_created' || type === 'crm_lead_updated' || type === 'crm_lead_assigned' || type === 'crm_lead_activity_logged' || type === 'crm_lead_status_updated' || (type === 'store_updated' && (payload?.key?.startsWith('crm_') || payload?.key === 'customer_store'))) {
-            window.dispatchEvent(new CustomEvent('controlroom_crm_updated', { detail: payload }));
-            window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: payload }));
-          }
-
-          // 9. Instant WhatsApp Messages, Session Updates & Chats Sync
-          else if (type === 'whatsapp_message') {
-            window.dispatchEvent(new CustomEvent('controlroom_whatsapp_message', { detail: payload }));
-          } else if (type === 'whatsapp_session_update') {
-            window.dispatchEvent(new CustomEvent('controlroom_whatsapp_session_update', { detail: payload }));
-          } else if (type === 'whatsapp_chats_updated') {
-            window.dispatchEvent(new CustomEvent('controlroom_whatsapp_chats_updated', { detail: payload }));
-          }
-
-          // Global broadcast for any custom listeners
-          window.dispatchEvent(new CustomEvent('controlroom_realtime_event', { detail: data }));
-        } catch (parseErr) {
-          // Ignore keepalive comments or non-JSON packets
-        }
+          handleIncomingRealtimeMessage(data);
+        } catch (_) {}
       };
 
       activeEventSource.onerror = () => {
