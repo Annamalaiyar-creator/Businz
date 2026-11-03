@@ -10668,11 +10668,11 @@
     "status": "Sales Confirmed - Sent to Dispatch",
     "salesConfirmed": false,
     "salesConfirmedAt": null,
-    "salesPerson": "Annamalaiyar",
-    "salesPersonCode": "SE-001",
+    "salesPerson": "Sanjai kumar",
+    "salesPersonCode": "SE-002",
     "c8": "Annamalaiyar",
     "createdBy": "Annamalaiyar",
-    "createdById": "SE-001",
+    "createdById": "SE-002",
     "items": [
       {
         "qty": 2,
@@ -11018,7 +11018,9 @@
     "proofDoc": null,
     "sourcePiNo": "VRM-PI-2026-114",
     "createdAt": "2026-11-01T14:44:13.595Z",
-    "updatedAt": "2026-11-01T14:44:39.754Z"
+    "updatedAt": "2026-11-01T14:44:39.754Z",
+    "salesperson": "Sanjai kumar",
+    "salesPersonEmail": "sanjaikumar3a@gmail.com"
   },
   {
     "stBg": "#e0e7ff",
@@ -11120,11 +11122,11 @@
     "status": "Sales Confirmed - Sent to Dispatch",
     "salesConfirmed": false,
     "salesConfirmedAt": null,
-    "salesPerson": "Annamalaiyar",
-    "salesPersonCode": "SE-001",
+    "salesPerson": "Sanjai kumar",
+    "salesPersonCode": "SE-002",
     "c8": "Annamalaiyar",
     "createdBy": "Annamalaiyar",
-    "createdById": "SE-001",
+    "createdById": "SE-002",
     "items": [
       {
         "qty": 2,
@@ -11470,7 +11472,9 @@
     "proofDoc": null,
     "sourcePiNo": "VRM-PI-2026-115",
     "createdAt": "2026-11-01T13:22:00.930Z",
-    "updatedAt": "2026-11-01T13:22:00.967Z"
+    "updatedAt": "2026-11-01T13:22:00.967Z",
+    "salesperson": "Sanjai kumar",
+    "salesPersonEmail": "sanjaikumar3a@gmail.com"
   },
   {
     "packedAt": null,
@@ -11533,11 +11537,11 @@
     "status": "Pending Confirmation",
     "salesConfirmed": false,
     "salesConfirmedAt": null,
-    "salesPerson": "Sales Executive",
-    "salesPersonCode": "SE-001",
+    "salesPerson": "Sanjai kumar",
+    "salesPersonCode": "SE-002",
     "c8": "Sales Executive",
     "createdBy": "Sales Executive",
-    "createdById": "SE-001",
+    "createdById": "SE-002",
     "items": [
       {
         "qty": 2,
@@ -11869,7 +11873,9 @@
     "proofDoc": null,
     "sourcePiNo": null,
     "createdAt": "2026-11-01T14:44:37.739Z",
-    "updatedAt": "2026-11-01T14:44:50.086Z"
+    "updatedAt": "2026-11-01T14:44:50.086Z",
+    "salesperson": "Sanjai kumar",
+    "salesPersonEmail": "sanjaikumar3a@gmail.com"
   },
   {
     "docType": "Invoice",
@@ -11928,11 +11934,11 @@
     "status": "Pending Confirmation",
     "salesConfirmed": false,
     "salesConfirmedAt": null,
-    "salesPerson": "Sales Executive",
-    "salesPersonCode": "SE-001",
+    "salesPerson": "Sanjai kumar",
+    "salesPersonCode": "SE-002",
     "c8": "Sales Executive",
     "createdBy": "Sales Executive",
-    "createdById": "SE-001",
+    "createdById": "SE-002",
     "dispatchPackingMedia": {
       "photos": [],
       "videos": []
@@ -12291,6 +12297,8 @@
     "dispatchedAt": null,
     "completedAt": null,
     "createdAt": "2026-11-01T14:44:05.836Z",
-    "updatedAt": "2026-11-01T14:44:16.427Z"
+    "updatedAt": "2026-11-01T14:44:16.427Z",
+    "salesperson": "Sanjai kumar",
+    "salesPersonEmail": "sanjaikumar3a@gmail.com"
   }
 ]
