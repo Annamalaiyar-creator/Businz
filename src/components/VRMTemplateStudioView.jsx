@@ -317,10 +317,10 @@ const SAMPLE_DATASETS = {
     paymentTerms: 'Due on Receipt',
     bankDetails: {
       beneficiary: 'VRM Structures India Private Limited',
-      accountNo: '50200031629272',
+      accountNo: '50200031629',
       bankName: 'HDFC Bank',
-      branch: 'Kodambakkam',
-      ifsc: 'HDFC0000574'
+      branch: 'VINAYAGAPURAM',
+      ifsc: 'HDFC0007315'
     },
     irn: '4b92904b4d6411f74bba72614aa9c1701423c1b80cfb8c712ed565bc2789db83',
     ackNo: '152626823842153',

@@ -2702,11 +2702,11 @@ export default function CrmQuotationsView({
                   <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #BAE6FD', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: '10px', color: '#0284C7', fontWeight: '700', textTransform: 'uppercase' }}>Account Number</div>
-                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0369A1', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0369A1', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629</div>
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
+                      onClick={() => handleCopyBankDetail('50200031629', 'Account Number')}
                       title="Copy Account Number"
                       style={{ border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', color: '#0284C7', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                     >
@@ -2732,7 +2732,7 @@ export default function CrmQuotationsView({
 
                 {/* Branch Location */}
                 <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span><strong>Branch:</strong> Vinayagapuram Branch</span>
+                  <span><strong>Branch:</strong> VINAYAGAPURAM</span>
                   <span style={{ color: '#64748B', fontSize: '10px' }}>Settlement: INR (₹)</span>
                 </div>
               </div>
@@ -3961,11 +3961,11 @@ export default function CrmQuotationsView({
                       <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #BAE6FD', borderRadius: '8px', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ color: '#0284C7', fontSize: '10px', fontWeight: '700' }}>Account Number:</div>
-                          <strong style={{ color: '#0369A1', fontFamily: 'monospace', fontSize: '13px' }}>50200031629272</strong>
+                          <strong style={{ color: '#0369A1', fontFamily: 'monospace', fontSize: '13px' }}>50200031629</strong>
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
+                          onClick={() => handleCopyBankDetail('50200031629', 'Account Number')}
                           title="Copy Account Number"
                           style={{ border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', color: '#0284C7', padding: '4px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                         >
@@ -3990,7 +3990,7 @@ export default function CrmQuotationsView({
                     </div>
 
                     <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', color: '#475569', fontSize: '11px' }}>
-                      <strong>Branch:</strong> Vinayagapuram Branch
+                      <strong>Branch:</strong> VINAYAGAPURAM
                     </div>
                   </div>
                 </div>

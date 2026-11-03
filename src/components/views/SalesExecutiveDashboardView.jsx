@@ -1136,7 +1136,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     ];
   }, [filteredQuotations, totalQuotesValue, filteredOpportunities, filteredPis, totalPiValue, filteredInvoices, totalInvoicedValue]);
 
-  // Real Monthly Sales Trend (Last 7 Months)
+  // Real Monthly Sales Trend (Last 7 Months) strictly based on Invoices (Billed Revenue)
   const monthlyTrendData = useMemo(() => {
     const today = new Date();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1154,23 +1154,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       });
     }
 
-    // Populate actual sales from invoices and proforma invoices
-    invoices.forEach(inv => {
+    // Populate actual sales strictly from official Invoices
+    (invoices || []).forEach(inv => {
       const invDate = new Date(inv.date || inv.invoiceDate || inv.createdAt);
       if (!isNaN(invDate.getTime())) {
         const found = months.find(m => m.monthIdx === invDate.getMonth() && m.year === invDate.getFullYear());
         if (found) {
           found.actual += parseAmt(inv.total || inv.invAmt || inv.amount);
-        }
-      }
-    });
-
-    proformaInvoices.forEach(pi => {
-      const piDate = new Date(pi.date || pi.piDate || pi.createdAt);
-      if (!isNaN(piDate.getTime())) {
-        const found = months.find(m => m.monthIdx === piDate.getMonth() && m.year === piDate.getFullYear());
-        if (found) {
-          found.actual += (parseAmt(pi.total || pi.grandTotal) * 0.4); // partial weighting for trend
         }
       }
     });
@@ -1182,7 +1172,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         actual: valLakhs
       };
     });
-  }, [invoices, proformaInvoices]);
+  }, [invoices]);
 
   const maxTrendLakhs = useMemo(() => {
     const maxVal = Math.max(...monthlyTrendData.map(d => d.actual), 0);
@@ -1195,7 +1185,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     return Math.ceil((maxVal * 1.25) / 10) * 10;
   }, [monthlyTrendData]);
 
-  // Real Product Performance Distribution
+  // Real Product Performance Distribution strictly based on Invoices
   const productPerformance = useMemo(() => {
     const catMap = {
       'Solar Structures': 0,
@@ -1206,35 +1196,18 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       'Accessories': 0
     };
 
-    // Analyze line items from invoices
-    invoices.forEach(inv => {
-      if (Array.isArray(inv.items)) {
+    // Analyze line items strictly from invoices
+    (invoices || []).forEach(inv => {
+      if (Array.isArray(inv.items) && inv.items.length > 0) {
         inv.items.forEach(it => {
           const cat = categorizeProduct(it);
           const amt = parseAmt(it.amount || it.total || (it.qty * it.rate));
           if (catMap[cat] !== undefined) catMap[cat] += amt;
         });
       } else {
-        const amt = parseAmt(inv.total || inv.invAmt);
+        const amt = parseAmt(inv.total || inv.invAmt || inv.amount);
         catMap['Solar Structures'] += amt;
       }
-    });
-
-    // Analyze line items from PIs
-    proformaInvoices.forEach(pi => {
-      const items = pi.items || pi.lineItems;
-      if (Array.isArray(items)) {
-        items.forEach(it => {
-          const cat = categorizeProduct(it);
-          const amt = parseAmt(it.amount || it.total || (it.qty * it.rate));
-          if (catMap[cat] !== undefined) catMap[cat] += (amt * 0.5);
-        });
-      }
-    });
-
-    boms.forEach(b => {
-      const amt = parseAmt(b.total || b.amount || b.grandTotal);
-      if (amt > 0) catMap['Solar Structures'] += (amt * 0.3);
     });
 
     const entries = Object.entries(catMap).map(([name, totalAmt]) => {
@@ -1248,7 +1221,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     });
 
     return entries.sort((a, b) => b.actual - a.actual);
-  }, [invoices, proformaInvoices, boms]);
+  }, [invoices]);
 
   const maxProductVal = useMemo(() => {
     return Math.max(...productPerformance.map(p => p.actual), 10);
@@ -1270,25 +1243,14 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     if (onNavigateTab) onNavigateTab('Sales Reports');
   }, [onNavigateTab]);
 
-  // Real Top 10 Customers by actual sales value
+  // Real Top 10 Customers strictly based on official Invoices
   const topCustomers = useMemo(() => {
     const custMap = new Map();
 
-    invoices.forEach(inv => {
-      const name = inv.customerName || inv.vendor || inv.customerId || 'Customer';
+    (invoices || []).forEach(inv => {
+      const name = (inv.customerName || inv.vendor || inv.customerId || 'Customer').trim();
       const cur = custMap.get(name) || 0;
       custMap.set(name, cur + parseAmt(inv.total || inv.invAmt || inv.amount));
-    });
-
-    proformaInvoices.forEach(pi => {
-      const name = pi.customerName || pi.customer || pi.companyName || 'Customer';
-      const cur = custMap.get(name) || 0;
-      custMap.set(name, cur + parseAmt(pi.total || pi.grandTotal));
-    });
-
-    quotations.forEach(q => {
-      const name = q.customerName || q.companyName || q.customer || 'Customer';
-      if (!custMap.has(name)) custMap.set(name, parseAmt(q.grandTotal || q.total) * 0.2);
     });
 
     const totalSalesAll = Array.from(custMap.values()).reduce((s, v) => s + v, 0);
@@ -1308,7 +1270,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         share
       };
     });
-  }, [invoices, proformaInvoices, quotations]);
+  }, [invoices]);
 
   const top10TotalVal = useMemo(() => {
     return topCustomers.reduce((s, c) => s + c.valNum, 0);
@@ -1451,20 +1413,40 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     return list.sort((a, b) => b.outstandingNum - a.outstandingNum);
   }, [customers, invoices]);
 
-  // Real Lost / Cancelled Opportunities
+  // Real Lost / Cancelled Opportunities (Connected with CRM Leads that are Dropped, Lost, Disqualified, or Cancelled + Opportunities)
   const realLostCancelledData = useMemo(() => {
-    return filteredOpportunities
+    const oppList = (filteredOpportunities || [])
       .filter(o => o.stage === 'Lost' || o.stage === 'Cancelled' || o.status === 'Lost' || o.status === 'Cancelled')
       .map(o => ({
         id: o.oppNumber || o.id,
         opportunity: o.title || o.customerName || 'Project Deal',
         value: formatLakhsCr(parseAmt(o.dealValue)),
         valNum: parseAmt(o.dealValue),
-        status: o.stage || 'Lost',
+        status: o.stage || o.status || 'Lost',
         reason: o.notes || o.reason || 'Price difference / Competitor',
         closedDate: o.targetCloseDate ? new Date(o.targetCloseDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Recent'
       }));
-  }, [filteredOpportunities]);
+
+    const leadList = (filteredLeads || [])
+      .filter(l => ['Dropped', 'Lost', 'Disqualified', 'Rejected', 'Cancelled'].includes(l.status))
+      .map(l => {
+        const kw = parseAmt(l.estimated_kw || l.estimatedKw || l.kw || 0);
+        const estValue = kw > 0 ? kw * 35000 : parseAmt(l.estimatedValue || l.value || 0);
+        return {
+          id: l.lead_number || l.leadNumber || l.id,
+          opportunity: l.company_name || l.companyName || l.contact_person || 'Lost Lead',
+          value: estValue > 0 ? formatLakhsCr(estValue) : (kw > 0 ? `${kw} kW` : '₹ 0.00'),
+          valNum: estValue,
+          status: l.status || 'Dropped',
+          reason: l.notes || l.remarks || l.drop_reason || 'Lead dropped / cancelled',
+          closedDate: l.updated_at || l.updatedAt || l.created_at || l.createdAt
+            ? new Date(l.updated_at || l.updatedAt || l.created_at || l.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+            : 'Recent'
+        };
+      });
+
+    return [...leadList, ...oppList];
+  }, [filteredOpportunities, filteredLeads]);
 
   const totalLostVal = useMemo(() => {
     return realLostCancelledData.reduce((s, l) => s + l.valNum, 0);

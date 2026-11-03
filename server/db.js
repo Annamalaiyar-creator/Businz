@@ -531,37 +531,47 @@ export async function initPostgresDatabase() {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+      `);
 
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS location TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS product_requirement TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS lead_created_by_id TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS lead_created_by_name TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_by_user_id TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_by_name TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_by_role TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_to_user_id TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_to_name TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_to_role TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'MEDIUM';
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS next_followup_date TIMESTAMPTZ;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS external_enquiry_id TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS external_payload JSONB;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS last_qualifying_activity_at TIMESTAMPTZ;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS last_activity_type TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_id TEXT;
-        ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
+      const leadColumns = [
+        'location TEXT',
+        'product_requirement TEXT',
+        'lead_created_by_id TEXT',
+        'lead_created_by_name TEXT',
+        'assigned_by_user_id TEXT',
+        'assigned_by_name TEXT',
+        'assigned_by_role TEXT',
+        'assigned_to_user_id TEXT',
+        'assigned_to_name TEXT',
+        'assigned_to_role TEXT',
+        'assigned_at TIMESTAMPTZ',
+        "priority TEXT DEFAULT 'MEDIUM'",
+        'next_followup_date TIMESTAMPTZ',
+        'external_enquiry_id TEXT',
+        'external_payload JSONB',
+        'last_qualifying_activity_at TIMESTAMPTZ',
+        'last_activity_at TIMESTAMPTZ',
+        'last_activity_type TEXT',
+        'is_unattended_24h BOOLEAN DEFAULT false',
+        'is_unattended_2h BOOLEAN DEFAULT false',
+        'is_unattended_48h BOOLEAN DEFAULT false',
+        'is_converted BOOLEAN DEFAULT false',
+        'unattended_alert_sent_at TIMESTAMPTZ',
+        'escalation_alert_sent_at TIMESTAMPTZ',
+        'converted_customer_id TEXT',
+        'converted_customer_code TEXT'
+      ];
 
-        CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
+      for (const col of leadColumns) {
+        try {
+          await client.query(`ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS ${col};`);
+        } catch (_) {}
+      }
+
+      const auxTables = [
+        `CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
           id TEXT PRIMARY KEY,
-          lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+          lead_id TEXT NOT NULL,
           assigned_by_user_id TEXT NOT NULL,
           assigned_by_name TEXT NOT NULL,
           assigned_by_role TEXT NOT NULL,
@@ -573,11 +583,10 @@ export async function initPostgresDatabase() {
           assignment_reason TEXT,
           assignment_type TEXT NOT NULL DEFAULT 'INITIAL',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS public.lead_activities (
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_activities (
           id TEXT PRIMARY KEY,
-          lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+          lead_id TEXT NOT NULL,
           activity_type TEXT NOT NULL,
           is_qualifying_activity BOOLEAN NOT NULL DEFAULT false,
           summary TEXT NOT NULL,
@@ -587,22 +596,20 @@ export async function initPostgresDatabase() {
           conducted_by_name TEXT NOT NULL,
           conducted_by_role TEXT NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS public.lead_status_history (
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_status_history (
           id TEXT PRIMARY KEY,
-          lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+          lead_id TEXT NOT NULL,
           previous_status TEXT,
           new_status TEXT NOT NULL,
           remarks TEXT,
           updated_by_user_id TEXT NOT NULL,
           updated_by_name TEXT NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS public.lead_followups (
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_followups (
           id TEXT PRIMARY KEY,
-          lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+          lead_id TEXT NOT NULL,
           scheduled_at TIMESTAMPTZ NOT NULL,
           notes TEXT,
           status TEXT NOT NULL DEFAULT 'PENDING',
@@ -611,11 +618,10 @@ export async function initPostgresDatabase() {
           completed_at TIMESTAMPTZ,
           outcome_remarks TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS public.lead_inactivity_incidents (
+        );`,
+        `CREATE TABLE IF NOT EXISTS public.lead_inactivity_incidents (
           id TEXT PRIMARY KEY,
-          lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+          lead_id TEXT NOT NULL,
           salesperson_id TEXT NOT NULL,
           salesperson_name TEXT NOT NULL,
           incident_type TEXT NOT NULL,
@@ -625,12 +631,10 @@ export async function initPostgresDatabase() {
           resolved_by_user_id TEXT,
           resolution_type TEXT,
           details JSONB
-        );
-
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
-          ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);
-
-        CREATE TABLE IF NOT EXISTS public.internal_notifications (
+        );`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_inactivity_unique_incident 
+          ON public.lead_inactivity_incidents(lead_id, incident_type, salesperson_id, assigned_at);`,
+        `CREATE TABLE IF NOT EXISTS public.internal_notifications (
           id TEXT PRIMARY KEY,
           recipient_emp_code TEXT,
           recipient_role TEXT,
@@ -649,14 +653,20 @@ export async function initPostgresDatabase() {
           read_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           dedup_id TEXT UNIQUE NOT NULL
-        );
+        );`,
+        `CREATE INDEX IF NOT EXISTS idx_internal_notifs_recipient 
+          ON public.internal_notifications(recipient_emp_code, is_read, created_at DESC);`,
+        `CREATE INDEX IF NOT EXISTS idx_internal_notifs_role 
+          ON public.internal_notifications(recipient_role, is_read, created_at DESC);`,
+        `CREATE INDEX IF NOT EXISTS idx_internal_notifs_doc 
+          ON public.internal_notifications(document_type, document_id);`
+      ];
 
-        CREATE INDEX IF NOT EXISTS idx_internal_notifs_recipient 
-          ON public.internal_notifications(recipient_emp_code, is_read, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_internal_notifs_role 
-          ON public.internal_notifications(recipient_role, is_read, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_internal_notifs_doc 
-          ON public.internal_notifications(document_type, document_id);
+      for (const stmt of auxTables) {
+        try {
+          await client.query(stmt);
+        } catch (_) {}
+      }
 
         DO $$
         BEGIN

@@ -9953,7 +9953,7 @@ app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
       try {
         await createInternalNotification({
           recipientEmpCode: createdLead.assigned_to_user_id,
-          recipientRole: createdLead.assigned_to_role || 'Sales Executive',
+          recipientRole: null, // Strictly target the assigned employee code only
           eventType: 'LEAD_ASSIGNED',
           documentType: 'lead',
           documentId: createdLead.id,
@@ -10029,7 +10029,7 @@ app.post(['/api/crm/leads/:id/assign', '/api/leads/:id/assign'], async (req, res
     try {
       await createInternalNotification({
         recipientEmpCode: assignedToId,
-        recipientRole: assignedToRole || 'Sales Executive',
+        recipientRole: null, // Strictly target the assigned employee code only
         eventType: 'LEAD_ASSIGNED',
         documentType: 'lead',
         documentId: id,

@@ -207,6 +207,14 @@ class RealtimeNotificationService {
       if (!isAlias) return;
     }
 
+    // TA Exclusion: Technical Administrator (TA) is strictly IT/System Admin and must never receive Lead notifications/voice
+    const currentRole = (this.getUserRole() || '').toLowerCase();
+    if (currentEmp.startsWith('TA-') || currentRole.includes('technical admin')) {
+      if (notif.document_type === 'lead' || notif.event_type?.startsWith('LEAD_') || notif.event_type?.includes('STATUS_UNCHANGED')) {
+        return;
+      }
+    }
+
     // Check if already in list (deduplication)
     const exists = this.notifications.some(n => n.id === notif.id || (n.dedup_id && n.dedup_id === notif.dedup_id));
     if (exists) return;

@@ -135,10 +135,10 @@ export const DEFAULT_OFFICIAL_TAX_INVOICE_DATA = {
   deliveryAddress: '2/587, THESOOR ROAD,\nPonnur, ,\nTiruvannamalai 604408\nTamil Nadu\nIndia\n+91-9659440090',
   bankDetails: {
     beneficiary: 'VRM Structures India Private Limited',
-    accountNo: '50200031629272',
+    accountNo: '50200031629',
     bankName: 'HDFC Bank',
-    branch: 'Kodambakkam',
-    ifsc: 'HDFC0000574'
+    branch: 'VINAYAGAPURAM',
+    ifsc: 'HDFC0007315'
   },
   termsConditions: [
     '1. TAX: Included',
@@ -646,7 +646,7 @@ export function VRMTaxInvoicePrintSheet({ invoiceData, id = "printable-tax-invoi
               </div>
               <div style={{ fontSize: '10px', color: '#1E293B', lineHeight: '1.4' }}>
                 <div>Beneficiary: {bank.beneficiary || 'VRM Structures India Private Limited'}</div>
-                <div>A/c No: <strong style={{ fontFamily: 'monospace' }}>{bank.accountNo || '50200031629272'}</strong></div>
+                <div>A/c No: <strong style={{ fontFamily: 'monospace' }}>{bank.accountNo || '50200031629'}</strong></div>
                 <div>Bank: {bank.bankName || 'HDFC Bank'}</div>
               </div>
             </div>
@@ -752,8 +752,8 @@ export function VRMTaxInvoicePrintSheet({ invoiceData, id = "printable-tax-invoi
           {/* LEFT: Branch, IFSC, Terms & Conditions */}
           <div style={{ borderRight: '1.5px solid #334155' }}>
             <div style={{ padding: '8px 12px', borderBottom: '1px solid #CBD5E1', fontSize: '10.5px', color: '#1E293B', lineHeight: '1.45' }}>
-              <div>Branch: {bank.branch || 'Kodambakkam'}</div>
-              <div>IFSC: <strong style={{ fontFamily: 'monospace' }}>{bank.ifsc || 'HDFC0000574'}</strong></div>
+              <div>Branch: {bank.branch || 'VINAYAGAPURAM'}</div>
+              <div>IFSC: <strong style={{ fontFamily: 'monospace' }}>{bank.ifsc || 'HDFC0007315'}</strong></div>
             </div>
 
             <div style={{ padding: '8px 12px' }}>

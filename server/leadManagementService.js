@@ -912,6 +912,18 @@ export async function updateLeadStatus({ leadId, newStatus, remarks = '', conver
   const userId = user?.employee_code || user?.id || 'USER';
   const userName = user?.employee_name || user?.name || 'Sales Rep';
 
+  // Ensure schema and all columns outside of transaction to prevent aborted-transaction traps
+  try {
+    await pool.query(`
+      ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT false;
+      ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false;
+      ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false;
+      ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false;
+      ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_id TEXT;
+      ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
+    `);
+  } catch (_) {}
+
   await ensureLeadsSchema();
 
   return await withTransaction(async (client) => {
@@ -1213,7 +1225,7 @@ export async function checkAndProcessLeadInactivity(options = {}) {
                 title: `⚠️ Lead Pending Action (2 Hours): ${lead.company_name || lead.lead_number}`,
                 message: `You have not attended lead #${lead.lead_number} (${lead.company_name || 'Prospect'}) and it has been 2 hours since assignment. Please contact the customer immediately.`,
                 specificRecipientId: lead.assigned_to_user_id,
-                specificRecipientRole: lead.assigned_to_role || 'Sales Executive',
+                specificRecipientRole: null,
                 metadata: {
                   leadId: lead.id,
                   leadNumber: lead.lead_number,

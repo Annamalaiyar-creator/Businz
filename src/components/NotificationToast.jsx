@@ -56,6 +56,13 @@ export default function NotificationToast({ alert, onClose, onNavigate }) {
   useEffect(() => {
     if (alertObj?._voiced) return;
     try {
+      const currentEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').toUpperCase().trim();
+      const currentRole = (localStorage.getItem('controlroom_user_role') || '').toLowerCase().trim();
+      const targetEmp = String(alertObj?.recipient_emp_code || '').toUpperCase().trim();
+      if (targetEmp && currentEmp && targetEmp !== currentEmp) return;
+      if (currentEmp.startsWith('TA-') || currentRole.includes('technical admin')) {
+        if (alertObj?.document_type === 'lead' || alertObj?.event_type?.startsWith('LEAD_')) return;
+      }
       speakNotificationVoice(alertObj);
     } catch (_) {}
   }, [alertObj?.id || alertObj?.message]);

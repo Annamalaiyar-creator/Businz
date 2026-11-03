@@ -1,22 +1,21 @@
 /**
  * Centralized Financial Year & Sequence Generator Utility for BUSINZ Frontend
  * 
- * Standard Format: VRM-[MODULE]-[YYYY]-[SEQ]
+ * Standard Format: VRMS/[MODULE]/[YY-YY]/[SEQ]
  * Examples:
- *   VRM-PI-2026-01
- *   VRM-PO-2026-01
- *   VRM-BOM-2026-01
- *   VRM-INV-2026-01
- *   VRM-QT-2026-01
- *   VRM-LEAD-2026-01
- *   VRM-DC-2026-01
- *   VRM-GRN-2026-01
- *   VRM-WO-2026-01
+ *   VRMS/PI/26-27/001
+ *   VRMS/BOM/26-27/001
+ *   VRMS/LD/26-27/001
+ *   VRMS/QT/26-27/001
+ *   VRMS/INV/26-27/001
+ *   VRMS/DC/26-27/001
+ *   VRMS/GRN/26-27/001
+ *   VRMS/WO/26-27/001
  * 
  * Financial Year:
  *   In India, FY runs from April 1 to March 31.
- *   Between 1 Apr 2026 and 31 Mar 2027 => FY is 2026.
- *   On 1 Apr 2027 => FY resets to 2027, and sequence counter restarts from 01.
+ *   Between 1 Apr 2026 and 31 Mar 2027 => FY is 2026, rendered as "26-27".
+ *   On 1 Apr 2027 => FY resets to 2027 ("27-28"), and sequence counter restarts from 001.
  */
 
 /**
@@ -32,27 +31,42 @@ export function getFinancialYear(date = new Date()) {
 }
 
 /**
- * Formats a sequence code with standard company prefix, module abbreviation, FY, and 2-digit minimum padding
+ * Returns two-digit financial year code string, e.g. "26-27"
+ * @param {Date|string|number} [date=new Date()]
+ * @returns {string} e.g. "26-27"
+ */
+export function getFinancialYearCode(date = new Date()) {
+  const fy = getFinancialYear(date);
+  const yy = fy % 100;
+  const nextYy = (yy + 1) % 100;
+  return `${String(yy).padStart(2, '0')}-${String(nextYy).padStart(2, '0')}`;
+}
+
+/**
+ * Formats a sequence code with standard company prefix VRMS, module abbreviation, FY (YY-YY), and 3-digit padding
  * @param {string} moduleType - e.g. 'PI', 'PO', 'BOM', 'INV', 'QT', 'LD'/'LEAD', 'DC', 'GRN', 'WO'
  * @param {number} seqNumber - Sequential positive integer (1, 2, ..., 99, 100, ..., 2000)
  * @param {Date|string|number} [date=new Date()]
- * @returns {string} e.g. 'VRM-LD-2026-01'
+ * @returns {string} e.g. 'VRMS/PI/26-27/001'
  */
 export function formatSequenceCode(moduleType, seqNumber, date = new Date()) {
-  const fy = getFinancialYear(date);
+  const fyCode = getFinancialYearCode(date);
   let cleanType = String(moduleType || '').toUpperCase().trim();
   if (cleanType === 'LEAD' || cleanType === 'LD') {
     cleanType = 'LD';
   } else if (cleanType === 'CS' || cleanType === 'CUST' || cleanType === 'CUSTOMER') {
     cleanType = 'CS';
+  } else if (cleanType === 'QUOTE' || cleanType === 'QUOTATION' || cleanType === 'QT') {
+    cleanType = 'QT';
   }
   const num = Math.max(1, parseInt(seqNumber, 10) || 1);
-  const padded = String(num).padStart(2, '0');
-  return `VRM-${cleanType}-${fy}-${padded}`;
+  const padded = String(num).padStart(3, '0');
+  return `VRMS/${cleanType}/${fyCode}/${padded}`;
 }
 
 /**
  * Inspects a list of records and extracts the maximum existing sequence number for a given module and financial year.
+ * Seamlessly matches BOTH new format (VRMS/PI/26-27/001) and legacy format (VRM-PI-2026-01).
  * @param {string} moduleType
  * @param {number} fy
  * @param {Array<Object|string>} records
@@ -61,17 +75,22 @@ export function formatSequenceCode(moduleType, seqNumber, date = new Date()) {
 export function extractMaxSequence(moduleType, fy, records = []) {
   if (!Array.isArray(records) || records.length === 0) return 0;
 
+  const yy = fy % 100;
+  const nextYy = (yy + 1) % 100;
+  const fyCode = `${String(yy).padStart(2, '0')}-${String(nextYy).padStart(2, '0')}`;
+
   let cleanType = String(moduleType || '').toUpperCase().trim();
-  let regex;
+  let typePattern = cleanType;
   if (cleanType === 'LEAD' || cleanType === 'LD') {
-    cleanType = 'LD';
-    regex = new RegExp(`^VRM-(?:LD|LEAD)-${fy}-(\\d+)$`, 'i');
+    typePattern = '(?:LD|LEAD)';
   } else if (cleanType === 'CS' || cleanType === 'CUST' || cleanType === 'CUSTOMER') {
-    cleanType = 'CS';
-    regex = new RegExp(`^VRM-CS-${fy}-(\\d+)$`, 'i');
-  } else {
-    regex = new RegExp(`^VRM-${cleanType}-${fy}-(\\d+)$`, 'i');
+    typePattern = '(?:CS|CUST|CUSTOMER)';
+  } else if (cleanType === 'QUOTE' || cleanType === 'QUOTATION' || cleanType === 'QT') {
+    typePattern = '(?:QT|QUOTE|QUOTATION)';
   }
+
+  // Matches VRMS/[TYPE]/26-27/001 OR VRM-[TYPE]-2026-01
+  const regex = new RegExp(`^(?:VRMS\/${typePattern}\/(?:${fyCode}|${fy})\/(\\d+)|VRM-${typePattern}-${fy}-(\\d+))$`, 'i');
   let maxSeq = 0;
 
   const candidateKeys = [
@@ -93,8 +112,8 @@ export function extractMaxSequence(moduleType, fy, records = []) {
     if (!item) continue;
     if (typeof item === 'string') {
       const match = item.match(regex);
-      if (match && match[1]) {
-        const val = parseInt(match[1], 10);
+      if (match) {
+        const val = parseInt(match[1] || match[2], 10);
         if (Number.isFinite(val) && val > maxSeq) maxSeq = val;
       }
       continue;
@@ -105,8 +124,8 @@ export function extractMaxSequence(moduleType, fy, records = []) {
         const raw = item[key];
         if (raw && typeof raw === 'string') {
           const match = raw.match(regex);
-          if (match && match[1]) {
-            const val = parseInt(match[1], 10);
+          if (match) {
+            const val = parseInt(match[1] || match[2], 10);
             if (Number.isFinite(val) && val > maxSeq) maxSeq = val;
           }
         }

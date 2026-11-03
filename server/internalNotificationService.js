@@ -74,6 +74,13 @@ function isClientRecipient(client, notification) {
   if (actorEmp && clientEmp && actorEmp === clientEmp) return false;
   if (actorName && clientName && actorName === clientName) return false;
 
+  // RULE: Technical Administrator (TA) is strictly IT/System Administrator and must NEVER receive Lead alerts
+  if (clientEmp.startsWith('TA-') || clientRole === 'technical administrator' || clientRole.includes('technical admin')) {
+    if (notification.document_type === 'lead' || notification.event_type?.startsWith('LEAD_') || notification.event_type?.includes('STATUS_UNCHANGED')) {
+      return false;
+    }
+  }
+
   const targetEmp = String(notification.recipient_emp_code || '').toUpperCase().trim();
   const targetRole = String(notification.recipient_role || '').toLowerCase().trim();
 
@@ -96,7 +103,15 @@ function isClientRecipient(client, notification) {
     if (targetRole.includes('production') && clientRole.includes('production')) return true;
     if (targetRole.includes('procurement') && clientRole.includes('procurement')) return true;
     if ((targetRole === 'ceo' || targetRole === 'md') && (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director'))) return true;
-    if (targetRole === 'lead_managers' && (clientRole.includes('sales head') || clientRole === 'ceo' || clientRole.includes('technical') || clientRole.includes('admin') || clientRole.includes('support') || clientRole.includes('director'))) return true;
+    if (targetRole === 'lead_managers') {
+      // Exclude TA strictly
+      if (clientEmp.startsWith('TA-') || clientRole.includes('technical admin')) return false;
+      // Lead managers are CEO, MD, and Tech Support (TS-001, TS-002) ONLY
+      if (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director') || clientEmp.startsWith('TS-') || clientRole.includes('tech support')) {
+        return true;
+      }
+      return false;
+    }
   }
 
   return false;

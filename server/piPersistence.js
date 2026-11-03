@@ -120,7 +120,7 @@ export async function getNextDatabasePiNumber(pool = defaultPool) {
     try {
       const res = await pool.query(`
         SELECT pi_no, id FROM public.proforma_invoices
-        WHERE (pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$' OR id ~ '^VRM-PI-[0-9]{4}-[0-9]+$')
+        WHERE (pi_no ~ '^(VRMS/PI/|VRM-PI-)' OR id ~ '^(VRMS/PI/|VRM-PI-)')
       `);
       for (const row of res.rows) {
         if (row.pi_no) candidateStrings.push(row.pi_no);
@@ -132,7 +132,7 @@ export async function getNextDatabasePiNumber(pool = defaultPool) {
     try {
       const bomRes = await pool.query(`
         SELECT source_pi_no FROM public.bom_orders
-        WHERE source_pi_no IS NOT NULL AND source_pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
+        WHERE source_pi_no IS NOT NULL AND (source_pi_no ~ '^(VRMS/PI/|VRM-PI-)')
       `);
       for (const row of bomRes.rows) {
         if (row.source_pi_no) candidateStrings.push(row.source_pi_no);
@@ -174,12 +174,15 @@ export async function getNextDatabasePiNumber(pool = defaultPool) {
     }
 
     let maxSeq = 0;
-    const regex = new RegExp(`^VRM-PI-${fy}-(\\d+)$`, 'i');
+    const yy = fy % 100;
+    const nextYy = (yy + 1) % 100;
+    const fyCode = `${String(yy).padStart(2, '0')}-${String(nextYy).padStart(2, '0')}`;
+    const regex = new RegExp(`^(?:VRMS\/PI\/(?:${fyCode}|${fy})\/(\\d+)|VRM-PI-${fy}-(\\d+))$`, 'i');
 
     for (const str of candidateStrings) {
       const match = String(str || '').trim().match(regex);
-      if (match && match[1]) {
-        const val = parseInt(match[1], 10);
+      if (match) {
+        const val = parseInt(match[1] || match[2], 10);
         if (Number.isFinite(val) && val > maxSeq) {
           maxSeq = val;
         }
@@ -188,7 +191,7 @@ export async function getNextDatabasePiNumber(pool = defaultPool) {
 
     const nextNum = maxSeq + 1;
     const code = formatSequenceCode('PI', nextNum);
-    return { nextPiNo: code, nextEstimateNo: code, nextNum, fiscalYear: String(fy), financialYear: fy };
+    return { nextPiNo: code, nextEstimateNo: code, nextNum, fiscalYear: String(fy), financialYear: fy, fiscalYearCode: fyCode };
   } catch (err) {
     console.warn('[PI Next Number DB Warning]:', err.message);
     const code = formatSequenceCode('PI', 1);
