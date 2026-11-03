@@ -421,7 +421,8 @@ export default function QuotationsView(props) {
             name: it.name,
             sku: it.sku || `SKU-${101 + idx}`,
             desc: it.description || '',
-            uom: it.unit || 'NOS',
+            uom: it.uom || it.unit || 'NOS',
+            unit: it.uom || it.unit || 'NOS',
             ordered: ordered,
             prev: prev,
             remaining: remaining,
@@ -1759,7 +1760,8 @@ export default function QuotationsView(props) {
       name: item.name,
       account: 'Raw Material',
       qty: parseFloat(String(item.reorderQty || '1').replace(/,/g, '')) || 1,
-      unit: item.uom || 'NOS',
+      unit: item.uom || item.unit || 'NOS',
+      uom: item.uom || item.unit || 'NOS',
       rate: Math.round((parseFloat(String(item.val || '0').replace(/,/g, '')) || 0) / (parseFloat(String(item.reorderQty || '1').replace(/,/g, '')) || 1)) || 1000,
       tax: 18
     }));

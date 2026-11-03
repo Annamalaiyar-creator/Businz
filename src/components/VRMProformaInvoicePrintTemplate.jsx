@@ -859,6 +859,8 @@ export function VRMProformaInvoicePrintSheet({
     const updated = rawItems.map((item, i) => {
       if (i === rawIdx) {
         const next = { ...item, ...patch };
+        if (patch.uom !== undefined) next.unit = patch.uom;
+        if (patch.unit !== undefined) next.uom = patch.unit;
         if (patch.qty !== undefined || patch.rate !== undefined) {
           const q = parseFloat(patch.qty !== undefined ? patch.qty : next.qty) || 0;
           const r = parseFloat(patch.rate !== undefined ? patch.rate : next.rate) || 0;
@@ -887,15 +889,23 @@ export function VRMProformaInvoicePrintSheet({
     onUpdatePiData?.({ presetGroups: currentGroups });
   };
 
-  // Helper to normalize item UOM display (e.g. Numbers/no/pcs -> NOS, Meter/m -> MT)
+  // Helper to normalize item UOM display (e.g. Numbers/no/pcs -> NOS, Meter/m -> MTR, Set -> SET)
   const normalizeUomDisplay = (rawUom, fallback = 'NOS') => {
     if (!rawUom) return fallback;
     const s = String(rawUom).trim();
-    if (/^(mtr|meter|meters|mt|m)$/i.test(s)) return 'MT';
-    if (/^(nos|no|no's|numbers?|pcs|pieces?)$/i.test(s)) return 'NOS';
+    if (/^(set|sets)$/i.test(s)) return 'SET';
+    if (/^(mtr|meter|meters|m)$/i.test(s)) return 'MTR';
+    if (/^mt$/i.test(s)) return 'MT';
+    if (/^(nos|no|no's|numbers?)$/i.test(s)) return 'NOS';
+    if (/^(pcs|piece|pieces)$/i.test(s)) return 'PCS';
     if (/^(kg|kgs|kilogram|kilograms)$/i.test(s)) return 'KG';
     if (/^(sqm|sq\.m|sqmtr)$/i.test(s)) return 'SQM';
-    if (/^(set|sets)$/i.test(s)) return fallback;
+    if (/^(box|boxes)$/i.test(s)) return 'BOX';
+    if (/^(pkt|packet|packets)$/i.test(s)) return 'PKT';
+    if (/^(pair|pairs)$/i.test(s)) return 'PAIR';
+    if (/^(lot|lots)$/i.test(s)) return 'LOT';
+    if (/^(ton|tons|tonne|tonnes)$/i.test(s)) return 'TON';
+    if (/^(kw|kwh)$/i.test(s)) return s.toUpperCase();
     return s.toUpperCase();
   };
 
@@ -2629,9 +2639,9 @@ export function VRMProformaInvoicePrintSheet({
                             </div>
                             <div style={{ fontSize: '8px', color: '#64748B' }}>
                               <EditableText
-                                value={it.uom || "no's"}
+                                value={it.uom || it.unit || "NOS"}
                                 fallback="NOS"
-                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { uom: v })}
+                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { uom: v, unit: v })}
                               />
                             </div>
                           </td>

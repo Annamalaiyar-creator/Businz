@@ -611,7 +611,7 @@ export default function CrmQuotationsView({
 
   // Helper handlers for Presets and Items
   const handleAddMaterialRow = () => {
-    setQuoteItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
+    setQuoteItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', unit: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
   };
 
   const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
@@ -1069,12 +1069,17 @@ export default function CrmQuotationsView({
       deliveryCity: sameAsBilling ? billingCity : deliveryCity,
       deliveryState: sameAsBilling ? billingState : deliveryState,
       deliveryPincode: sameAsBilling ? billingPincode : deliveryPincode,
-      items: quoteItems.map(it => ({
-        ...it,
-        hsn: it.hsn || getHsnCode(it),
-        description: it.category || it.name,
-        amount: (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)
-      })),
+      items: quoteItems.map(it => {
+        const resolvedUom = String(it.uom || it.unit || 'NOS').trim().toUpperCase() || 'NOS';
+        return {
+          ...it,
+          uom: resolvedUom,
+          unit: resolvedUom,
+          hsn: it.hsn || getHsnCode(it),
+          description: it.category || it.name,
+          amount: (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)
+        };
+      }),
       presetGroups,
       salesperson: salesPerson,
       salesPerson: salesPerson,
@@ -1179,6 +1184,7 @@ export default function CrmQuotationsView({
           name: it.name || it.description,
           category: it.category || (isPreset ? 'Preset Component' : 'MMS Scope'),
           uom: it.uom || it.unit || 'NOS',
+          unit: it.uom || it.unit || 'NOS',
           qty: String(it.qty || 1),
           baseQty: it.baseQty != null ? it.baseQty : (parseFloat(it.qty) || 1),
           rate: isPreset ? '0' : String(it.rate || 0),
@@ -2094,7 +2100,8 @@ export default function CrmQuotationsView({
                                     ...mat,
                                     name: pName,
                                     rate: matched ? String(matched.price || matched.rate || mat.rate) : mat.rate,
-                                    uom: matched ? (matched.uom || matched.unit || mat.uom) : mat.uom,
+                                    uom: matched ? (matched.uom || matched.unit || mat.uom || mat.unit || 'NOS') : (mat.uom || mat.unit || 'NOS'),
+                                    unit: matched ? (matched.uom || matched.unit || mat.uom || mat.unit || 'NOS') : (mat.uom || mat.unit || 'NOS'),
                                     category: pCat,
                                     gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%'),
                                     hsn: pHsn
@@ -2155,22 +2162,25 @@ export default function CrmQuotationsView({
                                type="text"
                                list={`uom-list-${i}`}
                                placeholder="UOM"
-                               value={item.uom || 'NOS'}
+                               value={item.uom || item.unit || 'NOS'}
                                onChange={(e) => {
                                  const val = e.target.value;
-                                 setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
+                                 setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
                                }}
                                style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700', cursor: 'text' }}
                               />
                              <datalist id={`uom-list-${i}`}>
                                <option value="NOS" />
                                <option value="SET" />
+                               <option value="KW" />
                                <option value="KG" />
                                <option value="MTR" />
                                <option value="PCS" />
                                <option value="BOX" />
                                <option value="PKT" />
                                <option value="PAIR" />
+                               <option value="LOT" />
+                               <option value="TON" />
                              </datalist>
                            </td>
                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
@@ -3827,7 +3837,7 @@ export default function CrmQuotationsView({
                             </div>
                           </td>
                           <td style={{ padding: '10px', textAlign: 'right', color: '#334155' }}>
-                            {itQty} {it.unit || it.uom || 'NOS'}
+                            {itQty} {it.uom || it.unit || 'NOS'}
                           </td>
                           {isPreset ? (
                             isFirstInGroup ? (

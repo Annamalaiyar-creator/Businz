@@ -352,7 +352,7 @@ export default function CreateBomFormPage(props) {
   const totals = calculateBOMTotals();
 
   const handleAddMaterialRow = () => {
-    setBomMaterialsList(prev => [...prev, { name: '', category: '', uom: 'NOS', qty: '1', wastage: '0%', rate: '', gstRate: newBomGstRate || '18%' }]);
+    setBomMaterialsList(prev => [...prev, { name: '', category: '', uom: 'NOS', unit: 'NOS', qty: '1', wastage: '0%', rate: '', gstRate: newBomGstRate || '18%' }]);
   };
 
   const handleRemoveMaterialRow = (idx) => {
@@ -1466,7 +1466,8 @@ export default function CreateBomFormPage(props) {
                             code: pCode || mat.code,
                             name: pName,
                             rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
-                            uom: matched.uom || matched.unit || mat.uom,
+                            uom: matched.uom || matched.unit || mat.uom || mat.unit || 'NOS',
+                            unit: matched.uom || matched.unit || mat.uom || mat.unit || 'NOS',
                             mm: matched.sections || mat.mm || '',
                             category: pCat,
                             gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
@@ -1492,10 +1493,10 @@ export default function CreateBomFormPage(props) {
                         type="text"
                         list={`uom-list-${i}`}
                         placeholder="UOM"
-                        value={item.uom || 'NOS'}
+                        value={item.uom || item.unit || 'NOS'}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
+                          setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
                         }}
                         style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700' }}
                        />
@@ -1509,6 +1510,8 @@ export default function CreateBomFormPage(props) {
                         <option value="BOX" />
                         <option value="PKT" />
                         <option value="PAIR" />
+                        <option value="LOT" />
+                        <option value="TON" />
                       </datalist>
                     </td>
                     <td style={{ padding: '12px 6px', textAlign: 'center' }}>
@@ -2541,7 +2544,8 @@ export default function CreateBomFormPage(props) {
                         code: item.code || item.sku || item.itemId || resolveProductCode(item) || '',
                         name: item.name || 'Custom Item',
                         category: item.category || '',
-                        uom: item.uom || 'NOS',
+                        uom: item.uom || item.unit || 'NOS',
+                        unit: item.uom || item.unit || 'NOS',
                         qty: cleanNum(item.qty, 1),
                         rate: cleanNum(item.rate, 0),
                         gstRate: item.gstRate || newBomGstRate || '18%',

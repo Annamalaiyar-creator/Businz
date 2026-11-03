@@ -1884,7 +1884,8 @@ export default function BomOrdersView(props) {
             code: it.code || it.sku || it.itemId || '',
             name: it.name || 'Structural Steel Beams',
             category: it.category || (isPreset ? 'Preset Component' : 'PI Converted Goods'),
-            uom: it.uom || 'NOS',
+            uom: it.uom || it.unit || 'NOS',
+            unit: it.uom || it.unit || 'NOS',
             qty: String(it.qty || '1'),
             baseQty: it.baseQty != null ? it.baseQty : (parseFloat(it.qty) || 1),
             wastage: it.wastage || '0%',
@@ -3386,7 +3387,7 @@ export default function BomOrdersView(props) {
   // ==========================================
   if (showBOMForm) {
     const handleAddMaterialRow = () => {
-      setBomMaterialsList(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', wastage: '0%', rate: '', gstRate: '18%' }]);
+      setBomMaterialsList(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', unit: 'NOS', qty: '1', wastage: '0%', rate: '', gstRate: '18%' }]);
     };
 
     const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
@@ -4507,7 +4508,8 @@ export default function BomOrdersView(props) {
                                       name: pName,
                                       code: matched.code || mat.code || '',
                                       rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
-                                      uom: matched.uom || matched.unit || mat.uom,
+                                      uom: matched.uom || matched.unit || mat.uom || mat.unit || 'NOS',
+                                      unit: matched.uom || matched.unit || mat.uom || mat.unit || 'NOS',
                                       category: pCat,
                                       gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
                                     } : mat));
@@ -4530,7 +4532,7 @@ export default function BomOrdersView(props) {
                           <td style={{ padding: '12px 10px' }}>
                             {isPiLocked ? (
                               <div style={{ textAlign: 'center', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
-                                {item.uom || 'NOS'}
+                                {item.uom || item.unit || 'NOS'}
                               </div>
                             ) : (
                               <>
@@ -4538,10 +4540,10 @@ export default function BomOrdersView(props) {
                                   type="text"
                                   list={`uom-list-${i}`}
                                   placeholder="UOM"
-                                  value={item.uom || 'NOS'}
+                                  value={item.uom || item.unit || 'NOS'}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
+                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
                                   }}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
                                  />
@@ -4555,6 +4557,8 @@ export default function BomOrdersView(props) {
                                   <option value="BOX" />
                                   <option value="PKT" />
                                   <option value="PAIR" />
+                                  <option value="LOT" />
+                                  <option value="TON" />
                                 </datalist>
                               </>
                             )}
@@ -5668,7 +5672,8 @@ export default function BomOrdersView(props) {
                             code: item.code || '',
                             name: item.name || 'Custom Item',
                             category: item.category || (item.isPresetItem ? 'Preset Component' : ''),
-                            uom: item.uom || 'NOS',
+                            uom: item.uom || item.unit || 'NOS',
+                            unit: item.uom || item.unit || 'NOS',
                             qty: cleanNum(item.qty, 1),
                             rate: item.isPresetItem ? 0 : cleanNum(item.rate, 0),
                             gstRate: item.gstRate || '18%',
@@ -7818,7 +7823,8 @@ export default function BomOrdersView(props) {
                                     name: pName,
                                     code: matched.code || it.code || '',
                                     rate: matched.price || matched.rate ? Number(matched.price || matched.rate) : it.rate,
-                                    uom: matched.uom || matched.unit || it.uom,
+                                    uom: matched.uom || matched.unit || it.uom || it.unit || 'NOS',
+                                    unit: matched.uom || matched.unit || it.uom || it.unit || 'NOS',
                                     category: pCat,
                                     gstRate: isSolar5 ? '5%' : (it.gstRate || '18%')
                                   } : it);

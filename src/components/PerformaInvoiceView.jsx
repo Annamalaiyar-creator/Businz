@@ -1351,7 +1351,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           code: resolvedC,
           name: it.name || 'Structural Steel Beams',
           category: it.category || (isPreset ? 'Preset Component' : 'Custom Material'),
-          uom: it.uom || 'NOS',
+          uom: it.uom || it.unit || 'NOS',
+          unit: it.uom || it.unit || 'NOS',
           qty: String(it.qty || '1'),
           baseQty: it.baseQty != null ? it.baseQty : (parseFloat(it.qty) || 1),
           rate: isPreset ? '0' : itRate,
@@ -1365,7 +1366,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           code: pi.productCode || resolveProductCode({ name: pi.productName }) || '',
           name: pi.productName || 'Structural Steel Beams',
           category: 'PI Converted Materials',
-          uom: 'NOS',
+          uom: pi.uom || pi.unit || 'NOS',
+          unit: pi.uom || pi.unit || 'NOS',
           qty: String(qty),
           rate: String(rate),
           gstRate: '18%',
@@ -2273,7 +2275,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const handleAddMaterialRow = () => {
-    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
+    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', unit: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
   };
 
   const handleAddPresetItem = (groupId) => {
@@ -2285,6 +2287,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       name: '',
       category: '',
       uom: 'NOS',
+      unit: 'NOS',
       qty: String(1 * mult),
       baseQty: 1,
       rate: '0',
@@ -2904,8 +2907,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       const sanitizedItems = (piItems || []).map(it => {
         const isPreset = Boolean(it.isPresetItem || it.presetGroupId);
+        const resolvedUom = String(it.uom || it.unit || 'NOS').trim().toUpperCase() || 'NOS';
         return {
           ...it,
+          uom: resolvedUom,
+          unit: resolvedUom,
           isPresetItem: isPreset,
           rate: isPreset ? '0' : String(it.rate || '0'),
           taxable: isPreset ? 0 : ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)),
@@ -6264,11 +6270,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
                                       const pHsn = matched.hsn || matched.hsn_or_sac || getHsnCode(matched || { name: pName, category: pCat });
                                       const isSolar5 = is5PctSolarProduct(pName, pCat, pHsn);
-                                      let rawUom = matched.uom || matched.unit || item.uom || 'NOS';
+                                      let rawUom = matched.uom || matched.unit || item.uom || item.unit || 'NOS';
                                       const u = String(rawUom).trim().toUpperCase();
                                       let resolvedUom = 'NOS';
                                       if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';
                                       else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
+                                      else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
+                                      else if (['KILOGRAM', 'KILOGRAMS', 'KG', 'KGS'].includes(u)) resolvedUom = 'KG';
+                                      else if (['BOX', 'BOXES'].includes(u)) resolvedUom = 'BOX';
+                                      else if (['PACKET', 'PACKETS', 'PKT', 'PKTS'].includes(u)) resolvedUom = 'PKT';
+                                      else if (['PAIR', 'PAIRS'].includes(u)) resolvedUom = 'PAIR';
+                                      else if (['LOT', 'LOTS'].includes(u)) resolvedUom = 'LOT';
+                                      else if (['TON', 'TONS'].includes(u)) resolvedUom = 'TON';
+                                      else if (['KW', 'KWH'].includes(u)) resolvedUom = 'KW';
+                                      else if (u) resolvedUom = u;
                                       else resolvedUom = 'NOS';
                                       setPiItems(prev => prev.map((mat, idx) => idx === i ? {
                                         ...mat,
@@ -6276,6 +6291,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         name: pName,
                                         rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
                                         uom: resolvedUom,
+                                        unit: resolvedUom,
                                         category: pCat,
                                         gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%'),
                                         hsn: pHsn
@@ -6350,39 +6366,50 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 />
                               </td>
                               <td style={{ padding: '12px 4px', textAlign: 'center', width: '105px', minWidth: '105px', whiteSpace: 'nowrap' }}>
-                                <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
-                                  value={['NOS', 'SET', 'KW', 'KG', 'MTR', 'PCS', 'BOX', 'PKT', 'PAIR'].includes(item.uom) ? item.uom : 'NOS'}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
-                                  }}
-                                  style={{
-                                    width: '100%',
-                                    minWidth: '95px',
-                                    height: '38px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #E2E8F0',
-                                    padding: '0 6px 0 10px',
-                                    fontSize: '12px',
-                                    fontWeight: '700',
-                                    color: '#0F172A',
-                                    backgroundColor: '#FFFFFF',
-                                    outline: 'none',
-                                    boxSizing: 'border-box',
-                                    cursor: 'pointer',
-                                    textAlign: 'center'
-                                  }}
-                                >
-                                  <option value="NOS">NOS</option>
-                                  <option value="SET">SET</option>
-                                  <option value="KW">KW</option>
-                                  <option value="KG">KG</option>
-                                  <option value="MTR">MTR</option>
-                                  <option value="PCS">PCS</option>
-                                  <option value="BOX">BOX</option>
-                                  <option value="PKT">PKT</option>
-                                  <option value="PAIR">PAIR</option>
-                                </select>
+                                {(() => {
+                                  const currentUom = String(item.uom || item.unit || 'NOS').trim().toUpperCase() || 'NOS';
+                                  const standardUoms = ['NOS', 'SET', 'KW', 'KG', 'MTR', 'PCS', 'BOX', 'PKT', 'PAIR', 'LOT', 'TON'];
+                                  return (
+                                    <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
+                                      value={currentUom}
+                                      onChange={(e) => {
+                                        const val = e.target.value.toUpperCase();
+                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        minWidth: '95px',
+                                        height: '38px',
+                                        borderRadius: '8px',
+                                        border: '1px solid #E2E8F0',
+                                        padding: '0 6px 0 10px',
+                                        fontSize: '12px',
+                                        fontWeight: '700',
+                                        color: '#0F172A',
+                                        backgroundColor: '#FFFFFF',
+                                        outline: 'none',
+                                        boxSizing: 'border-box',
+                                        cursor: 'pointer',
+                                        textAlign: 'center'
+                                      }}
+                                    >
+                                      {!standardUoms.includes(currentUom) && (
+                                        <option value={currentUom}>{currentUom}</option>
+                                      )}
+                                      <option value="NOS">NOS</option>
+                                      <option value="SET">SET</option>
+                                      <option value="KW">KW</option>
+                                      <option value="KG">KG</option>
+                                      <option value="MTR">MTR</option>
+                                      <option value="PCS">PCS</option>
+                                      <option value="BOX">BOX</option>
+                                      <option value="PKT">PKT</option>
+                                      <option value="PAIR">PAIR</option>
+                                      <option value="LOT">LOT</option>
+                                      <option value="TON">TON</option>
+                                    </select>
+                                  );
+                                })()}
                               </td>
                               <td style={{ padding: '12px 6px', verticalAlign: 'middle' }}>
                                 <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -7757,7 +7784,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   })()}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center', color: '#334155', fontWeight: '600' }}>
-                                  {itQty} {it.uom || 'NOS'}
+                                  {itQty} {it.uom || it.unit || 'NOS'}
                                 </td>
                                 {isPreset ? (
                                   isFirstInGroup ? (
