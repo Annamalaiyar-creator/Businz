@@ -11020,7 +11020,11 @@
     "createdAt": "2026-11-01T14:44:13.595Z",
     "updatedAt": "2026-11-01T14:44:39.754Z",
     "salesperson": "Sanjai kumar",
-    "salesPersonEmail": "sanjaikumar3a@gmail.com"
+    "salesPersonEmail": "sanjaikumar3a@gmail.com",
+    "sales_person": "Sanjai kumar",
+    "sales_person_code": "SE-002",
+    "created_by_id": "SE-002",
+    "sales_person_email": "sanjaikumar3a@gmail.com"
   },
   {
     "stBg": "#e0e7ff",
@@ -11474,7 +11478,11 @@
     "createdAt": "2026-11-01T13:22:00.930Z",
     "updatedAt": "2026-11-01T13:22:00.967Z",
     "salesperson": "Sanjai kumar",
-    "salesPersonEmail": "sanjaikumar3a@gmail.com"
+    "salesPersonEmail": "sanjaikumar3a@gmail.com",
+    "sales_person": "Sanjai kumar",
+    "sales_person_code": "SE-002",
+    "created_by_id": "SE-002",
+    "sales_person_email": "sanjaikumar3a@gmail.com"
   },
   {
     "packedAt": null,
@@ -11875,7 +11883,11 @@
     "createdAt": "2026-11-01T14:44:37.739Z",
     "updatedAt": "2026-11-01T14:44:50.086Z",
     "salesperson": "Sanjai kumar",
-    "salesPersonEmail": "sanjaikumar3a@gmail.com"
+    "salesPersonEmail": "sanjaikumar3a@gmail.com",
+    "sales_person": "Sanjai kumar",
+    "sales_person_code": "SE-002",
+    "created_by_id": "SE-002",
+    "sales_person_email": "sanjaikumar3a@gmail.com"
   },
   {
     "docType": "Invoice",
@@ -12299,6 +12311,10 @@
     "createdAt": "2026-11-01T14:44:05.836Z",
     "updatedAt": "2026-11-01T14:44:16.427Z",
     "salesperson": "Sanjai kumar",
-    "salesPersonEmail": "sanjaikumar3a@gmail.com"
+    "salesPersonEmail": "sanjaikumar3a@gmail.com",
+    "sales_person": "Sanjai kumar",
+    "sales_person_code": "SE-002",
+    "created_by_id": "SE-002",
+    "sales_person_email": "sanjaikumar3a@gmail.com"
   }
 ]

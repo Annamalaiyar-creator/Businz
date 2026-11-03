@@ -249,7 +249,7 @@ function numberToWordsINR(num) {
 
   const integerPart = Math.floor(Math.abs(num));
   const words = convert(integerPart);
-  return `Indian Rupee ${words} Only`;
+  return `Indian Rupees ${words} Only`;
 }
 
 // Format date nicely (DD-MM-YYYY to match official format)
@@ -262,6 +262,22 @@ function formatDate(dateStr) {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     return `${day}-${month}-${year}`;
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+// Format date in official long document format (e.g. "29 October 2026") matching redesigned PI template
+function formatDocumentDate(dateStr) {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const day = d.getDate();
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
   } catch (e) {
     return dateStr;
   }
@@ -1047,6 +1063,430 @@ export function VRMProformaInvoicePrintSheet({
 
   const hiddenElements = ALL_ELEMENTS.filter(item => cfg[item.key] === false);
 
+  const renderRedesignedProformaInvoice = () => {
+    const roundOffVal = Math.round(grandTotal) - grandTotal;
+    const hasRoundOff = Math.abs(roundOffVal) > 0.001;
+    const repName = pi.salesPerson || pi.salesperson || pi.sales_person_name || pi.createdByName || 'Sanjai Kumar';
+    const docDateStr = formatDocumentDate(pi.piDate || pi.date);
+    const docNoStr = pi.piNo || pi.proformaInvoiceNo || pi.invoiceNo || 'VRM-PI-2026-288';
+    const primaryTitle = (cfg.documentTitle || 'PROFORMA INVOICE').toUpperCase();
+
+    return (
+      <div
+        className="vrm-print-outer-box redesigned-pi-sheet"
+        style={{
+          backgroundColor: '#FFFFFF',
+          padding: '24px 28px',
+          color: '#0F172A',
+          fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+          position: 'relative'
+        }}
+      >
+        {/* 1. TOP HEADER (LOGO + COMPANY on Left | TITLE + META on Right) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
+          {/* LEFT: COMPANY LOGO & DETAILS */}
+          <div style={{ flex: '1 1 auto' }}>
+            <div style={{ height: '44px', maxWidth: '200px', display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
+              <img
+                src={getSafePrintImageUrl(cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')), VRM_OFFICIAL_LOGO)}
+                alt="VRM Structures"
+                style={{ maxHeight: '42px', maxWidth: '190px', width: 'auto', height: 'auto', display: 'block' }}
+                onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_LOGO; }}
+              />
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F3D6E', letterSpacing: '0.2px', textTransform: 'uppercase', marginBottom: '2px' }}>
+              <EditableText
+                value={cfg.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED'}
+                fallback="VRM STRUCTURES INDIA PRIVATE LIMITED"
+                onSave={(v) => onUpdateSetting?.({ companyName: v })}
+              />
+            </div>
+            <div style={{ fontSize: '9.5px', color: '#334155', lineHeight: '1.45' }}>
+              <div>1427, GNT Road, Nagappa Industrial Estate, Puzhal,</div>
+              <div>Chennai, Tamil Nadu 600066, India</div>
+              <div style={{ marginTop: '2px' }}>
+                <strong style={{ color: '#0F172A' }}>GSTIN: </strong>
+                <EditableText
+                  value={cfg.companyGstin || '33AAGCV4262N1ZZ'}
+                  fallback="33AAGCV4262N1ZZ"
+                  onSave={(v) => onUpdateSetting?.({ companyGstin: v })}
+                  style={{ fontWeight: '700', color: '#0F172A' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: DOCUMENT TITLE + PI NO + DATE + SALES EXECUTIVE */}
+          <div style={{ textAlign: 'right', flex: '0 0 auto', paddingTop: '2px' }}>
+            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F3D6E', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+              <EditableText
+                value={primaryTitle}
+                fallback="PROFORMA INVOICE"
+                onSave={(v) => onUpdateSetting?.({ documentTitle: v })}
+              />
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#334155', marginTop: '3px' }}>
+              <EditableText
+                value={docNoStr}
+                fallback="VRM-PI-2026-288"
+                onSave={(v) => onUpdatePiData?.({ piNo: v })}
+                style={{ fontWeight: '700', color: '#0F172A' }}
+              />
+              {' | '}
+              <EditableText
+                value={docDateStr}
+                fallback="29 October 2026"
+                onSave={(v) => onUpdatePiData?.({ piDate: v })}
+              />
+            </div>
+            <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
+              Sales Executive: <EditableText
+                value={repName}
+                fallback="Sanjai Kumar"
+                onSave={(v) => onUpdatePiData?.({ salesPerson: v, salesperson: v })}
+                style={{ color: '#334155', fontWeight: '500' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 2. GOLD / OCHRE ACCENT DIVIDER */}
+        <div style={{ height: '2.5px', backgroundColor: '#D97706', margin: '14px 0 16px 0', width: '100%' }} />
+
+        {/* 3. BILL TO & SHIP TO SECTION (CLEAN 2-COLUMN TEXT) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '36px', marginBottom: '16px', fontSize: '10px', lineHeight: '1.45' }}>
+          {/* BILL TO */}
+          <div>
+            <div style={{ fontSize: '10.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+              BILL TO
+            </div>
+            <div style={{ fontSize: '11.5px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '2px' }}>
+              <EditableText
+                value={customerName}
+                fallback="VEL SYSTEMS"
+                onSave={(v) => onUpdatePiData?.({ customerName: v, vendor: v, vendorName: v })}
+              />
+            </div>
+            {bStreet ? <div>{bStreet}</div> : null}
+            <div>
+              {`${bCity ? bCity + ', ' : ''}${bState ? bState + ' ' : ''}${bPincode ? bPincode + ', ' : ''}India`}
+            </div>
+            {pi.gstNo ? (
+              <div style={{ marginTop: '2px' }}>
+                <strong style={{ color: '#0F172A' }}>GSTIN: </strong>
+                <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.gstNo}</span>
+              </div>
+            ) : null}
+            {phoneVal ? (
+              <div style={{ color: '#334155', marginTop: '1px' }}>
+                Customer Mobile: {phoneVal}
+              </div>
+            ) : null}
+          </div>
+
+          {/* SHIP TO */}
+          <div>
+            <div style={{ fontSize: '10.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+              SHIP TO
+            </div>
+            <div style={{ color: '#334155', whiteSpace: 'pre-line' }}>
+              {sameAsBilling
+                ? `${bStreet ? bStreet + '\n' : ''}${bCity ? bCity + ', ' : ''}${bState ? bState + ' ' : ''}${bPincode ? bPincode + ', ' : ''}India`
+                : `${dStreet ? dStreet + '\n' : ''}${dCity ? dCity + ', ' : ''}${dState ? dState + ' ' : ''}${dPincode ? dPincode + ', ' : ''}India`}
+            </div>
+          </div>
+        </div>
+
+        {/* 4. LINE ITEMS TABLE (NAVY BLUE HEADER + STACKED GST RATES/AMTS) */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px', marginBottom: '12px' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#0B3B60', color: '#FFFFFF', fontWeight: '700', fontSize: '9px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+              <th style={{ padding: '8px 10px', textAlign: 'left' }}>ITEM & DESCRIPTION</th>
+              <th style={{ padding: '8px 6px', textAlign: 'center', width: '60px' }}>QTY</th>
+              <th style={{ padding: '8px 8px', textAlign: 'right', width: '80px' }}>RATE (₹)</th>
+              <th style={{ padding: '8px 8px', textAlign: 'right', width: '90px' }}>TAXABLE (₹)</th>
+              {isIntra ? (
+                <>
+                  <th style={{ padding: '5px 6px', textAlign: 'right', width: '75px' }}>
+                    <div>CGST</div>
+                    <div style={{ fontSize: '7.5px', fontWeight: '500', opacity: 0.9 }}>Rate / Amt (₹)</div>
+                  </th>
+                  <th style={{ padding: '5px 6px', textAlign: 'right', width: '75px' }}>
+                    <div>SGST</div>
+                    <div style={{ fontSize: '7.5px', fontWeight: '500', opacity: 0.9 }}>Rate / Amt (₹)</div>
+                  </th>
+                </>
+              ) : (
+                <th style={{ padding: '5px 6px', textAlign: 'right', width: '85px' }}>
+                  <div>IGST</div>
+                  <div style={{ fontSize: '7.5px', fontWeight: '500', opacity: 0.9 }}>Rate / Amt (₹)</div>
+                </th>
+              )}
+              <th style={{ padding: '8px 8px', textAlign: 'right', width: '95px' }}>INCL. GST (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, idx) => {
+              const halfRate = (it.gRate / 2).toFixed(1).replace(/\.0$/, '');
+              const halfAmt = it.gstAmt / 2;
+              return (
+                <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                  <td style={{ padding: '8px 10px', verticalAlign: 'top' }}>
+                    <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px' }}>{it.name}</div>
+                    {it.description ? (
+                      <div style={{ color: '#64748B', fontSize: '8.5px', marginTop: '1px', lineHeight: '1.3' }}>
+                        {it.description}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'top', color: '#0F172A' }}>
+                    {it.qty} {it.unit || it.uom || 'Nos'}
+                  </td>
+                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
+                    {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
+                    {it.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  {isIntra ? (
+                    <>
+                      <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
+                        <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
+                        <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                          {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
+                        <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
+                        <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                          {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
+                      <div style={{ color: '#475569', fontSize: '8.5px' }}>{it.gRate}%</div>
+                      <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                        {it.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </td>
+                  )}
+                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
+                    {it.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* 5. GST SUMMARY BY RATE TABLE */}
+        {gstTiers && gstTiers.length > 0 && (
+          <div style={{ margin: '14px 0 16px 0' }}>
+            <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+              GST SUMMARY BY RATE
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700', fontSize: '8.5px', textTransform: 'uppercase' }}>
+                  <th style={{ padding: '6px 8px', textAlign: 'left' }}>GST RATE</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right' }}>TAXABLE VALUE</th>
+                  {isIntra ? (
+                    <>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>CGST</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>SGST</th>
+                    </>
+                  ) : (
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>IGST</th>
+                  )}
+                  <th style={{ padding: '6px 8px', textAlign: 'right' }}>TOTAL GST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gstTiers.map((t) => {
+                  const halfRate = (t.rate / 2).toFixed(1).replace(/\.0$/, '');
+                  const halfAmt = t.gstAmt / 2;
+                  return (
+                    <tr key={t.rate} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '5px 8px', color: '#0F172A' }}>{t.rate}%</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#0F172A' }}>
+                        ₹{t.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      {isIntra ? (
+                        <>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: '#475569' }}>
+                            ₹{halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({halfRate}%)
+                          </td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: '#475569' }}>
+                            ₹{halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({halfRate}%)
+                          </td>
+                        </>
+                      ) : (
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: '#475569' }}>
+                          ₹{t.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({t.rate}%)
+                        </td>
+                      )}
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#0F172A' }}>
+                        ₹{t.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 6. BOTTOM SECTION: BANK & TERMS (LEFT) | TOTALS + GRAND TOTAL + WORDS + STAMP (RIGHT) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '54% 46%', columnGap: '28px', marginTop: '10px', fontSize: '9.5px' }}>
+          {/* LEFT: BANK DETAILS & TERMS */}
+          <div>
+            {/* BANK DETAILS */}
+            <div style={{
+              backgroundColor: '#F0F7FF',
+              border: '1px solid #E0F2FE',
+              borderRadius: '4px',
+              padding: '10px 14px',
+              marginBottom: '14px'
+            }}>
+              <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                BANK DETAILS
+              </div>
+              <div style={{ fontSize: '9px', color: '#475569' }}>Beneficiary:</div>
+              <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
+                VRM Structures India Private Limited
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                Bank: <strong>{cfg.bankName || 'HDFC Bank'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                Branch: <strong>{cfg.bankBranch || 'VINAYAGAPURAM'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                A/c No.: <strong>{cfg.bankAccountNo || '50200031629'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                IFSC: <strong>{cfg.bankIfsc || 'HDFC0007315'}</strong>
+              </div>
+            </div>
+
+            {/* TERMS & CONDITIONS */}
+            <div>
+              <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+                TERMS & CONDITIONS
+              </div>
+              <div style={{ fontSize: '9px', color: '#334155', lineHeight: '1.55' }}>
+                <div>1. Tax: Included in grand total.</div>
+                <div>2. Transport: At actuals.</div>
+                <div>3. Payment: 100% along with the Purchase Order.</div>
+                <div>4. Delivery: Immediate Dispatch.</div>
+                <div>5. Validity: 3 days.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: TOTALS LIST + GRAND TOTAL + WORDS + STAMP */}
+          <div>
+            {/* TOTALS LIST */}
+            <div style={{ fontSize: '10px', lineHeight: '1.6', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                <span>Total taxable value</span>
+                <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                  ₹{subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              {isIntra ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                    <span>Total CGST</span>
+                    <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                      ₹{(totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                    <span>Total SGST</span>
+                    <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                      ₹{(totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                  <span>Total IGST</span>
+                  <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                    ₹{totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              {hasRoundOff && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                  <span>Round-off</span>
+                  <span style={{ fontWeight: '600', color: '#0F172A' }}>
+                    ₹{roundOffVal.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* GRAND TOTAL BAR */}
+            <div style={{
+              backgroundColor: '#0F3D6E',
+              color: '#FFFFFF',
+              padding: '8px 12px',
+              borderRadius: '3px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '10px'
+            }}>
+              <span style={{ fontSize: '11px', fontWeight: '800', letterSpacing: '0.5px' }}>GRAND TOTAL</span>
+              <span style={{ fontSize: '16px', fontWeight: '900' }}>
+                ₹{Math.round(grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* AMOUNT IN WORDS */}
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '8.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                AMOUNT IN WORDS
+              </div>
+              <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', marginTop: '2px', lineHeight: '1.35' }}>
+                {numberToWordsINR(grandTotal)}
+              </div>
+            </div>
+
+            {/* SIGNATURE & STAMP */}
+            <div style={{ textAlign: 'center', marginTop: '8px' }}>
+              <div style={{ display: 'inline-block', position: 'relative' }}>
+                <img
+                  src={getSafePrintImageUrl(cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')), VRM_OFFICIAL_STAMP)}
+                  alt="Authorized Signatory Stamp"
+                  style={{ height: '95px', width: '95px', objectFit: 'contain' }}
+                  onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_STAMP; }}
+                />
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#64748B', marginTop: '3px' }}>Authorized Signatory</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 7. FOOTER */}
+        <div style={{
+          borderTop: '1px solid #E2E8F0',
+          paddingTop: '8px',
+          marginTop: '16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: '8.5px',
+          color: '#64748B'
+        }}>
+          <div>VRM Structures India Private Limited | Chennai, Tamil Nadu, India</div>
+          <div>Page 1 of 1</div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       id={id}
@@ -1312,7 +1752,11 @@ export function VRMProformaInvoicePrintSheet({
       )}
 
       {/* OUTER BORDER CONTAINER */}
-      <div className="vrm-print-outer-box" style={{ border: '1px solid #CBD5E1', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+      {!isBomDocument ? (
+        renderRedesignedProformaInvoice()
+      ) : (
+        <>
+          <div className="vrm-print-outer-box" style={{ border: '1px solid #CBD5E1', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
 
         {/* 1. HEADER SECTION (LOGO + COMPANY DETAILS on Left | DOCUMENT TITLE on Right) */}
         <div style={{ padding: '12px 18px', borderBottom: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}>
@@ -2439,30 +2883,32 @@ export function VRMProformaInvoicePrintSheet({
 
       </div>
 
-      {/* PAGE NUMBER (BOTTOM RIGHT) */}
-      <div style={{ textAlign: 'right', fontSize: '9px', color: '#64748B', marginTop: '4px', paddingRight: '2px' }}>
-        1
-      </div>
+          {/* PAGE NUMBER (BOTTOM RIGHT) */}
+          <div style={{ textAlign: 'right', fontSize: '9px', color: '#64748B', marginTop: '4px', paddingRight: '2px' }}>
+            1
+          </div>
 
-      {/* FOOTER NOTICE */}
-      {cfg.showFooterNote !== false && cfg.footerNote && (
-        <RemovableBlock
-          visible={cfg.showFooterNote !== false}
-          settingKey="showFooterNote"
-          title="Footer Note"
-          style={{ marginTop: '10px', textAlign: 'center', fontSize: '9.5px', color: '#64748B' }}
-        >
-          <EditableText
-            value={cfg.footerNote}
-            fallback="This is a Computer Generated Proforma Invoice and does not require physical signature unless requested."
-            onSave={(v) => onUpdateSetting?.({ footerNote: v })}
-            onRemove={() => {
-              onUpdateSetting?.({ showFooterNote: false });
-              onElementRemoved?.('showFooterNote', 'Footer Note');
-            }}
-            removeLabel="Footer Note"
-          />
-        </RemovableBlock>
+          {/* FOOTER NOTICE */}
+          {cfg.showFooterNote !== false && cfg.footerNote && (
+            <RemovableBlock
+              visible={cfg.showFooterNote !== false}
+              settingKey="showFooterNote"
+              title="Footer Note"
+              style={{ marginTop: '10px', textAlign: 'center', fontSize: '9.5px', color: '#64748B' }}
+            >
+              <EditableText
+                value={cfg.footerNote}
+                fallback="This is a Computer Generated Proforma Invoice and does not require physical signature unless requested."
+                onSave={(v) => onUpdateSetting?.({ footerNote: v })}
+                onRemove={() => {
+                  onUpdateSetting?.({ showFooterNote: false });
+                  onElementRemoved?.('showFooterNote', 'Footer Note');
+                }}
+                removeLabel="Footer Note"
+              />
+            </RemovableBlock>
+          )}
+        </>
       )}
     </div>
   );
