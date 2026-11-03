@@ -283,11 +283,26 @@ export default function ConfirmingBomModal({
 
                 // 3. Post to backend and trigger server reconciliation
                 try {
+                  const sesId = typeof window !== 'undefined' && window.localStorage
+                    ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+                    : null;
+                  const curRole = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_user_role') || 'Sales') : 'Sales';
+                  const curEmp = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001') : 'SE-001';
+
                   fetch('/api/boms', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(sesId ? { 'x-session-id': sesId } : {}),
+                      'x-user-role': curRole,
+                      'x-employee-code': curEmp
+                    },
                     body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomRecord), isUpdate: true })
-                  }).catch(() => {});
+                  }).then(res => {
+                    if (!res.ok) {
+                      console.warn('[ConfirmingBomModal] POST /api/boms response not OK:', res.status);
+                    }
+                  }).catch(err => console.warn('[ConfirmingBomModal] POST /api/boms error:', err));
                   fetch('/api/inventory/reconcile-boms', { method: 'POST' }).catch(() => {});
                 } catch (_) {}
 

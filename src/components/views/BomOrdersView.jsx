@@ -95,6 +95,7 @@ export default function BomOrdersView(props) {
   // Canonical Salesperson Code Normalizer
   const canonicalizeSalespersonCode = (rawCode, name) => {
     const c = String(rawCode || '').trim().toUpperCase();
+    if (c.startsWith('TS-')) return c;
     if (c === 'SE-015' || (c === 'SE-VRM002' && String(name || '').toLowerCase().includes('mohith'))) return 'SE-004';
     if (c === 'SH-001' || c === 'SH-VRM001') return 'SE-001';
     if (c === 'SE-020') return 'SE-006';
@@ -103,7 +104,9 @@ export default function BomOrdersView(props) {
     if (String(name || '').toLowerCase().includes('mohith')) return 'SE-004';
     if (String(name || '').toLowerCase().includes('sanjai') || String(name || '').toLowerCase().includes('sanjay')) return 'SE-002';
     if (String(name || '').toLowerCase().includes('manoj')) return 'SE-001';
-    if (String(name || '').toLowerCase().includes('vasanth')) return 'SE-003';
+    const lowerName = String(name || '').toLowerCase();
+    if (lowerName.includes('kumar') && lowerName.includes('vasanth')) return 'SE-003';
+    if (c === 'SE-003' || c === 'SE-004' || c === 'SE-VRM006') return 'SE-003';
     return c || '';
   };
 
@@ -965,7 +968,7 @@ export default function BomOrdersView(props) {
     const SALES_TEAM = [
       { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
       { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
-      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar', 'vasanth'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-004'] },
+      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-004'] },
       { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
       { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
       { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },
@@ -1881,7 +1884,8 @@ export default function BomOrdersView(props) {
             code: it.code || it.sku || it.itemId || '',
             name: it.name || 'Structural Steel Beams',
             category: it.category || (isPreset ? 'Preset Component' : 'PI Converted Goods'),
-            uom: it.uom || 'NOS',
+            uom: it.uom || it.unit || 'NOS',
+            unit: it.uom || it.unit || 'NOS',
             qty: String(it.qty || '1'),
             baseQty: it.baseQty != null ? it.baseQty : (parseFloat(it.qty) || 1),
             wastage: it.wastage || '0%',
@@ -3383,7 +3387,7 @@ export default function BomOrdersView(props) {
   // ==========================================
   if (showBOMForm) {
     const handleAddMaterialRow = () => {
-      setBomMaterialsList(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', wastage: '0%', rate: '', gstRate: '18%' }]);
+      setBomMaterialsList(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', unit: 'NOS', qty: '1', wastage: '0%', rate: '', gstRate: '18%' }]);
     };
 
     const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
@@ -4504,7 +4508,8 @@ export default function BomOrdersView(props) {
                                       name: pName,
                                       code: matched.code || mat.code || '',
                                       rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
-                                      uom: matched.uom || matched.unit || mat.uom,
+                                      uom: matched.uom || matched.unit || mat.uom || mat.unit || 'NOS',
+                                      unit: matched.uom || matched.unit || mat.uom || mat.unit || 'NOS',
                                       category: pCat,
                                       gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
                                     } : mat));
@@ -4527,7 +4532,7 @@ export default function BomOrdersView(props) {
                           <td style={{ padding: '12px 10px' }}>
                             {isPiLocked ? (
                               <div style={{ textAlign: 'center', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
-                                {item.uom || 'NOS'}
+                                {item.uom || item.unit || 'NOS'}
                               </div>
                             ) : (
                               <>
@@ -4535,10 +4540,10 @@ export default function BomOrdersView(props) {
                                   type="text"
                                   list={`uom-list-${i}`}
                                   placeholder="UOM"
-                                  value={item.uom || 'NOS'}
+                                  value={item.uom || item.unit || 'NOS'}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
+                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
                                   }}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
                                  />
@@ -4552,6 +4557,8 @@ export default function BomOrdersView(props) {
                                   <option value="BOX" />
                                   <option value="PKT" />
                                   <option value="PAIR" />
+                                  <option value="LOT" />
+                                  <option value="TON" />
                                 </datalist>
                               </>
                             )}
@@ -5665,7 +5672,8 @@ export default function BomOrdersView(props) {
                             code: item.code || '',
                             name: item.name || 'Custom Item',
                             category: item.category || (item.isPresetItem ? 'Preset Component' : ''),
-                            uom: item.uom || 'NOS',
+                            uom: item.uom || item.unit || 'NOS',
+                            unit: item.uom || item.unit || 'NOS',
                             qty: cleanNum(item.qty, 1),
                             rate: item.isPresetItem ? 0 : cleanNum(item.rate, 0),
                             gstRate: item.gstRate || '18%',
@@ -7815,7 +7823,8 @@ export default function BomOrdersView(props) {
                                     name: pName,
                                     code: matched.code || it.code || '',
                                     rate: matched.price || matched.rate ? Number(matched.price || matched.rate) : it.rate,
-                                    uom: matched.uom || matched.unit || it.uom,
+                                    uom: matched.uom || matched.unit || it.uom || it.unit || 'NOS',
+                                    unit: matched.uom || matched.unit || it.uom || it.unit || 'NOS',
                                     category: pCat,
                                     gstRate: isSolar5 ? '5%' : (it.gstRate || '18%')
                                   } : it);
@@ -8208,9 +8217,20 @@ export default function BomOrdersView(props) {
       const targetBom = updatedList.find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
       if (targetBom) {
         saveCloudBomRow(targetBom);
+        const sesId = typeof window !== 'undefined' && window.localStorage
+          ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+          : null;
+        const curRole = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_user_role') || 'Sales') : 'Sales';
+        const curEmp = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001') : 'SE-001';
+
         fetch('/api/boms', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sesId ? { 'x-session-id': sesId } : {}),
+            'x-user-role': curRole,
+            'x-employee-code': curEmp
+          },
           body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
         }).catch(() => {});
 
@@ -11052,9 +11072,20 @@ export default function BomOrdersView(props) {
                             const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
                             if (targetBom) {
                               saveCloudBomRow(targetBom);
+                              const sesId = typeof window !== 'undefined' && window.localStorage
+                                ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+                                : null;
+                              const curRole = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_user_role') || 'Sales') : 'Sales';
+                              const curEmp = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001') : 'SE-001';
+
                               fetch('/api/boms', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  ...(sesId ? { 'x-session-id': sesId } : {}),
+                                  'x-user-role': curRole,
+                                  'x-employee-code': curEmp
+                                },
                                 body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
                               }).catch(() => {});
 

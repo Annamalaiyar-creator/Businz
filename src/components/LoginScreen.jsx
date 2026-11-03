@@ -41,6 +41,15 @@ export const USER_ROLES_CONFIG = [
     desc: 'Complete organization oversight, high-level financial & operational metrics.'
   },
   {
+    role: 'HR',
+    prefix: 'HR',
+    allowedPrefixes: ['HR', 'HRA'],
+    category: 'Human Resources & Executive',
+    icon: Users,
+    color: '#0D9488',
+    desc: 'Company operations, kit & materials analytics, sales trends & workforce oversight.'
+  },
+  {
     role: 'Sales',
     prefix: 'SE',
     allowedPrefixes: ['SE', 'SH', 'SLS'],
@@ -345,7 +354,7 @@ export default function LoginScreen({ onLoginSuccess }) {
       const cleanCode = empIdInput.trim().toUpperCase();
       const cleanEmail = usernameInput.trim().toLowerCase();
 
-      const isDeveloperAccount = roleObj.role === 'Technical Administrator' || roleObj.prefix === 'TA' || cleanCode.startsWith('TA-') || roleObj.role === 'CEO' || roleObj.prefix === 'CEO' || cleanCode.startsWith('CEO-');
+      const isDeveloperAccount = roleObj.role === 'Technical Administrator' || roleObj.prefix === 'TA' || cleanCode.startsWith('TA-') || roleObj.role === 'CEO' || roleObj.prefix === 'CEO' || cleanCode.startsWith('CEO-') || roleObj.role === 'HR' || roleObj.prefix === 'HR' || cleanCode.startsWith('HR-');
 
       // Check duplicate Employee Code and duplicate Email
       try {

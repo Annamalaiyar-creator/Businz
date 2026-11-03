@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
 
 // Canonical BUSINZ KPI Grid Component for all CEO Dashboards
 export function CeoKpiGrid({ kpis }) {
@@ -156,6 +157,11 @@ export function CeoKpiGrid({ kpis }) {
 export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigateTab }) {
   // Navigation & filtering states
   const [activeSubTab, setActiveSubTab] = useState(() => {
+    if (userRole === 'HR') {
+      const saved = localStorage.getItem('controlroom_ceo_sub_tab');
+      if (saved === 'accounts' || saved === 'finance') return 'kit-analytics';
+      return saved || 'kit-analytics';
+    }
     return localStorage.getItem('controlroom_ceo_sub_tab') || 'overview';
   });
 
@@ -329,7 +335,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         return clean.charAt(0).toUpperCase() + clean.slice(1);
       }
     } catch (_) {}
-    return 'Velmurugan Rathinam';
+    return userRole === 'HR' ? 'HR Operations' : 'Velmurugan Rathinam';
   });
 
   useEffect(() => {
@@ -347,7 +353,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           return;
         }
       } catch (_) {}
-      setCurrentLoggedName('Velmurugan Rathinam');
+      setCurrentLoggedName(userRole === 'HR' ? 'HR Operations' : 'Velmurugan Rathinam');
     };
 
     window.addEventListener('storage', handleUserUpdate);
@@ -356,7 +362,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       window.removeEventListener('storage', handleUserUpdate);
       window.removeEventListener('controlroom_storage_update', handleUserUpdate);
     };
-  }, []);
+  }, [userRole]);
 
   const avatarInitials = useMemo(() => {
     const parts = (currentLoggedName || 'Velmurugan Rathinam').trim().split(/\s+/).filter(Boolean);
@@ -1367,6 +1373,37 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     ];
   }, [invList]);
 
+  // Kits sold summary calculation for HR / CEO dashboard
+  const { hrKitsSoldCount, hrKitsOrderValueFormatted } = useMemo(() => {
+    let totalSets = 0;
+    let totalVal = 0;
+    (bomList || []).forEach(b => {
+      if (!b || b.cancelled) return;
+      const st = String(b.status || '').toLowerCase();
+      if (st === 'draft' || st === 'cancelled') return;
+      if (b.presetGroups && typeof b.presetGroups === 'object') {
+        const grps = Array.isArray(b.presetGroups) ? b.presetGroups : Object.values(b.presetGroups);
+        grps.forEach(g => {
+          if (!g) return;
+          const sCount = parseFloat(g.setCount || g.quantity || 1) || 1;
+          const kPrice = parseFloat(g.kitPrice || g.price || 0) || 0;
+          const val = parseFloat(g.groupTotal || g.groupSubtotal || (kPrice * sCount)) || (kPrice * sCount);
+          totalSets += sCount;
+          totalVal += val;
+        });
+      } else if (b.presetName || b.selectedPreset) {
+        const sCount = parseFloat(b.setCount || b.quantity || 1) || 1;
+        const val = parseFloat(b.grandTotal || b.presetKitPrice || b.amount || 0) || 0;
+        totalSets += sCount;
+        totalVal += val;
+      }
+    });
+    const fmt = totalVal >= 10000000 
+      ? `₹ ${(totalVal / 10000000).toFixed(2)} Cr` 
+      : (totalVal >= 100000 ? `₹ ${(totalVal / 100000).toFixed(2)} L` : `₹ ${Math.round(totalVal).toLocaleString('en-IN')}`);
+    return { hrKitsSoldCount: totalSets, hrKitsOrderValueFormatted: fmt };
+  }, [bomList]);
+
   return (
     <div style={{
       padding: '0 4px',
@@ -1430,11 +1467,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 borderRadius: '8px',
                 border: '1px solid #BAE6FD'
               }}>
-                {userRole === 'MD' || userRole === 'Managing Director' ? 'MD COMMAND CENTER' : 'CEO & MD DASHBOARD'}
+                {userRole === 'HR' ? 'HR OPERATIONS & KIT COMMAND' : (userRole === 'MD' || userRole === 'Managing Director' ? 'MD COMMAND CENTER' : 'CEO & MD DASHBOARD')}
               </span>
             </div>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0', fontWeight: '500' }}>
-              Executive Leadership Command Center • Real-time enterprise overview across Sales, Purchase, Procurement, Accounts & Person-Wise Performance.
+              {userRole === 'HR'
+                ? 'Operations & Kit Analytics Center • Real-time enterprise tracking for MMS Kits Sold, Component Separation, BOM, Sales & Logistics.'
+                : 'Executive Leadership Command Center • Real-time enterprise overview across Sales, Purchase, Procurement, Accounts & Person-Wise Performance.'}
             </p>
           </div>
         </div>
@@ -1492,6 +1531,72 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
           </button>
         </div>
+      </div>
+
+      {/* Dynamic Sub-Tab Switcher Pills */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        overflowX: 'auto',
+        padding: '2px 0 6px 0',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none'
+      }}>
+        {[
+          ...(userRole === 'HR' ? [
+            { id: 'kit-analytics', label: 'Kit & Materials Analytics', icon: Boxes },
+            { id: 'overview', label: 'Operations Overview', icon: LayoutDashboard }
+          ] : [
+            { id: 'overview', label: 'Company Overview', icon: LayoutDashboard },
+            { id: 'kit-analytics', label: 'Kit & Materials Analytics', icon: Boxes }
+          ]),
+          { id: 'crm-dashboard', label: 'CRM & Leads', icon: Users },
+          { id: 'sales', label: 'Sales & Targets', icon: Target },
+          { id: 'production', label: 'BOM & Production', icon: Factory },
+          { id: 'dispatch', label: 'Dispatch', icon: Truck },
+          { id: 'inventory-dashboard', label: 'Inventory', icon: Warehouse },
+          { id: 'procurement', label: 'Procurement', icon: ShoppingCart },
+          ...(userRole !== 'HR' ? [
+            { id: 'accounts', label: 'Accounts & Finance', icon: Wallet }
+          ] : []),
+          { id: 'reports-dashboard', label: 'Reports', icon: BarChart3 }
+        ].map(tab => {
+          const isActive = (tab.id === 'overview' && (activeSubTab === 'overview' || activeSubTab === 'performance' || activeSubTab === 'action-center' || activeSubTab === 'alerts')) ||
+            (tab.id === 'accounts' && (activeSubTab === 'accounts' || activeSubTab === 'finance')) ||
+            (tab.id === 'sales' && (activeSubTab === 'sales' || activeSubTab === 'sales-targets')) ||
+            (tab.id === 'production' && (activeSubTab === 'production' || activeSubTab === 'bom-workflow')) ||
+            activeSubTab === tab.id;
+          const TabIcon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveSubTab(tab.id);
+                localStorage.setItem('controlroom_ceo_sub_tab', tab.id);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 14px',
+                borderRadius: '20px',
+                border: isActive ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                backgroundColor: isActive ? '#0E7490' : '#FFFFFF',
+                color: isActive ? '#FFFFFF' : '#475569',
+                fontSize: '11.5px',
+                fontWeight: isActive ? '800' : '600',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                boxShadow: isActive ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(0,0,0,0.03)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {TabIcon && <TabIcon size={13} color={isActive ? '#FFFFFF' : '#64748B'} />}
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ======================================================== */}
@@ -1561,20 +1666,35 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#FAF5FF',
               bottomPrefix: 'Total GST billed ',
               bottomHighlight: totalRevenueFormatted,
-              onClick: () => setActiveSubTab('accounts')
+              onClick: () => setActiveSubTab(userRole === 'HR' ? 'billing' : 'accounts')
             },
-            {
-              title: 'ACCOUNTS & COLLECTIONS',
-              value: `${totalCollectedFormatted} Done`,
-              trend: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Rate` : '0% Rate',
-              trendUp: totalCollectedNum > 0,
-              icon: Wallet,
-              iconColor: '#16A34A',
-              iconBg: '#F0FDF4',
-              bottomPrefix: 'Outstanding pending ',
-              bottomHighlight: outstandingOverdueFormatted,
-              onClick: () => setActiveSubTab('accounts')
-            }
+            ...(userRole === 'HR' ? [
+              {
+                title: 'MMS KITS SOLD',
+                value: `${hrKitsSoldCount} Kits Sold`,
+                trend: `${bomList.filter(b => b && !b.cancelled && String(b.status || '').toLowerCase() !== 'draft').length} Orders`,
+                trendUp: hrKitsSoldCount > 0,
+                icon: Boxes,
+                iconColor: '#0E7490',
+                iconBg: '#ECFEFF',
+                bottomPrefix: 'Kit order book ',
+                bottomHighlight: hrKitsOrderValueFormatted,
+                onClick: () => setActiveSubTab('kit-analytics')
+              }
+            ] : [
+              {
+                title: 'ACCOUNTS & COLLECTIONS',
+                value: `${totalCollectedFormatted} Done`,
+                trend: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Rate` : '0% Rate',
+                trendUp: totalCollectedNum > 0,
+                icon: Wallet,
+                iconColor: '#16A34A',
+                iconBg: '#F0FDF4',
+                bottomPrefix: 'Outstanding pending ',
+                bottomHighlight: outstandingOverdueFormatted,
+                onClick: () => setActiveSubTab('accounts')
+              }
+            ])
           ]} />
 
           {/* ROW A: APPROVAL QUEUE + REVENUE VS SPEND + CRITICAL ALERTS */}
@@ -2165,6 +2285,18 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           </div>
 
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* KIT & MATERIALS ANALYTICS (HR & OPERATIONS)             */}
+      {/* ======================================================== */}
+      {activeSubTab === 'kit-analytics' && (
+        <HrKitAnalyticsDashboard 
+          allBomList={allBomList}
+          selectedPeriod={selectedPeriod}
+          onPeriodChange={setSelectedPeriod}
+          matchesSelectedPeriod={matchesSelectedPeriod}
+        />
       )}
 
       {/* ======================================================== */}
@@ -3174,7 +3306,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {/* ======================================================== */}
       {/* CATEGORY 8: ACCOUNTS & FINANCE FOCUS TAB                 */}
       {/* ======================================================== */}
-      {(activeSubTab === 'accounts' || activeSubTab === 'finance') && (
+      {(activeSubTab === 'accounts' || activeSubTab === 'finance') && userRole !== 'HR' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
           {/* Accounts Top Ribbon (BUSINZ DESIGN SYSTEM) */}

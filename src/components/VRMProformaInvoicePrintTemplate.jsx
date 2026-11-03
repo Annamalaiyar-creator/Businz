@@ -135,9 +135,9 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   bankHeading: 'Account Details:',
   bankBeneficiary: 'VRM Structures India Private Limited',
   bankName: 'HDFC Bank',
-  bankAccountNo: '50200031629',
+  bankAccountNo: '50200031629272',
   bankIfsc: 'HDFC0007315',
-  bankBranch: 'VINAYAGAPURAM',
+  bankBranch: 'VINAYAGAPURAM BRANCH',
   bankAccountType: 'Current Account',
 
   // Terms & Conditions
@@ -859,6 +859,8 @@ export function VRMProformaInvoicePrintSheet({
     const updated = rawItems.map((item, i) => {
       if (i === rawIdx) {
         const next = { ...item, ...patch };
+        if (patch.uom !== undefined) next.unit = patch.uom;
+        if (patch.unit !== undefined) next.uom = patch.unit;
         if (patch.qty !== undefined || patch.rate !== undefined) {
           const q = parseFloat(patch.qty !== undefined ? patch.qty : next.qty) || 0;
           const r = parseFloat(patch.rate !== undefined ? patch.rate : next.rate) || 0;
@@ -887,6 +889,26 @@ export function VRMProformaInvoicePrintSheet({
     onUpdatePiData?.({ presetGroups: currentGroups });
   };
 
+  // Helper to normalize item UOM display (e.g. Numbers/no/pcs -> NOS, Meter/m -> MTR, Set -> SET)
+  const normalizeUomDisplay = (rawUom, fallback = 'NOS') => {
+    if (!rawUom) return fallback;
+    const s = String(rawUom).trim();
+    if (/^(set|sets)$/i.test(s)) return 'SET';
+    if (/^(mtr|meter|meters|m)$/i.test(s)) return 'MTR';
+    if (/^mt$/i.test(s)) return 'MT';
+    if (/^(nos|no|no's|numbers?)$/i.test(s)) return 'NOS';
+    if (/^(pcs|piece|pieces)$/i.test(s)) return 'PCS';
+    if (/^(kg|kgs|kilogram|kilograms)$/i.test(s)) return 'KG';
+    if (/^(sqm|sq\.m|sqmtr)$/i.test(s)) return 'SQM';
+    if (/^(box|boxes)$/i.test(s)) return 'BOX';
+    if (/^(pkt|packet|packets)$/i.test(s)) return 'PKT';
+    if (/^(pair|pairs)$/i.test(s)) return 'PAIR';
+    if (/^(lot|lots)$/i.test(s)) return 'LOT';
+    if (/^(ton|tons|tonne|tonnes)$/i.test(s)) return 'TON';
+    if (/^(kw|kwh)$/i.test(s)) return s.toUpperCase();
+    return s.toUpperCase();
+  };
+
   // Compute item totals
   const items = rawItems.map((it, idx) => {
     const q = parseFloat(it.qty) || 1;
@@ -900,6 +922,7 @@ export function VRMProformaInvoicePrintSheet({
     const grpMeta = grpId ? groupMetaMap[grpId] : null;
 
     let isFirstInGroup = false;
+    let isLastInGroup = false;
     let groupCount = 1;
     let groupItemsIndices = [];
     if (isPreset && grpId) {
@@ -916,6 +939,7 @@ export function VRMProformaInvoicePrintSheet({
         .map(o => o.i);
 
       isFirstInGroup = (groupItemsIndices[0] === idx);
+      isLastInGroup = (groupItemsIndices[groupItemsIndices.length - 1] === idx);
       groupCount = groupItemsIndices.length;
     }
 
@@ -936,6 +960,9 @@ export function VRMProformaInvoicePrintSheet({
     const gstAmt = isPreset ? 0 : (taxable * (gRate / 100));
     const lineTotal = taxable + gstAmt;
 
+    const rawUom = String(it.uom || it.unit || '').trim();
+    const cleanUom = normalizeUomDisplay(rawUom, 'NOS');
+
     return {
       rawIndex: idx,
       grpId,
@@ -948,7 +975,8 @@ export function VRMProformaInvoicePrintSheet({
       description: it.description || it.specifications || '',
       hsn: it.hsn || getHsnCode(it),
       qty: q,
-      uom: it.uom || it.unit || 'Nos',
+      uom: cleanUom,
+      unit: cleanUom,
       rate: r,
       discPct,
       taxable,
@@ -958,10 +986,11 @@ export function VRMProformaInvoicePrintSheet({
       isPresetItem: isPreset,
       presetGroupId: grpId,
       isFirstInGroup,
+      isLastInGroup,
       groupCount,
       presetName: grpMeta?.presetName || grpMeta?.name || '',
       setCount: grpMeta?.setCount || 1,
-      unit: grpMeta?.unit || 'Sets',
+      groupUnit: grpMeta?.unit || 'Sets',
       groupPrice: grpMeta?.kitPrice || grpMeta?.groupSubtotal || 0,
       groupTaxable: grpMeta?.groupSubtotal || grpMeta?.taxable || 0,
       groupGst: grpMeta?.groupGst || 0,
@@ -1232,51 +1261,207 @@ export function VRMProformaInvoicePrintSheet({
               const halfRate = (it.gRate / 2).toFixed(1).replace(/\.0$/, '');
               const halfAmt = it.gstAmt / 2;
               return (
-                <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                  <td style={{ padding: '8px 10px', verticalAlign: 'top' }}>
-                    <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px' }}>{it.name}</div>
-                    {it.description ? (
-                      <div style={{ color: '#64748B', fontSize: '8.5px', marginTop: '1px', lineHeight: '1.3' }}>
-                        {it.description}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'top', color: '#0F172A' }}>
-                    {it.qty} {it.unit || it.uom || 'Nos'}
-                  </td>
-                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
-                    {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
-                    {it.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  {isIntra ? (
-                    <>
-                      <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
-                        <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
-                        <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
-                          {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
+                <React.Fragment key={idx}>
+                  {it.isPresetItem && it.isFirstInGroup && (
+                    <tr style={{ backgroundColor: '#F0F7FF', borderTop: '2px solid #0B3B60', borderBottom: '1px solid #CBD5E1' }}>
+                      <td colSpan={isIntra ? 7 : 6} style={{ padding: '6px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '10px' }}>
+                        {it.presetName || 'Solar Structure MMS Kit'}
                       </td>
-                      <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
-                        <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
-                        <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
-                          {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    <td style={{ padding: '8px 6px', textAlign: 'right', verticalAlign: 'top' }}>
-                      <div style={{ color: '#475569', fontSize: '8.5px' }}>{it.gRate}%</div>
-                      <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
-                        {it.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </td>
+                    </tr>
                   )}
-                  <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
-                    {it.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
+                  <tr style={{ backgroundColor: it.isPresetItem ? '#FCFDFE' : 'transparent' }}>
+                    <td style={{
+                      padding: '7px 10px',
+                      verticalAlign: 'top',
+                      borderBottom: (it.isPresetItem && it.isLastInGroup) ? '1px solid #CBD5E1' : '1px solid #E2E8F0'
+                    }}>
+                      <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px' }}>{it.name}</div>
+                      {it.description ? (
+                        <div style={{ color: '#64748B', fontSize: '8.5px', marginTop: '1px', lineHeight: '1.3' }}>
+                          {it.description}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{
+                      padding: '7px 6px',
+                      textAlign: 'center',
+                      verticalAlign: 'top',
+                      color: '#0F172A',
+                      borderBottom: (it.isPresetItem && it.isLastInGroup) ? '1px solid #CBD5E1' : '1px solid #E2E8F0'
+                    }}>
+                      {it.qty} {it.uom || 'NOS'}
+                    </td>
+
+                    {/* RATE COLUMN: Merged vertically in middle for Preset Kit */}
+                    {it.isPresetItem ? (
+                      it.isFirstInGroup ? (
+                        <td
+                          rowSpan={it.groupCount}
+                          style={{
+                            padding: '8px 8px',
+                            textAlign: 'right',
+                            verticalAlign: 'middle',
+                            backgroundColor: '#F8FAFC',
+                            fontWeight: '700',
+                            color: '#0F172A',
+                            borderLeft: '1px solid #E2E8F0',
+                            borderRight: '1px solid #E2E8F0',
+                            borderBottom: '1px solid #CBD5E1'
+                          }}
+                        >
+                          <div>{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          <div style={{ fontSize: '7.5px', color: '#64748B', fontWeight: '500', marginTop: '1px' }}>
+                            {it.groupUnit === 'kW' ? 'per kW' : 'per set'}
+                          </div>
+                        </td>
+                      ) : null
+                    ) : (
+                      <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A', borderBottom: '1px solid #E2E8F0' }}>
+                        {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    )}
+
+                    {/* TAXABLE COLUMN: Merged vertically in middle for Preset Kit */}
+                    {it.isPresetItem ? (
+                      it.isFirstInGroup ? (
+                        <td
+                          rowSpan={it.groupCount}
+                          style={{
+                            padding: '8px 8px',
+                            textAlign: 'right',
+                            verticalAlign: 'middle',
+                            backgroundColor: '#F8FAFC',
+                            fontWeight: '700',
+                            color: '#0F172A',
+                            borderRight: '1px solid #E2E8F0',
+                            borderBottom: '1px solid #CBD5E1'
+                          }}
+                        >
+                          {Number(it.groupTaxable || it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      ) : null
+                    ) : (
+                      <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A', borderBottom: '1px solid #E2E8F0' }}>
+                        {it.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    )}
+
+                    {/* TAX COLUMNS: Merged vertically in middle for Preset Kit */}
+                    {isIntra ? (
+                      it.isPresetItem ? (
+                        it.isFirstInGroup ? (
+                          <>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{
+                                padding: '8px 6px',
+                                textAlign: 'right',
+                                verticalAlign: 'middle',
+                                backgroundColor: '#F8FAFC',
+                                borderRight: '1px solid #E2E8F0',
+                                borderBottom: '1px solid #CBD5E1'
+                              }}
+                            >
+                              <div style={{ color: '#475569', fontSize: '8.5px' }}>
+                                {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
+                              </div>
+                              <div style={{ color: '#0F172A', fontWeight: '600', marginTop: '1px' }}>
+                                {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </td>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{
+                                padding: '8px 6px',
+                                textAlign: 'right',
+                                verticalAlign: 'middle',
+                                backgroundColor: '#F8FAFC',
+                                borderRight: '1px solid #E2E8F0',
+                                borderBottom: '1px solid #CBD5E1'
+                              }}
+                            >
+                              <div style={{ color: '#475569', fontSize: '8.5px' }}>
+                                {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
+                              </div>
+                              <div style={{ color: '#0F172A', fontWeight: '600', marginTop: '1px' }}>
+                                {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </td>
+                          </>
+                        ) : null
+                      ) : (
+                        <>
+                          <td style={{ padding: '7px 6px', textAlign: 'right', verticalAlign: 'top', borderBottom: '1px solid #E2E8F0' }}>
+                            <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
+                            <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                              {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          </td>
+                          <td style={{ padding: '7px 6px', textAlign: 'right', verticalAlign: 'top', borderBottom: '1px solid #E2E8F0' }}>
+                            <div style={{ color: '#475569', fontSize: '8.5px' }}>{halfRate}%</div>
+                            <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                              {halfAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          </td>
+                        </>
+                      )
+                    ) : (
+                      it.isPresetItem ? (
+                        it.isFirstInGroup ? (
+                          <td
+                            rowSpan={it.groupCount}
+                            style={{
+                              padding: '8px 6px',
+                              textAlign: 'right',
+                              verticalAlign: 'middle',
+                              backgroundColor: '#F8FAFC',
+                              borderRight: '1px solid #E2E8F0',
+                              borderBottom: '1px solid #CBD5E1'
+                            }}
+                          >
+                            <div style={{ color: '#475569', fontSize: '8.5px' }}>
+                              {it.gRate ? `${it.gRate}%` : '18%'}
+                            </div>
+                            <div style={{ color: '#0F172A', fontWeight: '600', marginTop: '1px' }}>
+                              {(it.groupGst || (it.groupTaxable * (it.gRate / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          </td>
+                        ) : null
+                      ) : (
+                        <td style={{ padding: '7px 6px', textAlign: 'right', verticalAlign: 'top', borderBottom: '1px solid #E2E8F0' }}>
+                          <div style={{ color: '#475569', fontSize: '8.5px' }}>{it.gRate}%</div>
+                          <div style={{ color: '#0F172A', fontWeight: '500', marginTop: '1px' }}>
+                            {it.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </td>
+                      )
+                    )}
+
+                    {/* INCL. GST / TOTAL COLUMN: Merged vertically in middle for Preset Kit */}
+                    {it.isPresetItem ? (
+                      it.isFirstInGroup ? (
+                        <td
+                          rowSpan={it.groupCount}
+                          style={{
+                            padding: '8px 8px',
+                            textAlign: 'right',
+                            verticalAlign: 'middle',
+                            backgroundColor: '#F8FAFC',
+                            fontWeight: '800',
+                            color: '#0F172A',
+                            borderBottom: '1px solid #CBD5E1'
+                          }}
+                        >
+                          {Number(it.groupLineTotal || ((it.groupTaxable || 0) + (it.groupGst || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      ) : null
+                    ) : (
+                      <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A', borderBottom: '1px solid #E2E8F0' }}>
+                        {it.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    )}
+                  </tr>
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -1352,20 +1537,19 @@ export function VRMProformaInvoicePrintSheet({
               marginBottom: '14px'
             }}>
               <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
-                BANK DETAILS
+                {cfg.bankHeading || 'Account Details:'}
               </div>
-              <div style={{ fontSize: '9px', color: '#475569' }}>Beneficiary:</div>
-              <div style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
-                VRM Structures India Private Limited
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                Beneficiary: <strong>{cfg.bankBeneficiary || 'VRM Structures India Private Limited'}</strong>
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
+                A/c No: <strong>{cfg.bankAccountNo || '50200031629272'}</strong>
               </div>
               <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
                 Bank: <strong>{cfg.bankName || 'HDFC Bank'}</strong>
               </div>
               <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
-                Branch: <strong>{cfg.bankBranch || 'VINAYAGAPURAM'}</strong>
-              </div>
-              <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
-                A/c No.: <strong>{cfg.bankAccountNo || '50200031629'}</strong>
+                Branch: <strong>{cfg.bankBranch || 'VINAYAGAPURAM BRANCH'}</strong>
               </div>
               <div style={{ fontSize: '9.5px', color: '#0F172A', lineHeight: '1.45' }}>
                 IFSC: <strong>{cfg.bankIfsc || 'HDFC0007315'}</strong>
@@ -2382,7 +2566,6 @@ export function VRMProformaInvoicePrintSheet({
                                     if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
                                   }}
                                 />
-                                {' '}({it.unit === 'kW' ? `Total Capacity: ${it.setCount || 1} kW` : `Total Quantity: ${it.setCount || 1} Set${(it.setCount || 1) > 1 ? 's' : ''}`} — {it.groupCount} Components)
                               </span>
                             </div>
                           </td>
@@ -2456,9 +2639,9 @@ export function VRMProformaInvoicePrintSheet({
                             </div>
                             <div style={{ fontSize: '8px', color: '#64748B' }}>
                               <EditableText
-                                value={it.uom || "no's"}
+                                value={it.uom || it.unit || "NOS"}
                                 fallback="NOS"
-                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { uom: v })}
+                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { uom: v, unit: v })}
                               />
                             </div>
                           </td>
@@ -2493,7 +2676,7 @@ export function VRMProformaInvoicePrintSheet({
                                   />
                                 </div>
                                 <div style={{ fontSize: '8px', color: '#64748B', fontWeight: '500', marginTop: '2px' }}>
-                                  {it.unit === 'kW' ? 'per kW' : 'per set'}
+                                  {it.groupUnit === 'kW' ? 'per kW' : 'per set'}
                                 </div>
                               </td>
                             ) : null
@@ -2727,8 +2910,8 @@ export function VRMProformaInvoicePrintSheet({
               <div style={{ padding: '8px 14px', borderBottom: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: '9px', fontWeight: '700', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
                   <EditableText
-                    value={cfg.bankHeading || 'Bank & Payment Details'}
-                    fallback="Bank & Payment Details"
+                    value={cfg.bankHeading || 'Account Details:'}
+                    fallback="Account Details:"
                     onSave={(v) => onUpdateSetting?.({ bankHeading: v })}
                   />
                 </div>
@@ -2739,7 +2922,7 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>A/c No: </span>
-                    <EditableText value={cfg.bankAccountNo || '50200031629'} fallback="50200031629" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
+                    <EditableText value={cfg.bankAccountNo || '50200031629272'} fallback="50200031629272" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>Bank: </span>
@@ -2747,7 +2930,7 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>Branch: </span>
-                    <EditableText value={cfg.bankBranch || 'VINAYAGAPURAM'} fallback="VINAYAGAPURAM" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
+                    <EditableText value={cfg.bankBranch || 'VINAYAGAPURAM BRANCH'} fallback="VINAYAGAPURAM BRANCH" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
                     <span style={{ color: '#0F172A', fontWeight: '800' }}>IFSC: </span>
@@ -4030,10 +4213,12 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         if (parsed.companyTagline === 'Engineered Solar Mounting Structures & Solutions') parsed.companyTagline = '';
         if (parsed.companyCin === 'U28112TN2020PTC135489') parsed.companyCin = '';
         if (parsed.signatureMode === 'vector' && !parsed.customSignatureUrl) parsed.signatureMode = 'none';
-        if (parsed.bankIfsc === 'HDFC0000574' || parsed.bankIfsc === 'HDFC0001234') parsed.bankIfsc = 'HDFC0007315';
-        if (parsed.bankBranch === 'Kodambakkam, Chennai' || parsed.bankBranch === 'Kodambakkam' || parsed.bankBranch?.includes('Ambattur') || parsed.bankBranch === 'Vinayagapuram Branch') parsed.bankBranch = 'VINAYAGAPURAM';
-        if (parsed.bankAccountNo === '50200088912456' || parsed.bankAccountNo === '50200031629272') parsed.bankAccountNo = '50200031629';
-        if (parsed.bankName === 'HDFC Bank Ltd.' || parsed.bankName === 'HDFC Bank Ltd') parsed.bankName = 'HDFC Bank';
+        if (parsed.bankIfsc === 'HDFC0000574' || parsed.bankIfsc === 'HDFC0001234' || !parsed.bankIfsc) parsed.bankIfsc = 'HDFC0007315';
+        if (parsed.bankBranch === 'Kodambakkam, Chennai' || parsed.bankBranch === 'Kodambakkam' || parsed.bankBranch?.includes('Ambattur') || parsed.bankBranch === 'Vinayagapuram Branch' || parsed.bankBranch === 'VINAYAGAPURAM' || !parsed.bankBranch) parsed.bankBranch = 'VINAYAGAPURAM BRANCH';
+        if (parsed.bankAccountNo === '50200088912456' || parsed.bankAccountNo === '50200031629' || !parsed.bankAccountNo) parsed.bankAccountNo = '50200031629272';
+        if (parsed.bankName === 'HDFC Bank Ltd.' || parsed.bankName === 'HDFC Bank Ltd' || !parsed.bankName) parsed.bankName = 'HDFC Bank';
+        if (parsed.bankBeneficiary === 'VRM Structures India Pvt Ltd' || !parsed.bankBeneficiary) parsed.bankBeneficiary = 'VRM Structures India Private Limited';
+        if (!parsed.bankHeading || parsed.bankHeading === 'BANK DETAILS' || parsed.bankHeading === 'Bank & Payment Details') parsed.bankHeading = 'Account Details:';
         parsed.showCompanyName = true;
         parsed.showCompanyTagline = false;
         parsed.companyUdyam = '';
@@ -4046,6 +4231,12 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         }
         initial = { ...initial, ...parsed };
       }
+      initial.bankBeneficiary = 'VRM Structures India Private Limited';
+      initial.bankAccountNo = '50200031629272';
+      initial.bankName = 'HDFC Bank';
+      initial.bankBranch = 'VINAYAGAPURAM BRANCH';
+      initial.bankIfsc = 'HDFC0007315';
+      initial.bankHeading = 'Account Details:';
       initial.companyName = initial.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED';
       initial.showCompanyName = true;
       if (!initial.accentColor || initial.accentColor === '#0E7490') {
