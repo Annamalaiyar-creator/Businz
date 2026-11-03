@@ -1064,6 +1064,7 @@ export function VRMProformaInvoicePrintSheet({
   const hiddenElements = ALL_ELEMENTS.filter(item => cfg[item.key] === false);
 
   const renderRedesignedProformaInvoice = () => {
+    const phoneVal = (pi.phone || pi.contactPhone || pi.customerPhone || pi.mobileNumber || pi.mobile || '').toString().replace(/[()]/g, '').trim();
     const roundOffVal = Math.round(grandTotal) - grandTotal;
     const hasRoundOff = Math.abs(roundOffVal) > 0.001;
     const repName = pi.salesPerson || pi.salesperson || pi.sales_person_name || pi.createdByName || 'Sanjai Kumar';
