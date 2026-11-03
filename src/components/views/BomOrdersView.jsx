@@ -939,21 +939,25 @@ export default function BomOrdersView(props) {
     const normA = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanCurNorm = normA(curName);
 
-    // Code matching helper: exact match or normalized matching (e.g. SE-004 vs SE-VRM004 vs EMP-SE-004)
-    const isCodeMatch = (testCode) => {
-      if (!testCode) return false;
-      const tc = String(testCode).trim().toUpperCase();
-      if (!tc) return false;
-      if (userAliases.has(tc)) return true;
-      if (curCode && (tc === curCode || tc.includes(curCode) || curCode.includes(tc))) return true;
+    // Helper to resolve the unambiguous salesperson owner by Name or Email
+    const resolveBomOwner = (b) => {
+      const spName = String(
+        b.salesPerson || b.createdBy || b.convertedBy || 
+        b.sales_person || b.created_by || b.converted_by || ''
+      ).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+      const spEmail = String(b.salesPersonEmail || b.email || b.creatorEmail || '').trim().toLowerCase();
 
-      // Extract numeric ID and dept prefix (e.g., 'SE' and '4')
-      if (curCode && curCode.includes('SE')) {
-        const curDigits = curCode.replace(/\D/g, '').replace(/^0+/, '');
-        const testDigits = tc.replace(/\D/g, '').replace(/^0+/, '');
-        if (tc.includes('SE') && curDigits && curDigits === testDigits) return true;
-      }
-      return false;
+      if (spEmail.includes('sales.s1@') || spName.includes('manoj')) return 'SE-001';
+      if (spEmail.includes('sanjaikumar') || spName.includes('sanjai')) return 'SE-002';
+      if (spEmail.includes('vasanthkumar') || (spName.includes('vasanth') && !spName.includes('support'))) return 'SE-003';
+      if (spEmail.includes('sales.s4@') || spName.includes('mohith')) return 'SE-004';
+      if (spEmail.includes('sales.s3@') || spName.includes('shanthi')) return 'SE-005';
+      if (spEmail.includes('dhanasekar') || spName.includes('dhana')) return 'SE-006';
+      if (spEmail.includes('sales.s2@') || spName.includes('prashanth') || spName.includes('prasanth')) return 'SE-007';
+      if (spEmail.includes('projectsales') || spName.includes('pavithra')) return 'SE-008';
+      if (spEmail.includes('mms@') || spName.includes('kalaiselvi')) return 'SE-009';
+
+      return null;
     };
 
     return rawList.filter(b => {
@@ -971,30 +975,19 @@ export default function BomOrdersView(props) {
         if (sPi === tPi) return true;
       }
 
-      // 1. Check all possible salesperson / creator / converter codes on the BOM
-      const bomCodes = [
-        b.salesPersonCode,
-        b.createdById,
-        b.convertedById,
-        b.sales_person_code,
-        b.created_by_id,
-        b.converted_by_id,
-        b._extra_data?.salesPersonCode,
-        b._extra_data?.createdById,
-        b._extra_data?.convertedById
-      ].filter(Boolean);
-
-      if (bomCodes.some(isCodeMatch)) {
-        return true;
+      // 0. Primary check: Unambiguous salesperson owner resolution by Name or Email
+      const resolvedOwnerCode = resolveBomOwner(b);
+      if (resolvedOwnerCode) {
+        return curCode === resolvedOwnerCode;
       }
 
-      // 2. Exact or normalized email match
+      // 1. Exact Email match
       const bomEmails = [b.salesPersonEmail, b.email, b.creatorEmail].filter(Boolean).map(e => String(e).trim().toLowerCase());
-      if (curEmail && bomEmails.some(e => e === curEmail || userAliases.has(e))) {
+      if (curEmail && bomEmails.some(e => e === curEmail)) {
         return true;
       }
 
-      // 3. Name matching across salesperson / creator / converter
+      // 2. Exact Name match
       const bomNames = [
         b.salesPerson,
         b.createdBy,
@@ -1004,33 +997,37 @@ export default function BomOrdersView(props) {
         b.converted_by
       ].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
 
-      if (bomNames.some(n => {
-        if (userAliases.has(n)) return true;
-        if (cleanCurNorm) {
-          const normN = normA(n);
-          if (normN === cleanCurNorm || normN.includes(cleanCurNorm) || cleanCurNorm.includes(normN)) return true;
-        }
-        return false;
-      })) {
+      if (cleanCurNorm && bomNames.some(n => normA(n) === cleanCurNorm)) {
         return true;
       }
 
-      // 4. Source PI ownership check: If source PI belongs to this sales user, include this BOM
+      // 3. Exact Code match fallback (strictly exact, NO digits substring matching)
+      const bomCodes = [
+        b.salesPersonCode,
+        b.createdById,
+        b.convertedById,
+        b.sales_person_code,
+        b.created_by_id,
+        b.converted_by_id
+      ].filter(Boolean).map(c => String(c).trim().toUpperCase());
+
+      if (curCode && bomCodes.includes(curCode)) {
+        return true;
+      }
+
+      // 4. Source PI ownership check
       const sPiNo = b.sourcePiNo || b.piNo;
       if (sPiNo) {
         try {
-          const piStore = JSON.parse(localStorage.getItem('controlroom_pi_store') || '[]');
-          const targetPi = piStore.find(p => {
+          const rawPis = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_pi_store');
+          const piStore = rawPis ? JSON.parse(rawPis) : [];
+          const targetPi = (piStore || []).find(p => {
             const pNo = String(p.piNo || p.id || '').trim().toLowerCase();
             return pNo === String(sPiNo).trim().toLowerCase();
           });
           if (targetPi) {
-            const piCodes = [targetPi.salesPersonCode, targetPi.createdById, targetPi.sales_person_code, targetPi.created_by_id, targetPi.assignedSalespersonCode, targetPi.assignedToCode, targetPi.assignedToId].filter(Boolean);
-            if (piCodes.some(isCodeMatch)) return true;
-            const piEmails = [targetPi.salesPersonEmail, targetPi.email].filter(Boolean).map(e => String(e).trim().toLowerCase());
-            if (curEmail && piEmails.some(e => e === curEmail || userAliases.has(e))) return true;
-            const piNames = [targetPi.salesPerson, targetPi.createdBy, targetPi.salesperson, targetPi.assignedSalesperson, targetPi.assignedToName].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
-            if (piNames.some(n => userAliases.has(n) || (cleanCurNorm && normA(n) === cleanCurNorm))) return true;
+            const piOwner = resolveBomOwner(targetPi);
+            if (piOwner) return curCode === piOwner;
           }
         } catch (_) {}
       }

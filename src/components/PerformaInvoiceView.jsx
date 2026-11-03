@@ -569,52 +569,61 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     // If no specific employee profile is configured, show all records safely
     if (!curCode && !curName && !curEmail) return raw;
 
+    // Helper to resolve the unambiguous salesperson owner by Name or Email
+    const resolvePiOwner = (pi) => {
+      const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
+
+      if (spEmail.includes('sales.s1@') || spName.includes('manoj')) return 'SE-001';
+      if (spEmail.includes('sanjaikumar') || spName.includes('sanjai')) return 'SE-002';
+      if (spEmail.includes('vasanthkumar') || (spName.includes('vasanth') && !spName.includes('support'))) return 'SE-003';
+      if (spEmail.includes('sales.s4@') || spName.includes('mohith')) return 'SE-004';
+      if (spEmail.includes('sales.s3@') || spName.includes('shanthi')) return 'SE-005';
+      if (spEmail.includes('dhanasekar') || spName.includes('dhana')) return 'SE-006';
+      if (spEmail.includes('sales.s2@') || spName.includes('prashanth') || spName.includes('prasanth')) return 'SE-007';
+      if (spEmail.includes('projectsales') || spName.includes('pavithra')) return 'SE-008';
+      if (spEmail.includes('mms@') || spName.includes('kalaiselvi')) return 'SE-009';
+
+      return null;
+    };
+
     return raw.filter(pi => {
       if (!pi) return false;
-      const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
       const assignedCode = String(pi.assignedSalespersonCode || pi.assignedToCode || pi.assignedToId || '').trim().toUpperCase();
-      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
-      const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
       const assignedName = String(pi.assignedSalesperson || pi.assignedToName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
 
-      // -1. Strict Instant Real-Time Safeguard: If PI is explicitly assigned to another salesperson, it must immediately be excluded
-      const isAssignedToOther = assignedCode && assignedCode !== curCode && !(
-        (curCode === 'SE-1000' && assignedCode === 'SE-001') ||
-        (curCode === 'SE-001' && assignedCode === 'SE-1000')
-      );
-      if (isAssignedToOther) {
+      // -1. If PI is explicitly assigned to another salesperson, exclude
+      if (assignedCode && assignedCode !== curCode) {
         return false;
       }
+      if (assignedName && curName && assignedName !== curName && !assignedName.includes(curName) && !curName.includes(assignedName)) {
+        if (assignedCode) return false;
+      }
 
-      // 0. Direct match on assigned salesperson code or assigned name (from Tech Support or Management assignment)
-      if (curCode && assignedCode && (assignedCode === curCode || (curCode === 'SE-1000' && assignedCode === 'SE-001') || (curCode === 'SE-001' && assignedCode === 'SE-1000'))) {
+      // 0. Direct match on assigned salesperson code or assigned name
+      if (curCode && assignedCode && assignedCode === curCode) {
         return true;
       }
       if (curName && assignedName && (curName === assignedName || assignedName.includes(curName) || curName.includes(assignedName))) {
         return true;
       }
 
-      // 1. Strict EMP Code matching
-      if (curCode && spCode && (spCode === curCode || (curCode === 'SE-1000' && spCode === 'SE-001') || (curCode === 'SE-001' && spCode === 'SE-1000'))) {
-        return true;
+      // 1. Resolve owner by person's Name or Email
+      const resolvedOwnerCode = resolvePiOwner(pi);
+      if (resolvedOwnerCode) {
+        return curCode === resolvedOwnerCode;
       }
 
-      // 2. Strict Email matching
+      // 2. Strict Email matching fallback
+      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
       if (curEmail && spEmail && spEmail === curEmail) {
         return true;
       }
 
-      // 3. Name matching when employee code is unassigned or generic fallback
-      const isGenericCode = !spCode || spCode === 'SE-1000' || spCode === 'SE-VRM001' || spCode === 'SE-DEFAULT' || spCode === 'UNASSIGNED';
-      if (curName && spName && (curName === spName || spName.includes(curName) || curName.includes(spName))) {
-        if (isGenericCode || (curCode && spCode === curCode)) {
-          return true;
-        }
-      }
-
-      // If record belongs to a distinct and different salesperson code and not assigned to this user, exclude
-      if (curCode && spCode && !isGenericCode && spCode !== curCode && assignedCode !== curCode) {
-        return false;
+      // 3. Strict Code matching fallback
+      const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
+      if (curCode && spCode && spCode === curCode) {
+        return true;
       }
 
       return false;

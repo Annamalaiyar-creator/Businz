@@ -477,23 +477,40 @@ async function runMigration() {
   // Helper to migrate sales documents
   const SALES_MAPPINGS = TEAM_MAPPINGS.filter(m => m.role === 'Sales');
 
+  function findSalesMappingForDoc(doc) {
+    if (!doc) return null;
+    const docEmail = norm(doc.salesPersonEmail || doc.createdByEmail || doc.email || doc.creatorEmail);
+    const docName = norm(doc.salesPerson || doc.salesperson || doc.createdBy || doc.convertedBy || doc.sales_person);
+
+    // 1. Unambiguous match by Email first (highest fidelity)
+    if (docEmail) {
+      const matchByEmail = SALES_MAPPINGS.find(m => 
+        (m.email && norm(m.email) === docEmail) ||
+        (m.matchEmails && m.matchEmails.some(me => norm(me) === docEmail))
+      );
+      if (matchByEmail) return matchByEmail;
+    }
+
+    // 2. Unambiguous match by Name second
+    if (docName) {
+      const matchByName = SALES_MAPPINGS.find(m => {
+        if (m.name && (norm(m.name) === docName || docName.includes(norm(m.name)) || norm(m.name).includes(docName))) return true;
+        if (m.matchNames && m.matchNames.some(mn => docName.includes(norm(mn)) || norm(mn).includes(docName))) return true;
+        return false;
+      });
+      if (matchByName) return matchByName;
+    }
+
+    // NOTE: Strictly avoid fallback to swapped employee codes (e.g. SE-001/SE-002/SE-004) to prevent cross-contamination
+    return null;
+  }
+
   function migrateDocuments(docList, storeName) {
     if (!Array.isArray(docList)) return { list: docList, count: 0 };
     let count = 0;
     const updated = docList.map(doc => {
       if (!doc) return doc;
-      const docEmail = norm(doc.salesPersonEmail || doc.createdByEmail || doc.email);
-      const docName = norm(doc.salesPerson || doc.salesperson || doc.createdBy || doc.convertedBy);
-      const docCode = String(doc.salesPersonCode || doc.createdById || doc.convertedById || '').trim().toUpperCase();
-
-      // Find matching salesperson
-      const mapping = SALES_MAPPINGS.find(m => {
-        if (docEmail && m.email && norm(m.email) === docEmail) return true;
-        if (docName && m.name && norm(m.name) === docName) return true;
-        if (docCode && m.aliases && m.aliases.map(a => a.toUpperCase()).includes(docCode)) return true;
-        return false;
-      });
-
+      const mapping = findSalesMappingForDoc(doc);
       if (mapping) {
         count++;
         return {
@@ -543,6 +560,42 @@ async function runMigration() {
   const oppRes = migrateDocuments(opps, 'crm_opportunities');
   await saveStore('crm_opportunities', oppRes.list);
   console.log(`  ✓ CRM: ${qRes.count} quotes, ${leadRes.count} leads, ${oppRes.count} opportunities re-keyed.`);
+
+  // 5. DIRECT POSTGRESQL TABLE MIGRATION FOR PROFORMA_INVOICES & BOM_ORDERS
+  if (hasPg && client) {
+    console.log('\n--- 5. Migrating PostgreSQL public.proforma_invoices & public.bom_orders ---');
+    for (const m of SALES_MAPPINGS) {
+      try {
+        const nameChecks = (m.matchNames || [m.name]).map(n => `LOWER(TRIM(COALESCE(sales_person, created_by, ''))) ILIKE '%${n.trim().toLowerCase()}%'`).join(' OR ');
+        const emailChecks = (m.matchEmails || [m.email]).filter(Boolean).map(e => `LOWER(TRIM(COALESCE(sales_person_email, email, ''))) ILIKE '%${e.trim().toLowerCase()}%'`).join(' OR ');
+        const fullCondition = emailChecks ? `(${nameChecks}) OR (${emailChecks})` : `(${nameChecks})`;
+
+        const piRes = await client.query(`
+          UPDATE public.proforma_invoices
+          SET sales_person_code = $1,
+              sales_person = $2,
+              sales_person_email = COALESCE(NULLIF(sales_person_email, ''), $3),
+              created_by_id = CASE WHEN LOWER(TRIM(COALESCE(created_by, ''))) ILIKE '%${m.matchNames[0]}%' THEN $1 ELSE created_by_id END,
+              updated_at = NOW()
+          WHERE ${fullCondition}
+        `, [m.newCode, m.name, m.email]);
+
+        const bomRes = await client.query(`
+          UPDATE public.bom_orders
+          SET sales_person_code = $1,
+              sales_person = $2,
+              sales_person_email = COALESCE(NULLIF(sales_person_email, ''), $3),
+              created_by_id = CASE WHEN LOWER(TRIM(COALESCE(created_by, ''))) ILIKE '%${m.matchNames[0]}%' THEN $1 ELSE created_by_id END,
+              updated_at = NOW()
+          WHERE ${fullCondition}
+        `, [m.newCode, m.name, m.email]);
+
+        console.log(`  ✓ Relational PG: ${m.name} (${m.newCode}) updated ${piRes.rowCount} PIs and ${bomRes.rowCount} BOMs.`);
+      } catch (err) {
+        console.warn(`  ⚠️ Error updating ${m.name} in PG:`, err.message);
+      }
+    }
+  }
 
   if (client) client.release();
   await pool.end().catch(() => {});
