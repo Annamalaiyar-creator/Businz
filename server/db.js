@@ -668,13 +668,16 @@ export async function initPostgresDatabase() {
         } catch (_) {}
       }
 
-        DO $$
-        BEGIN
-          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quotations') THEN
-            ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS lead_id TEXT;
-          END IF;
-        END $$;
-      `);
+      try {
+        await client.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quotations') THEN
+              ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS lead_id TEXT;
+            END IF;
+          END $$;
+        `);
+      } catch (_) {}
       console.log('✅ [PostgreSQL] Ensured public.leads columns (location, etc.) and CRM tables exist.');
     } catch (leadsErr) {
       console.warn('[PostgreSQL Leads Schema Notice]:', leadsErr.message);
