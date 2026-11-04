@@ -2063,6 +2063,7 @@ table td {
     width: 100% !important;
     max-width: 100vw !important;
     box-sizing: border-box !important;
+    overflow-x: hidden !important;
   }
   
   .app-header-responsive {
@@ -2226,6 +2227,7 @@ table td {
 
   .content-pane {
     padding: 6px 6px 30px 6px !important;
+    overflow-x: hidden !important;
   }
 }
 
