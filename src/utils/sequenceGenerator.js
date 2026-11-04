@@ -170,3 +170,48 @@ export const PO_CODE_REGEX = /^(?:VRM-PO-\d{4}-\d+|PO-\d+)$/i;
  * Helper to match any PI code (both new VRM-PI-YYYY-XX and legacy PI-XXXXX)
  */
 export const PI_CODE_REGEX = /^(?:VRM-PI-\d{4}-\d+|PI-\d+|VRMS\/PI\/\d{2}-\d{2}\/\d+)$/i;
+
+/**
+ * Universal BOM Sequence Number Parser.
+ * Accurately extracts the numeric order/sequence from any BOM code format:
+ * - VRM-BOM-2026-999 -> 999
+ * - VRM-BOM-2026-22  -> 22
+ * - BOM-2026-999     -> 999
+ * - BOM-999          -> 999
+ * - BOM-22           -> 22
+ * - VRM-BOM-26-27-519-> 519
+ * - VRM-INV-2026-999 -> 999
+ */
+export function parseBomSequenceNumber(code) {
+  if (!code) return 0;
+  const str = String(code).trim();
+  const terminalMatch = str.match(/[-/_](\d+)$/);
+  if (terminalMatch) return parseInt(terminalMatch[1], 10);
+  
+  const bomMatch = str.match(/BOM.*?(\d+)(?!.*\d)/i);
+  if (bomMatch) return parseInt(bomMatch[1], 10);
+
+  const allNums = str.match(/\d+/g);
+  if (allNums && allNums.length > 0) {
+    return parseInt(allNums[allNums.length - 1], 10);
+  }
+  return 0;
+}
+
+/**
+ * Comparator to sort BOM records in descending order (highest BOM number first, e.g. 999, 998, 997...).
+ * Ensures newly created BOMs automatically appear at the very top.
+ */
+export function compareBomDescending(a, b) {
+  const codeA = a?.bomCode || a?.code || a?.poNo || a?.invNo || a?.id || '';
+  const codeB = b?.bomCode || b?.code || b?.poNo || b?.invNo || b?.id || '';
+  const seqA = parseBomSequenceNumber(codeA);
+  const seqB = parseBomSequenceNumber(codeB);
+  if (seqA !== seqB) {
+    return seqB - seqA; // Descending
+  }
+  const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
+  const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
+  return dateB - dateA;
+}
+

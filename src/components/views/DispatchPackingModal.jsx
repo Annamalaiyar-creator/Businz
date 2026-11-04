@@ -206,15 +206,36 @@ export default function DispatchPackingModal({
   const dispatchCameraVideoRef = useRef(null);
   const dispatchCameraCanvasRef = useRef(null);
 
-  // Dynamic mobile viewport detection
-  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  // Dynamic mobile viewport detection using matchMedia
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+  });
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 768);
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia ? window.matchMedia('(max-width: 768px)') : null;
+    const updateMobile = () => {
+      setIsMobile((mediaQuery && mediaQuery.matches) || window.innerWidth <= 768);
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    if (mediaQuery) {
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', updateMobile);
+      } else if (mediaQuery.addListener) {
+        mediaQuery.addListener(updateMobile);
+      }
+    }
+    window.addEventListener('resize', updateMobile);
+    return () => {
+      if (mediaQuery) {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener('change', updateMobile);
+        } else if (mediaQuery.removeListener) {
+          mediaQuery.removeListener(updateMobile);
+        }
+      }
+      window.removeEventListener('resize', updateMobile);
+    };
   }, []);
 
   // Safety auto-reset so buttons are never permanently stuck disabled due to unhandled network/file errors
@@ -1207,15 +1228,11 @@ export default function DispatchPackingModal({
 
       {/* ─── 3 STATS CARDS (Order Value hidden for Dispatch role) ─── */}
       <div className="dispatch-stats-grid" style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
-        gap: isMobile ? '10px' : '14px',
         width: '100%',
         boxSizing: 'border-box'
       }}>
         {/* Progress Card */}
         <div className="dispatch-stat-card" style={{
-          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
@@ -1240,7 +1257,6 @@ export default function DispatchPackingModal({
 
         {/* Completion % Card */}
         <div className="dispatch-stat-card" style={{
-          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
@@ -1263,7 +1279,6 @@ export default function DispatchPackingModal({
 
         {/* Delivery Card */}
         <div className="dispatch-delivery-card" style={{
-          gridColumn: isMobile ? 'span 2' : 'span 1',
           width: '100%',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',

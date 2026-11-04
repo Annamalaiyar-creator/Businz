@@ -2229,6 +2229,20 @@ table td {
     padding: 6px 6px 30px 6px !important;
     overflow-x: hidden !important;
   }
+
+  /* Full-width single-column native mobile card layout for Dispatch & Verification */
+  .dispatch-stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .dispatch-stat-card {
+    grid-column: span 1 !important;
+  }
+
+  .dispatch-delivery-card {
+    grid-column: span 1 !important;
+  }
 }
 
 /* ==========================================================================

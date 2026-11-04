@@ -1,5 +1,6 @@
 import { prodModuleEngine, isLegacyWoId } from '../../utils/productionModuleEngine.js';
 import { formatCurrency } from '../../utils/otherViewsShared.js';
+import { compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator.js';
 
 export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [] }) {
   const isLegacyMockBom = (b) => {
@@ -326,9 +327,12 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
           });
 
           const allInvoicesUnified = dedupedInvoices.sort((a, b) => {
-            const numA = parseInt((a.poNo || a.bomCode || a.invNo || '').replace(/[^0-9]/g, ''), 10) || 0;
-            const numB = parseInt((b.poNo || b.bomCode || b.invNo || '').replace(/[^0-9]/g, ''), 10) || 0;
-            return numB - numA;
+            const seqA = parseBomSequenceNumber(a.poNo || a.bomCode || a.invNo || a.code || '');
+            const seqB = parseBomSequenceNumber(b.poNo || b.bomCode || b.invNo || b.code || '');
+            if (seqA !== seqB) return seqB - seqA;
+            const dateA = new Date(a.date || a.createdAt || 0).getTime() || 0;
+            const dateB = new Date(b.date || b.createdAt || 0).getTime() || 0;
+            return dateB - dateA;
           });
 
           // Domain-specific Page Configs for all Production Admin views using the Purchase Orders 5-part layout template
@@ -416,20 +420,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 );
               };
 
-              const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort((a, b) => {
-                const parseBomSeq = (code) => {
-                  const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
-                  if (vrm) return parseInt(vrm[1], 10);
-                  const m = String(code || '').match(/BOM-(\d+)/i);
-                  return m ? parseInt(m[1], 10) : 0;
-                };
-                const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
-                const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
-                if (seqA !== seqB) return seqB - seqA;
-                const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-                const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-                return dateB - dateA;
-              });
+              const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort(compareBomDescending);
 
               return {
                 title: 'Accounts Verification & Document Control',
@@ -776,20 +767,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'Cancelled', label: 'Cancelled', count: allDispatchBoms.filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Dispatch Packing Status'],
-                rows: allDispatchBoms.sort((a, b) => {
-                  const parseBomSeq = (code) => {
-                    const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
-                    if (vrm) return parseInt(vrm[1], 10);
-                    const m = String(code || '').match(/BOM-(\d+)/i);
-                    return m ? parseInt(m[1], 10) : 0;
-                  };
-                  const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
-                  const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
-                  if (seqA !== seqB) return seqB - seqA;
-                  const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-                  const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-                  return dateB - dateA;
-                }).map(b => {
+                rows: allDispatchBoms.sort(compareBomDescending).map(b => {
                   // Resolve source PI for fallback data if BOM has missing fields
                   let matchedPi = null;
                   try {

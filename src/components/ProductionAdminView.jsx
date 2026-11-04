@@ -11,6 +11,7 @@ import DailyProductionTrendChart from './DailyProductionTrendChart';
 import StatusBadge from './StatusBadge';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { fetchCloudStore } from '../utils/supabaseDataSync';
+import { compareBomDescending } from '../utils/sequenceGenerator';
 
 export default function ProductionAdminView({ activeTab, userRole }) {
   const isDispatchView = userRole === 'Dispatch Head' || activeTab === 'Dispatch Dashboard';
@@ -48,18 +49,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
         }
 
         if (Array.isArray(boms) && boms.length > 0) {
-          const parseBomSeq = (code) => {
-            const m = String(code || '').match(/BOM-(\d+)/i);
-            return m ? parseInt(m[1], 10) : 0;
-          };
-          const sorted = [...boms].sort((a, b) => {
-            const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
-            const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
-            if (seqA !== seqB) return seqB - seqA;
-            const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-            const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-            return dateB - dateA;
-          });
+          const sorted = [...boms].sort(compareBomDescending);
           setBomStore(sorted);
         }
       } catch (_) {}

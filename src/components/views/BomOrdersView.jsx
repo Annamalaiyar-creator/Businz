@@ -27,7 +27,7 @@ import ExecutiveOrderDossierModal from './ExecutiveOrderDossierModal';
 import LrUploadPopupModal from './LrUploadPopupModal';
 import DispatchMediaThumbnail from './DispatchMediaThumbnail';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts, notifyCreditPaymentSettled } from '../../services/notificationService';
-import { getNextSequence } from '../../utils/sequenceGenerator';
+import { getNextSequence, compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator';
 
 export default function BomOrdersView(props) {
   const {
@@ -281,18 +281,7 @@ export default function BomOrdersView(props) {
             setBomStore([]);
           } else {
             const { list: resolvedList } = resolveBomCollisions(data, 662);
-            const parseBomSeq = (code) => {
-              const m = String(code || '').match(/BOM-(\d+)/i);
-              return m ? parseInt(m[1], 10) : 0;
-            };
-            const sorted = resolvedList.sort((a, b) => {
-              const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
-              const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
-              if (seqA !== seqB) return seqB - seqA;
-              const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-              const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-              return dateB - dateA;
-            });
+            const sorted = resolvedList.sort(compareBomDescending);
             const cleaned = sorted.map(stripDataUrlsFromRecord);
             setBomStore(prev => {
               let mergedCleaned = [...cleaned];
@@ -928,7 +917,7 @@ export default function BomOrdersView(props) {
       }
       return b;
     });
-    if (!isRestrictedSalesUser) return rawList;
+    if (!isRestrictedSalesUser) return [...rawList].sort(compareBomDescending);
 
     const curCode = (currentEmpId || '').trim().toUpperCase();
     const effectiveCurName = (currentEmpName || (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : '') || '').trim();
@@ -1063,7 +1052,7 @@ export default function BomOrdersView(props) {
       }
 
       return false;
-    });
+    }).sort(compareBomDescending);
   }, [bomStore, isRestrictedSalesUser, currentEmpId, currentEmpName, defaultSalesPersonName, currentLoggedEmail, props.targetBomCode, props.targetPiNo]);
 
   // Operational Financial & KPI Ribbon (Visible for CEO, MD, and Sales Logins)
@@ -1998,7 +1987,7 @@ export default function BomOrdersView(props) {
       { id: 'Cancelled', label: 'Cancelled & Restored', count: (visibleBomStore || []).filter(b => b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel')).length, bg: '#fee2e2', fg: '#dc2626' }
     ],
     headers: ['BOM Code', 'Date & Time', 'Customer Name', 'Sales Person', 'Payment Type', 'Total (₹)', 'Printout Status', 'Status'],
-    rows: (visibleBomStore || []).filter(Boolean).map(b => {
+    rows: (visibleBomStore || []).filter(Boolean).sort(compareBomDescending).map(b => {
       const isCancelled = b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel');
       const isAddressRequested = b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales';
       const isClosedOrCompleted = b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed');

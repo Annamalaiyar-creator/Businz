@@ -41,6 +41,7 @@ import VRMTaxInvoicePrintTemplate from '../VRMTaxInvoicePrintTemplate';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import * as XLSX from 'xlsx';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile, cleanNum, formatCurrency } from '../../utils/otherViewsShared';
+import { compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator';
 import StatusBadge from '../StatusBadge';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
@@ -354,20 +355,7 @@ export default function ProductionViewsEngine(props) {
                 };
               });
 
-              const parseBomSeq = (code) => {
-                const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
-                if (vrm) return parseInt(vrm[1], 10);
-                const m = String(code || '').match(/BOM-(\d+)/i);
-                return m ? parseInt(m[1], 10) : 0;
-              };
-              const sorted = mergedList.sort((a, b) => {
-                const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
-                const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
-                if (seqA !== seqB) return seqB - seqA;
-                const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-                const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-                return dateB - dateA;
-              });
+              const sorted = mergedList.sort(compareBomDescending);
               const nextList = sorted.map(stripDataUrlsFromRecord);
               if (Array.isArray(prev) && prev.length === nextList.length) {
                 try {

@@ -113,3 +113,4 @@ export async function exportSmartMultiPagePdf(sheetEl, options = {}) {
   pdf.save(filename);
   return true;
 }
+
