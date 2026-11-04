@@ -234,18 +234,18 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         const metaSet = parseFloat(grpMeta.setCount || grpMeta.sets || grpMeta.quantity || grpMeta.count) || null;
         const bomSet = parseFloat(b.presetSetCount || b.setCount || b.sets) || null;
         const itemSet = parseFloat(item.setCount || item.sets || item.quantity) || null;
-        const piSet = parseFloat(matchedPi?.presetSetCount || matchedPi?.setCount || matchedPi?.sets) || null;
+        const piSet = parseFloat(matchedPi?.presetSetCount || matchedPi?.setCount || matchedPi?.sets || (matchedPi?.presetGroups && Object.values(matchedPi.presetGroups)[0]?.setCount)) || null;
 
         let sCount = 1;
-        if (bomSet && bomSet > 1) {
+        if (bomSet && bomSet > 0) {
           sCount = bomSet;
-        } else if (metaSet && metaSet > 1) {
+        } else if (metaSet && metaSet > 0) {
           sCount = metaSet;
-        } else if (nameExtractedSets && nameExtractedSets > 1) {
+        } else if (nameExtractedSets && nameExtractedSets > 0) {
           sCount = nameExtractedSets;
-        } else if (itemSet && itemSet > 1) {
+        } else if (itemSet && itemSet > 0) {
           sCount = itemSet;
-        } else if (piSet && piSet > 1) {
+        } else if (piSet && piSet > 0) {
           sCount = piSet;
         } else if (metaSet) {
           sCount = metaSet;
@@ -255,7 +255,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
           sCount = nameExtractedSets;
         }
 
-        const pUnit = grpMeta.unit || item.unit || b.presetUnit || matchedPi?.presetUnit || 'Sets';
+        const pUnit = grpMeta.unit || grpMeta.unitType || (item.unitType || (item.unit !== 'NOS' && item.unit !== 'NO' ? item.unit : null)) || b.presetUnit || matchedPi?.presetUnit || (matchedPi?.presetGroups && Object.values(matchedPi.presetGroups)[0]?.unit) || (String(pName).toLowerCase().includes('kw') ? 'kW' : 'Sets');
         kitGroupsMap.set(key, {
           groupId: key,
           presetId: grpMeta.presetId || item.presetId || null,
@@ -279,11 +279,15 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   // Post-check: If there is a single kit group and BOM specified presetSetCount > 1, strictly enforce it!
   if (kitGroupsMap.size === 1) {
     const singleGrp = kitGroupsMap.values().next().value;
-    const bomTotalSets = parseFloat(b.presetSetCount || b.setCount || b.sets || matchedPi?.presetSetCount || matchedPi?.setCount) || null;
+    const bomTotalSets = parseFloat(b.presetSetCount || b.setCount || b.sets || matchedPi?.presetSetCount || matchedPi?.setCount || (matchedPi?.presetGroups && Object.values(matchedPi.presetGroups)[0]?.setCount)) || null;
     const nameSets = extractSetsFromName(singleGrp.presetName) || extractSetsFromName(b.presetName) || extractSetsFromName(matchedPi?.presetName);
-    const targetSets = (bomTotalSets && bomTotalSets > 1) ? bomTotalSets : (nameSets && nameSets > 1 ? nameSets : null);
-    if (targetSets && targetSets > (singleGrp.setCount || 1)) {
+    const targetSets = (bomTotalSets && bomTotalSets > 0) ? bomTotalSets : (nameSets && nameSets > 0 ? nameSets : null);
+    if (targetSets && targetSets > 0) {
       singleGrp.setCount = targetSets;
+    }
+    const matchedPiUnit = (matchedPi?.presetGroups && Object.values(matchedPi.presetGroups)[0]?.unit) || matchedPi?.presetUnit;
+    if (b.presetUnit === 'kW' || matchedPiUnit === 'kW' || String(singleGrp.presetName).toLowerCase().includes('kw')) {
+      singleGrp.unit = 'kW';
     }
   }
 
@@ -773,7 +777,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
           <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
             <th style={{ padding: '8px 6px', width: '45px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>S.No</th>
             <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Product / Material Name</th>
-            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{hasAnyKits && kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set'}</th>
+            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{hasAnyKits && kitGroups.every(kg => kg.unit === 'kW') ? 'kW' : (hasAnyKits && kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set')}</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
             <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
               Total Quantity

@@ -2282,7 +2282,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const handleAddPresetItem = (groupId) => {
     const grp = (groupId && presetGroups[groupId]) || Object.values(presetGroups)[0];
     if (!grp) return;
-    const mult = Math.max(1, parseInt(grp.setCount) || 1);
+    const mult = (grp.unit === 'kW' || grp.unitType === 'kW') ? 1 : Math.max(1, parseFloat(grp.setCount) || 1);
     const targetGid = grp.groupId || groupId;
     const newItem = {
       name: '',
@@ -2469,7 +2469,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
     if (!targetPreset || !targetPreset.items || targetPreset.items.length === 0) return;
     const groupId = 'preset_grp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-    const multiplier = Math.max(1, parseInt(setsCount) || 1);
+    const multiplier = Math.max(0.01, parseFloat(setsCount) || 1);
 
     let defaultPrice = '';
     if (targetPreset.price || targetPreset.rate) {
@@ -6015,8 +6015,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
-                                        {(parseInt(currentGroup?.setCount) || 1) > 1 ? (
-                                          <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
+                                        {(parseFloat(currentGroup?.setCount) || 1) !== 1 ? (
+                                          <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseFloat(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
                                         ) : (
                                           <>Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
                                         )}
@@ -6422,7 +6422,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       const val = e.target.value;
                                       setPiItems(prev => prev.map((mat, idx) => {
                                         if (idx !== i) return mat;
-                                        const mult = Math.max(1, parseInt(currentGroup?.setCount) || 1);
+                                        const mult = Math.max(0.01, parseFloat(currentGroup?.setCount) || 1);
                                         const parsedVal = parseFloat(val) || 0;
                                         return {
                                           ...mat,

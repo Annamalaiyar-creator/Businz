@@ -1711,7 +1711,7 @@ export default function DispatchPackingModal({
                         const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
                         const grp = presetGroupsMap[gid] || {};
                         const grpName = grp.presetName || grp.name || `Set / Kit ${gIdx + 1}`;
-                        const setCount = parseInt(grp.setCount) || 1;
+                        const setCount = parseFloat(grp.setCount) || 1;
 
                         const setIndices = [];
                         itemsToPack.forEach((it, idx) => {
@@ -1862,7 +1862,7 @@ export default function DispatchPackingModal({
                         const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
                         const grp = presetGroupsMap[gid] || {};
                         const grpName = grp.presetName || grp.name || `Set / Kit ${gIdx + 1}`;
-                        const setCount = parseInt(grp.setCount) || 1;
+                        const setCount = parseFloat(grp.setCount) || 1;
 
                         const setIndices = [];
                         itemsToPack.forEach((it, idx) => {

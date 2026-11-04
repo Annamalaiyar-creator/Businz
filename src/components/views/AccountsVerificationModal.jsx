@@ -1682,7 +1682,9 @@ export default function AccountsVerificationModal({
             : (accountsVerificationModal.presetName || (cleanNum(accountsVerificationModal.presetKitPrice) > 0))
               ? [{
                   presetName: accountsVerificationModal.presetName || 'Pre-Engineered Structure Kit Package',
-                  setCount: parseInt(accountsVerificationModal.presetSetCount) || 1,
+                  setCount: parseFloat(accountsVerificationModal.presetSetCount) || 1,
+                  unit: accountsVerificationModal.presetUnit || (String(accountsVerificationModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+                  unitType: accountsVerificationModal.presetUnit || (String(accountsVerificationModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
                   kitPrice: cleanNum(accountsVerificationModal.presetKitPrice) || 0
                 }]
               : [];
@@ -1768,10 +1770,10 @@ export default function AccountsVerificationModal({
                     {/* Render Kit / Preset Groups if present */}
                     {pGroups.length > 0 && pGroups.map((grp, gIdx) => {
                       const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
-                      const sCount = parseInt(grp.setCount) || 1;
+                      const sCount = parseFloat(grp.setCount) || 1;
                       const kPrice = cleanNum(grp.kitPrice) || 0;
                       const kTotal = sCount * kPrice;
-                      const unitType = grp.unitType || (grp.isKwBased ? 'kW' : 'Sets');
+                      const unitType = grp.unit || grp.unitType || (grp.isKwBased || String(grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
 
                       const kitItems = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
 

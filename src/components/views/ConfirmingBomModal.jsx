@@ -44,12 +44,14 @@ export default function ConfirmingBomModal({
     : (confirmingBomModal.presetName || (cleanNum(confirmingBomModal.presetKitPrice) > 0))
       ? [{
           presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
-          setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
+          setCount: parseFloat(confirmingBomModal.presetSetCount) || 1,
+          unit: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+          unitType: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
           kitPrice: cleanNum(confirmingBomModal.presetKitPrice) || 0
         }]
       : [];
 
-  let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseInt(g.setCount) || 1)), 0) || (cleanNum(confirmingBomModal.presetKitPrice) || 0);
+  let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseFloat(g.setCount) || 1)), 0) || (cleanNum(confirmingBomModal.presetKitPrice) || 0);
   const customItemsTotal = (confirmingBomModal.items || []).reduce((acc, it) => acc + ((cleanNum(it.qty) || 0) * (cleanNum(it.rate) || 0)), 0);
 
   // Fallback: If presetKitsTotal is 0, but the BOM has items with rate 0 and grandTotal > customItemsTotal, compute preset package price
@@ -61,11 +63,12 @@ export default function ConfirmingBomModal({
       if (modalPresetGroups.length === 0) {
         modalPresetGroups.push({
           presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
-          setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
+          setCount: parseFloat(confirmingBomModal.presetSetCount) || 1,
+          unit: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
           kitPrice: presetKitsTotal
         });
       } else if (modalPresetGroups.length === 1 && (cleanNum(modalPresetGroups[0].kitPrice) || 0) === 0) {
-        modalPresetGroups[0].kitPrice = presetKitsTotal / (parseInt(modalPresetGroups[0].setCount) || 1);
+        modalPresetGroups[0].kitPrice = presetKitsTotal / (parseFloat(modalPresetGroups[0].setCount) || 1);
       }
     }
   }
@@ -1415,13 +1418,15 @@ export default function ConfirmingBomModal({
                     const gid = item.presetGroupId || item.groupId || item.presetId || modalPresetGroups[0]?.groupId || modalPresetGroups[0]?.presetGroupId || 'default_kit';
                     if (!presetGroupMap[gid]) {
                       const matchedGrp = modalPresetGroups.find(g => (g.groupId === gid || g.presetGroupId === gid || g.presetId === gid || (g.groupId || 'default_kit') === gid)) || modalPresetGroups[0] || {};
-                      const sets = parseInt(matchedGrp.setCount) || 1;
+                      const sets = parseFloat(matchedGrp.setCount) || 1;
+                      const pUnit = matchedGrp.unit || matchedGrp.unitType || (String(matchedGrp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
                       const price = cleanNum(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
                       presetGroupMap[gid] = {
                         firstIdx: idx,
                         count: 0,
                         presetName: matchedGrp.presetName || confirmingBomModal.presetName || 'Preset MMS Kit',
                         setCount: sets,
+                        unit: pUnit,
                         kitPrice: price,
                         totalAmount: price * sets
                       };
@@ -1473,7 +1478,7 @@ export default function ConfirmingBomModal({
                             >
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                                 <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                                  {pInfo.setCount} Set{pInfo.setCount > 1 ? 's' : ''} Kit
+                                  {pInfo.setCount} {pInfo.unit === 'kW' ? 'kW' : (pInfo.setCount > 1 ? 'Sets' : 'Set')} Kit
                                 </span>
                                 <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13.5px' }}>
                                   ₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

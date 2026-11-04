@@ -41,6 +41,9 @@ export default function CreateBomFormPage(props) {
     showClearConfirmModal, setShowClearConfirmModal,
     bomConfirmModal, setBomConfirmModal, showCustomAlert
   } = props;
+  const [internalPresetUnit, setInternalPresetUnit] = React.useState(props.presetUnit || (String(props.selectedPreset || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'));
+  const presetUnit = props.presetUnit !== undefined ? props.presetUnit : internalPresetUnit;
+  const setPresetUnit = props.setPresetUnit || setInternalPresetUnit;
   const [internalDocType, setInternalDocType] = React.useState('Invoice');
   const newBomDocType = props.newBomDocType !== undefined ? props.newBomDocType : internalDocType;
   const setNewBomDocType = props.setNewBomDocType || setInternalDocType;
@@ -1141,19 +1144,20 @@ export default function CreateBomFormPage(props) {
 
             {/* SET COUNT / MULTIPLIER INPUT */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', padding: '0 8px', borderRadius: '8px', height: '36px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', whiteSpace: 'nowrap' }}>Total Quantity (Sets):</span>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', whiteSpace: 'nowrap' }}>Quantity ({presetUnit || 'Sets'}):</span>
               <input id="create-bom-form-preset-set-count" name="presetSetCount" aria-label="PresetSetCount"
                 type="number"
-                min="1"
-                max="999"
+                step="any"
+                min="0.01"
+                max="9999"
                 value={presetSetCount}
                 onChange={(e) => {
                   const rawVal = e.target.value;
-                  const newCount = rawVal === '' ? '' : Math.max(1, parseInt(rawVal) || 1);
+                  const newCount = rawVal === '' ? '' : Math.max(0.01, parseFloat(rawVal) || 0.01);
                   setPresetSetCount(newCount);
                 }}
                 style={{
-                  width: '54px',
+                  width: '58px',
                   height: '26px',
                   borderRadius: '6px',
                   border: '1px solid #94A3B8',
@@ -1166,6 +1170,24 @@ export default function CreateBomFormPage(props) {
                   backgroundColor: 'white'
                 }}
                />
+              <select
+                value={presetUnit || 'Sets'}
+                onChange={(e) => setPresetUnit && setPresetUnit(e.target.value)}
+                style={{
+                  height: '26px',
+                  borderRadius: '6px',
+                  border: '1px solid #94A3B8',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#4F46E5',
+                  backgroundColor: 'white',
+                  cursor: 'pointer'
+                }}
+                title="Choose unit: Sets or kW"
+              >
+                <option value="Sets">Sets</option>
+                <option value="kW">kW</option>
+              </select>
             </div>
 
             {/* Dedicated Preset Full Package Price Input */}
@@ -1180,9 +1202,9 @@ export default function CreateBomFormPage(props) {
                   onChange={(e) => setPresetKitPrice(e.target.value)}
                   style={{ width: '100px', height: '26px', borderRadius: '6px', border: '1px solid #818CF8', padding: '0 8px', fontSize: '13px', fontWeight: '800', color: '#1E1B4B', textAlign: 'right', outline: 'none', backgroundColor: 'white' }}
                  />
-                {presetSetCount > 1 && presetKitPrice && (
+                {presetSetCount > 0 && presetKitPrice && (
                   <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '700' }}>
-                    (Total: ₹{((parseFloat(presetKitPrice) || 0) * (parseInt(presetSetCount) || 1)).toLocaleString('en-IN')})
+                    (Total: ₹{((parseFloat(presetKitPrice) || 0) * (parseFloat(presetSetCount) || 1)).toLocaleString('en-IN')})
                   </span>
                 )}
               </div>
@@ -1366,7 +1388,7 @@ export default function CreateBomFormPage(props) {
                                   borderRadius: '12px',
                                   border: `1px solid ${theme.border}`
                                 }}>
-                                  {presetSetCount || 1} Sets • {groupCount} Components
+                                  {presetSetCount || 1} {presetUnit || 'Sets'} • {groupCount} Components
                                 </span>
                               </div>
                               {presetKitPrice && (
@@ -1877,7 +1899,7 @@ export default function CreateBomFormPage(props) {
         <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px', fontSize: '13px' }}>
           {selectedPreset && totals.kitSubtotal > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', width: '320px', color: '#4338CA', backgroundColor: '#EEF2FF', padding: '6px 10px', borderRadius: '6px' }}>
-              <span style={{ fontWeight: '700' }}>Preset ({presetSetCount} Set{presetSetCount > 1 ? 's' : ''})</span>
+              <span style={{ fontWeight: '700' }}>Preset ({presetSetCount} {presetUnit === 'kW' ? 'kW' : (presetSetCount > 1 ? 'Sets' : 'Set')})</span>
               <strong style={{ color: '#3730A3' }}>₹{totals.kitSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
             </div>
           )}
@@ -2553,7 +2575,7 @@ export default function CreateBomFormPage(props) {
                         isPresetItem: Boolean(item.isPresetItem || selectedPreset),
                         presetGroupId: item.presetGroupId || (selectedPreset ? 'default_preset' : null),
                         presetName: item.presetName || selectedPreset || null,
-                        setCount: selectedPreset ? (parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1) : (item.setCount || 1),
+                        setCount: selectedPreset ? (parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1) : (item.setCount || 1),
                         confirmed: false
                       })),
                       payments: {
@@ -2581,14 +2603,16 @@ export default function CreateBomFormPage(props) {
                       invoiceDeducted: false,
                       presetName: selectedPreset || null,
                       presetKitPrice: (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, null) : null,
-                      presetSetCount: selectedPreset ? (parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1) : null,
+                      presetSetCount: selectedPreset ? (parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1) : null,
+                      presetUnit: presetUnit || 'Sets',
                       presetGroups: selectedPreset ? [{
                         groupId: 'default_preset',
                         presetId: selectedPreset,
                         presetName: selectedPreset,
-                        setCount: parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1,
-                        sets: parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1,
-                        unit: 'Sets',
+                        setCount: parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1,
+                        sets: parseFloat(String(presetSetCount).replace(/[^0-9.]/g, '')) || 1,
+                        unit: presetUnit || 'Sets',
+                        unitType: presetUnit || 'Sets',
                         kitPrice: (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, null) : null
                       }] : [],
                       subTotal: cleanNum(totals.sub, 0),

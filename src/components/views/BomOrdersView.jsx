@@ -1121,6 +1121,7 @@ export default function BomOrdersView(props) {
 
   const [selectedPreset, setSelectedPreset] = useState('');
   const [presetSetCount, setPresetSetCount] = useState(1);
+  const [presetUnit, setPresetUnit] = useState('Sets');
   const [presetKitPrice, setPresetKitPrice] = useState('');
   const [presetGroups, setPresetGroups] = useState({}); // { [groupId]: { groupId, presetId, presetName, setCount, kitPrice } }
   const [selectedBomItemIndexes, setSelectedBomItemIndexes] = useState([]);
@@ -1774,11 +1775,16 @@ export default function BomOrdersView(props) {
           pendingPi.presetGroups.forEach((g, idx) => {
             if (g && (g.groupId || g.presetId || g.presetName)) {
               const gid = g.groupId || `preset_${Date.now()}_${idx}`;
+              const sCount = parseFloat(g.setCount || g.quantity || g.sets) || 1;
+              const gUnit = g.unit || g.unitType || (String(g.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
               restoredPresetGroups[gid] = {
                 groupId: gid,
                 presetId: g.presetId || gid,
                 presetName: g.presetName || 'Preset Kit',
-                setCount: parseInt(g.setCount) || 1,
+                setCount: sCount,
+                sets: sCount,
+                unit: gUnit,
+                unitType: gUnit,
                 kitPrice: g.kitPrice != null ? String(g.kitPrice) : '',
                 gstRate: g.gstRate || '18%'
               };
@@ -1788,11 +1794,16 @@ export default function BomOrdersView(props) {
           Object.keys(pendingPi.presetGroups).forEach(gid => {
             const g = pendingPi.presetGroups[gid];
             if (g) {
+              const sCount = parseFloat(g.setCount || g.quantity || g.sets) || 1;
+              const gUnit = g.unit || g.unitType || (String(g.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
               restoredPresetGroups[gid] = {
                 groupId: gid,
                 presetId: g.presetId || gid,
                 presetName: g.presetName || 'Preset Kit',
-                setCount: parseInt(g.setCount) || 1,
+                setCount: sCount,
+                sets: sCount,
+                unit: gUnit,
+                unitType: gUnit,
                 kitPrice: g.kitPrice != null ? String(g.kitPrice) : '',
                 gstRate: g.gstRate || '18%'
               };
@@ -1806,11 +1817,16 @@ export default function BomOrdersView(props) {
           if (it.isPresetItem && (it.presetGroupId || it.presetName)) {
             const gid = it.presetGroupId || 'legacy_default';
             if (!restoredPresetGroups[gid]) {
+              const piSet = parseFloat(pendingPi.presetSetCount || pendingPi.setCount || pendingPi.quantity) || 1;
+              const piUnit = pendingPi.unit || pendingPi.unitType || (String(it.presetName || pendingPi.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
               restoredPresetGroups[gid] = {
                 groupId: gid,
                 presetId: gid,
                 presetName: it.presetName || pendingPi.presetName || 'Preset Kit',
-                setCount: parseInt(pendingPi.presetSetCount) || 1,
+                setCount: piSet,
+                sets: piSet,
+                unit: piUnit,
+                unitType: piUnit,
                 kitPrice: pendingPi.presetKitPrice != null ? String(pendingPi.presetKitPrice) : (pendingPi.kitSubtotal != null ? String(pendingPi.kitSubtotal) : ''),
                 gstRate: it.gstRate || '18%'
               };
@@ -1828,15 +1844,20 @@ export default function BomOrdersView(props) {
         setSelectedPreset(firstPresetGroup.presetName || firstPresetGroup.presetId);
         setPresetKitPrice(firstPresetGroup.kitPrice != null && String(firstPresetGroup.kitPrice) !== '' ? String(firstPresetGroup.kitPrice) : (cleanGrand > 0 ? String(Math.round(cleanGrand / 1.18)) : ''));
         setPresetSetCount(firstPresetGroup.setCount || 1);
+        setPresetUnit(firstPresetGroup.unit || firstPresetGroup.unitType || 'Sets');
       } else if (pendingPi.presetName || (cleanGrand > 0 && Array.isArray(pendingPi.items) && pendingPi.items.some(it => it.isPresetItem))) {
         setSelectedPreset(pendingPi.presetName || 'Pre-Engineered Structure Kit Package');
         const pPrice = pendingPi.presetKitPrice != null ? pendingPi.presetKitPrice : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : '');
         setPresetKitPrice(String(pPrice));
-        setPresetSetCount(pendingPi.presetSetCount || 1);
+        const rawCount = parseFloat(pendingPi.presetSetCount || pendingPi.setCount || pendingPi.quantity) || 1;
+        setPresetSetCount(rawCount);
+        const rawUnit = pendingPi.unit || pendingPi.unitType || (String(pendingPi.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
+        setPresetUnit(rawUnit);
       } else {
         setSelectedPreset('');
         setPresetKitPrice('');
         setPresetSetCount(1);
+        setPresetUnit('Sets');
       }
 
       // 7. Map items: preserve preset components with rate 0 and custom single items with actual rates
@@ -3361,7 +3382,9 @@ export default function BomOrdersView(props) {
     const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
       if (!targetPreset || !targetPreset.items || targetPreset.items.length === 0) return;
       const groupId = 'preset_grp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-      const multiplier = Math.max(1, parseInt(setsCount) || 1);
+      const isKw = String(targetPreset.label || presetId || '').toLowerCase().includes('kw');
+      const multiplier = Math.max(0.01, parseFloat(setsCount) || 1);
+      const pUnit = targetPreset.unit || (isKw ? 'kW' : 'Sets');
 
       let defaultPrice = '';
       if (targetPreset.price || targetPreset.rate) {
@@ -3382,6 +3405,9 @@ export default function BomOrdersView(props) {
           presetId,
           presetName,
           setCount: multiplier,
+          sets: multiplier,
+          unit: pUnit,
+          unitType: pUnit,
           kitPrice: defaultPrice,
           gstRate: initialGstRate
         }
@@ -4325,7 +4351,8 @@ export default function BomOrdersView(props) {
                       groupId: groupId || 'legacy_default',
                       presetName: item.presetName || selectedPreset || 'Preset Kit',
                       setCount: presetSetCount || 1,
-                      unitType: (item.unitType || item.unit || 'Sets'),
+                      unitType: presetUnit || item.unitType || item.unit || 'Sets',
+                      unit: presetUnit || item.unit || item.unitType || 'Sets',
                       kitPrice: presetKitPrice || ''
                     };
 
@@ -4365,12 +4392,12 @@ export default function BomOrdersView(props) {
                                     borderRadius: '12px',
                                     border: `1px solid ${theme.border}`
                                   }}>
-                                    {currentGroup.setCount || 1} {currentGroup.unitType || 'Sets'} • {groupCount} Components
+                                    {currentGroup.setCount || 1} {currentGroup.unit || currentGroup.unitType || 'Sets'} • {groupCount} Components
                                   </span>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                   <span style={{ fontSize: '11.5px', color: '#475569' }}>
-                                    Package Rate: <strong style={{ color: theme.primary }}>₹ {parseFloat(currentGroup.kitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {currentGroup.unitType === 'kW' ? 'kW' : 'Set'}
+                                    Package Rate: <strong style={{ color: theme.primary }}>₹ {parseFloat(currentGroup.kitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {(currentGroup.unit === 'kW' || currentGroup.unitType === 'kW') ? 'kW' : 'Set'}
                                   </span>
                                   <span style={{ fontSize: '12px', fontWeight: '800', color: theme.primary, backgroundColor: '#FFFFFF', padding: '2px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
                                     Kit Subtotal: ₹ {(parseFloat(currentGroup.kitPrice || 0) * (parseFloat(currentGroup.setCount || 1) || 1)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -4669,8 +4696,9 @@ export default function BomOrdersView(props) {
                                           </span>
                                           <input id="bom-orders-set-count" name="setCount" aria-label="SetCount"
                                             type="number"
-                                            min="0"
-                                            max="999"
+                                            step="any"
+                                            min="0.01"
+                                            max="9999"
                                             value={currentGroup.setCount !== undefined && currentGroup.setCount !== null ? currentGroup.setCount : ''}
                                             onFocus={(e) => e.target.select()}
                                             onChange={(e) => {
@@ -4684,8 +4712,8 @@ export default function BomOrdersView(props) {
                                                 }
                                                 return;
                                               }
-                                              const parsed = parseInt(rawVal);
-                                              const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
+                                              const parsed = parseFloat(rawVal);
+                                              const valToSave = isNaN(parsed) ? '' : Math.max(0.01, parsed);
                                               if (groupId) {
                                                 setPresetGroups(prev => ({
                                                   ...prev,
@@ -4695,7 +4723,7 @@ export default function BomOrdersView(props) {
                                             }}
                                             onBlur={() => {
                                               const current = currentGroup.setCount;
-                                              const finalCount = (current === '' || isNaN(parseInt(current)) || parseInt(current) < 0) ? 1 : Math.max(0, parseInt(current));
+                                              const finalCount = (current === '' || isNaN(parseFloat(current)) || parseFloat(current) <= 0) ? 1 : Math.max(0.01, parseFloat(current));
                                               if (groupId) {
                                                 setPresetGroups(prev => ({
                                                   ...prev,
@@ -4704,16 +4732,36 @@ export default function BomOrdersView(props) {
                                               }
                                             }}
                                             style={{
-                                              width: '42px', height: '26px', borderRadius: '6px',
+                                              width: '50px', height: '26px', borderRadius: '6px',
                                               border: '1.5px solid #818CF8', fontSize: '13px',
                                               fontWeight: '800', color: '#312E81', textAlign: 'center',
                                               padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box', cursor: 'text'
                                             }}
-                                            title="Sets multiplier for this preset"
+                                            title="Multiplier / Capacity for this preset"
                                            />
-                                          <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
-                                            set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
-                                          </span>
+                                          <select
+                                            value={currentGroup.unit || currentGroup.unitType || 'Sets'}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              if (groupId) {
+                                                setPresetGroups(prev => ({
+                                                  ...prev,
+                                                  [groupId]: { ...(prev[groupId] || currentGroup), unit: val, unitType: val }
+                                                }));
+                                              }
+                                            }}
+                                            style={{
+                                              height: '24px', borderRadius: '6px',
+                                              border: '1px solid #C7D2FE', padding: '0 2px',
+                                              fontSize: '11px', fontWeight: '800',
+                                              color: '#4F46E5', backgroundColor: '#FFFFFF',
+                                              cursor: 'pointer'
+                                            }}
+                                            title="Choose unit: Sets or kW"
+                                          >
+                                            <option value="Sets">Sets</option>
+                                            <option value="kW">kW</option>
+                                          </select>
                                         </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
@@ -5084,7 +5132,7 @@ export default function BomOrdersView(props) {
           <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px', fontSize: '13px' }}>
             {selectedPreset && totals.kitSubtotal > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', width: '320px', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '6px 10px', borderRadius: '6px' }}>
-                <span style={{ fontWeight: '700' }}>Preset ({presetSetCount} Set{presetSetCount > 1 ? 's' : ''})</span>
+                <span style={{ fontWeight: '700' }}>Preset ({presetSetCount} {presetUnit === 'kW' ? 'kW' : (presetSetCount > 1 ? 'Sets' : 'Set')})</span>
                 <strong style={{ color: '#0E7490' }}>₹{totals.kitSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </div>
             )}
@@ -5677,15 +5725,19 @@ export default function BomOrdersView(props) {
                           invoiceDeducted: false,
                           stockBlocked: !isDraft,
                           stockBlockedAt: !isDraft ? new Date().toISOString() : null,
-                          presetName: Object.values(presetGroups).map(g => `${g.presetName} (${g.setCount} Set${g.setCount > 1 ? 's' : ''})`).join(' + ') || selectedPreset || null,
+                          presetName: Object.values(presetGroups).map(g => `${g.presetName} (${g.setCount} ${g.unit === 'kW' ? 'kW' : (g.setCount > 1 ? 'Sets' : 'Set')})`).join(' + ') || selectedPreset || null,
                           presetKitPrice: (Object.values(presetGroups).length === 1 && Object.values(presetGroups)[0]?.kitPrice)
                             ? cleanNum(Object.values(presetGroups)[0].kitPrice, null)
                             : (totals.kitSubtotal || ((selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, null) : null)),
-                          presetSetCount: Object.values(presetGroups).reduce((s, g) => s + (parseInt(g.setCount) || 1), 0) || (selectedPreset ? (parseInt(presetSetCount) || 1) : null),
+                          presetSetCount: Object.values(presetGroups).reduce((s, g) => s + (parseFloat(g.setCount) || 1), 0) || (selectedPreset ? (parseFloat(presetSetCount) || 1) : null),
+                          presetUnit: presetUnit || (Object.values(presetGroups)[0]?.unit) || 'Sets',
                           presetGroups: Object.values(presetGroups).map(g => ({
                             ...g,
                             kitPrice: cleanNum(g.kitPrice, 0),
-                            setCount: parseInt(g.setCount) || 1
+                            setCount: parseFloat(g.setCount) || 1,
+                            sets: parseFloat(g.setCount) || 1,
+                            unit: g.unit || g.unitType || 'Sets',
+                            unitType: g.unit || g.unitType || 'Sets'
                           })),
                           subTotal: cleanNum(totals.sub, 0),
                           gstAmount: cleanNum(totals.gst, 0),
@@ -6053,12 +6105,13 @@ export default function BomOrdersView(props) {
       : (confirmingBomModal.presetName || (cleanNum(confirmingBomModal.presetKitPrice) > 0))
         ? [{
             presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
-            setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
+            setCount: parseFloat(confirmingBomModal.presetSetCount) || 1,
+            unit: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
             kitPrice: cleanNum(confirmingBomModal.presetKitPrice) || 0
           }]
         : [];
 
-    let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseInt(g.setCount) || 1)), 0) || (cleanNum(confirmingBomModal.presetKitPrice) || 0);
+    let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseFloat(g.setCount) || 1)), 0) || (cleanNum(confirmingBomModal.presetKitPrice) || 0);
     const customItemsTotal = (confirmingBomModal.items || []).reduce((acc, it) => acc + ((cleanNum(it.qty) || 0) * (cleanNum(it.rate) || 0)), 0);
 
     // Fallback: If presetKitsTotal is 0, but the BOM has items with rate 0 and grandTotal > customItemsTotal, compute preset package price
@@ -6070,11 +6123,12 @@ export default function BomOrdersView(props) {
         if (modalPresetGroups.length === 0) {
           modalPresetGroups.push({
             presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
-            setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
+            setCount: parseFloat(confirmingBomModal.presetSetCount) || 1,
+            unit: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
             kitPrice: presetKitsTotal
           });
         } else if (modalPresetGroups.length === 1 && (cleanNum(modalPresetGroups[0].kitPrice) || 0) === 0) {
-          modalPresetGroups[0].kitPrice = presetKitsTotal / (parseInt(modalPresetGroups[0].setCount) || 1);
+          modalPresetGroups[0].kitPrice = presetKitsTotal / (parseFloat(modalPresetGroups[0].setCount) || 1);
         }
       }
     }
@@ -7415,8 +7469,8 @@ export default function BomOrdersView(props) {
                   const presetGroupMap = {};
                   distinctPresetGroupIds.forEach((gid, gIdx) => {
                     const matchedGrp = modalPresetGroups.find(g => g.groupId === gid || g.presetGroupId === gid || g.presetId === gid || (gIdx === 0 && (gid === 'default_kit' || gid === 'preset_grp_0'))) || modalPresetGroups[gIdx] || {};
-                    const sets = parseInt(matchedGrp.setCount || matchedGrp.quantity) || 1;
-                    const unitType = matchedGrp.unitType || (matchedGrp.isKwBased ? 'kW' : 'Sets');
+                    const sets = parseFloat(matchedGrp.setCount || matchedGrp.quantity || matchedGrp.sets) || 1;
+                    const unitType = matchedGrp.unit || matchedGrp.unitType || (matchedGrp.isKwBased || String(matchedGrp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
                     const price = cleanNum(matchedGrp.kitPrice) || (modalPresetGroups.length === 1 ? (presetKitsTotal / sets) : 0);
                     presetGroupMap[gid] = {
                       groupId: gid,
@@ -10067,17 +10121,19 @@ export default function BomOrdersView(props) {
                         : (quickPreviewRecord.presetName || (cleanNum(quickPreviewRecord.presetKitPrice) > 0))
                           ? [{
                               presetName: quickPreviewRecord.presetName || 'Pre-Engineered Structure Kit Package',
-                              setCount: parseInt(quickPreviewRecord.presetSetCount) || 1,
+                              setCount: parseFloat(quickPreviewRecord.presetSetCount) || 1,
+                              unit: quickPreviewRecord.presetUnit || (String(quickPreviewRecord.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+                              unitType: quickPreviewRecord.presetUnit || (String(quickPreviewRecord.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
                               kitPrice: cleanNum(quickPreviewRecord.presetKitPrice) || 0
                             }]
                           : [];
 
                       return pGroups.map((grp, gIdx) => {
-                        const sCount = parseInt(grp.setCount) || 1;
+                        const sCount = parseFloat(grp.setCount) || 1;
                         const kPrice = cleanNum(grp.kitPrice) || 0;
                         const kTotal = sCount * kPrice;
                         const theme = getPresetTheme(gIdx);
-                        const unitType = grp.unitType || (grp.isKwBased ? 'kW' : 'Sets');
+                        const unitType = grp.unit || grp.unitType || (grp.isKwBased || String(grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
                         return (
                           <tr key={`preset-pkg-${gIdx}`} style={{ backgroundColor: theme.bg, borderBottom: `1.5px solid ${theme.border}` }}>
                             <td style={{ padding: '8px 10px', color: theme.primary, fontWeight: '800', textAlign: 'center' }}>★</td>
@@ -10116,7 +10172,7 @@ export default function BomOrdersView(props) {
                           ? [{
                               groupId: 'default_kit',
                               presetName: quickPreviewRecord.presetName || 'Preset Package',
-                              setCount: parseInt(quickPreviewRecord.presetSetCount) || 1
+                              setCount: parseFloat(quickPreviewRecord.presetSetCount) || 1
                             }]
                           : [];
 

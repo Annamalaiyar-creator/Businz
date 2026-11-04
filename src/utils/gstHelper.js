@@ -127,7 +127,7 @@ export function calculateGstTiers(items = [], options = {}) {
     Object.values(options.presetGroups).forEach(grp => {
       if (!grp) return;
       const unitPrice = parseFloat(grp.kitPrice) || 0;
-      const multiplier = parseInt(grp.setCount) || 1;
+      const multiplier = parseFloat(grp.setCount) || 1;
       const groupTotal = unitPrice * multiplier;
       const rate = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
       const amt = groupTotal * (rate / 100);
