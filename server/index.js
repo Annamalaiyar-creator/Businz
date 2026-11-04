@@ -10176,7 +10176,39 @@ app.post(['/api/crm/leads/:id/assign', '/api/leads/:id/assign'], async (req, res
       reason: reason || 'Direct assignment from CRM'
     });
 
+    // Also persist assignment to server/crm_leads.json and memory cache
+    try {
+      const diskPath = getStoreFilePath('crm_leads.json');
+      if (fs.existsSync(diskPath)) {
+        let leads = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+        leads = leads.map(l => (l.id === id || l.lead_number === id) ? {
+          ...l,
+          assigned_to_user_id: assignedToId,
+          assigned_to_name: assignedToName,
+          assigned_to_role: assignedToRole || 'Sales Executive',
+          assigned_salesperson: assignedToName,
+          status: (l.status === 'New' || l.status === 'Unassigned' || !l.status) ? 'Assigned' : l.status,
+          updated_at: new Date().toISOString()
+        } : l);
+        fs.writeFileSync(diskPath, JSON.stringify(leads, null, 2), 'utf8');
+      }
+      if (supabaseMemoryStore.crm_leads && Array.isArray(supabaseMemoryStore.crm_leads)) {
+        supabaseMemoryStore.crm_leads = supabaseMemoryStore.crm_leads.map(l => (l.id === id || l.lead_number === id) ? {
+          ...l,
+          assigned_to_user_id: assignedToId,
+          assigned_to_name: assignedToName,
+          assigned_to_role: assignedToRole || 'Sales Executive',
+          assigned_salesperson: assignedToName,
+          status: (l.status === 'New' || l.status === 'Unassigned' || !l.status) ? 'Assigned' : l.status,
+          updated_at: new Date().toISOString()
+        } : l);
+      }
+    } catch (diskErr) {
+      console.warn('crm_leads.json assignment update notice:', diskErr.message);
+    }
+
     broadcastRealtimeEvent('crm_lead_assigned', { lead: updated });
+    broadcastRealtimeEvent('controlroom_crm_updated', { lead: updated });
 
     // Send real-time notification to the assigned salesperson
     try {
@@ -10445,7 +10477,44 @@ app.post(['/api/crm/leads/:id/activity', '/api/leads/:id/activity'], async (req,
       user
     });
 
-    broadcastRealtimeEvent('crm_lead_activity_logged', { leadId: id, activity: result });
+    // Also append to lead.notes for instant visibility across Tech Support and CEO views
+    const formattedNote = `[${user.employee_name || 'Sales'} • ${new Date().toLocaleDateString('en-IN')}]: ${summary}`;
+    try {
+      await pool.query(`
+        UPDATE public.leads SET
+          notes = CASE
+            WHEN notes IS NULL OR TRIM(notes) = '' THEN $1
+            ELSE notes || E'\n---\n' || $1
+          END,
+          updated_at = NOW()
+        WHERE id = $2 OR lead_number = $2
+      `, [formattedNote, id]);
+    } catch (_) {}
+
+    try {
+      const diskPath = getStoreFilePath('crm_leads.json');
+      if (fs.existsSync(diskPath)) {
+        let leads = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+        leads = leads.map(l => (l.id === id || l.lead_number === id) ? {
+          ...l,
+          notes: l.notes ? `${l.notes}\n---\n${formattedNote}` : formattedNote,
+          updated_at: new Date().toISOString()
+        } : l);
+        fs.writeFileSync(diskPath, JSON.stringify(leads, null, 2), 'utf8');
+      }
+      if (supabaseMemoryStore.crm_leads && Array.isArray(supabaseMemoryStore.crm_leads)) {
+        supabaseMemoryStore.crm_leads = supabaseMemoryStore.crm_leads.map(l => (l.id === id || l.lead_number === id) ? {
+          ...l,
+          notes: l.notes ? `${l.notes}\n---\n${formattedNote}` : formattedNote,
+          updated_at: new Date().toISOString()
+        } : l);
+      }
+    } catch (diskErr) {
+      console.warn('crm_leads.json activity note notice:', diskErr.message);
+    }
+
+    broadcastRealtimeEvent('crm_lead_activity_logged', { leadId: id, activity: result, note: formattedNote });
+    broadcastRealtimeEvent('controlroom_crm_updated', { leadId: id, activity: result, note: formattedNote });
     res.json({ success: true, message: 'Activity recorded successfully', ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

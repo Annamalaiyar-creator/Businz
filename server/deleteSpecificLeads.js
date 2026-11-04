@@ -123,3 +123,4 @@ if (process.argv[1] && process.argv[1].endsWith('deleteSpecificLeads.js')) {
       process.exit(1);
     });
 }
+

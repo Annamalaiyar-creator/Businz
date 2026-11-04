@@ -769,7 +769,7 @@ export async function assignLead({
         assigned_to_name = $5,
         assigned_to_role = $6,
         assigned_at = $7,
-        status = CASE WHEN status = 'New' THEN 'Assigned' ELSE status END,
+        status = CASE WHEN status IN ('New', 'Unassigned', 'unassigned') OR status IS NULL THEN 'Assigned' ELSE status END,
         is_unattended_24h = false,
         is_unattended_48h = false,
         unattended_alert_sent_at = NULL,
@@ -788,15 +788,15 @@ export async function assignLead({
       leadId
     ]);
 
-    // 4. Record status change if transitioned from New to Assigned
-    if (current.status === 'New') {
+    // 4. Record status change if transitioned from New/Unassigned to Assigned
+    if (current.status === 'New' || current.status === 'Unassigned' || current.status === 'unassigned' || !current.status) {
       const statusHistId = `SH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
       await activeClient.query(`
         INSERT INTO public.lead_status_history (
           id, lead_id, previous_status, new_status, remarks,
           updated_by_user_id, updated_by_name, created_at
-        ) VALUES ($1, $2, 'New', 'Assigned', $3, $4, $5, NOW())
-      `, [statusHistId, leadId, `Assigned to ${assignedToName} by ${assignerName}`, assignerId, assignerName]);
+        ) VALUES ($1, $2, $3, 'Assigned', $4, $5, $6, NOW())
+      `, [statusHistId, leadId, current.status || 'Unassigned', `Assigned to ${assignedToName} by ${assignerName}`, assignerId, assignerName]);
     }
 
     return updateRes.rows[0];

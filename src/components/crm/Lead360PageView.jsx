@@ -569,17 +569,18 @@ export default function Lead360PageView({
       }
     });
 
-    // 2. From PostgreSQL database lead.activities where activity_type === 'NOTE'
+    // 2. From PostgreSQL database lead.activities (All notes and logged interaction summaries)
     (lead.activities || []).forEach(act => {
-      const type = String(act.activity_type || act.activityType || '').toUpperCase();
-      if (type === 'NOTE' && act.summary) {
+      if (act.summary) {
         const t = act.summary.trim().toLowerCase();
         if (!seenTexts.has(t)) {
           seenTexts.add(t);
+          const type = String(act.activity_type || act.activityType || '').toUpperCase();
+          const prefix = type && type !== 'NOTE' ? `[${type}] ` : '';
           list.push({
             id: act.id || ('act_' + act.created_at),
-            text: act.summary,
-            author: act.created_by_name || act.createdByName || 'Sales Executive',
+            text: prefix + act.summary,
+            author: act.conducted_by_name || act.conductedByName || act.created_by_name || act.createdByName || 'Sales Executive',
             date: act.created_at ? new Date(act.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Note',
             createdAt: act.created_at
           });
@@ -587,19 +588,22 @@ export default function Lead360PageView({
       }
     });
 
-    // 3. From lead.notes column if present
+    // 3. From lead.notes column (All historical and sales rep notes)
     if (lead.notes && typeof lead.notes === 'string' && lead.notes.trim()) {
-      const t = lead.notes.trim().toLowerCase();
-      if (!seenTexts.has(t)) {
-        seenTexts.add(t);
-        list.push({
-          id: 'lead_initial_note',
-          text: lead.notes.trim(),
-          author: lead.lead_created_by_name || 'System / Inbound',
-          date: lead.created_at ? new Date(lead.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Initial Note',
-          createdAt: lead.created_at
-        });
-      }
+      const blocks = lead.notes.split(/\n---\n/).map(s => s.trim()).filter(Boolean);
+      blocks.forEach((block, bIdx) => {
+        const t = block.toLowerCase();
+        if (!seenTexts.has(t)) {
+          seenTexts.add(t);
+          list.push({
+            id: `lead_note_blk_${bIdx}`,
+            text: block,
+            author: lead.assigned_to_name || lead.lead_created_by_name || 'Sales Representative',
+            date: lead.updated_at ? new Date(lead.updated_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Note',
+            createdAt: lead.updated_at || lead.created_at
+          });
+        }
+      });
     }
 
     return list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));

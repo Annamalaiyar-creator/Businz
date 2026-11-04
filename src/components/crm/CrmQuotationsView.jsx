@@ -3804,91 +3804,87 @@ export default function CrmQuotationsView({
                 }
               });
 
+              const groupKeys = Object.keys(groupMeta);
+              const standaloneQuoteItems = quoteItemsList.filter(it => !it.isPresetItem && !it.presetGroupId);
+
               return (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '20px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                       <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#475569' }}>Item Description</th>
-                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#475569' }}>Qty</th>
-                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#475569' }}>Rate (₹)</th>
-                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#475569' }}>Amount (₹)</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#475569', width: '80px' }}>Qty</th>
+                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#475569', width: '110px' }}>Rate (₹)</th>
+                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#475569', width: '120px' }}>Amount (₹)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {quoteItemsList.map((it, idx) => {
+                    {/* 1. PRESET KIT GROUPS (Plain Component Breakdown, Single Unified Row) */}
+                    {groupKeys.map((gid, gIdx) => {
+                      const gInfo = groupMeta[gid];
+                      const compItems = quoteItemsList.filter(it => (it.isPresetItem || it.presetGroupId) && (it.presetGroupId === gid || groupKeys.length === 1));
+
+                      return (
+                        <tr key={`quote_grp_${gid}_${gIdx}`} style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
+                          <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                            <div style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
+                              📦 {gInfo.name}
+                            </div>
+                            {compItems.length > 0 && (
+                              <div style={{
+                                marginTop: '6px',
+                                padding: '6px 10px',
+                                backgroundColor: '#F8FAFC',
+                                borderRadius: '6px',
+                                border: '1px solid #E2E8F0'
+                              }}>
+                                <div style={{ fontSize: '9px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                  Kit Included Components ({compItems.length} items):
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: compItems.length > 3 ? 'repeat(2, 1fr)' : '1fr', gap: '3px 12px', fontSize: '10px', color: '#334155' }}>
+                                  {compItems.map((c, cIdx) => (
+                                    <div key={cIdx} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dotted #E2E8F0', padding: '1px 0' }}>
+                                      <span>• {c.name || c.description}</span>
+                                      <span style={{ fontWeight: '700', color: '#64748B', marginLeft: '6px' }}>{c.qty} {c.uom || c.unit || 'NOS'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 8px', textAlign: 'center', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
+                            {gInfo.setCount} {gInfo.unit || 'SET'}
+                          </td>
+                          <td style={{ padding: '10px 8px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
+                            <div>₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            <div style={{ fontSize: '9px', color: '#64748B' }}>per {gInfo.unit === 'kW' ? 'kW' : 'set'}</div>
+                          </td>
+                          <td style={{ padding: '10px 8px', textAlign: 'right', verticalAlign: 'top', fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
+                            ₹ {gInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {/* 2. STANDALONE SINGLE ITEMS (Standard Table Grid Row) */}
+                    {standaloneQuoteItems.map((it, idx) => {
                       const itQty = Number(it.qty || 0);
                       const itRate = Number(it.rate || 0);
                       const itAmt = Number(it.amount || (itQty * itRate));
-                      const isPreset = Boolean(it.isPresetItem || it.presetGroupId);
-                      const gid = isPreset ? (it.presetGroupId || 'default_preset') : null;
-                      const gInfo = gid ? groupMeta[gid] : null;
-                      const isFirstInGroup = gInfo && gInfo.firstIndex === idx;
 
                       return (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: 'transparent' }}>
-                          <td style={{ padding: '10px', color: '#0F172A', fontWeight: isPreset ? '500' : '600', backgroundColor: isPreset ? '#FBFDFF' : 'transparent' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {isPreset && (
-                                <span style={{ fontSize: '10px', backgroundColor: '#E0F2FE', color: '#0369A1', fontWeight: '700', padding: '1px 6px', borderRadius: '4px' }}>
-                                  KIT COMPONENT
-                                </span>
-                              )}
-                              <span>{it.name || it.description}</span>
-                            </div>
+                        <tr key={`quote_single_${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
+                          <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                            <div style={{ fontWeight: '600', color: '#0F172A', fontSize: '12px' }}>{it.name || it.description}</div>
                           </td>
-                          <td style={{ padding: '10px', textAlign: 'right', color: '#334155', backgroundColor: isPreset ? '#FBFDFF' : 'transparent' }}>
+                          <td style={{ padding: '10px 8px', textAlign: 'center', verticalAlign: 'top', color: '#334155' }}>
                             {itQty} {it.uom || it.unit || 'NOS'}
                           </td>
-                          {isPreset ? (
-                            isFirstInGroup ? (
-                              <td
-                                rowSpan={gInfo.itemsCount}
-                                style={{
-                                  padding: '10px',
-                                  textAlign: 'right',
-                                  verticalAlign: 'middle',
-                                  backgroundColor: '#F0FDFA',
-                                  borderLeft: '1px solid #CCFBF1',
-                                  borderRight: '1px solid #CCFBF1'
-                                }}
-                              >
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 6px', borderRadius: '4px' }}>
-                                    {gInfo.unit === 'kW' ? `Total Capacity: ${gInfo.setCount} kW` : `Total Quantity: ${gInfo.setCount} Set${gInfo.setCount !== 1 ? 's' : ''}`}
-                                  </span>
-                                  <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
-                                    ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}{gInfo.unit === 'kW' ? ' / kW' : ''}
-                                  </span>
-                                </div>
-                              </td>
-                            ) : null
-                          ) : (
-                            <td style={{ padding: '10px', textAlign: 'right', color: '#334155' }}>
-                              ₹ {itRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </td>
-                          )}
-                          {isPreset ? (
-                            isFirstInGroup ? (
-                              <td
-                                rowSpan={gInfo.itemsCount}
-                                style={{
-                                  padding: '10px',
-                                  textAlign: 'right',
-                                  verticalAlign: 'middle',
-                                  fontWeight: '800',
-                                  color: '#0E7490',
-                                  fontSize: '13px',
-                                  backgroundColor: '#F0FDFA'
-                                }}
-                              >
-                                ₹ {gInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                              </td>
-                            ) : null
-                          ) : (
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                              ₹ {itAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </td>
-                          )}
+                          <td style={{ padding: '10px 8px', textAlign: 'right', verticalAlign: 'top', color: '#334155' }}>
+                            ₹ {itRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '10px 8px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
+                            ₹ {itAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
                         </tr>
                       );
                     })}

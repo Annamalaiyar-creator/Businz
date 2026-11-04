@@ -379,12 +379,26 @@ export default function CrmLeadsView({
     ];
   }, [dbLeads]);
 
-  // Filter sales representatives strictly to Sales Executive and Sales Head roles only
+  // Filter sales representatives strictly to active sales staff with guaranteed canonical fallback
   const salesRepresentatives = useMemo(() => {
-    return (salespersons || []).filter(s => {
+    const list = (salespersons || []).filter(s => {
       const r = (s.role || '').trim().toLowerCase();
-      return r === 'sales executive' || r === 'sales head' || r.includes('sales executive') || r.includes('sales head');
+      const d = (s.department || '').trim().toLowerCase();
+      const code = (s.employee_code || s.code || '').trim().toUpperCase();
+      return r.includes('sales') || d.includes('sales') || code.startsWith('SE-');
     });
+    if (list.length > 0) return list;
+    return [
+      { employee_code: 'SE-001', employee_name: 'Manojraj Selvaraj', role: 'Sales' },
+      { employee_code: 'SE-002', employee_name: 'Sanjai kumar', role: 'Sales' },
+      { employee_code: 'SE-003', employee_name: 'Vasanth Kumar S', role: 'Sales' },
+      { employee_code: 'SE-004', employee_name: 'Mohith JV', role: 'Sales' },
+      { employee_code: 'SE-005', employee_name: 'Shanthi', role: 'Sales' },
+      { employee_code: 'SE-006', employee_name: 'Dhana Sekar', role: 'Sales' },
+      { employee_code: 'SE-007', employee_name: 'PRASHANTH', role: 'Sales' },
+      { employee_code: 'SE-008', employee_name: 'Pavithra', role: 'Sales' },
+      { employee_code: 'SE-009', employee_name: 'KALAISELVI T', role: 'Sales' }
+    ];
   }, [salespersons]);
 
   // Filtering Logic
@@ -401,7 +415,7 @@ export default function CrmLeadsView({
 
       let matchStatus = true;
       if (statusFilter === 'Unassigned') {
-        matchStatus = !lead.assigned_to_user_id || lead.status === 'New';
+        matchStatus = !lead.assigned_to_user_id || lead.status === 'Unassigned' || lead.status === 'New';
       } else if (statusFilter === 'Contacted') {
         matchStatus = ['Assigned', 'Contacted', 'In Progress'].includes(lead.status);
       } else if (statusFilter === '2h Inactive' || statusFilter === '24h Inactive') {
@@ -414,32 +428,30 @@ export default function CrmLeadsView({
         matchStatus = lead.status === statusFilter;
       }
 
-      // Salesperson data isolation: Sales persons see leads assigned to them + unassigned leads
+      // Salesperson data isolation: Regular sales persons see ONLY leads assigned to them.
+      // Unassigned leads MUST strictly be visible ONLY in Tech Support and CEO/MD logins.
       if (!hasGlobalView) {
+        const isLeadUnassigned = !lead.assigned_to_user_id ||
+          lead.status === 'Unassigned' ||
+          lead.status === 'unassigned' ||
+          !lead.assigned_to_name ||
+          String(lead.assigned_to_user_id).trim() === '' ||
+          String(lead.assigned_to_name).trim() === '';
+
+        // If the lead is unassigned, regular sales people MUST NOT see it!
+        if (isLeadUnassigned) return false;
+
         const myEmp = (loggedInEmpId || '').toLowerCase().trim();
         const myName = (loggedInUserName || '').toLowerCase().trim();
         const assignedId = (lead.assigned_to_user_id || '').toLowerCase().trim();
         const assignedName = (lead.assigned_to_name || lead.assigned_salesperson || '').toLowerCase().trim();
 
-        const isGenericSales = (effectiveRoleLower.includes('sales') && (myEmp === 'se-001' || myName === 'sales executive' || !myEmp));
-        const matchedSalesperson = (salespersons || []).find(s => 
-          (s.employee_code && s.employee_code.toLowerCase() === myEmp) ||
-          (s.employee_name && s.employee_name.toLowerCase().includes(myName)) ||
-          (s.employee_name && myName.includes(s.employee_name.toLowerCase()))
-        );
-        const activeRepCode = (matchedSalesperson?.employee_code || (isGenericSales ? 'se-1000' : myEmp)).toLowerCase();
-        const activeRepName = (matchedSalesperson?.employee_name || myName).toLowerCase();
-
-        const isUnassigned = !lead.assigned_to_user_id || lead.status === 'New';
         const isAssignedToMe = (
-          isUnassigned ||
           (myEmp && (assignedId === myEmp || assignedName.includes(myEmp) || (assignedId && myEmp.includes(assignedId)))) ||
-          (myName && (assignedName.includes(myName) || (assignedName && myName.includes(assignedName)))) ||
-          (activeRepCode && (assignedId === activeRepCode || assignedName.includes(activeRepCode))) ||
-          (activeRepName && (assignedName.includes(activeRepName) || activeRepName.includes(assignedName))) ||
-          (isGenericSales && (lead.assigned_to_role || '').toLowerCase().includes('sales'))
+          (myName && (assignedName.includes(myName) || (assignedName && myName.includes(assignedName))))
         );
-        if ((myEmp || myName || activeRepCode) && !isAssignedToMe) return false;
+
+        if (!isAssignedToMe) return false;
       }
 
       const matchSource = sourceFilter === 'All' || lead.source === sourceFilter;
