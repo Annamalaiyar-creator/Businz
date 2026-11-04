@@ -2550,6 +2550,10 @@ export default function CreateBomFormPage(props) {
                         qty: cleanNum(item.qty, 1),
                         rate: cleanNum(item.rate, 0),
                         gstRate: item.gstRate || newBomGstRate || '18%',
+                        isPresetItem: Boolean(item.isPresetItem || selectedPreset),
+                        presetGroupId: item.presetGroupId || (selectedPreset ? 'default_preset' : null),
+                        presetName: item.presetName || selectedPreset || null,
+                        setCount: selectedPreset ? (parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1) : (item.setCount || 1),
                         confirmed: false
                       })),
                       payments: {
@@ -2578,6 +2582,15 @@ export default function CreateBomFormPage(props) {
                       presetName: selectedPreset || null,
                       presetKitPrice: (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, null) : null,
                       presetSetCount: selectedPreset ? (parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1) : null,
+                      presetGroups: selectedPreset ? [{
+                        groupId: 'default_preset',
+                        presetId: selectedPreset,
+                        presetName: selectedPreset,
+                        setCount: parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1,
+                        sets: parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1,
+                        unit: 'Sets',
+                        kitPrice: (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, null) : null
+                      }] : [],
                       subTotal: cleanNum(totals.sub, 0),
                       gstAmount: cleanNum(totals.gst, 0),
                       cgstAmount: cleanNum(totals.cgst, 0),

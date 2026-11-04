@@ -211,6 +211,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
     };
   });
 
+  // Helper to extract set count from preset name string (e.g. "... (2 Sets)" or "... (3.5 kW)")
+  const extractSetsFromName = (nameStr) => {
+    if (!nameStr) return null;
+    const m = String(nameStr).match(/\((\d+(?:\.\d+)?)\s*(?:sets?|kw)\)/i);
+    return m ? parseFloat(m[1]) : null;
+  };
+
   // 3. Group into Distinct Kits and Standalone Items
   const kitGroupsMap = new Map();
   const standaloneItems = [];
@@ -221,7 +228,33 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
       if (!kitGroupsMap.has(key)) {
         const grpMeta = (item.presetGroupId && presetGroupsObj[item.presetGroupId]) || {};
         const pName = grpMeta.presetName || item.presetName || b.presetName || matchedPi?.presetName || 'Preset Kit';
-        const sCount = grpMeta.setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1;
+        const nameExtractedSets = extractSetsFromName(pName) || extractSetsFromName(b.presetName) || extractSetsFromName(matchedPi?.presetName);
+
+        // Robust set count resolution: check group, BOM record, item, and extracted title
+        const metaSet = parseFloat(grpMeta.setCount || grpMeta.sets || grpMeta.quantity || grpMeta.count) || null;
+        const bomSet = parseFloat(b.presetSetCount || b.setCount || b.sets) || null;
+        const itemSet = parseFloat(item.setCount || item.sets || item.quantity) || null;
+        const piSet = parseFloat(matchedPi?.presetSetCount || matchedPi?.setCount || matchedPi?.sets) || null;
+
+        let sCount = 1;
+        if (bomSet && bomSet > 1) {
+          sCount = bomSet;
+        } else if (metaSet && metaSet > 1) {
+          sCount = metaSet;
+        } else if (nameExtractedSets && nameExtractedSets > 1) {
+          sCount = nameExtractedSets;
+        } else if (itemSet && itemSet > 1) {
+          sCount = itemSet;
+        } else if (piSet && piSet > 1) {
+          sCount = piSet;
+        } else if (metaSet) {
+          sCount = metaSet;
+        } else if (bomSet) {
+          sCount = bomSet;
+        } else if (nameExtractedSets) {
+          sCount = nameExtractedSets;
+        }
+
         const pUnit = grpMeta.unit || item.unit || b.presetUnit || matchedPi?.presetUnit || 'Sets';
         kitGroupsMap.set(key, {
           groupId: key,
@@ -233,14 +266,26 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         });
       }
       const currentGroup = kitGroupsMap.get(key);
-      if ((!currentGroup.setCount || Number(currentGroup.setCount) <= 1) && item.setCount && Number(item.setCount) > 1) {
-        currentGroup.setCount = item.setCount;
+      const curItemSets = parseFloat(item.setCount || item.sets) || null;
+      if (curItemSets && curItemSets > (currentGroup.setCount || 1)) {
+        currentGroup.setCount = curItemSets;
       }
       currentGroup.items.push(item);
     } else {
       standaloneItems.push(item);
     }
   });
+
+  // Post-check: If there is a single kit group and BOM specified presetSetCount > 1, strictly enforce it!
+  if (kitGroupsMap.size === 1) {
+    const singleGrp = kitGroupsMap.values().next().value;
+    const bomTotalSets = parseFloat(b.presetSetCount || b.setCount || b.sets || matchedPi?.presetSetCount || matchedPi?.setCount) || null;
+    const nameSets = extractSetsFromName(singleGrp.presetName) || extractSetsFromName(b.presetName) || extractSetsFromName(matchedPi?.presetName);
+    const targetSets = (bomTotalSets && bomTotalSets > 1) ? bomTotalSets : (nameSets && nameSets > 1 ? nameSets : null);
+    if (targetSets && targetSets > (singleGrp.setCount || 1)) {
+      singleGrp.setCount = targetSets;
+    }
+  }
 
   const kitGroups = Array.from(kitGroupsMap.values());
   const hasMultipleKits = kitGroups.length > 1;
@@ -966,7 +1011,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
           ) : (
             enrichedItems.map((item, idx) => {
               const fallbackMid = Math.floor(enrichedItems.length / 2);
-              const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
+              const fallbackSetVal = (b.presetSetCount && Number(b.presetSetCount) > 1)
+                ? b.presetSetCount
+                : (item.setCount || item.sets || b.presetSetCount || extractSetsFromName(b.presetName) || matchedPi?.presetSetCount || '');
               const qty = getItemQty(item);
               const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                 ? item.quantityTaken
