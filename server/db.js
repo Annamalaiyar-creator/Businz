@@ -679,6 +679,12 @@ export async function initPostgresDatabase() {
         `);
       } catch (_) {}
       console.log('✅ [PostgreSQL] Ensured public.leads columns (location, etc.) and CRM tables exist.');
+
+      // Automatically purge specifically requested deleted leads: VRM-LD-2026-10, VRM-LD-2026-04, VRM-LD-2026-03, VRM-LD-2026-02
+      try {
+        const { deleteTargetLeadsFromDb } = await import('./deleteSpecificLeads.js');
+        await deleteTargetLeadsFromDb();
+      } catch (_) {}
     } catch (leadsErr) {
       console.warn('[PostgreSQL Leads Schema Notice]:', leadsErr.message);
     }
