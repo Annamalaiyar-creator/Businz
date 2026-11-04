@@ -1228,11 +1228,16 @@ export default function DispatchPackingModal({
 
       {/* ─── 3 STATS CARDS (Order Value hidden for Dispatch role) ─── */}
       <div className="dispatch-stats-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+        gap: isMobile ? '10px' : '14px',
         width: '100%',
+        maxWidth: '100%',
         boxSizing: 'border-box'
       }}>
         {/* Progress Card */}
         <div className="dispatch-stat-card" style={{
+          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
@@ -1257,6 +1262,7 @@ export default function DispatchPackingModal({
 
         {/* Completion % Card */}
         <div className="dispatch-stat-card" style={{
+          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
@@ -1279,6 +1285,7 @@ export default function DispatchPackingModal({
 
         {/* Delivery Card */}
         <div className="dispatch-delivery-card" style={{
+          gridColumn: isMobile ? 'span 2' : 'span 1',
           width: '100%',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',

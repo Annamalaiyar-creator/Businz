@@ -62,9 +62,9 @@ export async function exportSmartMultiPagePdf(sheetEl, options = {}) {
     const cutBox = avoidBoxes.find((b) => b.top < rawTarget && b.bottom > rawTarget);
 
     let safeCut = rawTarget;
-    if (cutBox && cutBox.top > currentY + (pageCanvasHeight * 0.35)) {
-      // Cut cleanly right above the intersecting element
-      safeCut = Math.max(currentY + 100, cutBox.top - 2);
+    if (cutBox && cutBox.top > currentY + (pageCanvasHeight * 0.15)) {
+      // Cut cleanly right above the intersecting element (with safety buffer)
+      safeCut = Math.max(currentY + 50, cutBox.top - 4);
     }
 
     pageCuts.push(safeCut);

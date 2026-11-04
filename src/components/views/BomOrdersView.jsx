@@ -107,7 +107,8 @@ export default function BomOrdersView(props) {
     if (String(name || '').toLowerCase().includes('manoj')) return 'SE-001';
     const lowerName = String(name || '').toLowerCase();
     if (lowerName.includes('kumar') && lowerName.includes('vasanth')) return 'SE-003';
-    if (c === 'SE-003' || c === 'SE-004' || c === 'SE-VRM006') return 'SE-003';
+    if (c === 'SE-003' || c === 'SE-VRM006') return 'SE-003';
+    if (c === 'SE-004' || c === 'SE-015') return 'SE-004';
     return c || '';
   };
 
@@ -958,7 +959,7 @@ export default function BomOrdersView(props) {
     const SALES_TEAM = [
       { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
       { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
-      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-004'] },
+      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-VRM006'] },
       { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
       { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
       { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },

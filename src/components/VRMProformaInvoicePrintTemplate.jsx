@@ -301,8 +301,7 @@ export function VRMProformaInvoicePrintSheet({
   const pi = piData;
   const isBomDocument = Boolean(
     piData?.category === 'bom' ||
-    settings?.documentTitle?.toUpperCase().includes('BOM') ||
-    piData?.bomCode
+    (settings?.documentTitle?.toUpperCase().includes('BOM') && !piData?.piNo && !piData?.proformaInvoiceNo && !String(piData?.id || '').includes('PI') && !String(piData?.code || '').includes('PI'))
   );
 
   const cfg = {
@@ -2486,289 +2485,206 @@ export function VRMProformaInvoicePrintSheet({
                   )}
                 </thead>
                 <tbody>
-                  {items.map((it, idx) => (
-                    <React.Fragment key={idx}>
-                      {it.isFirstInGroup && (
-                        <tr
-                          className="preset-group-banner-row"
-                          style={{
-                            backgroundColor: '#F8FAFC',
-                            pageBreakAfter: 'avoid',
-                            breakAfter: 'avoid',
-                            pageBreakBefore: (it.presetGroupNum > 1 && idx > 5) ? 'always' : 'auto',
-                            breakBefore: (it.presetGroupNum > 1 && idx > 5) ? 'page' : 'auto'
-                          }}
-                        >
-                          <td
-                            colSpan={computedColSpan || (isIntra ? 10 : 8)}
-                            style={{
-                              border: '1px solid #CBD5E1',
-                              padding: '3px 8px',
-                              backgroundColor: '#EFF6FF',
-                              borderTop: `2px solid ${cfg.accentColor || '#1E2F5B'}`
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                              <span style={{ fontWeight: '800', color: cfg.accentColor || '#1E2F5B', fontSize: '10px' }}>
-                                <EditableText
-                                  value={it.presetName}
-                                  fallback="Solar Structure MMS Kit"
-                                  onSave={(v) => {
-                                    if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
-                                  }}
-                                />
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                  {/* 1. PRESET KIT GROUPS (Plain Component Breakdown, Clean Single Unified Row - NO CUTTING GRID) */}
+                  {printGroupKeys.map((grpId, gIdx) => {
+                    const grp = groupMetaMap[grpId];
+                    if (!grp) return null;
+                    const grpItems = items.filter(it => it.isPresetItem && (it.grpId === grpId || it.presetGroupId === grpId || printGroupKeys.length === 1));
+                    const rawRate = grp.gstRateStr || grp.gstRate || "18%";
+                    const cleanedRate = String(rawRate).replace("%", "").trim();
+                    const gRateNum = isNaN(parseFloat(cleanedRate)) ? 18 : parseFloat(cleanedRate);
+                    const halfRate = (gRateNum / 2).toFixed(1).replace(/\.0$/, "");
+                    const halfAmt = (grp.groupGst || 0) / 2;
+                    const snoVal = gIdx + 1;
+
+                    return (
                       <tr
-                        className={it.isFirstInGroup ? 'preset-first-item-row' : ''}
+                        key={`legacy_preset_grp_${grpId}_${gIdx}`}
+                        className="print-avoid-break preset-kit-row"
                         style={{
-                          verticalAlign: 'top',
-                          pageBreakBefore: it.isFirstInGroup ? 'avoid' : 'auto',
-                          breakBefore: it.isFirstInGroup ? 'avoid' : 'auto'
+                          borderBottom: "1px solid #CBD5E1",
+                          backgroundColor: "#FFFFFF",
+                          pageBreakInside: "avoid",
+                          breakInside: "avoid"
                         }}
                       >
                         {hasSno && (
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', color: '#334155', fontWeight: it.isPresetItem ? '700' : 'normal', fontSize: '9.5px' }}>
-                            {it.displaySNo || it.sNo}
+                          <td style={{ border: "1px solid #CBD5E1", padding: "6px 4px", textAlign: "center", fontSize: "9px", verticalAlign: "top", fontWeight: "700" }}>
+                            {snoVal}
                           </td>
                         )}
                         {hasDesc && (
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px' }}>
-                            <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px', lineHeight: '1.2' }}>
-                              <EditableText
-                                value={it.name}
-                                fallback="Item Name"
-                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { name: v })}
-                              />
+                          <td style={{ border: "1px solid #CBD5E1", padding: "6px 8px", verticalAlign: "top" }}>
+                            <div style={{ fontWeight: "800", color: "#0B3B60", fontSize: "10.5px", lineHeight: "1.3" }}>
+                              📦 {grp.presetName || "Solar Structure MMS Kit"}
                             </div>
-                            {it.description ? (
-                              <div style={{ fontSize: '8.5px', color: '#475569', marginTop: '1px', whiteSpace: 'pre-line', lineHeight: '1.15' }}>
-                                <EditableText
-                                  value={it.description}
-                                  fallback=""
-                                  placeholder=""
-                                  multiline={true}
-                                  onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { description: v })}
-                                />
+
+                            {/* Plain Component Breakdown (NO GRID LINES) */}
+                            {grpItems.length > 0 && (
+                              <div style={{
+                                marginTop: "5px",
+                                padding: "5px 8px",
+                                backgroundColor: "#F8FAFC",
+                                borderRadius: "5px",
+                                border: "1px solid #E2E8F0"
+                              }}>
+                                <div style={{ fontSize: "8px", fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "3px" }}>
+                                  Kit Specifications & Components ({grpItems.length} items included):
+                                </div>
+                                <div style={{
+                                  display: "grid",
+                                  gridTemplateColumns: grpItems.length > 3 ? "repeat(2, 1fr)" : "1fr",
+                                  gap: "2px 12px",
+                                  fontSize: "8.5px",
+                                  lineHeight: "1.3"
+                                }}>
+                                  {grpItems.map((comp, cIdx) => (
+                                    <div key={cIdx} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: "1px dotted #E2E8F0", padding: "1.5px 0" }}>
+                                      <span style={{ color: "#0F172A", fontWeight: "500" }}>• {comp.name}</span>
+                                      <span style={{ color: "#64748B", fontWeight: "700", fontSize: "8px", marginLeft: "6px", whiteSpace: "nowrap" }}>
+                                        {comp.qty} {comp.uom || comp.unit || "NOS"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            ) : isEditable ? (
-                              <div className="no-print" style={{ fontSize: '7.5px', color: '#94A3B8', marginTop: '1px' }}>
-                                <EditableText
-                                  value=""
-                                  fallback=""
-                                  placeholder="+ desc"
-                                  multiline={true}
-                                  onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { description: v })}
-                                />
+                            )}
+                          </td>
+                        )}
+                        {hasHsn && (
+                          <td style={{ border: "1px solid #CBD5E1", padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: "9px", verticalAlign: "top" }}>
+                            {grpItems[0]?.hsn || "73089090"}
+                          </td>
+                        )}
+                        {hasQty && (
+                          <td style={{ border: "1px solid #CBD5E1", padding: "6px 4px", textAlign: "center", fontSize: "9.5px", verticalAlign: "top", fontWeight: "700" }}>
+                            {grp.setCount || 1} {grp.unit || "SET"}
+                          </td>
+                        )}
+                        {hasRate && (
+                          <td style={{ border: "1px solid #CBD5E1", padding: "6px 6px", textAlign: "right", fontSize: "10px", verticalAlign: "top", fontWeight: "700" }}>
+                            <div>{Number(grp.kitPrice || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div style={{ fontSize: "7.5px", color: "#64748B", fontWeight: "500", marginTop: "1px" }}>
+                              {grp.unit === "kW" ? "per kW" : "per set"}
+                            </div>
+                          </td>
+                        )}
+                        {hasGst && (
+                          isIntra ? (
+                            <>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "6px 3px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                                {halfRate}%
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "6px 5px", textAlign: "right", fontSize: "9.5px", verticalAlign: "top", fontWeight: "600" }}>
+                                {halfAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "6px 3px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                                {halfRate}%
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "6px 5px", textAlign: "right", fontSize: "9.5px", verticalAlign: "top", fontWeight: "600" }}>
+                                {halfAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "6px 3px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                                {gRateNum}%
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "6px 5px", textAlign: "right", fontSize: "9.5px", verticalAlign: "top", fontWeight: "600" }}>
+                                {(grp.groupGst || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </>
+                          )
+                        )}
+                        {hasAmt && (
+                          <td style={{ border: "1px solid #CBD5E1", padding: "6px 6px", textAlign: "right", fontWeight: "800", color: "#0F172A", fontSize: "10px", verticalAlign: "top" }}>
+                            {Number(grp.groupSubtotal || grp.groupPrice || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+
+                  {/* 2. STANDALONE SINGLE ITEMS (Standard Table Grid Row) */}
+                  {standaloneItems.map((it, idx) => {
+                    const halfRate = (it.gRate / 2).toFixed(1).replace(/\.0$/, "");
+                    const halfAmt = it.gstAmt / 2;
+                    const snoVal = printGroupKeys.length + idx + 1;
+                    return (
+                      <tr
+                        key={`legacy_single_item_${idx}`}
+                        className="print-avoid-break single-product-row"
+                        style={{
+                          borderBottom: "1px solid #CBD5E1",
+                          pageBreakInside: "avoid",
+                          breakInside: "avoid"
+                        }}
+                      >
+                        {hasSno && (
+                          <td style={{ border: "1px solid #CBD5E1", padding: "3px 4px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                            {snoVal}
+                          </td>
+                        )}
+                        {hasDesc && (
+                          <td style={{ border: "1px solid #CBD5E1", padding: "3px 6px", verticalAlign: "top" }}>
+                            <div style={{ fontWeight: "700", color: "#0F172A", fontSize: "9.5px" }}>{it.name}</div>
+                            {it.description ? (
+                              <div style={{ color: "#64748B", fontSize: "8px", marginTop: "1px", lineHeight: "1.25" }}>
+                                {it.description}
                               </div>
                             ) : null}
                           </td>
                         )}
                         {hasHsn && (
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
-                            <EditableText
-                              value={it.hsn || getHsnCode(it)}
-                              fallback={getHsnCode(it)}
-                              onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { hsn: v })}
-                            />
+                          <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 3px", textAlign: "center", fontFamily: "monospace", fontSize: "9px", verticalAlign: "top" }}>
+                            {it.hsn || getHsnCode(it)}
                           </td>
                         )}
                         {hasQty && (
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
-                            <div>
-                              <EditableText
-                                value={typeof it.qty === 'number' ? it.qty.toFixed(2) : String(it.qty || '1')}
-                                fallback="1.00"
-                                onSave={(v) => {
-                                  const n = parseFloat(v);
-                                  handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { qty: isNaN(n) ? v : n });
-                                }}
-                              />
-                            </div>
-                            <div style={{ fontSize: '8px', color: '#64748B' }}>
-                              <EditableText
-                                value={it.uom || it.unit || "NOS"}
-                                fallback="NOS"
-                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { uom: v, unit: v })}
-                              />
-                            </div>
+                          <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 3px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                            {it.qty} {it.uom || it.unit || "NOS"}
                           </td>
                         )}
-
-                        {/* RATE COLUMN: Merged vertically in middle for Preset Kit */}
                         {hasRate && (
-                          it.isPresetItem ? (
-                            it.isFirstInGroup ? (
-                              <td
-                                rowSpan={it.groupCount}
-                                style={{
-                                  border: '1px solid #CBD5E1',
-                                  padding: '6px 6px',
-                                  textAlign: 'right',
-                                  fontSize: '10.5px',
-                                  verticalAlign: 'middle',
-                                  backgroundColor: '#F8FAFC',
-                                  fontWeight: '700'
-                                }}
-                              >
-                                <div style={{ color: '#0F172A' }}>
-                                  <EditableText
-                                    value={Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    fallback="0.00"
-                                    onSave={(v) => {
-                                      const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                                      if (!isNaN(num) && it.grpId) {
-                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                                <div style={{ fontSize: '8px', color: '#64748B', fontWeight: '500', marginTop: '2px' }}>
-                                  {it.groupUnit === 'kW' ? 'per kW' : 'per set'}
-                                </div>
-                              </td>
-                            ) : null
-                          ) : (
-                            <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px', textAlign: 'right', fontSize: '9.5px', verticalAlign: 'top' }}>
-                              <EditableText
-                                value={Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                fallback="0.00"
-                                onSave={(v) => {
-                                  const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                                  if (!isNaN(num)) handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { rate: num });
-                                }}
-                              />
-                            </td>
-                          )
+                          <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 6px", textAlign: "right", fontSize: "9.5px", verticalAlign: "top" }}>
+                            {Number(it.rate || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
                         )}
-
-                        {/* TAX COLUMNS: Merged vertically in middle for Preset Kit */}
                         {hasGst && (
                           isIntra ? (
-                            it.isPresetItem ? (
-                              it.isFirstInGroup ? (
-                                <>
-                                  <td
-                                    rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
-                                  >
-                                    {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
-                                  </td>
-                                  <td
-                                    rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
-                                  >
-                                    {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </td>
-                                  <td
-                                    rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
-                                  >
-                                    {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
-                                  </td>
-                                  <td
-                                    rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
-                                  >
-                                    {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </td>
-                                </>
-                              ) : null
-                            ) : (
-                              <>
-                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
-                                  {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
-                                </td>
-                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
-                                  {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </td>
-                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
-                                  {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
-                                </td>
-                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
-                                  {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </td>
-                              </>
-                            )
+                            <>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 3px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                                {halfRate}%
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 5px", textAlign: "right", fontSize: "9px", verticalAlign: "top" }}>
+                                {halfAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 3px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                                {halfRate}%
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 5px", textAlign: "right", fontSize: "9px", verticalAlign: "top" }}>
+                                {halfAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </>
                           ) : (
-                            it.isPresetItem ? (
-                              it.isFirstInGroup ? (
-                                <>
-                                  <td
-                                    rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
-                                  >
-                                    {it.gRate ? `${it.gRate}%` : '18%'}
-                                  </td>
-                                  <td
-                                    rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
-                                  >
-                                    {(it.groupGst || (it.groupTaxable * (it.gRate / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </td>
-                                </>
-                              ) : null
-                            ) : (
-                              <>
-                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
-                                  {it.gRate ? `${it.gRate}%` : '5%'}
-                                </td>
-                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
-                                  {(it.gstAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </td>
-                              </>
-                            )
+                            <>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 3px", textAlign: "center", fontSize: "9px", verticalAlign: "top" }}>
+                                {it.gRate}%
+                              </td>
+                              <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 5px", textAlign: "right", fontSize: "9px", verticalAlign: "top" }}>
+                                {(it.gstAmt || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </>
                           )
                         )}
-
-                        {/* AMOUNT COLUMN: Merged vertically in middle for Preset Kit */}
                         {hasAmt && (
-                          it.isPresetItem ? (
-                            it.isFirstInGroup ? (
-                              <td
-                                rowSpan={it.groupCount}
-                                style={{
-                                  border: '1px solid #CBD5E1',
-                                  padding: '6px 6px',
-                                  textAlign: 'right',
-                                  fontWeight: '800',
-                                  color: '#0F172A',
-                                  fontSize: '10.5px',
-                                  verticalAlign: 'middle',
-                                  backgroundColor: '#F8FAFC'
-                                }}
-                              >
-                                <EditableText
-                                  value={Number(it.groupTaxable || it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  fallback="0.00"
-                                  onSave={(v) => {
-                                    const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                                    if (!isNaN(num) && it.grpId) {
-                                      handleUpdatePresetGroup(it.grpId, { kitPrice: num / (it.setCount || 1) });
-                                    }
-                                  }}
-                                />
-                              </td>
-                            ) : null
-                          ) : (
-                            <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px', textAlign: 'right', fontWeight: '600', color: '#0F172A', fontSize: '9.5px', verticalAlign: 'top' }}>
-                              <EditableText
-                                value={Number(it.taxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                fallback="0.00"
-                                onSave={(v) => {
-                                  const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                                  if (!isNaN(num)) handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { amount: num });
-                                }}
-                              />
-                            </td>
-                          )
+                          <td style={{ border: "1px solid #CBD5E1", padding: "2.5px 6px", textAlign: "right", fontWeight: "700", color: "#0F172A", fontSize: "9.5px", verticalAlign: "top" }}>
+                            {Number(it.lineTotal || it.taxable || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
                         )}
                       </tr>
-                    </React.Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             );

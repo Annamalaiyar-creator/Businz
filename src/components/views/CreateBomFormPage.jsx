@@ -2490,7 +2490,8 @@ export default function CreateBomFormPage(props) {
                       if (String(n || '').toLowerCase().includes('manoj')) return 'SE-001';
                       const lowerN = String(n || '').toLowerCase();
                       if (lowerN.includes('kumar') && lowerN.includes('vasanth')) return 'SE-003';
-                      if (uc === 'SE-003' || uc === 'SE-004' || uc === 'SE-VRM006') return 'SE-003';
+                      if (uc === 'SE-003' || uc === 'SE-VRM006') return 'SE-003';
+                      if (uc === 'SE-004' || uc === 'SE-015') return 'SE-004';
                       return uc || '';
                     };
                     const effectiveSalesPersonCode = canonicalizeCode(rawSalesPersonCode, effectiveSalesPersonName);

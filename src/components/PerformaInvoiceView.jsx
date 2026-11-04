@@ -100,7 +100,8 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
   if (String(name || '').toLowerCase().includes('manoj')) return 'SE-001';
   const lowerName = String(name || '').toLowerCase();
   if (lowerName.includes('kumar') && lowerName.includes('vasanth')) return 'SE-003';
-  if (c === 'SE-003' || c === 'SE-004' || c === 'SE-VRM006') return 'SE-003';
+  if (c === 'SE-003' || c === 'SE-VRM006') return 'SE-003';
+  if (c === 'SE-004' || c === 'SE-015') return 'SE-004';
   return c || '';
 };
 
@@ -636,7 +637,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const SALES_TEAM = [
       { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
       { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
-      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-004'] },
+      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-VRM006'] },
       { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
       { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
       { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },
@@ -2970,7 +2971,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         statusType: isDraft ? 'draft' : (isEditing && matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
         salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
         salesperson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
-        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : (currentEmpId || 'SE-004')),
+        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : (currentEmpId || '')),
         salesPersonEmail: (isEditing ? matchedExisting?.salesPersonEmail : null) || currentLoggedEmail || '',
         assignedSalesperson: (isEditing ? matchedExisting?.assignedSalesperson : null) || (isTechSupport ? salesPerson || '' : ''),
         assignedSalespersonCode: (isEditing ? matchedExisting?.assignedSalespersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : ''),
@@ -2980,7 +2981,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         assignedBy: (isEditing ? matchedExisting?.assignedBy : null) || (isTechSupport && salesPerson ? (currentEmpName || 'Tech Support') : null),
         assignedById: (isEditing ? matchedExisting?.assignedById : null) || (isTechSupport && salesPerson ? (currentEmpId || 'TS-001') : null),
         createdBy: (isEditing ? matchedExisting?.createdBy : null) || currentEmpName || (isTechSupport ? 'Tech Support' : getEffectiveSalesPerson()),
-        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || (isTechSupport ? 'TS-001' : 'SE-004'),
+        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || (isTechSupport ? 'TS-001' : ''),
         createdByRole: (isEditing ? matchedExisting?.createdByRole : null) || userRole || (isTechSupport ? 'Tech Support' : 'Sales Executive'),
         createdByEmail: (isEditing ? matchedExisting?.createdByEmail : null) || currentLoggedEmail || '',
         convertedBomCode: isEditing ? (matchedExisting?.convertedBomCode || null) : null,
