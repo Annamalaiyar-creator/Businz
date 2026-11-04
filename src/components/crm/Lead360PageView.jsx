@@ -6,7 +6,8 @@ import {
   Zap, Sparkles, User, MapPin, Building2, Briefcase, Tag,
   Receipt, TrendingUp, Activity, Info, Hash,
   ShieldCheck, PhoneCall, AlertTriangle, UserCheck, Flame,
-  Compass, FileCheck2, RotateCcw, Check, FileCheck, ExternalLink, UserPlus, Lock
+  Compass, FileCheck2, RotateCcw, Check, FileCheck, ExternalLink, UserPlus, Lock,
+  Paperclip, Download, X
 } from 'lucide-react';
 import { fetchCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
 
@@ -235,6 +236,7 @@ export default function Lead360PageView({
   const isTechSupport = ['tech support', 'technical support', 'tech_support'].some(r => effectiveRole.includes(r));
 
   const [profileTab, setProfileTab] = useState('Timeline');
+  const [previewImageModal, setPreviewImageModal] = useState(null);
 
   // Proforma Invoices & Tax Invoices live store
   const [dbPis, setDbPis] = useState([]);
@@ -1618,6 +1620,53 @@ export default function Lead360PageView({
                           {lead.product_requirement || 'Custom Solar Mounting Structures'}
                         </div>
                       </div>
+
+                      {/* Attached Requirement Images from Tech Support / CEO */}
+                      {(() => {
+                        const reqImages = Array.isArray(lead.requirement_images)
+                          ? lead.requirement_images
+                          : (Array.isArray(lead.requirementImages)
+                              ? lead.requirementImages
+                              : (lead.requirement_images && typeof lead.requirement_images === 'string'
+                                  ? JSON.parse(lead.requirement_images || '[]')
+                                  : []));
+                        if (!reqImages || reqImages.length === 0) return null;
+                        return (
+                          <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${C.purpleSoft}` }}>
+                            <div style={{ fontSize: '10.5px', color: C.purple, fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '8px' }}>
+                              <Paperclip size={12} />
+                              <span>Attached Requirement Images ({reqImages.length})</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))', gap: '8px' }}>
+                              {reqImages.map((img, iIdx) => {
+                                const imgSrc = img.dataUrl || img.url || img;
+                                return (
+                                  <div
+                                    key={iIdx}
+                                    onClick={() => setPreviewImageModal(imgSrc)}
+                                    style={{
+                                      height: '75px',
+                                      borderRadius: '8px',
+                                      overflow: 'hidden',
+                                      border: '1.5px solid #CBD5E1',
+                                      cursor: 'pointer',
+                                      backgroundColor: '#0F172A',
+                                      position: 'relative'
+                                    }}
+                                    title={img.name || `View Image ${iIdx + 1}`}
+                                  >
+                                    <img
+                                      src={imgSrc}
+                                      alt={img.name || `Requirement Image ${iIdx + 1}`}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1645,6 +1694,83 @@ export default function Lead360PageView({
 
           </div>
         </Card>
+
+        {/* Lightbox Modal for Requirement Image Attachments */}
+        {previewImageModal && (
+          <div
+            onClick={() => setPreviewImageModal(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.85)',
+              zIndex: 99999,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px'
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'relative',
+                maxWidth: '90vw',
+                maxHeight: '85vh',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '8px', gap: '10px' }}>
+                <a
+                  href={previewImageModal}
+                  download="lead_requirement_attachment.jpg"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    color: '#FFFFFF',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    textDecoration: 'none',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Download size={14} /> Download
+                </a>
+                <button
+                  onClick={() => setPreviewImageModal(null)}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <img
+                src={previewImageModal}
+                alt="Lead Requirement Attachment"
+                style={{
+                  maxWidth: '90vw',
+                  maxHeight: '80vh',
+                  objectFit: 'contain',
+                  borderRadius: '8px',
+                  boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)'
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }

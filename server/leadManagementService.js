@@ -88,7 +88,8 @@ export async function ensureLeadsSchema() {
       'unattended_alert_sent_at TIMESTAMPTZ',
       'escalation_alert_sent_at TIMESTAMPTZ',
       'converted_customer_id TEXT',
-      'converted_customer_code TEXT'
+      'converted_customer_code TEXT',
+      "requirement_images JSONB DEFAULT '[]'::jsonb"
     ];
 
     for (const col of columns) {
@@ -525,15 +526,19 @@ export async function createLead(leadData, creatorUser = {}) {
       id, lead_number, company_name, contact_person, designation, phone, whatsapp,
       email, location, source, status, product_requirement, priority, estimated_kw,
       notes, lead_created_by_id, lead_created_by_name, external_enquiry_id, external_payload,
-      created_at, updated_at
+      requirement_images, created_at, updated_at
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7,
       $8, $9, $10, $11, $12, $13, $14,
       $15, $16, $17, $18, $19,
-      NOW(), NOW()
+      $20, NOW(), NOW()
     )
     RETURNING *
   `;
+
+  const reqImages = Array.isArray(leadData.requirementImages)
+    ? JSON.stringify(leadData.requirementImages)
+    : (Array.isArray(leadData.requirement_images) ? JSON.stringify(leadData.requirement_images) : '[]');
 
   const params = [
     id,
@@ -554,7 +559,8 @@ export async function createLead(leadData, creatorUser = {}) {
     createdById,
     createdByName,
     leadData.externalEnquiryId || null,
-    leadData.externalPayload ? JSON.stringify(leadData.externalPayload) : null
+    leadData.externalPayload ? JSON.stringify(leadData.externalPayload) : null,
+    reqImages
   ];
 
   let pendingNotificationBroadcast = null;
@@ -645,6 +651,10 @@ export async function updateLead(leadId, leadData = {}) {
     }
   }
 
+  const reqImages = leadData.requirementImages !== undefined
+    ? JSON.stringify(leadData.requirementImages)
+    : (leadData.requirement_images !== undefined ? JSON.stringify(leadData.requirement_images) : null);
+
   const res = await dbQuery(
     `UPDATE public.leads
      SET company_name = COALESCE($1, company_name),
@@ -661,8 +671,9 @@ export async function updateLead(leadId, leadData = {}) {
          priority = COALESCE($12, priority),
          status = COALESCE($13, status),
          source = COALESCE($14, source),
+         requirement_images = COALESCE($15::jsonb, requirement_images),
          updated_at = NOW()
-     WHERE id = $15 OR lead_number = $15
+     WHERE id = $16 OR lead_number = $16
      RETURNING *`,
     [
       companyName,
@@ -679,6 +690,7 @@ export async function updateLead(leadId, leadData = {}) {
       priority,
       status,
       source,
+      reqImages,
       leadId
     ]
   );

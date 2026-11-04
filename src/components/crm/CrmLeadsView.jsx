@@ -6,11 +6,12 @@ import {
   FileText, Check, ChevronDown, Zap, Send, TrendingUp, Layers, Award,
   Trash2, UserCheck, RotateCcw, Download, Printer, ChevronLeft,
   ChevronsLeft, ChevronsRight, AlertTriangle, PhoneCall, Users,
-  FileCheck2, Compass, Edit3, UserPlus, Lock
+  FileCheck2, Compass, Edit3, UserPlus, Lock, Paperclip, Image as ImageIcon
 } from 'lucide-react';
 import Lead360PageView, { LEAD_STAGES, getStageRank, canTransitionStage } from './Lead360PageView';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 import NotificationToast from '../NotificationToast';
+import { compressAndSaveFile } from '../../utils/mediaUtils';
 
 const STRUCTURE_CATEGORIES = [
   'Aluminium Mounting Structures',
@@ -104,6 +105,7 @@ export default function CrmLeadsView({
     location: '',
     source: 'Direct Inbound',
     productRequirement: '',
+    requirementImages: [],
     category: '',
     estimatedKw: '',
     notes: '',
@@ -113,6 +115,34 @@ export default function CrmLeadsView({
     assignedToName: '',
     assignedToRole: ''
   });
+
+  // Active Image Modal for full-resolution lightbox view
+  const [activeImageModal, setActiveImageModal] = useState(null);
+
+  const handleRequirementImageUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    files.forEach(file => {
+      if (!file.type.startsWith('image/') && !/\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(file.name || '')) return;
+      compressAndSaveFile(file, (meta) => {
+        if (meta && (meta.dataUrl || meta.url)) {
+          setCreateForm(prev => ({
+            ...prev,
+            requirementImages: [...(prev.requirementImages || []), meta]
+          }));
+        }
+      });
+    });
+    e.target.value = '';
+  };
+
+  const handleRemoveRequirementImage = (indexToRemove) => {
+    setCreateForm(prev => ({
+      ...prev,
+      requirementImages: (prev.requirementImages || []).filter((_, idx) => idx !== indexToRemove)
+    }));
+  };
 
   // Assign Form State
   const [assignForm, setAssignForm] = useState({
@@ -469,6 +499,7 @@ export default function CrmLeadsView({
       location: l.location || '',
       source: l.source || 'Direct Inbound',
       productRequirement: l.product_requirement || l.productRequirement || '',
+      requirementImages: Array.isArray(l.requirement_images) ? l.requirement_images : (Array.isArray(l.requirementImages) ? l.requirementImages : []),
       category: l.category || '',
       estimatedKw: l.estimated_kw || l.estimatedKw || '',
       notes: l.notes || '',
@@ -621,6 +652,7 @@ export default function CrmLeadsView({
           location: '',
           source: 'Direct Inbound',
           productRequirement: '',
+          requirementImages: [],
           category: '',
           estimatedKw: '',
           notes: '',
@@ -1011,6 +1043,7 @@ export default function CrmLeadsView({
                   location: '',
                   source: 'Direct Inbound',
                   productRequirement: '',
+          requirementImages: [],
                   category: '',
                   estimatedKw: '',
                   notes: '',
@@ -1403,9 +1436,41 @@ export default function CrmLeadsView({
                         <div style={{ fontSize: '12px', color: '#1E293B', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={lead.product_requirement}>
                           {lead.product_requirement || 'General Solar Mounting'}
                         </div>
-                        <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 600 }}>
-                          {lead.estimated_kw ? `${lead.estimated_kw} kW` : ''}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                          {lead.estimated_kw ? (
+                            <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 600 }}>
+                              {lead.estimated_kw} kW
+                            </span>
+                          ) : null}
+                          {(() => {
+                            const reqImgs = Array.isArray(lead.requirement_images) ? lead.requirement_images : (Array.isArray(lead.requirementImages) ? lead.requirementImages : []);
+                            if (!reqImgs || reqImgs.length === 0) return null;
+                            return (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveImageModal(reqImgs[0]?.dataUrl || reqImgs[0]?.url || reqImgs[0]);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  color: '#0E7490',
+                                  backgroundColor: '#ECFEFF',
+                                  border: '1px solid #A5F3FC',
+                                  padding: '1px 6px',
+                                  borderRadius: '12px',
+                                  cursor: 'pointer'
+                                }}
+                                title="Click to view attached requirement images"
+                              >
+                                <Paperclip size={10} /> {reqImgs.length} {reqImgs.length === 1 ? 'photo' : 'photos'}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </td>
 
                       {/* Source */}
@@ -1834,8 +1899,8 @@ export default function CrmLeadsView({
             );
           })()}
 
-          {/* Convert to Customer / View Customer (Hidden for CEO & Tech Support logins) */}
-          {!isCeo && !isTechSupport && (() => {
+          {/* Convert to Customer / View Customer (Available for Sales & Tech Support) */}
+          {!isCeo && (() => {
             const selectedLead = selectedLeadIds.length === 1 ? dbLeads.find(l => l.id === selectedLeadIds[0]) : null;
             const isLeadConverted = selectedLead && (selectedLead.status === 'Converted' || selectedLead.status === 'Won');
             const selCustCode = selectedLead && (
@@ -2154,9 +2219,37 @@ export default function CrmLeadsView({
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                  Product Requirement / Technical Scope
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                    Product Requirement / Technical Scope
+                  </label>
+                  {/* Attachment Icon Button (Multiple images supported) */}
+                  <label style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: '11.5px',
+                    fontWeight: '700',
+                    color: '#0E7490',
+                    backgroundColor: '#ECFEFF',
+                    border: '1px solid #A5F3FC',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    transition: 'all 0.15s ease'
+                  }}>
+                    <Paperclip size={13} style={{ color: '#0E7490' }} />
+                    <span>Attach Images {createForm.requirementImages?.length > 0 ? `(${createForm.requirementImages.length})` : ''}</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleRequirementImageUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
                 <textarea
                   rows={3}
                   placeholder="e.g. Need aluminium walk-way clamps and 50kW rail mounting system with SS fasteners."
@@ -2164,6 +2257,86 @@ export default function CrmLeadsView({
                   onChange={(e) => setCreateForm({ ...createForm, productRequirement: e.target.value })}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
                 />
+
+                {/* Attached Images Thumbnail Preview List */}
+                {createForm.requirementImages && createForm.requirementImages.length > 0 && (
+                  <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                    {createForm.requirementImages.map((img, imgIdx) => (
+                      <div
+                        key={imgIdx}
+                        style={{
+                          position: 'relative',
+                          width: '64px',
+                          height: '64px',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          border: '1.5px solid #0E7490',
+                          backgroundColor: '#0F172A',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          flexShrink: 0
+                        }}
+                      >
+                        <img
+                          src={img.dataUrl || img.url || img}
+                          alt={img.name || `Attachment ${imgIdx + 1}`}
+                          onClick={() => setActiveImageModal(img.dataUrl || img.url || img)}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                          title="Click to preview image"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRequirementImage(imgIdx)}
+                          style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            backgroundColor: '#EF4444',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            padding: 0,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                          }}
+                          title="Remove image"
+                        >
+                          <X size={11} strokeWidth={3} />
+                        </button>
+                      </div>
+                    ))}
+                    <label style={{
+                      width: '64px',
+                      height: '64px',
+                      borderRadius: '8px',
+                      border: '1.5px dashed #0E7490',
+                      backgroundColor: '#ECFEFF',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '2px',
+                      cursor: 'pointer',
+                      fontSize: '10px',
+                      color: '#0E7490',
+                      fontWeight: '700'
+                    }}>
+                      <Plus size={16} />
+                      <span>Add</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleRequirementImageUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Status (Available during Edit) */}
@@ -2873,6 +3046,83 @@ export default function CrmLeadsView({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal for Attached Requirement Images */}
+      {activeImageModal && (
+        <div
+          onClick={() => setActiveImageModal(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            zIndex: 99999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '8px', gap: '10px' }}>
+              <a
+                href={activeImageModal}
+                download="requirement_attachment.jpg"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: '#FFFFFF',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  textDecoration: 'none',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Download size={14} /> Download
+              </a>
+              <button
+                onClick={() => setActiveImageModal(null)}
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <img
+              src={activeImageModal}
+              alt="Requirement Attachment"
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: '8px',
+                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)'
+              }}
+            />
           </div>
         </div>
       )}
