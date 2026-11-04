@@ -622,7 +622,7 @@ return (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif", minHeight: '100%' }}>
 
     {/* ─── GRADIENT STATUS BANNER HEADER (Exact Dispatch Packing Specifications Theme) ─── */}
-    <div style={{
+    <div className="dispatch-modal-banner" style={{
       background: isReadOnly
         ? 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)'
         : 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)',
@@ -633,92 +633,96 @@ return (
       alignItems: 'center',
       boxShadow: '0 8px 24px rgba(6,78,59,0.35)'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-        {/* Back button */}
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            backgroundColor: 'rgba(255,255,255,0.15)',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: '10px', padding: '9px 16px',
-            fontSize: '13px', fontWeight: '700', color: '#FFFFFF',
-            cursor: 'pointer', backdropFilter: 'blur(4px)',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)'}
-          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
-        >
-          <ChevronLeft style={{ width: '16px', height: '16px' }} /> Back
-        </button>
+      <div className="dispatch-banner-main-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        {/* Back button & BOM badge row */}
+        <div className="dispatch-banner-nav-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '10px', padding: '9px 16px',
+              fontSize: '13px', fontWeight: '700', color: '#FFFFFF',
+              cursor: 'pointer', backdropFilter: 'blur(4px)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+          >
+            <ChevronLeft style={{ width: '16px', height: '16px' }} /> Back
+          </button>
+          <span style={{
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            border: '1px solid rgba(255,255,255,0.35)',
+            color: '#FFFFFF', padding: '3px 12px',
+            borderRadius: '20px', fontSize: '12px', fontWeight: '800'
+          }}>
+            {bCode}
+          </span>
+        </div>
 
         {/* Title + meta */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
+          <div className="dispatch-banner-heading-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <h1 className="dispatch-banner-title" style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
               {isReadOnly ? 'Dispatch Vehicle Loading Specifications (Locked)' : 'Dispatch Vehicle Loading Verification'}
             </h1>
-            <span style={{
-              backgroundColor: 'rgba(255,255,255,0.2)',
-              border: '1px solid rgba(255,255,255,0.35)',
-              color: '#FFFFFF', padding: '3px 12px',
-              borderRadius: '20px', fontSize: '12px', fontWeight: '800'
-            }}>
-              {bCode}
-            </span>
-            <span style={{
-              backgroundColor: '#DCFCE7',
-              border: '1px solid #86EFAC',
-              color: '#166534', padding: '3px 12px',
-              borderRadius: '20px', fontSize: '11px', fontWeight: '800'
-            }}>
-              {invNo}
-            </span>
-            {bom?.docType === 'DC' ? (
+            <div className="dispatch-banner-tags" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{
-                backgroundColor: '#FEF3C7',
-                border: '1px solid #FCD34D',
-                color: '#92400E', padding: '3px 12px',
-                borderRadius: '20px', fontSize: '11px', fontWeight: '800',
-                letterSpacing: '0.5px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px'
+                backgroundColor: '#DCFCE7',
+                border: '1px solid #86EFAC',
+                color: '#166534', padding: '3px 12px',
+                borderRadius: '20px', fontSize: '11px', fontWeight: '800'
               }}>
-                <Truck size={13} strokeWidth={2.2} />
-                <span>DC (DELIVERY CHALLAN)</span>
+                {invNo}
               </span>
-            ) : (
+              {bom?.docType === 'DC' ? (
+                <span style={{
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E', padding: '3px 12px',
+                  borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <Truck size={13} strokeWidth={2.2} />
+                  <span>DC (DELIVERY CHALLAN)</span>
+                </span>
+              ) : (
+                <span style={{
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF', padding: '3px 12px',
+                  borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                  letterSpacing: '0.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <FileText size={13} strokeWidth={2.2} />
+                  <span>TAX INVOICE</span>
+                </span>
+              )}
               <span style={{
-                backgroundColor: '#EFF6FF',
-                border: '1px solid #BFDBFE',
-                color: '#1E40AF', padding: '3px 12px',
-                borderRadius: '20px', fontSize: '11px', fontWeight: '800',
-                letterSpacing: '0.5px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px'
+                backgroundColor: '#DCFCE7',
+                color: '#166534',
+                padding: '3px 12px', borderRadius: '20px',
+                fontSize: '11px', fontWeight: '800',
+                display: 'inline-flex', alignItems: 'center', gap: '4px'
               }}>
-                <FileText size={13} strokeWidth={2.2} />
-                <span>TAX INVOICE</span>
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#166534' }}></span>
+                {isReadOnly ? 'DISPATCH COMPLETED' : 'ALL ITEMS PACKED'}
               </span>
-            )}
-            <span style={{
-              backgroundColor: '#DCFCE7',
-              color: '#166534',
-              padding: '3px 12px', borderRadius: '20px',
-              fontSize: '11px', fontWeight: '800',
-              display: 'inline-flex', alignItems: 'center', gap: '4px'
-            }}>
-              <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#166534' }}></span>
-              {isReadOnly ? 'DISPATCH COMPLETED' : 'ALL ITEMS PACKED'}
-            </span>
+            </div>
           </div>
 
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div className="dispatch-banner-meta" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
             <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custName}</strong></span>
-            <span>•</span>
+            <span className="dispatch-banner-bullet">•</span>
             <span>
               Sales Creator: <strong style={{
                 color: '#FFFFFF',
@@ -732,7 +736,7 @@ return (
                 <User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {authenticSalesPerson}
               </strong>
             </span>
-            <span>•</span>
+            <span className="dispatch-banner-bullet">•</span>
             <span>Payment: <strong style={{ color: '#FFFFFF' }}>{bom.paymentType || '100% Paid'}</strong></span>
           </div>
         </div>
@@ -740,7 +744,7 @@ return (
 
       {/* Action Buttons in Header */}
       {!isReadOnly && (
-        <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+        <div className="dispatch-banner-actions" style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
           <button
             type="button"
             onClick={handleInitiateConfirm}
@@ -806,8 +810,8 @@ return (
       </div>
 
       {/* Items Manifest Table */}
-      <div style={{ padding: '0', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+      <div className="dispatch-table-scroll-container" style={{ padding: '0', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="dispatch-checklist-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               <th style={{ padding: '12px 18px', textAlign: 'center', width: '50px', fontWeight: '800' }}>#</th>
