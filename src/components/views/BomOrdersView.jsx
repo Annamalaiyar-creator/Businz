@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { exportSmartMultiPagePdf } from '../../utils/smartPdfExporter';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, deleteCloudBomRow, saveCloudBomRow } from '../../utils/supabaseDataSync';
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
@@ -1249,7 +1250,7 @@ export default function BomOrdersView(props) {
     URL.revokeObjectURL(url);
   };
 
-  // Export BOM sheet as high-resolution PDF document using jsPDF + html2canvas
+  // Export BOM sheet as high-resolution PDF document using smart multi-page exporter
   const handleExportAsPdf = async (record) => {
     if (!record) return;
     setIsExportingFormat('pdf');
@@ -1260,34 +1261,11 @@ export default function BomOrdersView(props) {
         setIsExportingFormat(null);
         return;
       }
-      await new Promise((res) => setTimeout(res, 350));
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      const pageHeight = pdf.internal.pageSize.getHeight();
-
-      let heightLeft = pdfHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
-        heightLeft -= pageHeight;
-      }
-
       const bomCode = record.bomCode || record.code || 'BOM_Order';
-      pdf.save(`${bomCode}_document.pdf`);
+      await exportSmartMultiPagePdf(el, {
+        filename: `${bomCode}_document.pdf`,
+        scale: 2
+      });
       setExportFormatRecord(null);
     } catch (err) {
       console.error('PDF export failed:', err);

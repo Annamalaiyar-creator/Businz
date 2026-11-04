@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { exportSmartMultiPagePdf } from '../utils/smartPdfExporter';
 import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAssets';
 import { stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import WhatsAppQrModal from './crm/WhatsAppQrModal';
@@ -4451,39 +4452,11 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         return;
       }
 
-      await new Promise(res => setTimeout(res, 250));
-
-      const canvas = await html2canvas(sheetEl, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: false,
-        imageTimeout: 3000,
-        logging: false,
-        backgroundColor: '#ffffff',
-        ignoreElements: (element) => element.classList?.contains('no-print')
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      const pageHeight = pdf.internal.pageSize.getHeight();
-
-      let heightLeft = pdfHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position -= pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
-        heightLeft -= pageHeight;
-      }
-
       const piNumberSafe = (piData.piNo || 'Proforma_Invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
-      pdf.save(`${piNumberSafe}_document.pdf`);
+      await exportSmartMultiPagePdf(sheetEl, {
+        filename: `${piNumberSafe}_document.pdf`,
+        scale: 2
+      });
     } catch (err) {
       console.error('Proforma Invoice PDF export failed:', err);
       window.print();
@@ -4519,31 +4492,12 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
       if (waAttachPdf) {
         const sheetEl = document.getElementById('printable-proforma-invoice');
         if (sheetEl) {
-          const canvas = await html2canvas(sheetEl, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: false,
-            imageTimeout: 3000,
-            logging: false,
-            backgroundColor: '#ffffff',
-            ignoreElements: (element) => element.classList?.contains('no-print')
+          const piNumberSafe = (currentPiData.piNo || 'Proforma_Invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
+          pdfBase64 = await exportSmartMultiPagePdf(sheetEl, {
+            filename: `${piNumberSafe}.pdf`,
+            returnBase64: true,
+            scale: 2
           });
-          const imgData = canvas.toDataURL('image/jpeg', 0.95);
-          const pdf = new jsPDF('p', 'mm', 'a4');
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-          const pageHeight = pdf.internal.pageSize.getHeight();
-          let heightLeft = pdfHeight;
-          let position = 0;
-          pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
-          heightLeft -= pageHeight;
-          while (heightLeft > 0) {
-            position -= pageHeight;
-            pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
-            heightLeft -= pageHeight;
-          }
-          pdfBase64 = pdf.output('datauristring');
         }
       }
 
