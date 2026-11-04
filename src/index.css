@@ -1740,6 +1740,12 @@ table td {
   display: block;
 }
 
+.dispatch-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
 @media screen and (max-width: 768px) {
   html, body {
     overflow-x: hidden !important;

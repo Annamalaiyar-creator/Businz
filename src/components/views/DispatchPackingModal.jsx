@@ -1150,7 +1150,7 @@ export default function DispatchPackingModal({
       )}
 
       {/* ─── 3 STATS CARDS (Order Value hidden for Dispatch role) ─── */}
-      <div className="dispatch-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+      <div className="dispatch-stats-grid">
         {/* Progress Card */}
         <div className="dispatch-stat-card" style={{
           backgroundColor: '#FFFFFF', borderRadius: '14px',
