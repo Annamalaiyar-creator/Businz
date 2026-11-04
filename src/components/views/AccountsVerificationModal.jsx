@@ -33,6 +33,17 @@ export default function AccountsVerificationModal({
   const [isResolvingProof, setIsResolvingProof] = useState(false);
   const [isResolvingAddressProof, setIsResolvingAddressProof] = useState(false);
 
+  // Dynamic mobile viewport detection
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     let active = true;
     if (!accountsVerificationModal) {
@@ -652,24 +663,32 @@ export default function AccountsVerificationModal({
       </div>
 
       {/* ─── 3 STAT CARDS (Payment Type, Total Amount, Payment Date) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+        gap: isMobile ? '10px' : '14px',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
         {/* Payment Status Card */}
         <div style={{
+          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0',
-          padding: '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: '14px'
+          padding: isMobile ? '12px 14px' : '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          boxSizing: 'border-box'
         }}>
           <div style={{
-            width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
             background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 10px rgba(37,99,235,0.25)'
           }}>
-            <Receipt style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
+            <Receipt style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Type & Status</div>
-            <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>{payTypeText || '100% Paid'}</div>
+            <div style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>{payTypeText || '100% Paid'}</div>
             <div style={{ marginTop: '3px' }}>
               <span style={{
                 fontSize: '11px',
@@ -689,21 +708,23 @@ export default function AccountsVerificationModal({
 
         {/* Total Amount Card */}
         <div style={{
+          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0',
-          padding: '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: '14px'
+          padding: isMobile ? '12px 14px' : '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          boxSizing: 'border-box'
         }}>
           <div style={{
-            width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
             background: 'linear-gradient(135deg, #166534, #16A34A)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 10px rgba(22,101,52,0.25)'
           }}>
-            <IndianRupee style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
+            <IndianRupee style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Amount</div>
-            <div style={{ fontSize: '18px', fontWeight: '900', color: (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0) ? '#0F172A' : '#94A3B8', lineHeight: 1.2 }}>
+            <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '900', color: (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0) ? '#0F172A' : '#94A3B8', lineHeight: 1.2 }}>
               {currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0 ? `₹ ${parseFloat(currentTotalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Pending Entry'}
             </div>
           </div>
@@ -711,21 +732,24 @@ export default function AccountsVerificationModal({
 
         {/* Payment Date Card */}
         <div style={{
+          gridColumn: isMobile ? 'span 2' : 'span 1',
+          width: '100%',
           backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0',
-          padding: '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: '14px'
+          padding: isMobile ? '12px 14px' : '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          boxSizing: 'border-box'
         }}>
           <div style={{
-            width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
             background: 'linear-gradient(135deg, #0E7490, #06B6D4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 10px rgba(14,116,144,0.25)'
           }}>
-            <Calendar style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
+            <Calendar style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Date</div>
-            <div style={{ fontSize: '14px', fontWeight: '900', color: currentPayDate ? '#0F172A' : '#94A3B8', lineHeight: 1.3 }}>
+            <div style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '900', color: currentPayDate ? '#0F172A' : '#94A3B8', lineHeight: 1.3 }}>
               {(() => {
                 if (!currentPayDate) return 'Pending Entry';
                 try {

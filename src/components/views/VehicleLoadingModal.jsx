@@ -198,6 +198,17 @@ export default function VehicleLoadingModal({
 }) {
   const bom = vehicleLoadingModal;
   const existingLoading = bom.vehicleLoading || {};
+
+  // Dynamic mobile viewport detection
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [localMediaPreviewModal, setLocalMediaPreviewModal] = useState(null);
 
   const salesTransportMode = (() => {
@@ -627,15 +638,31 @@ return (
         ? 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)'
         : 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)',
       borderRadius: '16px',
-      padding: '24px 28px',
+      padding: isMobile ? '16px 14px' : '24px 28px',
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
-      boxShadow: '0 8px 24px rgba(6,78,59,0.35)'
+      alignItems: isMobile ? 'stretch' : 'center',
+      gap: isMobile ? '14px' : '20px',
+      boxShadow: '0 8px 24px rgba(6,78,59,0.35)',
+      boxSizing: 'border-box',
+      width: '100%'
     }}>
-      <div className="dispatch-banner-main-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+      <div className="dispatch-banner-main-wrapper" style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: isMobile ? '12px' : '20px',
+        width: '100%'
+      }}>
         {/* Back button & BOM badge row */}
-        <div className="dispatch-banner-nav-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="dispatch-banner-nav-row" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: isMobile ? 'space-between' : 'flex-start',
+          gap: '12px',
+          width: isMobile ? '100%' : 'auto'
+        }}>
           <button
             type="button"
             onClick={onClose}
@@ -643,8 +670,8 @@ return (
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               backgroundColor: 'rgba(255,255,255,0.15)',
               border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: '10px', padding: '9px 16px',
-              fontSize: '13px', fontWeight: '700', color: '#FFFFFF',
+              borderRadius: '10px', padding: isMobile ? '7px 12px' : '9px 16px',
+              fontSize: isMobile ? '12px' : '13px', fontWeight: '700', color: '#FFFFFF',
               cursor: 'pointer', backdropFilter: 'blur(4px)',
               transition: 'all 0.15s ease'
             }}
@@ -664,9 +691,19 @@ return (
         </div>
 
         {/* Title + meta */}
-        <div>
-          <div className="dispatch-banner-heading-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <h1 className="dispatch-banner-title" style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
+        <div style={{ width: '100%' }}>
+          <div className="dispatch-banner-heading-row" style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'flex-start' : 'center',
+            gap: isMobile ? '8px' : '12px',
+            flexWrap: 'wrap'
+          }}>
+            <h1 className="dispatch-banner-title" style={{
+              fontSize: isMobile ? '16px' : '20px',
+              fontWeight: '900', color: '#FFFFFF', margin: 0,
+              letterSpacing: '-0.2px', lineHeight: 1.3
+            }}>
               {isReadOnly ? 'Dispatch Vehicle Loading Specifications (Locked)' : 'Dispatch Vehicle Loading Verification'}
             </h1>
             <div className="dispatch-banner-tags" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -720,9 +757,20 @@ return (
             </div>
           </div>
 
-          <div className="dispatch-banner-meta" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div className="dispatch-banner-meta" style={{
+            fontSize: isMobile ? '12px' : '13px',
+            color: 'rgba(255,255,255,0.85)',
+            marginTop: isMobile ? '8px' : '6px',
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? '6px' : '16px',
+            flexWrap: 'wrap',
+            backgroundColor: isMobile ? 'rgba(0,0,0,0.18)' : 'transparent',
+            padding: isMobile ? '10px 12px' : '0',
+            borderRadius: isMobile ? '10px' : '0'
+          }}>
             <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custName}</strong></span>
-            <span className="dispatch-banner-bullet">•</span>
+            {!isMobile && <span className="dispatch-banner-bullet">•</span>}
             <span>
               Sales Creator: <strong style={{
                 color: '#FFFFFF',
@@ -736,7 +784,7 @@ return (
                 <User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {authenticSalesPerson}
               </strong>
             </span>
-            <span className="dispatch-banner-bullet">•</span>
+            {!isMobile && <span className="dispatch-banner-bullet">•</span>}
             <span>Payment: <strong style={{ color: '#FFFFFF' }}>{bom.paymentType || '100% Paid'}</strong></span>
           </div>
         </div>
@@ -744,7 +792,13 @@ return (
 
       {/* Action Buttons in Header */}
       {!isReadOnly && (
-        <div className="dispatch-banner-actions" style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+        <div className="dispatch-banner-actions" style={{
+          display: 'flex',
+          gap: '10px',
+          flexShrink: 0,
+          width: isMobile ? '100%' : 'auto',
+          marginTop: isMobile ? '6px' : '0'
+        }}>
           <button
             type="button"
             onClick={handleInitiateConfirm}
@@ -753,11 +807,13 @@ return (
               border: 'none',
               backgroundColor: (uploadingMedia || uploadingLr) ? '#E2E8F0' : '#FFFFFF',
               color: (uploadingMedia || uploadingLr) ? '#94A3B8' : '#065F46',
-              height: '42px', padding: '0 20px',
+              height: isMobile ? '44px' : '42px',
+              padding: '0 20px',
               borderRadius: '10px', fontSize: '13px', fontWeight: '900',
               cursor: (uploadingMedia || uploadingLr) ? 'not-allowed' : 'pointer',
               boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-              display: 'flex', alignItems: 'center', gap: '8px'
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              width: isMobile ? '100%' : 'auto'
             }}
           >
             <CheckCircle style={{ width: '16px', height: '16px' }} />

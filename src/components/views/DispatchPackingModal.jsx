@@ -206,6 +206,17 @@ export default function DispatchPackingModal({
   const dispatchCameraVideoRef = useRef(null);
   const dispatchCameraCanvasRef = useRef(null);
 
+  // Dynamic mobile viewport detection
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Safety auto-reset so buttons are never permanently stuck disabled due to unhandled network/file errors
   useEffect(() => {
     if (uploadingCount > 0) {
@@ -938,23 +949,39 @@ export default function DispatchPackingModal({
               ? 'linear-gradient(135deg, #78350F 0%, #92400E 100%)'
               : 'linear-gradient(135deg, #1E3A5F 0%, #1E40AF 100%)',
         borderRadius: '16px',
-        padding: '24px 28px',
+        padding: isMobile ? '16px 14px' : '24px 28px',
         display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        boxShadow: isCancelled ? '0 8px 24px rgba(127,29,29,0.35)' : allItemsPacked ? '0 8px 24px rgba(6,78,59,0.35)' : isPartial ? '0 8px 24px rgba(120,53,15,0.35)' : '0 8px 24px rgba(30,58,138,0.35)'
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: isMobile ? '14px' : '20px',
+        boxShadow: isCancelled ? '0 8px 24px rgba(127,29,29,0.35)' : allItemsPacked ? '0 8px 24px rgba(6,78,59,0.35)' : isPartial ? '0 8px 24px rgba(120,53,15,0.35)' : '0 8px 24px rgba(30,58,138,0.35)',
+        boxSizing: 'border-box',
+        width: '100%'
       }}>
-        <div className="dispatch-banner-main-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div className="dispatch-banner-main-wrapper" style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? '12px' : '20px',
+          width: '100%'
+        }}>
           {/* Back button & BOM badge row */}
-          <div className="dispatch-banner-nav-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="dispatch-banner-nav-row" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isMobile ? 'space-between' : 'flex-start',
+            gap: '12px',
+            width: isMobile ? '100%' : 'auto'
+          }}>
             <button
               onClick={() => setDispatchPackingModal(null)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 backgroundColor: 'rgba(255,255,255,0.15)',
                 border: '1px solid rgba(255,255,255,0.3)',
-                borderRadius: '10px', padding: '9px 16px',
-                fontSize: '13px', fontWeight: '700', color: '#FFFFFF',
+                borderRadius: '10px', padding: isMobile ? '7px 12px' : '9px 16px',
+                fontSize: isMobile ? '12px' : '13px', fontWeight: '700', color: '#FFFFFF',
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
                 transition: 'all 0.15s ease'
               }}
@@ -974,9 +1001,19 @@ export default function DispatchPackingModal({
           </div>
 
           {/* Title + meta */}
-          <div>
-            <div className="dispatch-banner-heading-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <h1 className="dispatch-banner-title" style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
+          <div style={{ width: '100%' }}>
+            <div className="dispatch-banner-heading-row" style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              alignItems: isMobile ? 'flex-start' : 'center',
+              gap: isMobile ? '8px' : '12px',
+              flexWrap: 'wrap'
+            }}>
+              <h1 className="dispatch-banner-title" style={{
+                fontSize: isMobile ? '16px' : '20px',
+                fontWeight: '900', color: '#FFFFFF', margin: 0,
+                letterSpacing: '-0.2px', lineHeight: 1.3
+              }}>
                 {isCancelled
                   ? 'Dispatch Packing Specifications (CANCELLED - VIEW ONLY)'
                   : (isPackedAndReady ? 'Dispatch Packing Specifications (Locked)' : 'Dispatch Packing Verification')}
@@ -1065,18 +1102,35 @@ export default function DispatchPackingModal({
                 )}
               </div>
             </div>
-            <div className="dispatch-banner-meta" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <span>Customer: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.customerName}</strong></span>
-              <span className="dispatch-banner-bullet">•</span>
+            <div className="dispatch-banner-meta" style={{
+              fontSize: isMobile ? '12px' : '13px',
+              color: 'rgba(255,255,255,0.85)',
+              marginTop: isMobile ? '8px' : '6px',
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '6px' : '16px',
+              flexWrap: 'wrap',
+              backgroundColor: isMobile ? 'rgba(0,0,0,0.18)' : 'transparent',
+              padding: isMobile ? '10px 12px' : '0',
+              borderRadius: isMobile ? '10px' : '0'
+            }}>
+              <span>Customer: <strong style={{ color: '#FFFFFF' }}>{cleanDisplayAddress(dispatchPackingModal.customerName || dispatchPackingModal.companyName || 'Tata Power Solar')}</strong></span>
+              {!isMobile && <span className="dispatch-banner-bullet">•</span>}
               <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {(dispatchPackingModal.salesPerson || dispatchPackingModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
-              <span className="dispatch-banner-bullet">•</span>
-              <span>Payment: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.paymentType}</strong></span>
+              {!isMobile && <span className="dispatch-banner-bullet">•</span>}
+              <span>Payment: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.paymentType || '100% Paid'}</strong></span>
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="dispatch-banner-actions" style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+        <div className="dispatch-banner-actions" style={{
+          display: 'flex',
+          gap: '10px',
+          flexShrink: 0,
+          width: isMobile ? '100%' : 'auto',
+          marginTop: isMobile ? '6px' : '0'
+        }}>
           {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
             <button
               type="button"
@@ -1086,11 +1140,13 @@ export default function DispatchPackingModal({
                 border: 'none',
                 backgroundColor: uploadingCount > 0 ? '#E2E8F0' : '#FFFFFF',
                 color: uploadingCount > 0 ? '#94A3B8' : '#065F46',
-                height: '42px', padding: '0 20px',
+                height: isMobile ? '44px' : '42px',
+                padding: '0 20px',
                 borderRadius: '10px', fontSize: '13px', fontWeight: '900',
                 cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                display: 'flex', alignItems: 'center', gap: '8px'
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                width: isMobile ? '100%' : 'auto'
               }}
             >
               <CheckCircle style={{ width: '16px', height: '16px' }} />
@@ -1150,58 +1206,73 @@ export default function DispatchPackingModal({
       )}
 
       {/* ─── 3 STATS CARDS (Order Value hidden for Dispatch role) ─── */}
-      <div className="dispatch-stats-grid">
+      <div className="dispatch-stats-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+        gap: isMobile ? '10px' : '14px',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
         {/* Progress Card */}
         <div className="dispatch-stat-card" style={{
+          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
-          border: '1px solid #E2E8F0', padding: '18px 20px',
+          border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: '14px'
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          boxSizing: 'border-box'
         }}>
           <div className="dispatch-stat-icon" style={{
-            width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
             background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 10px rgba(37,99,235,0.25)'
           }}>
-            <Package style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
+            <Package style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items Packed</div>
-            <div className="dispatch-stat-value" style={{ fontSize: '22px', fontWeight: '900', color: '#0F172A', lineHeight: 1.2 }}>
-              {packedItemsCount}<span style={{ fontSize: '14px', color: '#64748B', fontWeight: '600' }}>/{totalItemsCount}</span>
+            <div className="dispatch-stat-value" style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: '900', color: '#0F172A', lineHeight: 1.2 }}>
+              {packedItemsCount}<span style={{ fontSize: '13px', color: '#64748B', fontWeight: '600' }}>/{totalItemsCount}</span>
             </div>
           </div>
         </div>
 
         {/* Completion % Card */}
         <div className="dispatch-stat-card" style={{
+          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
-          border: '1px solid #E2E8F0', padding: '18px 20px',
+          border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: '14px'
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          boxSizing: 'border-box'
         }}>
           <div className="dispatch-stat-icon" style={{
-            width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
             background: allItemsPacked ? 'linear-gradient(135deg, #166534, #16A34A)' : isPartial ? 'linear-gradient(135deg, #B45309, #D97706)' : 'linear-gradient(135deg, #64748B, #94A3B8)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: allItemsPacked ? '0 4px 10px rgba(22,101,52,0.3)' : '0 4px 10px rgba(100,116,139,0.2)'
           }}>
-            <CheckCircle style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
+            <CheckCircle style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Completion</div>
-            <div className="dispatch-stat-value" style={{ fontSize: '22px', fontWeight: '900', color: allItemsPacked ? '#166534' : '#0F172A', lineHeight: 1.2 }}>{progressPercent}%</div>
+            <div className="dispatch-stat-value" style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: '900', color: allItemsPacked ? '#166534' : '#0F172A', lineHeight: 1.2 }}>{progressPercent}%</div>
           </div>
         </div>
 
         {/* Delivery Card */}
         <div className="dispatch-delivery-card" style={{
+          gridColumn: isMobile ? 'span 2' : 'span 1',
+          width: '100%',
           backgroundColor: '#FFFFFF', borderRadius: '14px',
-          border: '1px solid #E2E8F0', padding: '18px 20px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+          border: '1px solid #E2E8F0', padding: isMobile ? '12px 14px' : '18px 20px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          boxSizing: 'border-box'
         }}>
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Delivery Address</div>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <MapPin size={12} style={{ color: '#0E7490' }} /> Delivery Address
+          </div>
           <div style={{ fontSize: '12px', color: '#1E293B', fontWeight: '600', lineHeight: '1.5' }}>
             {cleanDisplayAddress(dispatchPackingModal.deliveryAddress || 'Plot 14, Phase II, Nagappa Estate, Puzhal, Chennai – 600066.')}
           </div>
@@ -1211,22 +1282,38 @@ export default function DispatchPackingModal({
       {/* ─── PROGRESS BAR CARD ─── */}
       <div className="dispatch-progress-card" style={{
         backgroundColor: '#FFFFFF', borderRadius: '14px',
-        border: '1px solid #E2E8F0', padding: '18px 24px',
+        border: '1px solid #E2E8F0', padding: isMobile ? '14px 16px' : '18px 24px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-        display: 'flex', alignItems: 'center', gap: '20px'
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: isMobile ? '10px' : '20px',
+        boxSizing: 'border-box',
+        width: '100%'
       }}>
-        <div className="dispatch-progress-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', minWidth: '160px' }}>
+        <div className="dispatch-progress-header" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          minWidth: isMobile ? 'auto' : '160px',
+          width: isMobile ? '100%' : 'auto'
+        }}>
           <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>
             Packing Progress
           </div>
           <div className="dispatch-progress-mobile-stats" style={{
-            fontSize: '13px', fontWeight: '900', whiteSpace: 'nowrap',
+            fontSize: '12.5px', fontWeight: '900', whiteSpace: 'nowrap',
             color: allItemsPacked ? '#166534' : isPartial ? '#B45309' : '#2563EB'
           }}>
             {packedItemsCount} of {totalItemsCount} Packed ({progressPercent}%)
           </div>
         </div>
-        <div className="dispatch-progress-track" style={{ flex: 1, height: '12px', backgroundColor: '#F1F5F9', borderRadius: '20px', overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+        <div className="dispatch-progress-track" style={{
+          flex: 1, height: isMobile ? '10px' : '12px',
+          backgroundColor: '#F1F5F9', borderRadius: '20px', overflow: 'hidden', border: '1px solid #E2E8F0',
+          width: isMobile ? '100%' : 'auto'
+        }}>
           <div style={{
             width: `${progressPercent}%`, height: '100%',
             background: allItemsPacked
@@ -1238,12 +1325,14 @@ export default function DispatchPackingModal({
             transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
           }} />
         </div>
-        <div className="dispatch-progress-desktop-stats" style={{
-          fontSize: '13px', fontWeight: '900', whiteSpace: 'nowrap',
-          color: allItemsPacked ? '#166534' : isPartial ? '#B45309' : '#2563EB'
-        }}>
-          {packedItemsCount} of {totalItemsCount} Packed ({progressPercent}%)
-        </div>
+        {!isMobile && (
+          <div className="dispatch-progress-desktop-stats" style={{
+            fontSize: '13px', fontWeight: '900', whiteSpace: 'nowrap',
+            color: allItemsPacked ? '#166534' : isPartial ? '#B45309' : '#2563EB'
+          }}>
+            {packedItemsCount} of {totalItemsCount} Packed ({progressPercent}%)
+          </div>
+        )}
       </div>
 
       {/* ─── CHECKLIST TABLE CARD ─── */}
@@ -1460,6 +1549,276 @@ export default function DispatchPackingModal({
                 </tr>
               );
             };
+
+            const renderMobileCard = (pItem, origIdx, itemNumberStr) => {
+              const itemBomQty = pItem.bomQty || pItem.qty || 1;
+              const currentPackedQty = (pItem.packedQty !== undefined && pItem.packedQty !== null && pItem.packedQty !== '') ? pItem.packedQty : (pItem.packed ? itemBomQty : '');
+
+              return (
+                <div
+                  key={origIdx}
+                  onClick={isPackedAndReady ? undefined : () => {
+                    const newPacked = !pItem.packed;
+                    const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
+                      ...pi,
+                      packed: newPacked,
+                      packedQty: newPacked ? (pi.packedQty ? pi.packedQty : (pi.bomQty || pi.qty || 1)) : ''
+                    } : pi);
+                    setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                  }}
+                  style={{
+                    backgroundColor: pItem.packed ? '#F0FDF4' : '#FFFFFF',
+                    border: pItem.packed ? '1.5px solid #86EFAC' : '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    cursor: isPackedAndReady ? 'default' : 'pointer',
+                    transition: 'all 0.15s ease',
+                    boxShadow: pItem.packed ? '0 2px 8px rgba(22,101,52,0.08)' : '0 1px 3px rgba(0,0,0,0.03)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '26px', height: '26px', borderRadius: '8px', flexShrink: 0,
+                        backgroundColor: pItem.packed ? '#166534' : '#FFFFFF',
+                        border: pItem.packed ? '2px solid #166534' : '2px solid #CBD5E1',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: pItem.packed ? '0 2px 6px rgba(22,101,52,0.25)' : 'none'
+                      }}>
+                        {pItem.packed && <CheckCircle style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '13.5px', fontWeight: '800', color: pItem.packed ? '#166534' : '#0F172A', lineHeight: 1.3 }}>
+                          {pItem.name}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+                          {itemNumberStr && (
+                            <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 5px', borderRadius: '4px' }}>
+                              #{itemNumberStr}
+                            </span>
+                          )}
+                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 6px', borderRadius: '4px' }}>
+                            {(() => {
+                              const nameStr = (pItem.name || '').toLowerCase().trim();
+                              if (nameStr.includes('mid 30') || nameStr.includes('mid30') || nameStr.includes('mc30')) return 'MC30';
+                              if (nameStr.includes('mid 35') || nameStr.includes('mid35') || nameStr.includes('mc35')) return 'MC35';
+                              if (nameStr.includes('end 30') || nameStr.includes('end30') || nameStr.includes('ec30')) return 'EC30';
+                              if (nameStr.includes('end 35') || nameStr.includes('end35') || nameStr.includes('ec35')) return 'EC35';
+                              if (nameStr.includes('mini rail') || nameStr.includes('mr100')) return 'MR100N';
+                              if (pItem.code && pItem.code !== 'MR100N') return pItem.code;
+                              if (pItem.itemCode && pItem.itemCode !== 'MR100N') return pItem.itemCode;
+                              const matchedProduct = VRM_PRODUCTS.find(vp => vp.name && pItem.name && vp.name.toLowerCase().trim() === nameStr);
+                              if (matchedProduct) return matchedProduct.code;
+                              return pItem.code || 'PROD-CODE';
+                            })()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                      padding: '3px 9px', borderRadius: '20px',
+                      fontSize: '10.5px', fontWeight: '800', flexShrink: 0,
+                      backgroundColor: pItem.packed ? '#DCFCE7' : '#FFF7ED',
+                      color: pItem.packed ? '#166534' : '#C2410C',
+                      border: `1px solid ${pItem.packed ? '#BBF7D0' : '#FED7AA'}`
+                    }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: pItem.packed ? '#22C55E' : '#F97316' }}></span>
+                      {pItem.packed ? 'Packed' : 'Pending'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '8px', marginTop: '2px' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
+                      Ordered: <strong style={{ color: '#0F172A', fontWeight: '800' }}>{itemBomQty} Nos</strong>
+                    </div>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>Packed Qty:</span>
+                      {isPackedAndReady ? (
+                        <span style={{ fontWeight: '900', color: '#0E7490', fontSize: '13px' }}>
+                          {currentPackedQty !== '' ? currentPackedQty : 0} Nos
+                        </span>
+                      ) : (
+                        <input
+                          type="number"
+                          min="0"
+                          max={itemBomQty || 999999}
+                          placeholder={String(itemBomQty)}
+                          value={currentPackedQty}
+                          onChange={(e) => {
+                            const rawVal = e.target.value;
+                            const parsedVal = rawVal === '' ? '' : Math.max(0, parseInt(rawVal, 10) || 0);
+                            const isAutoPacked = parsedVal !== '' && parsedVal > 0;
+                            const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
+                              ...pi,
+                              packedQty: parsedVal,
+                              packed: isAutoPacked
+                            } : pi);
+                            setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                          }}
+                          style={{
+                            width: '70px',
+                            height: '32px',
+                            textAlign: 'center',
+                            borderRadius: '6px',
+                            border: pItem.packed ? '1.5px solid #10B981' : '1px solid #CBD5E1',
+                            backgroundColor: pItem.packed ? '#ECFDF5' : '#FFFFFF',
+                            fontSize: '13px',
+                            fontWeight: '800',
+                            color: pItem.packed ? '#065F46' : '#1E293B',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            };
+
+            if (isMobile) {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px' }}>
+                  {distinctGroupIds.length > 0 ? (
+                    <>
+                      {distinctGroupIds.map((gid, gIdx) => {
+                        const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
+                        const grp = presetGroupsMap[gid] || {};
+                        const grpName = grp.presetName || grp.name || `Set / Kit ${gIdx + 1}`;
+                        const setCount = parseInt(grp.setCount) || 1;
+
+                        const setIndices = [];
+                        itemsToPack.forEach((it, idx) => {
+                          if (it.presetGroupId === gid || (!it.presetGroupId && it.isPresetItem && gIdx === 0)) {
+                            setIndices.push(idx);
+                          }
+                        });
+
+                        if (setIndices.length === 0) return null;
+
+                        const allSetPacked = setIndices.every(i => itemsToPack[i]?.packed);
+                        const packedCountInSet = setIndices.filter(i => itemsToPack[i]?.packed).length;
+
+                        return (
+                          <div key={`mobile-set-grp-${gid}`} style={{
+                            border: `1.5px solid ${theme.border}`,
+                            borderRadius: '14px',
+                            overflow: 'hidden',
+                            backgroundColor: theme.bg,
+                            marginBottom: '6px'
+                          }}>
+                            {/* Set Header */}
+                            <div style={{
+                              padding: '12px 14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px',
+                              borderBottom: `1px solid ${theme.border}`
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <span style={{
+                                  padding: '3px 9px',
+                                  borderRadius: '6px',
+                                  backgroundColor: theme.primary,
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '900',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  {theme.badge}
+                                </span>
+                                {!isPackedAndReady && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const shouldPack = !allSetPacked;
+                                      const updatedPacking = itemsToPack.map((pi, i) => setIndices.includes(i) ? { ...pi, packed: shouldPack, packedQty: shouldPack ? (pi.packedQty ? pi.packedQty : (pi.bomQty || pi.qty || 1)) : '' } : pi);
+                                      setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                                    }}
+                                    style={{
+                                      border: `1px solid ${theme.primary}`,
+                                      backgroundColor: allSetPacked ? '#FFFFFF' : theme.primary,
+                                      color: allSetPacked ? theme.primary : '#FFFFFF',
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {allSetPacked ? 'Unpack Set' : 'Pack Whole Set'}
+                                  </button>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+                                {grpName} {setCount > 1 ? `(${setCount} Sets)` : '(1 Set)'}
+                              </div>
+                              <div style={{ fontSize: '11.5px', fontWeight: '700', color: theme.tagText }}>
+                                {packedCountInSet} of {setIndices.length} items packed in this set
+                              </div>
+                            </div>
+                            {/* Items inside set */}
+                            <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#FFFFFF' }}>
+                              {setIndices.map((origIdx, sItemIdx) => {
+                                const pItem = itemsToPack[origIdx];
+                                return renderMobileCard(pItem, origIdx, `${gIdx + 1}.${sItemIdx + 1}`);
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Loose / Non-preset items */}
+                      {(() => {
+                        const looseIndices = [];
+                        itemsToPack.forEach((it, idx) => {
+                          const isPartOfGroup = it.presetGroupId || (it.isPresetItem && distinctGroupIds.length > 0);
+                          if (!isPartOfGroup) {
+                            looseIndices.push(idx);
+                          }
+                        });
+
+                        if (looseIndices.length === 0) return null;
+
+                        return (
+                          <div key="mobile-loose-items-group" style={{
+                            border: '1px solid #CBD5E1',
+                            borderRadius: '14px',
+                            overflow: 'hidden',
+                            backgroundColor: '#F8FAFC'
+                          }}>
+                            <div style={{ padding: '10px 14px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '4px',
+                                backgroundColor: '#475569', color: '#FFFFFF',
+                                fontSize: '10.5px', fontWeight: '900'
+                              }}>
+                                INDIVIDUAL PRODUCTS
+                              </span>
+                              <span style={{ fontSize: '12px', fontWeight: '800', color: '#334155' }}>
+                                Additional Non-Kit Products ({looseIndices.length})
+                              </span>
+                            </div>
+                            <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#FFFFFF' }}>
+                              {looseIndices.map((origIdx, lIdx) => {
+                                const pItem = itemsToPack[origIdx];
+                                return renderMobileCard(pItem, origIdx, `C.${lIdx + 1}`);
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    itemsToPack.map((pItem, idx) => renderMobileCard(pItem, idx, String(idx + 1)))
+                  )}
+                </div>
+              );
+            }
 
             return (
               <table className="dispatch-checklist-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -1762,7 +2121,7 @@ export default function DispatchPackingModal({
 
           {/* Media Gallery Thumbnails */}
           {(dispatchPackingModal.dispatchPackingMedia?.photos || []).length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginTop: '6px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginTop: '6px' }}>
               {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => (
                 <DispatchPhotoThumbnail
                   key={ph.id || phIdx}
@@ -1796,10 +2155,22 @@ export default function DispatchPackingModal({
 
         {/* Action Buttons Footer */}
         <div className="dispatch-footer-bar" style={{
-          padding: '16px 24px', backgroundColor: '#FFFFFF', borderTop: '1px solid #E2E8F0',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px'
+          padding: isMobile ? '14px 16px' : '16px 24px',
+          backgroundColor: '#FFFFFF',
+          borderTop: '1px solid #E2E8F0',
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? '12px' : '12px'
         }}>
-          <div className="dispatch-footer-summary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="dispatch-footer-summary" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isMobile ? 'space-between' : 'flex-start',
+            gap: '8px',
+            width: isMobile ? '100%' : 'auto'
+          }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Items Packed:</span>
             <span style={{
               fontSize: '13px', fontWeight: '900',
@@ -1810,15 +2181,24 @@ export default function DispatchPackingModal({
               {packedItemsCount} / {totalItemsCount} ({progressPercent}%)
             </span>
           </div>
-          <div className="dispatch-footer-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="dispatch-footer-actions" style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: '10px',
+            width: isMobile ? '100%' : 'auto'
+          }}>
             <button
               onClick={() => setDispatchPackingModal(null)}
               style={{
                 border: '1px solid #CBD5E1',
                 background: '#FFFFFF',
-                color: '#475569', height: '40px', padding: '0 20px',
+                color: '#475569',
+                height: isMobile ? '44px' : '40px',
+                padding: '0 20px',
                 borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}
             >
               ← Back
@@ -1832,11 +2212,14 @@ export default function DispatchPackingModal({
                 style={{
                   border: 'none',
                   background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #0E7490, #0891B2)',
-                  color: '#FFFFFF', height: '40px', padding: '0 20px',
+                  color: '#FFFFFF',
+                  height: isMobile ? '44px' : '40px',
+                  padding: '0 20px',
                   borderRadius: '10px', fontSize: '13px', fontWeight: '800',
                   cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  boxShadow: '0 2px 8px rgba(14,116,144,0.3)'
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  boxShadow: '0 2px 8px rgba(14,116,144,0.3)',
+                  width: isMobile ? '100%' : 'auto'
                 }}
                 title="Save added packing photos without altering workflow status"
               >
@@ -1854,7 +2237,7 @@ export default function DispatchPackingModal({
                   border: '1.5px solid #0E7490',
                   background: '#ECFEFF',
                   color: '#0E7490',
-                  height: '40px',
+                  height: isMobile ? '44px' : '40px',
                   padding: '0 18px',
                   borderRadius: '10px',
                   fontSize: '13px',
@@ -1862,8 +2245,10 @@ export default function DispatchPackingModal({
                   cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   gap: '8px',
-                  boxShadow: '0 2px 6px rgba(14,116,144,0.1)'
+                  boxShadow: '0 2px 6px rgba(14,116,144,0.1)',
+                  width: isMobile ? '100%' : 'auto'
                 }}
                 title="Save current progress as draft without advancing order to next process"
               >
@@ -1881,7 +2266,7 @@ export default function DispatchPackingModal({
                   border: 'none',
                   background: '#CBD5E1',
                   color: '#64748B',
-                  height: '40px',
+                  height: isMobile ? '44px' : '40px',
                   padding: '0 20px',
                   borderRadius: '10px',
                   fontSize: '13px',
@@ -1889,7 +2274,9 @@ export default function DispatchPackingModal({
                   cursor: 'not-allowed',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  justifyContent: 'center',
+                  gap: '8px',
+                  width: isMobile ? '100%' : 'auto'
                 }}
                 title="Please select at least 1 product to complete packing"
               >
@@ -1907,7 +2294,7 @@ export default function DispatchPackingModal({
                   border: 'none',
                   background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #D97706, #B45309)',
                   color: '#FFFFFF',
-                  height: '40px',
+                  height: isMobile ? '44px' : '40px',
                   padding: '0 20px',
                   borderRadius: '10px',
                   fontSize: '13px',
@@ -1916,7 +2303,9 @@ export default function DispatchPackingModal({
                   boxShadow: '0 4px 12px rgba(217,119,6,0.3)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  justifyContent: 'center',
+                  gap: '8px',
+                  width: isMobile ? '100%' : 'auto'
                 }}
                 title="Confirm partial packing and forward to Accounts verification"
               >
@@ -1937,7 +2326,7 @@ export default function DispatchPackingModal({
                   border: 'none',
                   background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #059669, #10B981)',
                   color: '#FFFFFF',
-                  height: '40px',
+                  height: isMobile ? '44px' : '40px',
                   padding: '0 22px',
                   borderRadius: '10px',
                   fontSize: '13px',
@@ -1946,7 +2335,9 @@ export default function DispatchPackingModal({
                   boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  justifyContent: 'center',
+                  gap: '8px',
+                  width: isMobile ? '100%' : 'auto'
                 }}
                 title={needsSalesPaymentProof ? "Confirm packing and notify Sales to attach payment slip" : "Confirm all goods packing and forward to Accounts"}
               >
