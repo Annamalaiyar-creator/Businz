@@ -929,8 +929,7 @@ export default function DispatchPackingModal({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif", minHeight: '100%' }}>
 
       {/* ─── GRADIENT STATUS BANNER HEADER ─── */}
-      {/* ─── GRADIENT STATUS BANNER HEADER ─── */}
-      <div style={{
+      <div className="dispatch-modal-banner" style={{
         background: isCancelled
           ? 'linear-gradient(135deg, #7F1D1D 0%, #991B1B 100%)'
           : allItemsPacked
@@ -945,135 +944,139 @@ export default function DispatchPackingModal({
         alignItems: 'center',
         boxShadow: isCancelled ? '0 8px 24px rgba(127,29,29,0.35)' : allItemsPacked ? '0 8px 24px rgba(6,78,59,0.35)' : isPartial ? '0 8px 24px rgba(120,53,15,0.35)' : '0 8px 24px rgba(30,58,138,0.35)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          {/* Back button */}
-          <button
-            onClick={() => setDispatchPackingModal(null)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: '10px', padding: '9px 16px',
-              fontSize: '13px', fontWeight: '700', color: '#FFFFFF',
-              cursor: 'pointer', backdropFilter: 'blur(4px)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
-          >
-            <ChevronLeft style={{ width: '16px', height: '16px' }} /> Back
-          </button>
+        <div className="dispatch-banner-main-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          {/* Back button & BOM badge row */}
+          <div className="dispatch-banner-nav-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={() => setDispatchPackingModal(null)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '10px', padding: '9px 16px',
+                fontSize: '13px', fontWeight: '700', color: '#FFFFFF',
+                cursor: 'pointer', backdropFilter: 'blur(4px)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+            >
+              <ChevronLeft style={{ width: '16px', height: '16px' }} /> Back
+            </button>
+            <span style={{
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.35)',
+              color: '#FFFFFF', padding: '3px 12px',
+              borderRadius: '20px', fontSize: '12px', fontWeight: '800'
+            }}>
+              {dispatchPackingModal.bomCode}
+            </span>
+          </div>
 
           {/* Title + meta */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
+            <div className="dispatch-banner-heading-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <h1 className="dispatch-banner-title" style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
                 {isCancelled
                   ? 'Dispatch Packing Specifications (CANCELLED - VIEW ONLY)'
                   : (isPackedAndReady ? 'Dispatch Packing Specifications (Locked)' : 'Dispatch Packing Verification')}
               </h1>
-              <span style={{
-                backgroundColor: 'rgba(255,255,255,0.2)',
-                border: '1px solid rgba(255,255,255,0.35)',
-                color: '#FFFFFF', padding: '3px 12px',
-                borderRadius: '20px', fontSize: '12px', fontWeight: '800'
-              }}>
-                {dispatchPackingModal.bomCode}
-              </span>
-              {dispatchPackingModal.docType === 'DC' ? (
-                <span style={{
-                  backgroundColor: '#FEF3C7',
-                  border: '1px solid #FCD34D',
-                  color: '#92400E',
-                  padding: '3px 12px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: '900',
-                  letterSpacing: '0.5px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}>
-                  <Truck size={13} strokeWidth={2.2} />
-                  <span>DC (DELIVERY CHALLAN)</span>
-                </span>
-              ) : (
-                <span style={{
-                  backgroundColor: '#EFF6FF',
-                  border: '1px solid #BFDBFE',
-                  color: '#1E40AF',
-                  padding: '3px 12px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: '900',
-                  letterSpacing: '0.5px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}>
-                  <FileText size={13} strokeWidth={2.2} />
-                  <span>TAX INVOICE</span>
-                </span>
-              )}
-              {isCancelled ? (
-                <span style={{
-                  backgroundColor: '#FEE2E2',
-                  color: '#DC2626',
-                  padding: '3px 12px', borderRadius: '20px',
-                  fontSize: '11px', fontWeight: '800',
-                  display: 'inline-flex', alignItems: 'center', gap: '4px'
-                }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }}></span>
-                  CANCELLED (VIEW ONLY)
-                </span>
-              ) : isPartiallySentToAccounts ? (
-                <span style={{
-                  backgroundColor: '#FEF3C7',
-                  color: '#92400E',
-                  border: '1px solid #FDE68A',
-                  padding: '3px 12px', borderRadius: '20px',
-                  fontSize: '11px', fontWeight: '800',
-                  display: 'inline-flex', alignItems: 'center', gap: '4px'
-                }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#D97706' }}></span>
-                  PARTIALLY PACKED • SENT TO ACCOUNTS ({packedItemsCount}/{totalItemsCount})
-                </span>
-              ) : isAlreadySentToAccounts ? (
-                <span style={{
-                  backgroundColor: '#DCFCE7',
-                  color: '#166534',
-                  padding: '3px 12px', borderRadius: '20px',
-                  fontSize: '11px', fontWeight: '800',
-                  display: 'inline-flex', alignItems: 'center', gap: '4px'
-                }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#166534' }}></span>
-                  PACKING VERIFIED • SENT TO ACCOUNTS
-                </span>
-              ) : (
-                <span style={{
-                  backgroundColor: allItemsPacked ? '#DCFCE7' : isPartial ? '#FEF3C7' : '#DBEAFE',
-                  color: allItemsPacked ? '#166534' : isPartial ? '#92400E' : '#1E40AF',
-                  padding: '3px 12px', borderRadius: '20px',
-                  fontSize: '11px', fontWeight: '800',
-                  display: 'inline-flex', alignItems: 'center', gap: '4px'
-                }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: allItemsPacked ? '#166534' : isPartial ? '#D97706' : '#2563EB' }}></span>
-                  {allItemsPacked ? 'ALL ITEMS PACKED' : isPartial ? 'PARTIALLY PACKED' : 'PENDING PACKING'}
-                </span>
-              )}
+              <div className="dispatch-banner-tags" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {dispatchPackingModal.docType === 'DC' ? (
+                  <span style={{
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    color: '#92400E',
+                    padding: '3px 12px',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    fontWeight: '900',
+                    letterSpacing: '0.5px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}>
+                    <Truck size={13} strokeWidth={2.2} />
+                    <span>DC (DELIVERY CHALLAN)</span>
+                  </span>
+                ) : (
+                  <span style={{
+                    backgroundColor: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    color: '#1E40AF',
+                    padding: '3px 12px',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    fontWeight: '900',
+                    letterSpacing: '0.5px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}>
+                    <FileText size={13} strokeWidth={2.2} />
+                    <span>TAX INVOICE</span>
+                  </span>
+                )}
+                {isCancelled ? (
+                  <span style={{
+                    backgroundColor: '#FEE2E2',
+                    color: '#DC2626',
+                    padding: '3px 12px', borderRadius: '20px',
+                    fontSize: '11px', fontWeight: '800',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }}></span>
+                    CANCELLED (VIEW ONLY)
+                  </span>
+                ) : isPartiallySentToAccounts ? (
+                  <span style={{
+                    backgroundColor: '#FEF3C7',
+                    color: '#92400E',
+                    border: '1px solid #FDE68A',
+                    padding: '3px 12px', borderRadius: '20px',
+                    fontSize: '11px', fontWeight: '800',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#D97706' }}></span>
+                    PARTIALLY PACKED • SENT TO ACCOUNTS ({packedItemsCount}/{totalItemsCount})
+                  </span>
+                ) : isAlreadySentToAccounts ? (
+                  <span style={{
+                    backgroundColor: '#DCFCE7',
+                    color: '#166534',
+                    padding: '3px 12px', borderRadius: '20px',
+                    fontSize: '11px', fontWeight: '800',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#166534' }}></span>
+                    PACKING VERIFIED • SENT TO ACCOUNTS
+                  </span>
+                ) : (
+                  <span style={{
+                    backgroundColor: allItemsPacked ? '#DCFCE7' : isPartial ? '#FEF3C7' : '#DBEAFE',
+                    color: allItemsPacked ? '#166534' : isPartial ? '#92400E' : '#1E40AF',
+                    padding: '3px 12px', borderRadius: '20px',
+                    fontSize: '11px', fontWeight: '800',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: allItemsPacked ? '#166534' : isPartial ? '#D97706' : '#2563EB' }}></span>
+                    {allItemsPacked ? 'ALL ITEMS PACKED' : isPartial ? 'PARTIALLY PACKED' : 'PENDING PACKING'}
+                  </span>
+                )}
+              </div>
             </div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            <div className="dispatch-banner-meta" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.customerName}</strong></span>
-              <span>•</span>
+              <span className="dispatch-banner-bullet">•</span>
               <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {(dispatchPackingModal.salesPerson || dispatchPackingModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
-              <span>•</span>
+              <span className="dispatch-banner-bullet">•</span>
               <span>Payment: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.paymentType}</strong></span>
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+        <div className="dispatch-banner-actions" style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
           {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
             <button
               type="button"
@@ -1147,15 +1150,15 @@ export default function DispatchPackingModal({
       )}
 
       {/* ─── 3 STATS CARDS (Order Value hidden for Dispatch role) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+      <div className="dispatch-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
         {/* Progress Card */}
-        <div style={{
+        <div className="dispatch-stat-card" style={{
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
           display: 'flex', alignItems: 'center', gap: '14px'
         }}>
-          <div style={{
+          <div className="dispatch-stat-icon" style={{
             width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
             background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1165,20 +1168,20 @@ export default function DispatchPackingModal({
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items Packed</div>
-            <div style={{ fontSize: '22px', fontWeight: '900', color: '#0F172A', lineHeight: 1.2 }}>
+            <div className="dispatch-stat-value" style={{ fontSize: '22px', fontWeight: '900', color: '#0F172A', lineHeight: 1.2 }}>
               {packedItemsCount}<span style={{ fontSize: '14px', color: '#64748B', fontWeight: '600' }}>/{totalItemsCount}</span>
             </div>
           </div>
         </div>
 
         {/* Completion % Card */}
-        <div style={{
+        <div className="dispatch-stat-card" style={{
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
           display: 'flex', alignItems: 'center', gap: '14px'
         }}>
-          <div style={{
+          <div className="dispatch-stat-icon" style={{
             width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
             background: allItemsPacked ? 'linear-gradient(135deg, #166534, #16A34A)' : isPartial ? 'linear-gradient(135deg, #B45309, #D97706)' : 'linear-gradient(135deg, #64748B, #94A3B8)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1188,12 +1191,12 @@ export default function DispatchPackingModal({
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Completion</div>
-            <div style={{ fontSize: '22px', fontWeight: '900', color: allItemsPacked ? '#166534' : '#0F172A', lineHeight: 1.2 }}>{progressPercent}%</div>
+            <div className="dispatch-stat-value" style={{ fontSize: '22px', fontWeight: '900', color: allItemsPacked ? '#166534' : '#0F172A', lineHeight: 1.2 }}>{progressPercent}%</div>
           </div>
         </div>
 
         {/* Delivery Card */}
-        <div style={{
+        <div className="dispatch-delivery-card" style={{
           backgroundColor: '#FFFFFF', borderRadius: '14px',
           border: '1px solid #E2E8F0', padding: '18px 20px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
@@ -1206,16 +1209,24 @@ export default function DispatchPackingModal({
       </div>
 
       {/* ─── PROGRESS BAR CARD ─── */}
-      <div style={{
+      <div className="dispatch-progress-card" style={{
         backgroundColor: '#FFFFFF', borderRadius: '14px',
         border: '1px solid #E2E8F0', padding: '18px 24px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
         display: 'flex', alignItems: 'center', gap: '20px'
       }}>
-        <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap', minWidth: '160px' }}>
-          Packing Progress
+        <div className="dispatch-progress-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', minWidth: '160px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>
+            Packing Progress
+          </div>
+          <div className="dispatch-progress-mobile-stats" style={{
+            fontSize: '13px', fontWeight: '900', whiteSpace: 'nowrap',
+            color: allItemsPacked ? '#166534' : isPartial ? '#B45309' : '#2563EB'
+          }}>
+            {packedItemsCount} of {totalItemsCount} Packed ({progressPercent}%)
+          </div>
         </div>
-        <div style={{ flex: 1, height: '12px', backgroundColor: '#F1F5F9', borderRadius: '20px', overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+        <div className="dispatch-progress-track" style={{ flex: 1, height: '12px', backgroundColor: '#F1F5F9', borderRadius: '20px', overflow: 'hidden', border: '1px solid #E2E8F0' }}>
           <div style={{
             width: `${progressPercent}%`, height: '100%',
             background: allItemsPacked
@@ -1227,7 +1238,7 @@ export default function DispatchPackingModal({
             transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
           }} />
         </div>
-        <div style={{
+        <div className="dispatch-progress-desktop-stats" style={{
           fontSize: '13px', fontWeight: '900', whiteSpace: 'nowrap',
           color: allItemsPacked ? '#166534' : isPartial ? '#B45309' : '#2563EB'
         }}>
@@ -1243,7 +1254,7 @@ export default function DispatchPackingModal({
         overflow: 'hidden'
       }}>
         {/* Table toolbar */}
-        <div style={{
+        <div className="dispatch-table-toolbar" style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '18px 24px', borderBottom: '2px solid #F1F5F9',
           background: 'linear-gradient(135deg, #FAFBFC 0%, #F8FAFC 100%)'
@@ -1257,7 +1268,7 @@ export default function DispatchPackingModal({
             </p>
           </div>
           {!isPackedAndReady && (
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="dispatch-table-toolbar-actions" style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => {
                   const allPacked = itemsToPack.map(p => ({
@@ -1294,7 +1305,7 @@ export default function DispatchPackingModal({
         </div>
 
         {/* Table Grouped by Sets / Kits (Matching PI View Design) */}
-        <div style={{ overflowX: 'auto' }}>
+        <div className="dispatch-table-scroll-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {(() => {
             const rawPresetGroups = dispatchPackingModal.presetGroups || {};
             const presetGroupsMap = typeof rawPresetGroups === 'object' && !Array.isArray(rawPresetGroups)
@@ -1451,7 +1462,7 @@ export default function DispatchPackingModal({
             };
 
             return (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <table className="dispatch-checklist-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                     <th style={{ padding: '13px 20px', width: '60px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Check</th>
@@ -1784,11 +1795,11 @@ export default function DispatchPackingModal({
         </div>
 
         {/* Action Buttons Footer */}
-        <div style={{
+        <div className="dispatch-footer-bar" style={{
           padding: '16px 24px', backgroundColor: '#FFFFFF', borderTop: '1px solid #E2E8F0',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="dispatch-footer-summary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Items Packed:</span>
             <span style={{
               fontSize: '13px', fontWeight: '900',
@@ -1799,7 +1810,7 @@ export default function DispatchPackingModal({
               {packedItemsCount} / {totalItemsCount} ({progressPercent}%)
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="dispatch-footer-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               onClick={() => setDispatchPackingModal(null)}
               style={{

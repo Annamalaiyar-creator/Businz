@@ -510,7 +510,7 @@ export default function AccountsVerificationModal({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
 
       {/* ─── GRADIENT HEADER BANNER ─── */}
-      <div style={{
+      <div className="dispatch-modal-banner" style={{
         background: isAlreadyCompleted
           ? 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)'
           : 'linear-gradient(135deg, #0E7490 0%, #0369A1 100%)',
@@ -521,94 +521,96 @@ export default function AccountsVerificationModal({
         alignItems: 'center',
         boxShadow: isAlreadyCompleted ? '0 8px 24px rgba(6,78,59,0.35)' : '0 8px 24px rgba(14,116,144,0.35)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div className="dispatch-banner-main-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
+            <div className="dispatch-banner-heading-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <h1 className="dispatch-banner-title" style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
                 Accounts Payment & Document Verification
               </h1>
-              <span style={{
-                backgroundColor: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)',
-                color: '#FFFFFF', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800'
-              }}>
-                {bomCodeText}
-              </span>
-              {accountsVerificationModal?.docType === 'DC' ? (
+              <div className="dispatch-banner-tags" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span style={{
-                  backgroundColor: '#FEF3C7',
-                  border: '1px solid #FCD34D',
-                  color: '#92400E',
-                  padding: '3px 12px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: '900',
-                  letterSpacing: '0.5px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
+                  backgroundColor: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)',
+                  color: '#FFFFFF', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800'
                 }}>
-                  <Truck size={13} strokeWidth={2.2} />
-                  <span>DC (DELIVERY CHALLAN)</span>
+                  {bomCodeText}
                 </span>
-              ) : (
+                {accountsVerificationModal?.docType === 'DC' ? (
+                  <span style={{
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    color: '#92400E',
+                    padding: '3px 12px',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    fontWeight: '900',
+                    letterSpacing: '0.5px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}>
+                    <Truck size={13} strokeWidth={2.2} />
+                    <span>DC (DELIVERY CHALLAN)</span>
+                  </span>
+                ) : (
+                  <span style={{
+                    backgroundColor: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    color: '#1E40AF',
+                    padding: '3px 12px',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    fontWeight: '900',
+                    letterSpacing: '0.5px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}>
+                    <FileText size={13} strokeWidth={2.2} />
+                    <span>TAX INVOICE</span>
+                  </span>
+                )}
                 <span style={{
-                  backgroundColor: '#EFF6FF',
-                  border: '1px solid #BFDBFE',
-                  color: '#1E40AF',
-                  padding: '3px 12px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: '900',
-                  letterSpacing: '0.5px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
+                  backgroundColor: 'rgba(14, 165, 233, 0.25)', border: '1px solid rgba(56, 189, 248, 0.5)',
+                  color: '#E0F2FE', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800',
+                  display: 'inline-flex', alignItems: 'center', gap: '6px'
                 }}>
-                  <FileText size={13} strokeWidth={2.2} />
-                  <span>TAX INVOICE</span>
+                  <Receipt style={{ width: '13px', height: '13px', color: '#38BDF8' }} />
+                  Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isAlreadyCompleted ? 'Assigned' : 'Assigned upon Clearance')}</strong>
                 </span>
-              )}
-              <span style={{
-                backgroundColor: 'rgba(14, 165, 233, 0.25)', border: '1px solid rgba(56, 189, 248, 0.5)',
-                color: '#E0F2FE', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800',
-                display: 'inline-flex', alignItems: 'center', gap: '6px'
-              }}>
-                <Receipt style={{ width: '13px', height: '13px', color: '#38BDF8' }} />
-                Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isAlreadyCompleted ? 'Assigned' : 'Assigned upon Clearance')}</strong>
-              </span>
-              <StatusBadge
-                status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isWhileDispatch && !hasUploadedPaymentProof ? 'AWAITING PAYMENT SLIP' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
-                size="sm"
-              />
-              {isPartialPackingOrder && (
-                <span style={{
-                  backgroundColor: '#FEF3C7',
-                  color: '#92400E',
-                  border: '1px solid #FCD34D',
-                  padding: '3px 12px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: '800',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}>
-                  <Package style={{ width: '13px', height: '13px', color: '#D97706' }} />
-                  PARTIAL SHIPMENT
-                </span>
-              )}
+                <StatusBadge
+                  status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isWhileDispatch && !hasUploadedPaymentProof ? 'AWAITING PAYMENT SLIP' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
+                  size="sm"
+                />
+                {isPartialPackingOrder && (
+                  <span style={{
+                    backgroundColor: '#FEF3C7',
+                    color: '#92400E',
+                    border: '1px solid #FCD34D',
+                    padding: '3px 12px',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}>
+                    <Package style={{ width: '13px', height: '13px', color: '#D97706' }} />
+                    PARTIAL SHIPMENT
+                  </span>
+                )}
+              </div>
             </div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            <div className="dispatch-banner-meta" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custNameText}</strong></span>
-              <span>•</span>
+              <span className="dispatch-banner-bullet">•</span>
               <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
-              <span>•</span>
+              <span className="dispatch-banner-bullet">•</span>
               <span>Payment Terms: <strong style={{ color: '#FFFFFF' }}>{payTypeText}</strong></span>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+        <div className="dispatch-banner-actions" style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
           <button
             onClick={() => setAccountsVerificationModal(null)}
             style={{
