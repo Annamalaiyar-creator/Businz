@@ -13,6 +13,7 @@ import {
   DEFAULT_RAW_MATERIAL_RATES,
   calculateHdgStructure
 } from '../../utils/hdgStructureConfigurator';
+import AluminiumStructureConfiguratorView from './AluminiumStructureConfiguratorView';
 
 /**
  * High-Definition Interactive 2D Solar Table Schematic (Side Elevation & Top Layout)
@@ -594,6 +595,9 @@ export default function HdgStructureConfiguratorModal({
 }) {
   if (!isOpen) return null;
 
+  // Master System Category: 'hdg' (Ground Mount & Elevated Steel) vs 'aluminium' (Rooftop Mini Rail & Standing Seam)
+  const [structureCategory, setStructureCategory] = useState(initialData.structureCategory || 'hdg');
+
   // Configuration State
   const [columnProfile, setColumnProfile] = useState(initialData.columnProfile || 'C Section');
   const [rowModel, setRowModel] = useState(initialData.rowModel || '2 Row');
@@ -862,7 +866,9 @@ export default function HdgStructureConfiguratorModal({
               width: '42px',
               height: '42px',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, #075985 0%, #0E7490 100%)',
+              background: structureCategory === 'aluminium'
+                ? 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)'
+                : 'linear-gradient(135deg, #075985 0%, #0E7490 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -873,7 +879,7 @@ export default function HdgStructureConfiguratorModal({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.3px' }}>
-                  Solar HDG Structure Configurator
+                  {structureCategory === 'aluminium' ? 'Aluminium Rooftop MMS Configurator' : 'Solar HDG Structure Configurator'}
                 </h2>
                 <span style={{
                   backgroundColor: '#ECFEFF',
@@ -884,37 +890,104 @@ export default function HdgStructureConfiguratorModal({
                   padding: '2px 8px',
                   borderRadius: '12px'
                 }}>
-                  Live Quotation Engine
+                  {structureCategory === 'aluminium' ? 'NALCO Benchmark Engine' : 'Live Quotation Engine'}
                 </span>
               </div>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
-                C-Section 100×50×15 & Square Tube 60×60 • Pre-Engineered Unified 1-Row, 2-Row & 3-Row Tables
+                {structureCategory === 'aluminium'
+                  ? 'Mini Rails & Standing Seam Rooftop Systems • Mathematical Formula Parity with Price List Workout'
+                  : 'C-Section 100×50×15 & Square Tube 60×60 • Pre-Engineered Unified 1-Row, 2-Row & 3-Row Tables'}
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* System Category Switcher Pills */}
+          <div style={{
+            display: 'flex',
+            backgroundColor: '#F1F5F9',
+            padding: '3px',
+            borderRadius: '12px',
+            gap: '4px',
+            border: '1px solid #E2E8F0'
+          }}>
             <button
-              onClick={() => setShowRatesDrawer(!showRatesDrawer)}
+              type="button"
+              onClick={() => setStructureCategory('hdg')}
               style={{
+                padding: '7px 15px',
+                borderRadius: '9px',
+                border: 'none',
+                backgroundColor: structureCategory === 'hdg' ? '#0E7490' : 'transparent',
+                color: structureCategory === 'hdg' ? '#FFFFFF' : '#475569',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                background: showRatesDrawer ? '#ECFEFF' : '#F8FAFC',
-                color: showRatesDrawer ? '#0E7490' : '#475569',
-                border: '1px solid',
-                borderColor: showRatesDrawer ? '#A5F3FC' : '#CBD5E1',
-                padding: '8px 14px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                boxShadow: structureCategory === 'hdg' ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
               }}
             >
-              <Sliders size={14} />
-              <span>Rates & Pricing ({showRatesDrawer ? 'Close' : 'Edit'})</span>
+              <span>🏗️ HDG & SHS Ground / Elevated</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setStructureCategory('aluminium')}
+              style={{
+                padding: '7px 15px',
+                borderRadius: '9px',
+                border: 'none',
+                backgroundColor: structureCategory === 'aluminium' ? '#0E7490' : 'transparent',
+                color: structureCategory === 'aluminium' ? '#FFFFFF' : '#475569',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease',
+                boxShadow: structureCategory === 'aluminium' ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
+              }}
+            >
+              <span>⚡ Aluminium Mini Rail & Standing Seam</span>
+              <span style={{
+                backgroundColor: structureCategory === 'aluminium' ? '#FDE047' : '#E2E8F0',
+                color: structureCategory === 'aluminium' ? '#0F172A' : '#64748B',
+                fontSize: '9.5px',
+                fontWeight: '800',
+                padding: '1px 5px',
+                borderRadius: '4px'
+              }}>
+                ADD-ON
+              </span>
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {structureCategory === 'hdg' && (
+              <button
+                onClick={() => setShowRatesDrawer(!showRatesDrawer)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: showRatesDrawer ? '#ECFEFF' : '#F8FAFC',
+                  color: showRatesDrawer ? '#0E7490' : '#475569',
+                  border: '1px solid',
+                  borderColor: showRatesDrawer ? '#A5F3FC' : '#CBD5E1',
+                  padding: '8px 14px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Sliders size={14} />
+                <span>Rates & Pricing ({showRatesDrawer ? 'Close' : 'Edit'})</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               style={{
@@ -936,6 +1009,16 @@ export default function HdgStructureConfiguratorModal({
           </div>
         </div>
 
+        {/* ========================================================= */}
+        {/* CONDITIONAL CONTENT: ALUMINIUM ADDON vs EXISTING HDG BODY */}
+        {/* ========================================================= */}
+        {structureCategory === 'aluminium' ? (
+          <AluminiumStructureConfiguratorView
+            onApplyToQuote={onApplyToQuote}
+            onClose={onClose}
+          />
+        ) : (
+          <>
         {/* 2. Collapsible Rates Drawer */}
         {showRatesDrawer && (
           <div style={{
@@ -1887,6 +1970,8 @@ export default function HdgStructureConfiguratorModal({
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
