@@ -1832,6 +1832,24 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     if (isAccounts && (raw === 'MD Approved' || raw === 'md_approved')) {
       return <StatusBadge status="Awaiting Accounts Verification" size="sm" />;
     }
+    if (raw === 'Draft' || raw === 'Draft / Pending Approval' || raw === 'Pending MD Approval' || raw === 'Pending Approval' || raw === 'pending') {
+      return <StatusBadge status="Pending Approval" customLabel="Pending Approval" size="sm" />;
+    }
+    if (raw === 'CLOSED / FULLY RECEIVED' || raw === 'Closed / Fully Received' || raw.toLowerCase().includes('fully received') || raw.toLowerCase() === 'closed') {
+      return <StatusBadge status="Fully Received" customLabel="Fully Received" size="sm" />;
+    }
+    if (raw === 'OPEN / PARTIALLY RECEIVED' || raw === 'Partially Received' || raw.toLowerCase().includes('partially')) {
+      return <StatusBadge status="Partially Received" customLabel="Partially Received" size="sm" />;
+    }
+    if (raw === 'Payment Processed / Credit Verified' || raw === 'Payment Processed') {
+      return <StatusBadge status="Payment Processed" customLabel="Payment Processed" size="sm" />;
+    }
+    if (raw === 'Proceed PO (GRN Ready)' || raw === 'Proceed PO') {
+      return <StatusBadge status="Proceed PO" customLabel="Proceed PO" size="sm" />;
+    }
+    if (raw === 'CANCELLED' || raw === 'Cancelled') {
+      return <StatusBadge status="Cancelled" customLabel="Cancelled" size="sm" />;
+    }
     return <StatusBadge status={label || type} size="sm" />;
   };
 
@@ -1891,23 +1909,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
       {/* ==================== VIEW 1: MAIN PO LIST SCREEN ==================== */}
       {viewMode === 'list' && (() => {
-        const allStatusOptions = isAccounts ? [
-          'All',
-          'Awaiting Accounts Verification',
-          'Payment Processed / Credit Verified',
-          'Draft / Pending MD Approval',
-          'REJECTED'
-        ] : [
-          'All',
-          'Draft',
-          'Draft / Pending Approval',
+        const allStatusOptions = [
+          'All orders',
+          'Pending Approval',
           'MD Approved',
           'Payment Processed',
           'Proceed PO',
-          'OPEN / PARTIALLY RECEIVED',
-          'CLOSED / FULLY RECEIVED',
-          'REJECTED',
-          'CANCELLED'
+          'Partially Received',
+          'Fully Received',
+          'Cancelled'
         ];
 
         const filteredPOList = poList.filter(po => {
@@ -1920,21 +1930,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const statusStr = String(po.status || '');
           const currentStage = getPoStage(po);
 
-          const matchesStatus = statusFilter === 'All' ||
-            (statusFilter === 'Awaiting Accounts Verification' && currentStage === 'MD_APPROVED') ||
-            (statusFilter === 'Payment Processed / Credit Verified' && currentStage === 'PAYMENT_PROCESSED') ||
-            (statusFilter === 'Proceed PO (GRN Ready)' && currentStage === 'PROCEED_PO') ||
-            (statusFilter === 'Draft / Pending MD Approval' && currentStage === 'Draft') ||
-            (statusFilter === 'Draft' && currentStage === 'Draft') ||
-            (statusFilter === 'Draft / Pending Approval' && currentStage === 'Draft') ||
+          const matchesStatus = statusFilter === 'All' || statusFilter === 'All orders' ||
+            ((statusFilter === 'Pending Approval' || statusFilter === 'Draft' || statusFilter === 'Draft / Pending Approval') && currentStage === 'Draft') ||
             (statusFilter === 'MD Approved' && currentStage === 'MD_APPROVED') ||
-            (statusFilter === 'Payment Processed' && currentStage === 'PAYMENT_PROCESSED') ||
-            (statusFilter === 'Proceed PO' && currentStage === 'PROCEED_PO') ||
-            (statusFilter === 'OPEN' && (statusStr === 'OPEN' || currentStage === 'MD_APPROVED' || currentStage === 'Draft')) ||
-            (statusFilter === 'OPEN / PARTIALLY RECEIVED' && currentStage === 'PARTIALLY_RECEIVED') ||
-            (statusFilter === 'CLOSED / FULLY RECEIVED' && currentStage === 'CLOSED') ||
-            (statusFilter === 'REJECTED' && currentStage === 'REJECTED') ||
-            (statusFilter === 'CANCELLED' && currentStage === 'CANCELLED') ||
+            ((statusFilter === 'Payment Processed' || statusFilter === 'Payment Processed / Credit Verified') && currentStage === 'PAYMENT_PROCESSED') ||
+            ((statusFilter === 'Proceed PO' || statusFilter === 'Proceed PO (GRN Ready)') && currentStage === 'PROCEED_PO') ||
+            ((statusFilter === 'Partially Received' || statusFilter === 'Partially Recived' || statusFilter === 'OPEN / PARTIALLY RECEIVED') && currentStage === 'PARTIALLY_RECEIVED') ||
+            ((statusFilter === 'Fully Received' || statusFilter === 'Fully Recived' || statusFilter === 'CLOSED / FULLY RECEIVED' || statusFilter === 'Closed') && currentStage === 'CLOSED') ||
+            (statusFilter === 'Cancelled' && currentStage === 'CANCELLED') ||
             statusStr === statusFilter;
 
           const matchesTab = poTab === 'All' || currentStage === poTab;
@@ -2056,8 +2059,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                 <select id="purchase-orders-status-filter" name="statusFilter" aria-label="StatusFilter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
                   {allStatusOptions.map(s => (
-                    <option key={s} value={s}>
-                      {s === 'All' ? 'Status: All' : s}
+                    <option key={s} value={s === 'All orders' ? 'All' : s}>
+                      {s === 'All orders' ? 'Status: All orders' : s}
                     </option>
                   ))}
                 </select>
@@ -2089,23 +2092,22 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             {/* 2. STATUS TABS ROW */}
             <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
               {(isExecutiveOrMD ? [
-                { id: 'All', label: 'All Purchase Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'Approved by MD', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' }
+                { id: 'All', label: 'All orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Draft', label: 'Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' }
               ] : isAccounts ? [
-                { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'Awaiting Accounts Verification', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' }
-              ] : [
-                { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft / Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'All', label: 'All orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Draft', label: 'Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
                 { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
-                { id: 'PROCEED_PO', label: 'Proceed PO (GRN Ready)', count: poList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
-                { id: 'PARTIALLY_RECEIVED', label: 'Open / Partially Received', count: poList.filter(po => getPoStage(po) === 'PARTIALLY_RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
-                { id: 'CLOSED', label: 'Closed / Fully Received', count: poList.filter(po => getPoStage(po) === 'CLOSED').length, bg: '#dcfce7', fg: '#15803d' },
-                { id: 'REJECTED', label: 'Rejected', count: poList.filter(po => getPoStage(po) === 'REJECTED').length, bg: '#fee2e2', fg: '#dc2626' },
+                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' }
+              ] : [
+                { id: 'All', label: 'All orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Draft', label: 'Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
+                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
+                { id: 'PROCEED_PO', label: 'Proceed PO', count: poList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
+                { id: 'PARTIALLY_RECEIVED', label: 'Partially Received', count: poList.filter(po => getPoStage(po) === 'PARTIALLY_RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'CLOSED', label: 'Fully Received', count: poList.filter(po => getPoStage(po) === 'CLOSED').length, bg: '#dcfce7', fg: '#15803d' },
                 { id: 'CANCELLED', label: 'Cancelled', count: poList.filter(po => getPoStage(po) === 'CANCELLED').length, bg: '#fee2e2', fg: '#b91c1c' }
               ]).map(tab => (
                 <button

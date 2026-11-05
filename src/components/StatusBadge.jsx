@@ -237,6 +237,34 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
     };
   }
 
+  if (
+    raw === 'fully received' ||
+    raw === 'fully_received' ||
+    raw === 'closed / fully received'
+  ) {
+    return {
+      label: customLabel || 'Fully Received',
+      bg: '#f0fdf4',
+      color: '#15803d',
+      border: '1px solid #bbf7d0',
+      Icon: IconSuccess
+    };
+  }
+
+  if (
+    raw === 'partially received' ||
+    raw === 'partially_received' ||
+    raw === 'open / partially received'
+  ) {
+    return {
+      label: customLabel || 'Partially Received',
+      bg: '#fef3c7',
+      color: '#b45309',
+      border: '1px solid #fde68a',
+      Icon: IconInProgress
+    };
+  }
+
   // 1. Pending / Warning (Soft Orange)
   if (
     raw === 'pending' || 
