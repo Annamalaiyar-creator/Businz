@@ -20,9 +20,20 @@ function autoStartBackendPlugin() {
     return { name: 'auto-start-backend-disabled-in-test' };
   }
   let backendProc = null;
+  let redirectServer = null;
   return {
     name: 'auto-start-backend',
     configureServer() {
+      // Convenience redirect from port 5173 -> 3000
+      try {
+        redirectServer = http.createServer((req, res) => {
+          res.writeHead(302, { Location: `http://localhost:3000${req.url || '/'}` });
+          res.end();
+        });
+        redirectServer.on('error', () => {});
+        redirectServer.listen(5173, '0.0.0.0');
+      } catch (_) {}
+
       const checkBackend = () => {
         const req = http.get(`${backendTarget}/api/customers`, (res) => {
           // Backend is already up and responding
@@ -51,6 +62,7 @@ function autoStartBackendPlugin() {
       process.on('exit', () => {
         clearInterval(interval);
         if (backendProc) backendProc.kill();
+        if (redirectServer) redirectServer.close();
       });
     }
   };

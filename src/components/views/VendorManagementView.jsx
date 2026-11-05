@@ -2670,24 +2670,23 @@ export default function VendorManagementView(props) {
                       title: 'Submit Vendor for Review?',
                       message: 'Are you sure you want to submit this vendor for onboarding approval & review?',
                       confirmLabel: 'Submit Vendor',
-                      confirmBtnColor: '#0E7490'
+                      confirmBtnColor: '#2563EB'
                     })}
                     style={{
-                      height: '38px',
+                      height: '40px',
                       borderRadius: '8px',
                       border: 'none',
-                      backgroundColor: '#0E7490',
+                      backgroundColor: '#2563EB',
                       color: '#FFFFFF',
                       padding: '0 22px',
-                      fontWeight: '700',
+                      fontWeight: '600',
                       cursor: 'pointer',
-                      fontSize: '13px',
-                      boxShadow: '0 2px 6px rgba(14, 116, 144, 0.3)',
-                      marginLeft: 'auto',
+                      fontSize: '14px',
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
                       transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1D4ED8'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563EB'}
                   >
                     Submit for Review
                   </button>

@@ -156,6 +156,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [editIdx, setEditIdx] = useState(null); // Row index to edit
   const [activeDropdownIdx, setActiveDropdownIdx] = useState(null); // Active 3-dot dropdown index
   const [openPresetIdx, setOpenPresetIdx] = useState(null); // Selected item row index opening preset materials dropdown
+  const [showPoSubmitDropdown, setShowPoSubmitDropdown] = useState(false);
 
   const [selectedPOs, setSelectedPOs] = useState([]);
 
@@ -4236,6 +4237,220 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               </div>
 
 
+            </div>
+          )}
+
+          {/* Sticky Bottom Action Bar Following with Scroll for Create / Edit Purchase Order */}
+          {(viewMode === 'create' || viewMode === 'edit') && (
+            <div
+              style={{
+                position: 'sticky',
+                bottom: 0,
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderTop: '1.5px solid #CBD5E1',
+                padding: '12px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                zIndex: 50,
+                boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+                borderRadius: '12px',
+                marginTop: '12px',
+                boxSizing: 'border-box'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {/* Save as Draft */}
+                <button
+                  type="button"
+                  onClick={(e) => executeCreatePO(e, 'Draft')}
+                  disabled={isSubmittingPO}
+                  style={{
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    padding: '0 20px',
+                    fontWeight: '600',
+                    cursor: isSubmittingPO ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                    transition: 'all 0.15s ease',
+                    opacity: isSubmittingPO ? 0.6 : 1
+                  }}
+                  onMouseEnter={(e) => { if (!isSubmittingPO) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                  onMouseLeave={(e) => { if (!isSubmittingPO) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                >
+                  {isSubmittingPO ? 'Saving...' : 'Save as Draft'}
+                </button>
+
+                {/* Cancel */}
+                <button
+                  type="button"
+                  onClick={() => setShowCancelConfirm(true)}
+                  style={{
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    padding: '0 20px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                >
+                  Cancel
+                </button>
+
+                {/* Submit for Review Split Button */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', borderRadius: '8px', boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)', overflow: 'visible', position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={triggerSaveConfirm}
+                    disabled={isSubmittingPO}
+                    style={{
+                      height: '40px',
+                      border: 'none',
+                      backgroundColor: '#2563EB',
+                      color: '#FFFFFF',
+                      padding: '0 20px',
+                      fontWeight: '600',
+                      cursor: isSubmittingPO ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      borderTopLeftRadius: '8px',
+                      borderBottomLeftRadius: '8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease',
+                      opacity: isSubmittingPO ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => { if (!isSubmittingPO) e.currentTarget.style.backgroundColor = '#1D4ED8'; }}
+                    onMouseLeave={(e) => { if (!isSubmittingPO) e.currentTarget.style.backgroundColor = '#2563EB'; }}
+                  >
+                    {isSubmittingPO ? 'Processing...' : (viewMode === 'edit' ? 'Save Changes' : 'Submit for Review')}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPoSubmitDropdown(prev => !prev)}
+                    disabled={isSubmittingPO}
+                    title="More actions"
+                    style={{
+                      height: '40px',
+                      border: 'none',
+                      borderLeft: '1px solid rgba(255, 255, 255, 0.3)',
+                      backgroundColor: '#2563EB',
+                      color: '#FFFFFF',
+                      padding: '0 12px',
+                      cursor: isSubmittingPO ? 'not-allowed' : 'pointer',
+                      borderTopRightRadius: '8px',
+                      borderBottomRightRadius: '8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease',
+                      opacity: isSubmittingPO ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => { if (!isSubmittingPO) e.currentTarget.style.backgroundColor = '#1D4ED8'; }}
+                    onMouseLeave={(e) => { if (!isSubmittingPO) e.currentTarget.style.backgroundColor = '#2563EB'; }}
+                  >
+                    <ChevronDown size={14} style={{ color: '#FFFFFF' }} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showPoSubmitDropdown && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '46px',
+                        left: 0,
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: '8px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                        border: '1px solid #E2E8F0',
+                        minWidth: '200px',
+                        zIndex: 100,
+                        overflow: 'hidden',
+                        padding: '4px 0'
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPoSubmitDropdown(false);
+                          triggerSaveConfirm();
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 16px',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: '#1E293B',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        Submit for Review
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          setShowPoSubmitDropdown(false);
+                          executeCreatePO(e, 'Draft');
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 16px',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: '#1E293B',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        Save as Draft
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Grand Total Display */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+                <strong style={{ fontSize: '15px', color: '#2563EB', fontWeight: '800' }}>
+                  ₹{getGrandTotal().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
             </div>
           )}
         </div>
