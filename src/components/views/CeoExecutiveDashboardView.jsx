@@ -184,9 +184,21 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [personSearchQuery, setPersonSearchQuery] = useState('');
   const [activePersonModal, setActivePersonModal] = useState(null);
   const [viewingRepBomsModal, setViewingRepBomsModal] = useState(null);
+  const [activeKpiPopup, setActiveKpiPopup] = useState(null); // 'pi' | 'bom' | 'po' | 'dispatch' | 'billing' | 'accounts' | 'kits'
+  const [kpiPopupSearch, setKpiPopupSearch] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hoveredDonutIdx, setHoveredDonutIdx] = useState(null);
   const [hoveredBarIdx, setHoveredBarIdx] = useState(null);
+
+  // Close KPI Popup on Escape key
+  useEffect(() => {
+    if (!activeKpiPopup) return;
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') setActiveKpiPopup(null);
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [activeKpiPopup]);
 
   // CEO Target Management State
   const [ceoTargetStore, setCeoTargetStore] = useState(() => {
@@ -910,6 +922,83 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return bomList.reduce((acc, b) => acc + (parseFloat(b.totalWeight || b.weight || 0) || 0), 0);
   }, [bomList]);
 
+  // Operational drilldown records for the 6 CEO KPI popup modals
+  const dispatchKpiRecords = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    (dispatchesList || []).forEach(d => {
+      const id = d.id || d.orderNo || d.bomCode;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        list.push({
+          id,
+          code: d.bomCode || d.orderNo || d.code || id,
+          customer: d.customerName || d.customer || '—',
+          transporter: d.transporterName || d.transportMode || d.carrier || 'Standard Transport',
+          vehicle: d.lrNumber || d.vehicleNumber || d.lrNo || '—',
+          date: d.dispatchDate || d.date || d.created_at,
+          status: d.status || 'Dispatched',
+          value: d.totalAmount || d.amount || 0
+        });
+      }
+    });
+
+    (bomList || []).forEach(b => {
+      if (!b || b.cancelled) return;
+      const code = b.bomCode || b.code || b.id;
+      if (code && !seen.has(code)) {
+        const st = String(b.status || '').toLowerCase();
+        const isDone = Boolean(b.fullyCompleted || st.includes('completed') || st.includes('dispatched'));
+        const isPacked = b.packingStatus === 'PACKING_VERIFIED' || st.includes('packed');
+        const isReady = b.invoiceConfirmed || st.includes('loading') || b.isAccountsDone;
+        if (isDone || isPacked || isReady || st !== 'draft') {
+          seen.add(code);
+          list.push({
+            id: code,
+            code: code,
+            customer: b.customerName || b.customer || '—',
+            transporter: b.transporterName || b.transportMode || 'Pending Assignment',
+            vehicle: b.lrNumber || b.vehicleNumber || '—',
+            date: b.dispatchDate || b.date || b.createdAt,
+            status: isDone ? 'Dispatched' : (isPacked ? 'Packing Verified' : 'In Dispatch Queue'),
+            value: b.grandTotal || b.totalAmount || b.amount || 0
+          });
+        }
+      }
+    });
+    return list;
+  }, [dispatchesList, bomList]);
+
+  const accountsKpiRecords = useMemo(() => {
+    const list = [];
+    (paymentsList || []).forEach(p => {
+      list.push({
+        id: p.id || p.receiptNo || p.reference,
+        refNo: p.receiptNo || p.reference || p.paymentId || p.id || 'PAY-VOUCHER',
+        date: p.paymentDate || p.date || p.created_at,
+        customer: p.customerName || p.customer || '—',
+        mode: p.paymentMode || p.mode || p.type || 'Bank Transfer',
+        amount: Number(p.amount || p.receivedAmount || 0),
+        status: p.status || 'Realized'
+      });
+    });
+
+    (bomList || []).forEach(b => {
+      if (b?.accountsVerification?.verified && b.accountsVerification?.amount) {
+        list.push({
+          id: `bom-acc-${b.bomCode || b.code}`,
+          refNo: `BOM-${b.bomCode || b.code}`,
+          date: b.accountsVerification?.paymentDate || b.date,
+          customer: b.customerName || b.customer || '—',
+          mode: b.accountsVerification?.paymentMode || b.paymentTerms || 'Bank Transfer',
+          amount: Number(b.accountsVerification?.amount || b.grandTotal || 0),
+          status: 'Verified by Accounts'
+        });
+      }
+    });
+    return list;
+  }, [paymentsList, bomList]);
+
   // Person-by-Person BOM Generation Breakdown for the CEO Dashboard
   const salesPersonBomBreakdown = useMemo(() => {
     const salesTeam = teamDirectory.filter(emp => emp.department === 'Sales');
@@ -1404,6 +1493,268 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return { hrKitsSoldCount: totalSets, hrKitsOrderValueFormatted: fmt };
   }, [bomList]);
 
+  // Configuration for 6 CEO KPI Popup Modals
+  const kpiModalConfig = useMemo(() => {
+    switch (activeKpiPopup) {
+      case 'pi':
+        return {
+          title: 'PROFORMA INVOICES (PI)',
+          subtitle: `Commercial proforma invoices and deal pipeline (${selectedPeriod})`,
+          badge: `${piList.length} Invoices`,
+          valueLabel: 'Pipeline Value',
+          value: totalPiPipelineFormatted,
+          themeColor: '#0E7490',
+          themeBg: '#ECFEFF',
+          icon: Receipt,
+          columns: ['#', 'PI NO.', 'Date', 'Customer Name', 'Sales Person', 'Total Value', 'Status']
+        };
+      case 'bom':
+        return {
+          title: 'BOM & PRODUCTION ORDERS',
+          subtitle: `Active Bill of Materials & manufacturing orders (${selectedPeriod})`,
+          badge: `${bomList.length} Orders`,
+          valueLabel: 'Order Book Value',
+          value: totalBomOrderValueFormatted,
+          themeColor: '#0284C7',
+          themeBg: '#F0F9FF',
+          icon: Factory,
+          columns: ['#', 'BOM Code', 'Date', 'Customer Name', 'Product / Structure', 'Order Value', 'Status']
+        };
+      case 'po':
+        return {
+          title: 'PURCHASE ORDERS (PO)',
+          subtitle: `Procurement orders & vendor spend authorizations (${selectedPeriod})`,
+          badge: `${poList.length} POs`,
+          valueLabel: 'Authorized Spend',
+          value: totalPoSpendFormatted,
+          themeColor: '#2563EB',
+          themeBg: '#EFF6FF',
+          icon: ShoppingCart,
+          columns: ['#', 'PO Number', 'Date', 'Vendor Name', 'Spend Amount', 'Approval Status']
+        };
+      case 'dispatch':
+        return {
+          title: 'DISPATCH & LOGISTICS',
+          subtitle: `Completed final deliveries and active packing queue (${selectedPeriod})`,
+          badge: `${completedDispatchesCount} Dispatched`,
+          valueLabel: 'Packing Queue',
+          value: `${pendingDispatchQueueCount} Orders`,
+          themeColor: '#059669',
+          themeBg: '#ECFDF5',
+          icon: Truck,
+          columns: ['#', 'Order / BOM Code', 'Date', 'Customer Name', 'Transporter / Carrier', 'LR / Vehicle No.', 'Status']
+        };
+      case 'billing':
+        return {
+          title: 'BILLING & TAX INVOICES',
+          subtitle: `Official GST tax invoices issued and billed (${selectedPeriod})`,
+          badge: `${invList.length} Invoices`,
+          valueLabel: 'Total GST Billed',
+          value: totalRevenueFormatted,
+          themeColor: '#9333EA',
+          themeBg: '#FAF5FF',
+          icon: FileCheck,
+          columns: ['#', 'Invoice No.', 'Date', 'Customer Name', 'Billed Value', 'Tax Status']
+        };
+      case 'accounts':
+        return {
+          title: 'ACCOUNTS & CASH COLLECTIONS',
+          subtitle: `Customer payments realized and verified payment receipts (${selectedPeriod})`,
+          badge: `${accountsKpiRecords.length} Receipts`,
+          valueLabel: 'Total Realized',
+          value: totalCollectedFormatted,
+          themeColor: '#16A34A',
+          themeBg: '#F0FDF4',
+          icon: Wallet,
+          columns: ['#', 'Ref / Receipt No.', 'Date', 'Customer Name', 'Payment Mode', 'Amount Received', 'Status']
+        };
+      case 'kits':
+        return {
+          title: 'MMS KITS SOLD & ORDERS',
+          subtitle: `MMS kit sales, presets, and order book (${selectedPeriod})`,
+          badge: `${hrKitsSoldCount} Kits Sold`,
+          valueLabel: 'Kit Order Book',
+          value: hrKitsOrderValueFormatted,
+          themeColor: '#0E7490',
+          themeBg: '#ECFEFF',
+          icon: Boxes,
+          columns: ['#', 'BOM Code', 'Date', 'Customer Name', 'Kit Description', 'Order Value', 'Status']
+        };
+      default:
+        return null;
+    }
+  }, [activeKpiPopup, selectedPeriod, piList.length, totalPiPipelineFormatted, bomList.length, totalBomOrderValueFormatted, poList.length, totalPoSpendFormatted, completedDispatchesCount, pendingDispatchQueueCount, invList.length, totalRevenueFormatted, accountsKpiRecords.length, totalCollectedFormatted, hrKitsSoldCount, hrKitsOrderValueFormatted]);
+
+  // Data rows for Active KPI Popup Modal with search filtering
+  const kpiModalRows = useMemo(() => {
+    if (!activeKpiPopup) return [];
+    const q = (kpiPopupSearch || '').toLowerCase().trim();
+
+    if (activeKpiPopup === 'pi') {
+      return (piList || []).filter(pi => {
+        if (!q) return true;
+        return (
+          (pi.piNo || '').toLowerCase().includes(q) ||
+          (pi.customerName || '').toLowerCase().includes(q) ||
+          (pi.salesPerson || '').toLowerCase().includes(q) ||
+          (pi.status || '').toLowerCase().includes(q)
+        );
+      }).map((pi, idx) => ({
+        id: pi.piNo || idx,
+        col1: pi.piNo || '—',
+        col1Style: { color: '#0E7490', fontWeight: '800' },
+        col2: pi.piDate || pi.date || '—',
+        col3: pi.customerName || '—',
+        col4: pi.salesPerson || 'Sales Team',
+        col5: formatRealCurrency(pi.totalAmount || pi.grandTotal || pi.amount || 0),
+        col5Style: { fontWeight: '800', textAlign: 'right', color: '#0F172A' },
+        status: pi.status || 'Active',
+        statusType: String(pi.status || '').toLowerCase().includes('confirm') ? 'success' : (String(pi.status || '').toLowerCase().includes('cancel') ? 'danger' : 'info')
+      }));
+    }
+
+    if (activeKpiPopup === 'bom') {
+      return (bomList || []).filter(b => {
+        if (!q) return true;
+        return (
+          (b.bomCode || b.code || '').toLowerCase().includes(q) ||
+          (b.customerName || b.customer || '').toLowerCase().includes(q) ||
+          (b.productName || b.structureType || '').toLowerCase().includes(q) ||
+          (b.status || '').toLowerCase().includes(q)
+        );
+      }).map((b, idx) => ({
+        id: b.bomCode || b.code || idx,
+        col1: b.bomCode || b.code || `BOM-${idx + 1}`,
+        col1Style: { color: '#0284C7', fontWeight: '800' },
+        col2: b.date || b.createdAt ? new Date(b.date || b.createdAt).toLocaleDateString('en-GB') : '—',
+        col3: b.customerName || b.customer || '—',
+        col4: b.productName || b.structureType || (b.systemCapacity ? `${b.systemCapacity} kW` : 'Solar Kit'),
+        col5: formatRealCurrency(b.grandTotal || b.totalAmount || b.amount || 0),
+        col5Style: { fontWeight: '800', textAlign: 'right', color: '#0F172A' },
+        status: b.packingStatus === 'PACKING_VERIFIED' ? 'Packing Verified' : (b.status || 'Confirmed'),
+        statusType: b.packingStatus === 'PACKING_VERIFIED' ? 'success' : (String(b.status || '').toLowerCase().includes('draft') ? 'warning' : 'info')
+      }));
+    }
+
+    if (activeKpiPopup === 'po') {
+      return (poList || []).filter(po => {
+        if (!q) return true;
+        return (
+          (po.po_number || po.poNumber || '').toLowerCase().includes(q) ||
+          (po.vendor_name || po.vendorName || '').toLowerCase().includes(q) ||
+          (po.status || '').toLowerCase().includes(q)
+        );
+      }).map((po, idx) => {
+        const isPending = String(po.status || '').toLowerCase().includes('pending') || (!po.status && !po.is_approved);
+        return {
+          id: po.po_number || po.poNumber || idx,
+          col1: po.po_number || po.poNumber || `PO-${idx + 1}`,
+          col1Style: { color: '#2563EB', fontWeight: '800' },
+          col2: po.date || po.created_time || '—',
+          col3: po.vendor_name || po.vendorName || '—',
+          col4: '',
+          col5: formatRealCurrency(po.total || po.amount || 0),
+          col5Style: { fontWeight: '800', textAlign: 'right', color: '#0F172A' },
+          status: isPending ? 'Pending MD Approval' : (po.status || 'Approved'),
+          statusType: isPending ? 'warning' : 'success'
+        };
+      });
+    }
+
+    if (activeKpiPopup === 'dispatch') {
+      return dispatchKpiRecords.filter(d => {
+        if (!q) return true;
+        return (
+          (d.code || '').toLowerCase().includes(q) ||
+          (d.customer || '').toLowerCase().includes(q) ||
+          (d.transporter || '').toLowerCase().includes(q) ||
+          (d.vehicle || '').toLowerCase().includes(q) ||
+          (d.status || '').toLowerCase().includes(q)
+        );
+      }).map((d, idx) => ({
+        id: d.id || idx,
+        col1: d.code,
+        col1Style: { color: '#059669', fontWeight: '800' },
+        col2: d.date ? (typeof d.date === 'string' && d.date.includes('.') ? d.date : new Date(d.date).toLocaleDateString('en-GB')) : '—',
+        col3: d.customer,
+        col4: d.transporter,
+        col5: d.vehicle,
+        col5Style: { fontWeight: '600', color: '#475569' },
+        status: d.status,
+        statusType: d.status === 'Dispatched' ? 'success' : (d.status === 'Packing Verified' ? 'info' : 'warning')
+      }));
+    }
+
+    if (activeKpiPopup === 'billing') {
+      return (invList || []).filter(inv => {
+        if (!q) return true;
+        return (
+          (inv.invNo || inv.invoice_number || '').toLowerCase().includes(q) ||
+          (inv.customerName || inv.customer || '').toLowerCase().includes(q) ||
+          (inv.status || '').toLowerCase().includes(q)
+        );
+      }).map((inv, idx) => ({
+        id: inv.invNo || inv.invoice_number || idx,
+        col1: inv.invNo || inv.invoice_number || `INV-${idx + 1}`,
+        col1Style: { color: '#9333EA', fontWeight: '800' },
+        col2: inv.invDate || inv.date || '—',
+        col3: inv.customerName || inv.customer || '—',
+        col4: inv.salesPerson || 'Accounts Billing',
+        col5: formatRealCurrency(inv.totalAmount || inv.grandTotal || inv.amount || 0),
+        col5Style: { fontWeight: '800', textAlign: 'right', color: '#0F172A' },
+        status: inv.status || 'Billed / Confirmed',
+        statusType: 'success'
+      }));
+    }
+
+    if (activeKpiPopup === 'accounts') {
+      return accountsKpiRecords.filter(p => {
+        if (!q) return true;
+        return (
+          (p.refNo || '').toLowerCase().includes(q) ||
+          (p.customer || '').toLowerCase().includes(q) ||
+          (p.mode || '').toLowerCase().includes(q) ||
+          (p.status || '').toLowerCase().includes(q)
+        );
+      }).map((p, idx) => ({
+        id: p.id || idx,
+        col1: p.refNo,
+        col1Style: { color: '#16A34A', fontWeight: '800' },
+        col2: p.date ? (typeof p.date === 'string' && p.date.includes('.') ? p.date : new Date(p.date).toLocaleDateString('en-GB')) : '—',
+        col3: p.customer,
+        col4: p.mode,
+        col5: formatRealCurrency(p.amount),
+        col5Style: { fontWeight: '800', textAlign: 'right', color: '#16A34A' },
+        status: p.status,
+        statusType: 'success'
+      }));
+    }
+
+    if (activeKpiPopup === 'kits') {
+      return (bomList || []).filter(b => !b.cancelled).filter(b => {
+        if (!q) return true;
+        return (
+          (b.bomCode || b.code || '').toLowerCase().includes(q) ||
+          (b.customerName || b.customer || '').toLowerCase().includes(q) ||
+          (b.productName || b.structureType || '').toLowerCase().includes(q)
+        );
+      }).map((b, idx) => ({
+        id: b.bomCode || b.code || idx,
+        col1: b.bomCode || b.code || `KIT-${idx + 1}`,
+        col1Style: { color: '#0E7490', fontWeight: '800' },
+        col2: b.date || b.createdAt ? new Date(b.date || b.createdAt).toLocaleDateString('en-GB') : '—',
+        col3: b.customerName || b.customer || '—',
+        col4: b.productName || b.structureType || `${b.systemCapacity || '10'} kW MMS Kit`,
+        col5: formatRealCurrency(b.grandTotal || b.totalAmount || b.amount || 0),
+        col5Style: { fontWeight: '800', textAlign: 'right', color: '#0F172A' },
+        status: b.status || 'Active',
+        statusType: 'info'
+      }));
+    }
+
+    return [];
+  }, [activeKpiPopup, kpiPopupSearch, piList, bomList, poList, invList, dispatchKpiRecords, accountsKpiRecords]);
+
   return (
     <div style={{
       padding: '0 4px',
@@ -1551,7 +1902,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#ECFEFF',
               bottomPrefix: 'Pipeline value ',
               bottomHighlight: totalPiPipelineFormatted,
-              onClick: () => setActiveSubTab('sales')
+              onClick: () => { setActiveKpiPopup('pi'); setKpiPopupSearch(''); }
             },
             {
               title: 'BOM & PRODUCTION',
@@ -1563,7 +1914,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#F0F9FF',
               bottomPrefix: 'Order book value ',
               bottomHighlight: totalBomOrderValueFormatted,
-              onClick: () => setActiveSubTab('production')
+              onClick: () => { setActiveKpiPopup('bom'); setKpiPopupSearch(''); }
             },
             {
               title: 'PURCHASE ORDERS (PO)',
@@ -1576,7 +1927,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: totalPoSpendFormatted,
               highlightCard: pendingMdPOs.length > 0,
-              onClick: () => setActiveSubTab('procurement')
+              onClick: () => { setActiveKpiPopup('po'); setKpiPopupSearch(''); }
             },
             {
               title: 'DISPATCH & LOGISTICS',
@@ -1588,7 +1939,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#ECFDF5',
               bottomPrefix: 'Packing queue ',
               bottomHighlight: `${pendingDispatchQueueCount} Orders`,
-              onClick: () => setActiveSubTab('dispatch')
+              onClick: () => { setActiveKpiPopup('dispatch'); setKpiPopupSearch(''); }
             },
             {
               title: 'BILLING & TAX INVOICES',
@@ -1600,7 +1951,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#FAF5FF',
               bottomPrefix: 'Total GST billed ',
               bottomHighlight: totalRevenueFormatted,
-              onClick: () => setActiveSubTab(userRole === 'HR' ? 'billing' : 'accounts')
+              onClick: () => { setActiveKpiPopup('billing'); setKpiPopupSearch(''); }
             },
             ...(userRole === 'HR' ? [
               {
@@ -1613,7 +1964,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 iconBg: '#ECFEFF',
                 bottomPrefix: 'Kit order book ',
                 bottomHighlight: hrKitsOrderValueFormatted,
-                onClick: () => setActiveSubTab('kit-analytics')
+                onClick: () => { setActiveKpiPopup('kits'); setKpiPopupSearch(''); }
               }
             ] : [
               {
@@ -1626,7 +1977,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 iconBg: '#F0FDF4',
                 bottomPrefix: 'Outstanding pending ',
                 bottomHighlight: outstandingOverdueFormatted,
-                onClick: () => setActiveSubTab('accounts')
+                onClick: () => { setActiveKpiPopup('accounts'); setKpiPopupSearch(''); }
               }
             ])
           ]} />
@@ -5363,6 +5714,316 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   fontSize: '12px',
                   fontWeight: '700',
                   cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. MODAL: CEO EXECUTIVE KPI DRILLDOWN POPUP */}
+      {activeKpiPopup && kpiModalConfig && (
+        <div
+          onClick={() => setActiveKpiPopup(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '1020px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+              border: '1px solid #CBD5E1',
+              overflow: 'hidden',
+              fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 22px',
+              backgroundColor: kpiModalConfig.themeColor,
+              color: '#FFFFFF',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  flexShrink: 0
+                }}>
+                  {React.createElement(kpiModalConfig.icon, { size: 20 })}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', letterSpacing: '-0.01em' }}>
+                      {kpiModalConfig.title}
+                    </h3>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                      color: '#FFFFFF'
+                    }}>
+                      {kpiModalConfig.badge}
+                    </span>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      backgroundColor: '#FFFFFF',
+                      color: kpiModalConfig.themeColor
+                    }}>
+                      {kpiModalConfig.valueLabel}: {kpiModalConfig.value}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11.5px', opacity: 0.9, marginTop: '2px', display: 'block' }}>
+                    {kpiModalConfig.subtitle}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveKpiPopup(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  cursor: 'pointer',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  transition: 'background 0.15s ease'
+                }}
+                title="Close (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Filter / Search Bar */}
+            <div style={{
+              padding: '12px 22px',
+              backgroundColor: '#F8FAFC',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '400px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                <input
+                  type="text"
+                  value={kpiPopupSearch}
+                  onChange={(e) => setKpiPopupSearch(e.target.value)}
+                  placeholder={`Search ${kpiModalConfig.title.toLowerCase()} by customer, number, or status...`}
+                  style={{
+                    width: '100%',
+                    padding: '7px 12px 7px 32px',
+                    fontSize: '12px',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    backgroundColor: '#FFFFFF',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                  autoFocus
+                />
+                {kpiPopupSearch && (
+                  <button
+                    onClick={() => setKpiPopupSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      border: 'none',
+                      background: 'none',
+                      color: '#94A3B8',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: 0
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
+                Showing <strong>{kpiModalRows.length}</strong> {kpiModalRows.length === 1 ? 'record' : 'records'}
+              </div>
+            </div>
+
+            {/* Modal Body - Table */}
+            <div style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(90vh - 180px)', backgroundColor: '#FFFFFF' }}>
+              {kpiModalRows.length === 0 ? (
+                <div style={{ padding: '48px 24px', textAlign: 'center', color: '#94A3B8' }}>
+                  <AlertCircle size={36} color="#CBD5E1" style={{ margin: '0 auto 10px auto' }} />
+                  <div style={{ fontSize: '14px', fontWeight: '800', color: '#475569' }}>
+                    {kpiPopupSearch ? 'No matching records found' : `No records recorded for ${selectedPeriod}`}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+                    {kpiPopupSearch ? 'Try clearing your search query' : 'Switch the time period filter on top to This Week, MTD, or YTD to inspect historical data.'}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', width: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0', position: 'sticky', top: 0, zIndex: 2 }}>
+                        {kpiModalConfig.columns.map((col, cIdx) => (
+                          <th
+                            key={cIdx}
+                            style={{
+                              padding: '11px 14px',
+                              fontWeight: '800',
+                              color: '#475569',
+                              fontSize: '11px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                              whiteSpace: 'nowrap',
+                              textAlign: cIdx === kpiModalConfig.columns.length - 2 ? 'right' : (cIdx === kpiModalConfig.columns.length - 1 ? 'center' : 'left'),
+                              backgroundColor: '#F8FAFC'
+                            }}
+                          >
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kpiModalRows.map((row, rIdx) => {
+                        let stBg = '#F1F5F9';
+                        let stColor = '#475569';
+                        let stBorder = '#E2E8F0';
+                        if (row.statusType === 'success') {
+                          stBg = '#ECFDF5'; stColor = '#047857'; stBorder = '#A7F3D0';
+                        } else if (row.statusType === 'warning') {
+                          stBg = '#FFFBEB'; stColor = '#B45309'; stBorder = '#FDE68A';
+                        } else if (row.statusType === 'danger') {
+                          stBg = '#FEF2F2'; stColor = '#DC2626'; stBorder = '#FECACA';
+                        } else if (row.statusType === 'info') {
+                          stBg = '#F0FDFA'; stColor = '#0E7490'; stBorder = '#CCFBF1';
+                        }
+
+                        return (
+                          <tr
+                            key={row.id || rIdx}
+                            style={{
+                              borderBottom: '1px solid #F1F5F9',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <td style={{ padding: '10px 14px', color: '#94A3B8', fontSize: '11.5px', width: '36px' }}>
+                              {rIdx + 1}
+                            </td>
+                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', ...(row.col1Style || {}) }}>
+                              {row.col1}
+                            </td>
+                            <td style={{ padding: '10px 14px', color: '#64748B', whiteSpace: 'nowrap', fontSize: '12px' }}>
+                              {row.col2}
+                            </td>
+                            <td style={{ padding: '10px 14px', color: '#0F172A', fontWeight: '700', minWidth: '180px' }}>
+                              {row.col3}
+                            </td>
+                            {row.col4 !== undefined && (
+                              <td style={{ padding: '10px 14px', color: '#475569', fontSize: '12px' }}>
+                                {row.col4}
+                              </td>
+                            )}
+                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', ...(row.col5Style || {}) }}>
+                              {row.col5}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 9px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                backgroundColor: stBg,
+                                color: stColor,
+                                border: `1px solid ${stBorder}`
+                              }}>
+                                {row.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '12px 22px',
+              backgroundColor: '#F8FAFC',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                Period: <strong>{selectedPeriod}</strong> • Total records: <strong>{kpiModalRows.length}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveKpiPopup(null)}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#334155',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                 }}
               >
                 Close
