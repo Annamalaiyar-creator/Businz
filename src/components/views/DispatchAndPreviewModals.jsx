@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle, MessageSquare, Mail, User, Camera, AlertCircle, Loader2
+  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle, MessageSquare, Mail, User, Camera, AlertCircle, Loader2, Upload, RefreshCw
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache } from "../../utils/otherViewsShared";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -142,9 +142,10 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 }
 
 export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
-  const initialUrl = activeMediaPreviewModal?.url ||
-    activeMediaPreviewModal?.dataUrl ||
-    activeMediaPreviewModal?.previewUrl ||
+  const getSafeInitialUrl = (url) => (url && typeof url === 'string' && !url.startsWith('blob:') ? url : '');
+  const initialUrl = getSafeInitialUrl(activeMediaPreviewModal?.dataUrl) ||
+    getSafeInitialUrl(activeMediaPreviewModal?.url) ||
+    getSafeInitialUrl(activeMediaPreviewModal?.previewUrl) ||
     (activeMediaPreviewModal?.name ? getMediaFromCache(activeMediaPreviewModal.name) : '') ||
     (activeMediaPreviewModal?.id ? getMediaFromCache(activeMediaPreviewModal.id) : '') ||
     '';
@@ -152,6 +153,8 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
   const [mediaUrl, setMediaUrl] = React.useState(initialUrl);
   const [loadFailed, setLoadFailed] = React.useState(false);
   const [imgError, setImgError] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
+  const attemptedUrlsRef = React.useRef(new Set());
 
   React.useEffect(() => {
     if (!activeMediaPreviewModal) return;
@@ -159,14 +162,14 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
     setImgError(false);
     let active = true;
 
-    const direct = activeMediaPreviewModal.url ||
-      activeMediaPreviewModal.dataUrl ||
-      activeMediaPreviewModal.previewUrl ||
+    const direct = getSafeInitialUrl(activeMediaPreviewModal.dataUrl) ||
+      getSafeInitialUrl(activeMediaPreviewModal.url) ||
+      getSafeInitialUrl(activeMediaPreviewModal.previewUrl) ||
       getMediaFromCache(activeMediaPreviewModal.name) ||
       getMediaFromCache(activeMediaPreviewModal.id) ||
       '';
 
-    if (direct && !direct.startsWith('blob:')) {
+    if (direct) {
       setMediaUrl(direct);
     }
 
@@ -175,7 +178,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
       if (activeMediaPreviewModal.storageBucket && activeMediaPreviewModal.storagePath) {
         try {
           const url = await resolveDocumentUrlAsync(activeMediaPreviewModal, activeMediaPreviewModal.bomCode || activeMediaPreviewModal.storagePath.split('/')[0]);
-          if (active && url) {
+          if (active && url && !attemptedUrlsRef.current.has(url)) {
             setMediaUrl(url);
             setImgError(false);
             setLoadFailed(false);
@@ -189,7 +192,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
       if (docName) {
         try {
           const cached = await getMediaFromCacheAsync(docName);
-          if (active && cached) {
+          if (active && cached && !attemptedUrlsRef.current.has(cached)) {
             setMediaUrl(cached);
             setImgError(false);
             setLoadFailed(false);
@@ -200,7 +203,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
         // 3. Try server media find API
         try {
           const r = await fetch(`/api/media/find/${encodeURIComponent(docName)}`).then(res => res.json());
-          if (active && r && r.found && r.url) {
+          if (active && r && r.found && r.url && !attemptedUrlsRef.current.has(r.url)) {
             saveMediaToCache(docName, r.url);
             setMediaUrl(r.url);
             setImgError(false);
@@ -284,29 +287,126 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
               style={{ width: '100%', height: '72vh', border: 'none', borderRadius: '10px', backgroundColor: '#FFFFFF' }}
             />
           ) : (loadFailed || imgError) ? (
-            <div style={{ textAlign: 'center', color: '#94A3B8', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            <div style={{ textAlign: 'center', color: '#94A3B8', padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', maxWidth: '440px' }}>
               <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#1E293B', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                <Camera size={28} style={{ color: '#94A3B8' }} />
+                <Camera size={28} style={{ color: '#38BDF8' }} />
               </div>
               <p style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: '#F1F5F9' }}>Photo Attachment: {activeMediaPreviewModal.name || 'Packing Photo'}</p>
-              <p style={{ fontSize: '12.5px', color: '#94A3B8', maxWidth: '380px', margin: 0, lineHeight: 1.5 }}>
-                Captured by Dispatch Packing Team. If image preview does not appear, this photo can be viewed after re-sync or recaptured directly in the packing checklist.
+              <p style={{ fontSize: '12.5px', color: '#94A3B8', margin: 0, lineHeight: 1.5 }}>
+                Captured by Dispatch Packing Team. The original file reference is saved on the checklist.
               </p>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '5px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', marginTop: '8px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '5px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: '700' }}>
                 <CheckCircle size={13} /> Recorded on Packing Checklist
+              </div>
+
+              {/* Action buttons to re-sync or re-upload */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  disabled={retrying}
+                  onClick={async () => {
+                    setRetrying(true);
+                    const docName = activeMediaPreviewModal.name || activeMediaPreviewModal.originalName;
+                    if (docName) {
+                      try {
+                        const r = await fetch(`/api/media/find/${encodeURIComponent(docName)}`).then(res => res.json());
+                        if (r && r.found && r.url) {
+                          saveMediaToCache(docName, r.url);
+                          setMediaUrl(r.url);
+                          setImgError(false);
+                          setLoadFailed(false);
+                          setRetrying(false);
+                          return;
+                        }
+                      } catch (_) {}
+                    }
+                    setRetrying(false);
+                    alert(`Server sync check completed for "${docName || 'Photo'}". You can also choose the photo from your device below to restore it instantly.`);
+                  }}
+                  style={{
+                    backgroundColor: '#1E293B',
+                    color: '#F1F5F9',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: retrying ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <RefreshCw size={13} /> {retrying ? 'Syncing...' : 'Retry Server Sync'}
+                </button>
+
+                <label style={{
+                  backgroundColor: '#0E7490',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <Upload size={13} /> Choose / Re-upload Image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files && e.target.files[0];
+                      if (!file) return;
+                      try {
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                          const dataUrl = ev.target?.result;
+                          if (dataUrl && typeof dataUrl === 'string') {
+                            setMediaUrl(dataUrl);
+                            setImgError(false);
+                            setLoadFailed(false);
+                            const docName = activeMediaPreviewModal.name || file.name;
+                            saveMediaToCache(docName, dataUrl);
+                            try {
+                              fetch('/api/media/upload', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: docName, dataUrl, mimeType: file.type })
+                              }).then(r => r.json()).then(res => {
+                                if (res?.url) {
+                                  saveMediaToCache(docName, res.url);
+                                  setMediaUrl(res.url);
+                                }
+                              }).catch(() => {});
+                            } catch (_) {}
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      } catch (err) {
+                        console.warn('Error reading file:', err);
+                      }
+                    }}
+                  />
+                </label>
               </div>
             </div>
           ) : (
             <img
               src={mediaUrl}
               alt={activeMediaPreviewModal.name || "Full Preview"}
-              onError={async (e) => {
+              onError={async () => {
                 setImgError(true);
+                if (mediaUrl) attemptedUrlsRef.current.add(mediaUrl);
                 const docName = activeMediaPreviewModal.name || activeMediaPreviewModal.originalName;
                 if (docName) {
                   try {
                     const r = await fetch(`/api/media/find/${encodeURIComponent(docName)}`).then(res => res.json());
-                    if (r && r.found && r.url) {
+                    if (r && r.found && r.url && !attemptedUrlsRef.current.has(r.url) && r.url !== mediaUrl) {
+                      attemptedUrlsRef.current.add(r.url);
                       setMediaUrl(r.url);
                       setImgError(false);
                       setLoadFailed(false);

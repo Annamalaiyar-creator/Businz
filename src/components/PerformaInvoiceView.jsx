@@ -136,6 +136,32 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Dynamic mobile viewport detection (<= 768px)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia ? window.matchMedia('(max-width: 768px)') : null;
+    const updateMobile = () => {
+      setIsMobile((mediaQuery && mediaQuery.matches) || window.innerWidth <= 768);
+    };
+    if (mediaQuery) {
+      if (mediaQuery.addEventListener) mediaQuery.addEventListener('change', updateMobile);
+      else if (mediaQuery.addListener) mediaQuery.addListener(updateMobile);
+    }
+    window.addEventListener('resize', updateMobile);
+    return () => {
+      if (mediaQuery) {
+        if (mediaQuery.removeEventListener) mediaQuery.removeEventListener('change', updateMobile);
+        else if (mediaQuery.removeListener) mediaQuery.removeListener(updateMobile);
+      }
+      window.removeEventListener('resize', updateMobile);
+    };
+  }, []);
+
   const showTopToast = (message, type = 'success', duration = 5000) => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('businz_show_toast', {
@@ -3863,31 +3889,67 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             )}
 
             {/* 1. FILTERS & SEARCH ROW CARD */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', flex: '1 1 240px', maxWidth: '380px', minWidth: '200px' }}>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '10px',
+              padding: isMobile ? '10px 12px' : '12px 16px',
+              backgroundColor: '#fafbfc',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              alignItems: 'center',
+              width: '100%',
+              boxSizing: 'border-box',
+              justifyContent: 'space-between',
+              marginBottom: '14px'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                padding: '0 12px',
+                height: '38px',
+                backgroundColor: '#f8fafc',
+                flex: isMobile ? '1 1 100%' : '1 1 240px',
+                maxWidth: isMobile ? '100%' : '380px',
+                minWidth: '200px',
+                boxSizing: 'border-box'
+              }}>
                 <Search style={{ width: '15px', height: '15px', color: '#64748b', flexShrink: 0 }} />
                 <input id="performa-invoice-search-query" name="searchQuery" aria-label="Search Performa Invoices (PI No, Customer Name, GST No)"
                   type="text"
-                  placeholder="Search Performa Invoices (PI No, Customer Name, GST No)..."
+                  placeholder={isMobile ? "Search PIs, Customer, GST..." : "Search Performa Invoices (PI No, Customer Name, GST No)..."}
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                   style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', minWidth: 0, color: '#334155' }}
                  />
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'center',
+                flexWrap: isMobile ? 'wrap' : 'nowrap',
+                width: isMobile ? '100%' : 'auto',
+                justifyContent: isMobile ? 'space-between' : 'flex-end',
+                flexShrink: 0
+              }}>
                 {/* Modern Date Range Picker */}
-                <ModernDateRangePicker
-                  startDate={startDate}
-                  endDate={endDate}
-                  onChange={({ startDate: s, endDate: e }) => {
-                    setStartDate(s);
-                    setEndDate(e);
-                    setCurrentPage(1);
-                  }}
-                />
+                <div style={{ flex: isMobile ? '1 1 auto' : 'none' }}>
+                  <ModernDateRangePicker
+                    startDate={startDate}
+                    endDate={endDate}
+                    onChange={({ startDate: s, endDate: e }) => {
+                      setStartDate(s);
+                      setEndDate(e);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </div>
 
-                <select id="performa-invoice-status-filter" name="statusFilter" aria-label="StatusFilter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
+                <select id="performa-invoice-status-filter" name="statusFilter" aria-label="StatusFilter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: isMobile ? '110px' : '130px', flex: isMobile ? '1 1 auto' : 'none', outline: 'none' }}>
                   {uniqueStatuses.map(s => (
                     <option key={s} value={s}>
                       {s === 'All' ? 'Status: All' : s}
@@ -3910,6 +3972,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     borderRadius: '8px',
                     height: '38px',
                     width: '38px',
+                    flexShrink: 0,
                     transition: 'all 0.15s ease'
                   }}
                 >
@@ -3918,9 +3981,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               </div>
             </div>
 
-            {/* 2. STATUS SUB-TABS ROW & EXPORT BUTTON (EXACT WORK ORDERS REFERENCE DESIGN) */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            {/* 2. STATUS SUB-TABS ROW & EXPORT BUTTON */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid #e2e8f0',
+              paddingBottom: '0',
+              marginBottom: '16px',
+              width: '100%',
+              overflowX: isMobile ? 'auto' : 'visible',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none'
+            }}>
+              <div style={{
+                display: 'flex',
+                gap: isMobile ? '14px' : '20px',
+                flexWrap: isMobile ? 'nowrap' : 'wrap',
+                whiteSpace: isMobile ? 'nowrap' : 'normal',
+                paddingBottom: isMobile ? '6px' : '0'
+              }}>
                 {[
                   { id: 'All', label: 'All Invoices (Total Sent)', count: visiblePIList.length },
                   { id: 'Issued', label: 'Issued / Active', count: visiblePIList.filter(pi => {
@@ -3965,7 +4045,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px'
+                      gap: '6px',
+                      flexShrink: 0
                     }}
                   >
                     {tab.label}
@@ -3986,6 +4067,302 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
             {/* 3. MAIN DATA TABLE MATCHING EXACT REFERENCE DESIGN */}
             <div className="section-card" style={{ padding: 0, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+              {isMobile ? (
+                /* MOBILE RESPONSIVE CARD VIEW (Clean mobile view without cut-off) */
+                <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Mobile Select All Header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    fontSize: '12px',
+                    color: '#475569'
+                  }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '700' }}>
+                      <input
+                        type="checkbox"
+                        onChange={(e) => handleSelectAll(e, filteredPIList)}
+                        checked={filteredPIList.length > 0 && filteredPIList.every(pi => selectedPIs.includes(pi.piNo))}
+                        style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                      />
+                      <span>Select All ({filteredPIList.length})</span>
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#64748B' }}>
+                      {selectedPIs.length > 0 ? `${selectedPIs.length} selected` : `Showing ${indexOfFirstRow + 1}-${Math.min(indexOfLastRow, filteredPIList.length)}`}
+                    </span>
+                  </div>
+
+                  {tableLoading ? (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#0E7490' }}>
+                      <div style={{ display: 'inline-block', width: '28px', height: '28px', border: '3px solid #0E7490', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      <p style={{ marginTop: '10px', fontSize: '13px', fontWeight: '700' }}>Loading Proforma Invoices...</p>
+                    </div>
+                  ) : currentRows.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
+                      <FileText size={40} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
+                      <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Proforma Invoices found</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px' }}>Try adjusting your filters or create a new PI.</p>
+                    </div>
+                  ) : (
+                    currentRows.map((pi) => {
+                      const isSelected = selectedPIs.includes(pi.piNo);
+                      const stStyle = getStatusBadgeStyle(pi.status);
+                      const contactPerson = pi.contactPerson || pi.customerContactPerson || pi.attn || pi.customerContact || '—';
+                      const phone = pi.phone || pi.customerPhone || pi.mobile || '';
+
+                      return (
+                        <div
+                          key={pi.piNo}
+                          onClick={() => setSelectedPi(pi)}
+                          style={{
+                            backgroundColor: isSelected ? '#ECFEFF' : '#FFFFFF',
+                            border: isSelected ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                            borderLeft: isSelected ? '4px solid #0E7490' : '1px solid #CBD5E1',
+                            borderRadius: '12px',
+                            padding: '14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            cursor: 'pointer',
+                            boxShadow: isSelected ? '0 4px 12px rgba(14,116,144,0.12)' : '0 1px 3px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {/* Top row: Checkbox + PI Number + Status Badge */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={() => handleSelectRow(pi.piNo)}
+                                style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                              />
+                              <span style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', letterSpacing: '0.2px' }}>
+                                {pi.piNo}
+                              </span>
+                            </div>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              backgroundColor: stStyle.bg,
+                              color: stStyle.color,
+                              border: `1px solid ${stStyle.border}`
+                            }}>
+                              {stStyle.icon}
+                              {pi.status}
+                            </span>
+                          </div>
+
+                          {/* Customer Name & Contact */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', lineHeight: '1.3' }}>
+                              {pi.customerName || 'Unknown Customer'}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#64748B', flexWrap: 'wrap' }}>
+                              {contactPerson !== '—' && <span>Attn: <strong style={{ color: '#475569' }}>{contactPerson}</strong></span>}
+                              {phone && <span>• 📞 {phone}</span>}
+                            </div>
+                          </div>
+
+                          {/* Sales Person & Terms */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '12px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px dashed #F1F5F9' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                backgroundColor: '#E0F2FE',
+                                color: '#0369A1',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '10px',
+                                fontWeight: '800'
+                              }}>
+                                {(pi.salesPerson || 'S').charAt(0).toUpperCase()}
+                              </div>
+                              <span style={{ color: '#475569', fontSize: '12px', fontWeight: '600' }}>
+                                {pi.salesPerson || 'Sales Team'}
+                              </span>
+                            </div>
+
+                            {pi.paymentTerms && (
+                              <span style={{
+                                backgroundColor: '#F1F5F9',
+                                color: '#475569',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: '600'
+                              }}>
+                                {pi.paymentTerms}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Footer row: Date & Total Amount */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingTop: '6px',
+                            borderTop: '1px solid #F1F5F9'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#64748B' }}>
+                              <Calendar size={13} style={{ color: '#94A3B8' }} />
+                              <span>{formatDate(pi.piDate)}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                              <span style={{ fontSize: '11px', color: '#64748B' }}>Total:</span>
+                              <span style={{ fontSize: '15px', fontWeight: '900', color: '#0F172A' }}>
+                                {formatCurrency(pi.grandTotal || pi.totalAmount || 0)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Badges / Quick Actions Row */}
+                          {(pi.bomCode || pi.zohoSalesOrderId || pi.status === 'Draft') && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '4px' }}>
+                              {pi.bomCode && (
+                                <span style={{ backgroundColor: '#DCFCE7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontSize: '10.5px', fontWeight: '700' }}>
+                                  ✓ Linked BOM: {pi.bomCode}
+                                </span>
+                              )}
+                              {pi.zohoSalesOrderId && (
+                                <span style={{ backgroundColor: '#EFF6FF', color: '#1E40AF', padding: '2px 8px', borderRadius: '4px', fontSize: '10.5px', fontWeight: '700' }}>
+                                  ✓ Zoho Synced
+                                </span>
+                              )}
+                              {pi.status === 'Draft' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setQuickCompleteModal(pi);
+                                  }}
+                                  style={{
+                                    marginLeft: 'auto',
+                                    backgroundColor: '#10B981',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <CheckCircle size={11} /> Complete PI →
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {/* Mobile Pagination Footer */}
+                  {!tableLoading && filteredPIList.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      padding: '12px 6px',
+                      borderTop: '1px solid #E2E8F0',
+                      fontSize: '12px',
+                      color: '#64748B'
+                    }}>
+                      {/* Top: Rows per page & Showing text */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>Per page</span>
+                          <select
+                            value={rowsPerPage}
+                            onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                            style={{ height: '30px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', padding: '0 6px', backgroundColor: 'white', fontWeight: 'bold' }}
+                          >
+                            <option value={5}>5</option>
+                            <option value={10}>10</option>
+                          </select>
+                        </div>
+                        <span>{indexOfFirstRow + 1}-{Math.min(indexOfLastRow, filteredPIList.length)} of {filteredPIList.length}</span>
+                      </div>
+
+                      {/* Bottom: Page Nav buttons & Page Jump */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                          <button
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(1)}
+                            style={{ border: '1px solid #E2E8F0', background: currentPage === 1 ? '#F8FAFC' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', padding: '5px 8px', borderRadius: '6px', color: '#64748B', fontWeight: 'bold' }}
+                          >
+                            &laquo;
+                          </button>
+                          <button
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            style={{ border: '1px solid #E2E8F0', background: currentPage === 1 ? '#F8FAFC' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', padding: '5px 8px', borderRadius: '6px', color: '#64748B' }}
+                          >
+                            &lt;
+                          </button>
+                          <span style={{ padding: '4px 8px', fontWeight: 'bold', color: '#0E7490' }}>
+                            {currentPage} / {totalPages || 1}
+                          </span>
+                          <button
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            style={{ border: '1px solid #E2E8F0', background: (currentPage === totalPages || totalPages === 0) ? '#F8FAFC' : 'white', cursor: (currentPage === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', padding: '5px 8px', borderRadius: '6px', color: '#64748B' }}
+                          >
+                            &gt;
+                          </button>
+                          <button
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(totalPages)}
+                            style={{ border: '1px solid #E2E8F0', background: (currentPage === totalPages || totalPages === 0) ? '#F8FAFC' : 'white', cursor: (currentPage === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', padding: '5px 8px', borderRadius: '6px', color: '#64748B', fontWeight: 'bold' }}
+                          >
+                            &raquo;
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '11px', color: '#64748B' }}>Go</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max={totalPages || 1}
+                            defaultValue={currentPage}
+                            id="pi-goto-page-input-mobile"
+                            style={{ width: '38px', height: '30px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
+                          />
+                          <button
+                            onClick={() => {
+                              const val = parseInt(document.getElementById('pi-goto-page-input-mobile')?.value || '1', 10);
+                              if (val >= 1 && val <= totalPages) setCurrentPage(val);
+                            }}
+                            style={{ height: '30px', padding: '0 8px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#FFFFFF', color: '#0E7490', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer' }}
+                          >
+                            ›
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
               <div style={{ overflowX: 'auto', width: '100%' }}>
                 <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
                   <thead>
@@ -4598,6 +4975,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   </div>
                 )}
               </div>
+              )}
             </div>
 
             {/* Floating Selection Toolbar (Single line, direct action buttons, no 3-dot menu) */}

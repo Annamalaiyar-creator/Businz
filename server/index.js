@@ -2483,7 +2483,10 @@ app.get('/api/media/find/:name', (req, res) => {
             if (isMatch) {
               if (doc.storagePath) {
                 const spClean = doc.storagePath.replace(/^bom-documents\//, '');
-                return res.json({ found: true, url: `/api/uploads/bom-documents/${spClean}`, filename: dName });
+                const diskP = path.join(uploadsDir, 'bom-documents', spClean);
+                if (fs.existsSync(diskP) && fs.statSync(diskP).isFile()) {
+                  return res.json({ found: true, url: `/api/uploads/bom-documents/${spClean}`, filename: dName });
+                }
               }
               const dData = doc.dataUrl || doc.fileData || doc.proofDocData || ((typeof doc === 'string' && doc.startsWith('data:')) ? doc : null);
               if (dData && typeof dData === 'string' && dData.startsWith('data:')) {
@@ -2501,10 +2504,22 @@ app.get('/api/media/find/:name', (req, res) => {
                 }
                 return res.json({ found: true, url: dData, filename: dName });
               }
-              if (doc.url && typeof doc.url === 'string') {
-                return res.json({ found: true, url: doc.url, filename: dName });
+              if (doc.url && typeof doc.url === 'string' && !doc.url.startsWith('blob:')) {
+                if (doc.url.startsWith('/api/uploads/') || doc.url.startsWith('/uploads/')) {
+                  const checkName = doc.url.replace(/^\/(?:api\/)?uploads\/?/, '');
+                  const checkPath = path.join(uploadsDir, checkName);
+                  if (fs.existsSync(checkPath) && fs.statSync(checkPath).isFile()) {
+                    return res.json({ found: true, url: doc.url, filename: dName });
+                  }
+                } else if (doc.url.startsWith('http://') || doc.url.startsWith('https://')) {
+                  return res.json({ found: true, url: doc.url, filename: dName });
+                }
               }
-              return res.json({ found: true, url: `/api/uploads/${encodeURIComponent(dName)}`, filename: dName });
+              // Check if raw file exists in uploadsDir directly
+              const directCheck = path.join(uploadsDir, dName);
+              if (fs.existsSync(directCheck) && fs.statSync(directCheck).isFile()) {
+                return res.json({ found: true, url: `/api/uploads/${encodeURIComponent(dName)}`, filename: dName });
+              }
             }
           }
         }
