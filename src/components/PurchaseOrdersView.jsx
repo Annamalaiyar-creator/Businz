@@ -3992,16 +3992,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               {(() => {
                 const currentCompany = getCompanyProfile(companyLocation);
                 return (
-                  <div className="section-card" style={{
+                  <div style={{
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '14px',
                     backgroundColor: '#FFFFFF',
-                    border: '1.5px solid #0E7490',
-                    borderLeft: '5px solid #0E7490',
+                    border: 'none',
                     borderRadius: '12px',
                     padding: '16px 20px',
-                    boxShadow: '0 2px 8px rgba(14, 116, 144, 0.08)'
+                    boxShadow: 'none'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -4010,7 +4009,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           height: '38px',
                           borderRadius: '8px',
                           backgroundColor: '#ECFEFF',
-                          border: '1px solid #A5F3FC',
                           color: '#0E7490',
                           display: 'flex',
                           alignItems: 'center',
@@ -4028,8 +4026,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                               fontWeight: '700',
                               backgroundColor: '#ECFEFF',
                               color: '#0E7490',
-                              border: '1px solid #A5F3FC',
-                              padding: '1px 8px',
+                              padding: '2px 8px',
                               borderRadius: '12px'
                             }}>
                               Buyer Entity
@@ -4059,12 +4056,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           style={{
                             height: '38px',
                             borderRadius: '8px',
-                            border: '1.5px solid #0E7490',
+                            border: '1px solid #CBD5E1',
                             padding: '0 14px',
                             fontSize: '13px',
                             fontWeight: '700',
                             color: '#0E7490',
-                            backgroundColor: '#ECFEFF',
+                            backgroundColor: '#F8FAFC',
                             cursor: 'pointer',
                             outline: 'none',
                             minWidth: '240px'
@@ -4080,7 +4077,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     {/* Live Company Details Preview */}
                     <div style={{
                       backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
+                      border: 'none',
                       borderRadius: '8px',
                       padding: '12px 16px',
                       display: 'grid',
