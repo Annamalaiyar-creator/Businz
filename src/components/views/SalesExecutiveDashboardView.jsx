@@ -236,6 +236,32 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     return userRole === 'Sales Head' ? 'Sales Head' : 'Mohit JV';
   })();
 
+  // Dynamic mobile viewport detection (<= 768px)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia ? window.matchMedia('(max-width: 768px)') : null;
+    const updateMobile = () => {
+      setIsMobile((mediaQuery && mediaQuery.matches) || window.innerWidth <= 768);
+    };
+    if (mediaQuery) {
+      if (mediaQuery.addEventListener) mediaQuery.addEventListener('change', updateMobile);
+      else if (mediaQuery.addListener) mediaQuery.addListener(updateMobile);
+    }
+    window.addEventListener('resize', updateMobile);
+    return () => {
+      if (mediaQuery) {
+        if (mediaQuery.removeEventListener) mediaQuery.removeEventListener('change', updateMobile);
+        else if (mediaQuery.removeListener) mediaQuery.removeListener(updateMobile);
+      }
+      window.removeEventListener('resize', updateMobile);
+    };
+  }, []);
+
   // CEO Target State
   const getCachedObj = (key, fallback = {}) => {
     try {
@@ -1723,7 +1749,16 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             }}
           >
             {/* Header with Title, Period & Edit Button */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", paddingBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: isMobile ? "flex-start" : "center",
+              flexDirection: isMobile ? "column" : "row",
+              borderBottom: "1px solid #F1F5F9",
+              paddingBottom: "12px",
+              flexWrap: "wrap",
+              gap: "10px"
+            }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <div style={{
                   width: "32px",
@@ -1733,12 +1768,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                   color: "#0E7490",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center"
+                  justifyContent: "center",
+                  flexShrink: 0
                 }}>
                   <Target size={17} />
                 </div>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     <span style={{ fontSize: "13.5px", fontWeight: "800", color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.4px" }}>
                       Target Progress & Run Rate Runway
                     </span>
@@ -1787,7 +1823,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                 borderRadius: "20px",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "6px"
+                gap: "6px",
+                alignSelf: isMobile ? "flex-start" : "auto"
               }}>
                 <span style={{
                   width: "7px",
@@ -1800,7 +1837,12 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
 
             {/* Main Cockpit Split: Left Dial + Right 3 Strategic Tiles */}
-            <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: "24px", alignItems: "center" }}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "240px 1fr",
+              gap: isMobile ? "16px" : "24px",
+              alignItems: "center"
+            }}>
               {/* Left Column: Circular SVG Radial Ring */}
               <div style={{
                 display: "flex",
@@ -1811,7 +1853,9 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                 backgroundColor: "#F8FAFC",
                 borderRadius: "14px",
                 border: "1px solid #E2E8F0",
-                position: "relative"
+                position: "relative",
+                width: isMobile ? "100%" : "auto",
+                boxSizing: "border-box"
               }}>
                 <div style={{ position: "relative", width: "128px", height: "128px" }}>
                   <svg width="128" height="128" viewBox="0 0 128 128" style={{ transform: "rotate(-90deg)" }}>
@@ -1863,10 +1907,18 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               </div>
 
               {/* Right Column: 3 Metric Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px", height: "100%" }}>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "14px",
+                height: "100%",
+                width: "100%",
+                boxSizing: "border-box"
+              }}>
                 {/* Tile 1: Target & Balance */}
                 <div style={{
                   padding: "16px",
+                  borderRadius: "12px",
                   borderRadius: "12px",
                   backgroundColor: "#FFFFFF",
                   border: "1px solid #E2E8F0",
@@ -2010,7 +2062,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       })()}
 
       {/* ─── ROW 2B: SALES FUNNEL & REGION-WISE SALES (50/50 SPLIT) ─── */}
-      <div className="sales-dashboard-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
+      <div className="sales-dashboard-grid-2" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.15fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
         {/* Card A: Sales Funnel */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
@@ -2135,7 +2187,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       </div>
 
       {/* ─── ROW 3: SALES TREND, PRODUCT PERFORMANCE, TOP 10 CUSTOMERS (3 COLUMNS) ─── */}
-      <div className="sales-dashboard-grid-3" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1.15fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
+      <div className="sales-dashboard-grid-3" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.15fr 1fr 1.15fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
         {/* Card A: Actual vs Target Trend Chart */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
@@ -2548,7 +2600,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       </div>
 
       {/* ─── ROW 5: CUSTOMER OUTSTANDING & CREDIT + LOST / CANCELLED (50/50 SPLIT) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
         {/* Table A: Customer Outstanding and Credit Status */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', gap: '12px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
@@ -2716,7 +2768,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       </div>
 
       {/* ─── ROW 6: OPPORTUNITY RISK & CUSTOMER SALES MIX ─── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "16px", width: "100%", alignItems: "stretch" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(380px, 1fr))", gap: "16px", width: "100%", alignItems: "stretch" }}>
         {/* Card A: Opportunity Risk & Expiry Alerts */}
           <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '4px' }}>
