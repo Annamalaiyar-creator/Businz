@@ -1,6 +1,31 @@
 // Pre-engineered HDG C-Section & SHS Structure Configurator Data & Engine
 // Extracted with 100% mathematical parity from HDG_C_Section_SHS_Configurator_Generic_Output.xlsx
 
+export const MASTER_STRUCTURE_OPTIONS = [
+  {
+    group: 'HDG / SHS Steel Structures (Ground & Elevated)',
+    options: [
+      { value: 'hdg_c_section', label: 'C Section — CS 100×50×15 (2.0mm HDG)' },
+      { value: 'hdg_square_tube', label: 'Square Tube — SHS 60×60 (2.0mm Heavy Duty Tube)' }
+    ]
+  },
+  {
+    group: 'Aluminium Rooftop MMS Systems',
+    options: [
+      { value: 'alu_fam_ssr', label: 'Standing Seam Profile (80 mm Height • Grub Screws)' },
+      { value: 'alu_fam_mr_125', label: 'Mini Rail Profile — 125 mm Height (Rivets + EPDM)' },
+      { value: 'alu_fam_mr_100', label: 'Mini Rail Profile — 100 mm Height (Rivets + EPDM)' },
+      { value: 'alu_fam_mr_75', label: 'Mini Rail Profile — 75 mm Height (Rivets + EPDM)' }
+    ]
+  },
+  {
+    group: 'PM Surya Ghar: Muft Bijli Yojana (Turnkey BOS Kits)',
+    options: [
+      { value: 'pm_surya_ghar', label: '☀️ PM Surya Ghar — Complete Solar BOS Kit (Turnkey)' }
+    ]
+  }
+];
+
 export const C_SECTION_LEG_WEIGHTS = {
   150: 0.48,
   300: 0.961,

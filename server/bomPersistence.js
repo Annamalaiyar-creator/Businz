@@ -205,8 +205,27 @@ export const toConsumerBomServer = (row) => {
     creditDueDate: row.credit_due_date || '',
     remarks: row.remarks || '',
     status: row.status || 'Draft',
-    salesConfirmed: Boolean(row.sales_confirmed),
-    salesConfirmedAt: row.sales_confirmed_at || null,
+    salesConfirmed: Boolean(
+      row.sales_confirmed ||
+      row.salesConfirmed ||
+      row.salesReconfirmed ||
+      (typeof row.status === 'string' && (
+        row.status.toLowerCase().includes('sales confirmed') ||
+        row.status.toLowerCase().includes('sent to dispatch') ||
+        row.status.toLowerCase().includes('sent to production') ||
+        row.status.toLowerCase().includes('packed') ||
+        row.status.toLowerCase().includes('accounts verified') ||
+        row.status.toLowerCase().includes('invoice') ||
+        row.status.toLowerCase().includes('dispatched')
+      ))
+    ),
+    salesConfirmedAt: row.sales_confirmed_at || (Boolean(
+      row.sales_confirmed ||
+      (typeof row.status === 'string' && (
+        row.status.toLowerCase().includes('sales confirmed') ||
+        row.status.toLowerCase().includes('sent to dispatch')
+      ))
+    ) ? (row.created_at || new Date().toISOString()) : null),
     salesPerson: salesRep,
     salesPersonCode: salesPersonCode,
     c8: salesRep,
@@ -424,6 +443,15 @@ export const toDatabaseBomRowServer = (item) => {
   if (item.cancelledByNameAndRole) mergedExtra.cancelledByNameAndRole = item.cancelledByNameAndRole;
   if (item.cancellationReason) mergedExtra.cancellationReason = item.cancellationReason;
 
+  delete mergedExtra.dateTimeObj;
+  delete mergedExtra.c2;
+  delete mergedExtra.c3;
+  delete mergedExtra.c4;
+  delete mergedExtra.c5;
+  delete mergedExtra.c6;
+  delete mergedExtra.c7;
+  delete mergedExtra.c8;
+
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
     : { _extra_data: mergedExtra };
@@ -489,7 +517,28 @@ export const toDatabaseBomRowServer = (item) => {
     payment_proof_doc: serializeDoc(item.paymentProofDoc),
     remarks: item.remarks || '',
     status: item.status || 'Draft',
-    sales_confirmed: Boolean(item.salesConfirmed),
+    sales_confirmed: Boolean(
+      item.salesConfirmed ||
+      item.salesReconfirmed ||
+      item.sales_confirmed ||
+      (typeof item.status === 'string' && (
+        item.status.toLowerCase().includes('sales confirmed') ||
+        item.status.toLowerCase().includes('sent to dispatch') ||
+        item.status.toLowerCase().includes('sent to production') ||
+        item.status.toLowerCase().includes('packed') ||
+        item.status.toLowerCase().includes('accounts verified') ||
+        item.status.toLowerCase().includes('invoice') ||
+        item.status.toLowerCase().includes('dispatched')
+      ))
+    ),
+    sales_confirmed_at: sanitizeTimestamp(item.salesConfirmedAt) || (Boolean(
+      item.salesConfirmed ||
+      item.salesReconfirmed ||
+      (typeof item.status === 'string' && (
+        item.status.toLowerCase().includes('sales confirmed') ||
+        item.status.toLowerCase().includes('sent to dispatch')
+      ))
+    ) ? (item.salesConfirmedAt || new Date().toISOString()) : null),
     sales_person: cleanSalesPerson || item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
     sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
     created_by: item.createdBy || item.created_by || cleanSalesPerson || item.salesPerson || item.sales_person || '',
@@ -557,6 +606,31 @@ export function mergeBomRecords(existing, incoming) {
     // Preserve financial totals if incoming is 0 and existing is non-zero
     grandTotal: (Number(incoming.grandTotal) > 0) ? Number(incoming.grandTotal) : (existing.grandTotal || 0),
     subTotal: (Number(incoming.subTotal) > 0) ? Number(incoming.subTotal) : (existing.subTotal || 0),
+    salesConfirmed: Boolean(
+      incoming.salesConfirmed ||
+      incoming.salesReconfirmed ||
+      existing.salesConfirmed ||
+      existing.salesReconfirmed ||
+      (typeof incoming.status === 'string' && (
+        incoming.status.toLowerCase().includes('sales confirmed') ||
+        incoming.status.toLowerCase().includes('sent to dispatch') ||
+        incoming.status.toLowerCase().includes('sent to production') ||
+        incoming.status.toLowerCase().includes('packed') ||
+        incoming.status.toLowerCase().includes('accounts verified') ||
+        incoming.status.toLowerCase().includes('invoice') ||
+        incoming.status.toLowerCase().includes('dispatched')
+      )) ||
+      (typeof existing.status === 'string' && (
+        existing.status.toLowerCase().includes('sales confirmed') ||
+        existing.status.toLowerCase().includes('sent to dispatch') ||
+        existing.status.toLowerCase().includes('sent to production') ||
+        existing.status.toLowerCase().includes('packed') ||
+        existing.status.toLowerCase().includes('accounts verified') ||
+        existing.status.toLowerCase().includes('invoice') ||
+        existing.status.toLowerCase().includes('dispatched')
+      ))
+    ),
+    salesConfirmedAt: incoming.salesConfirmedAt || existing.salesConfirmedAt || null,
     // Workflow progression safety: do not allow a stale lower-rank status to regress progress,
     // while explicitly honoring legitimate cancellation / stock restoration requests.
     status: (incoming.cancelled || String(incoming.status || '').toLowerCase().includes('cancel') || String(incoming.status || '').toLowerCase().includes('stock restored') || iRank >= eRank)

@@ -688,19 +688,25 @@ export default function CrmQuotationsView({
 
     setQuoteItems(prev => [...(prev || []), ...items]);
 
-    if (!structureType || structureType === 'Aluminium Rooftop Rails (6063 T6)') {
+    if (result.structureType) {
+      setStructureType(result.structureType);
+    } else if (!structureType || structureType === 'Aluminium Rooftop Rails (6063 T6)') {
       setStructureType(`Hot Dip Galvanized (HDG) Steel Structure — ${result.tableTitle}`);
     }
 
-    const panelsPerTable = (result.rowModel ? parseInt(result.rowModel.charAt(0)) : 1) * (parseInt(result.tableSize) || 1);
-    const totalPanels = panelsPerTable * (parseInt(multCount) || 1);
-    const estKw = ((totalPanels * 550) / 1000).toFixed(1);
-    if (!capacityKw || String(capacityKw).trim() === '') {
-      setCapacityKw(estKw);
+    if (result.capacityKw) {
+      setCapacityKw(String(result.capacityKw));
+    } else {
+      const panelsPerTable = (result.rowModel ? parseInt(result.rowModel.charAt(0)) : 1) * (parseInt(result.tableSize) || 1);
+      const totalPanels = panelsPerTable * (parseInt(multCount) || 1);
+      const estKw = ((totalPanels * 550) / 1000).toFixed(1);
+      if (!capacityKw || String(capacityKw).trim() === '') {
+        setCapacityKw(estKw);
+      }
     }
 
     setShowBOMQuoteForm(true);
-    setToastMessage(`⚡ ${groupTitle} (${multCount} Table${multCount > 1 ? 's' : ''}) added to quotation! Total: ₹${result.totalQuotedPrice.toLocaleString('en-IN')}`);
+    setToastMessage(`⚡ ${groupTitle} (${multCount} ${result.isKit ? 'Kit' : 'Table'}${multCount > 1 ? 's' : ''}) added to quotation! Total: ₹${Number(result.totalQuotedPrice || result.grandTotal || 0).toLocaleString('en-IN')}`);
   };
 
   const handleRemovePresetGroup = (groupId) => {

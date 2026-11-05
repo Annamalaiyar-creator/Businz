@@ -2203,18 +2203,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       igstAmt: t.gstAmt
     }));
 
-    const gst = formattedTiers.reduce((sum, t) => sum + t.gstAmt, 0);
-    const grand = sub + gst;
-    const cgst = gst / 2;
-    const sgst = gst / 2;
+    const rawGst = formattedTiers.reduce((sum, t) => sum + t.gstAmt, 0);
+    const roundedSub = Math.round(sub * 100) / 100;
+    const roundedGst = Math.round(rawGst * 100) / 100;
+    const roundedGrand = Math.round((roundedSub + roundedGst) * 100) / 100;
+    const halfGst = Math.round((roundedGst / 2) * 100) / 100;
 
     return {
-      sub: isNaN(sub) ? 0 : sub,
-      kitSubtotal: isNaN(kitSubtotal) ? 0 : kitSubtotal,
-      gst: isNaN(gst) ? 0 : gst,
-      grand: isNaN(grand) ? 0 : grand,
-      cgst: isNaN(cgst) ? 0 : cgst,
-      sgst: isNaN(sgst) ? 0 : sgst,
+      sub: isNaN(roundedSub) ? 0 : roundedSub,
+      kitSubtotal: isNaN(kitSubtotal) ? 0 : Math.round(kitSubtotal * 100) / 100,
+      gst: isNaN(roundedGst) ? 0 : roundedGst,
+      grand: isNaN(roundedGrand) ? 0 : roundedGrand,
+      cgst: isNaN(halfGst) ? 0 : halfGst,
+      sgst: isNaN(halfGst) ? 0 : halfGst,
       isIntra,
       taxType: isIntra ? 'INTRA' : 'INTER',
       gstTiers: formattedTiers
@@ -4454,31 +4455,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   >
                                     <CheckCircle size={10} style={{ color: '#10B981' }} /> Zoho Synced
                                   </span>
-                                )}
-                                {!hasSavedBom && isConverted && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleConvertToBom(pi);
-                                    }}
-                                    title="Complete and save BOM order for this PI"
-                                    style={{
-                                      backgroundColor: '#F59E0B',
-                                      color: '#FFFFFF',
-                                      border: 'none',
-                                      fontSize: '10.5px',
-                                      fontWeight: '800',
-                                      padding: '2px 8px',
-                                      borderRadius: '6px',
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '3px'
-                                    }}
-                                  >
-                                    Complete BOM →
-                                  </button>
                                 )}
                                 {isDraft && (
                                   <button

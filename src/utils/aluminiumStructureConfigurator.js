@@ -43,6 +43,67 @@ export const ALUMINIUM_CATALOG = [
 ];
 
 /**
+ * Distinct Aluminium Profile Families (Categorized by Profile Type & Height)
+ * Lengths are selected separately in the Rail Length Specification container
+ */
+export const ALUMINIUM_PROFILE_FAMILIES = [
+  {
+    familyId: 'ssr',
+    category: 'Standing Seam',
+    height: 80,
+    label: 'Standing Seam Profile (80 mm Height • Grub Screws)',
+    shortLabel: 'Standing Seam (80mm)',
+    defaultRailId: 'ssr_100',
+    fixing: 'Grub Screws'
+  },
+  {
+    familyId: 'mr_125',
+    category: 'Mini Rail',
+    height: 125,
+    label: 'Mini Rail Profile — 125 mm Height (Rivets + EPDM)',
+    shortLabel: 'Mini Rail (125mm H)',
+    defaultRailId: 'mr_125_300',
+    fixing: 'Rivets + EPDM'
+  },
+  {
+    familyId: 'mr_100',
+    category: 'Mini Rail',
+    height: 100,
+    label: 'Mini Rail Profile — 100 mm Height (Rivets + EPDM)',
+    shortLabel: 'Mini Rail (100mm H)',
+    defaultRailId: 'mr_100_300',
+    fixing: 'Rivets + EPDM'
+  },
+  {
+    familyId: 'mr_75',
+    category: 'Mini Rail',
+    height: 75,
+    label: 'Mini Rail Profile — 75 mm Height (Rivets + EPDM)',
+    shortLabel: 'Mini Rail (75mm H)',
+    defaultRailId: 'mr_75_300',
+    fixing: 'Rivets + EPDM'
+  },
+  {
+    familyId: 'mr_120',
+    category: 'Mini Rail',
+    height: 120,
+    label: 'Mini Rail Profile — 120 mm Height (Rivets + EPDM)',
+    shortLabel: 'Mini Rail (120mm H)',
+    defaultRailId: 'mr_120_100',
+    fixing: 'Rivets + EPDM'
+  }
+];
+
+export function getProfileFamilyForRail(railDef) {
+  if (!railDef) return ALUMINIUM_PROFILE_FAMILIES[0];
+  if (railDef.category === 'Standing Seam') return ALUMINIUM_PROFILE_FAMILIES[0];
+  return (
+    ALUMINIUM_PROFILE_FAMILIES.find(f => f.category === 'Mini Rail' && f.height === railDef.height) ||
+    ALUMINIUM_PROFILE_FAMILIES[1]
+  );
+}
+
+/**
  * Calculate unit cost and price for an item given the live NALCO price
  * Formula from Excel:
  * Cost = isAlu ? ((nalcoPrice / 1000) * weight) + fabCost : baseCost + fabCost
@@ -189,3 +250,4 @@ export function calculateAluminiumStructure({
     items
   };
 }
+

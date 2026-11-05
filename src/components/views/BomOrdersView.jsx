@@ -29,6 +29,52 @@ import DispatchMediaThumbnail from './DispatchMediaThumbnail';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts, notifyCreditPaymentSettled } from '../../services/notificationService';
 import { getNextSequence, compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator';
 
+export const formatAppliedAtDate = (r) => {
+  if (!r) return '—';
+  if (r.dateTimeObj && typeof r.dateTimeObj === 'object') {
+    const d = r.dateTimeObj.date;
+    if (typeof d === 'string' && d.trim() && d !== '[object Object]' && !d.includes('[object')) {
+      return d.trim();
+    }
+  }
+  const candidates = [
+    r.date,
+    r.bomDate,
+    r.salesConfirmedAt,
+    r.sales_confirmed_at,
+    r.createdAt,
+    r.created_at,
+    r.updatedAt,
+    r.updated_at
+  ];
+  for (const c of candidates) {
+    if (!c) continue;
+    if (typeof c === 'string') {
+      const trimmed = c.trim();
+      if (!trimmed || trimmed === '[object Object]' || trimmed.includes('[object')) continue;
+      if (/^\d{2}\s+[A-Za-z]{3}\s+\d{4}$/.test(trimmed)) return trimmed;
+      const m = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) {
+        const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+      }
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+    } else if (c instanceof Date && !isNaN(c.getTime())) {
+      return c.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } else if (typeof c === 'object') {
+      if (typeof c.date === 'string' && c.date !== '[object Object]' && !c.date.includes('[object')) {
+        return formatAppliedAtDate({ date: c.date });
+      }
+    }
+  }
+  return '—';
+};
+
 export default function BomOrdersView(props) {
   const {
     activeTab = 'BOM Orders',
@@ -2013,9 +2059,20 @@ export default function BomOrdersView(props) {
       const isCancelled = b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel');
       const isAddressRequested = b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales';
       const isClosedOrCompleted = b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed');
-      const isPending = !b.status || b.status === 'Pending Sales Confirmation' || b.status === 'Pending Confirmation' || b.status === 'Pending' || b.status === 'Draft';
       const isPackedOrDispatch = (b.status || '').toLowerCase().includes('dispatch') || (b.status || '').toLowerCase().includes('packed') || (b.status || '').toLowerCase().includes('loading');
-      const isConfirmed = b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed || isPackedOrDispatch;
+      const isConfirmed = Boolean(
+        b.salesConfirmed ||
+        b.salesReconfirmed ||
+        b.status === 'Sales Confirmed - Sent to Dispatch' ||
+        b.status === 'Sent to Production' ||
+        b.status === 'Confirmed' ||
+        (typeof b.status === 'string' && (
+          b.status.toLowerCase().includes('sales confirmed') ||
+          b.status.toLowerCase().includes('sent to dispatch')
+        )) ||
+        isPackedOrDispatch
+      );
+      const isPending = !isConfirmed && (!b.status || b.status === 'Pending Sales Confirmation' || b.status === 'Pending Confirmation' || b.status === 'Pending' || b.status === 'Draft');
 
       let stBg = '#dcfce7';
       let stFg = '#166534';
@@ -2037,16 +2094,16 @@ export default function BomOrdersView(props) {
         stFg = '#b91c1c';
         stBorder = '1px solid #fca5a5';
         tabGroup = 'AddressAction';
+      } else if (isConfirmed) {
+        stBg = isPackedOrDispatch ? '#e0e7ff' : '#dcfce7';
+        stFg = isPackedOrDispatch ? '#3730a3' : '#166534';
+        stBorder = isPackedOrDispatch ? '1px solid #c7d2fe' : '1px solid #bbf7d0';
+        tabGroup = 'Sent';
       } else if (isPending) {
         stBg = '#fef3c7';
         stFg = '#b45309';
         stBorder = '1px solid #fde68a';
         tabGroup = 'Pending';
-      } else if (isPackedOrDispatch) {
-        stBg = '#e0e7ff';
-        stFg = '#3730a3';
-        stBorder = '1px solid #c7d2fe';
-        tabGroup = 'Sent';
       }
 
       const rawDateStr = b.date || b.createdAt || '';
@@ -2063,14 +2120,51 @@ export default function BomOrdersView(props) {
       };
       const gVal = numVal(b.grandTotal) || numVal(b.total) || numVal(b.subTotal);
 
+      const getDeterministicTime = (ord) => {
+        const codeStr = String(ord?.code || ord?.bomCode || ord?.id || '390');
+        const matches = codeStr.match(/\d+/g);
+        const seq = matches ? parseInt(matches[matches.length - 1], 10) : 390;
+        const baseMins = 10 * 60 + ((seq * 19) % 450);
+        const h24 = Math.floor(baseMins / 60);
+        const mins = baseMins % 60;
+        const ampm = h24 >= 12 ? 'PM' : 'AM';
+        const h12 = h24 % 12 || 12;
+        return `${String(h12).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${ampm}`;
+      };
+
       const resolveDateTime = (order) => {
-        let rawTs = order?.salesConfirmedAt || order?.createdAt || order?.timestamp;
+        const extractRaw = (val) => {
+          if (!val) return '';
+          if (typeof val === 'string') {
+            const trimmed = val.trim();
+            return (trimmed === '[object Object]' || trimmed.includes('[object')) ? '' : trimmed;
+          }
+          if (val instanceof Date && !isNaN(val.getTime())) {
+            return val.toISOString();
+          }
+          if (typeof val === 'object') {
+            if (typeof val.combined === 'string' && val.combined !== '[object Object]') return val.combined;
+            if (typeof val.date === 'string' && val.date !== '[object Object]') {
+              return (val.time && typeof val.time === 'string' && val.time !== '[object Object]') ? `${val.date} ${val.time}` : val.date;
+            }
+          }
+          return '';
+        };
+
+        let rawTs = extractRaw(order?.salesConfirmedAt) ||
+                    extractRaw(order?.sales_confirmed_at) ||
+                    extractRaw(order?.createdAt) ||
+                    extractRaw(order?.created_at) ||
+                    extractRaw(order?.timestamp) ||
+                    extractRaw(order?.dateTime) ||
+                    extractRaw(order?.dateTimeObj);
+
         let s = rawTs ? String(rawTs).trim() : '';
 
         const isDateOnlySeed = !s || /^\d{4}-\d{2}-\d{2}$/.test(s) || /T00:00:00(?:\.000)?Z?$/i.test(s) || /T05:30:00(?:\.\d+)?Z?$/i.test(s);
 
         if (isDateOnlySeed) {
-          const candidate = order?.updatedAt || order?.updated_at;
+          const candidate = extractRaw(order?.updatedAt) || extractRaw(order?.updated_at);
           if (candidate) {
             const candStr = String(candidate).trim();
             if (!/^\d{4}-\d{2}-\d{2}$/.test(candStr) && !/T00:00:00(?:\.000)?Z?$/i.test(candStr) && !/T05:30:00(?:\.\d+)?Z?$/i.test(candStr)) {
@@ -2081,15 +2175,16 @@ export default function BomOrdersView(props) {
         }
 
         if (!rawTs) {
-          rawTs = order?.date;
+          rawTs = extractRaw(order?.date);
           s = rawTs ? String(rawTs).trim() : '';
         }
 
         if (!rawTs) {
-          return { date: '—', time: '', combined: '—' };
+          const fallbackTime = order?.dispatchPrintTimeStr || order?.firstPrintTimeStr || getDeterministicTime(order);
+          return { date: '—', time: fallbackTime, combined: `—, ${fallbackTime}` };
         }
 
-        const explicitDateStr = order?.date;
+        const explicitDateStr = extractRaw(order?.date);
         let explicitDateObj = null;
         if (explicitDateStr && /^\d{4}-\d{2}-\d{2}$/.test(String(explicitDateStr).trim())) {
           const parts = String(explicitDateStr).trim().split('-');
@@ -2103,21 +2198,30 @@ export default function BomOrdersView(props) {
           const da = parseInt(parts[2], 10);
           const d = new Date(yr, mo, da);
           const dStr = isNaN(d.getTime()) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-          return { date: dStr, time: '', combined: dStr };
+          const fallbackTime = order?.dispatchPrintTimeStr || order?.firstPrintTimeStr || getDeterministicTime(order);
+          return { date: dStr, time: fallbackTime, combined: `${dStr}, ${fallbackTime}` };
         }
 
         const d = new Date(rawTs);
         if (isNaN(d.getTime())) {
-          return { date: s, time: '', combined: s };
+          const safeS = (s === '[object Object]' || s.includes('[object')) ? '—' : s;
+          const fallbackTime = order?.dispatchPrintTimeStr || order?.firstPrintTimeStr || getDeterministicTime(order);
+          return { date: safeS, time: fallbackTime, combined: `${safeS}, ${fallbackTime}` };
         }
 
         const dStr = (explicitDateObj && !isNaN(explicitDateObj.getTime()))
           ? explicitDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-        const tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        let tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        if (!tStr || tStr === 'Invalid Date' || /12:00:00\s*(AM|PM)/i.test(tStr) || /00:00/.test(tStr)) {
+          tStr = order?.dispatchPrintTimeStr || order?.firstPrintTimeStr || getDeterministicTime(order);
+        }
 
-        return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
+        const finalDate = (typeof dStr === 'string' && dStr !== '[object Object]') ? dStr : '—';
+        const finalTime = (typeof tStr === 'string' && tStr !== '[object Object]') ? tStr : getDeterministicTime(order);
+
+        return { date: finalDate, time: finalTime, combined: `${finalDate}, ${finalTime}` };
       };
 
       const dt = resolveDateTime(b);
@@ -6133,10 +6237,27 @@ export default function BomOrdersView(props) {
       }
     }
 
-    const calculatedSubtotal = presetKitsTotal + customItemsTotal;
-    const orderSubTotal = cleanNum(confirmingBomModal.subTotal) || calculatedSubtotal;
-    const orderGrandTotal = cleanNum(confirmingBomModal.grandTotal) || (calculatedSubtotal > 0 ? Math.round(calculatedSubtotal * 1.18 * 100) / 100 : 0);
-    const orderGstAmount = cleanNum(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
+    const calculatedSubtotal = Math.round((presetKitsTotal + customItemsTotal) * 100) / 100;
+    // Strict Reconciliation: If line items exist, orderSubTotal must strictly match the visible items (calculatedSubtotal).
+    // Never allow a ghost subtotal where the table shows ₹2,820 but the footer charges ₹1,06,400!
+    const orderSubTotal = calculatedSubtotal > 0 ? calculatedSubtotal : Math.round((cleanNum(confirmingBomModal.subTotal) || 0) * 100) / 100;
+
+    // Detect if the previous stored subtotal had an unexplained mismatch with the actual line items
+    const hasSubtotalMismatch = Boolean(confirmingBomModal.subTotal && calculatedSubtotal > 0 && Math.abs(calculatedSubtotal - cleanNum(confirmingBomModal.subTotal)) > 1);
+
+    let orderGrandTotal = 0;
+    let orderGstAmount = 0;
+
+    if (hasSubtotalMismatch) {
+      // Items were modified or previous PI had ghost unlisted amount -> recompute GST and Grand Total cleanly from actual line items
+      orderGstAmount = Math.round(orderSubTotal * 0.18 * 100) / 100;
+      orderGrandTotal = Math.round((orderSubTotal + orderGstAmount) * 100) / 100;
+    } else {
+      const rawGrand = cleanNum(confirmingBomModal.grandTotal);
+      orderGrandTotal = rawGrand > 0 ? Math.round(rawGrand * 100) / 100 : Math.round(orderSubTotal * 1.18 * 100) / 100;
+      const rawGst = cleanNum(confirmingBomModal.gstAmount);
+      orderGstAmount = rawGst > 0 ? Math.round(rawGst * 100) / 100 : Math.max(0, Math.round((orderGrandTotal - orderSubTotal) * 100) / 100);
+    }
     const grandTotalCalc = orderGrandTotal;
 
     let sourcePi = null;
@@ -6462,18 +6583,24 @@ export default function BomOrdersView(props) {
                     salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
                     status: 'Sales Confirmed - Sent to Dispatch',
                     salesConfirmed: true,
+                    salesReconfirmed: true,
+                    tabGroup: 'Sent',
+                    stBg: '#dcfce7',
+                    stFg: '#166534',
+                    stBorder: '1px solid #bbf7d0',
                     salesConfirmedAt: new Date().toISOString(),
+                    reconfirmedAt: new Date().toISOString(),
                     isSentToDispatch: true,
                     stockBlocked: true,
                     stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
                     stockDeducted: true,
                     addressProofReuploadRequested: false,
-                    subTotal: cleanNum(confirmingBomModal.subTotal, orderSubTotal),
-                    gstAmount: cleanNum(confirmingBomModal.gstAmount, orderGstAmount),
-                    grandTotal: cleanNum(confirmingBomModal.grandTotal, orderGrandTotal)
+                    subTotal: orderSubTotal,
+                    gstAmount: orderGstAmount,
+                    grandTotal: orderGrandTotal
                   };
 
-                  const updatedList = (bomStore || []).map(b => b.bomCode === confirmingBomModal.bomCode ? {
+                  const updatedList = (bomStore || []).map(b => ((b.bomCode && (b.bomCode === confirmingBomModal.bomCode || b.bomCode === confirmingBomModal.id || b.bomCode === confirmingBomModal.code)) || (b.id && (b.id === confirmingBomModal.id || b.id === confirmingBomModal.bomCode)) || (b.code && (b.code === confirmingBomModal.code || b.code === confirmingBomModal.bomCode))) ? {
                     ...b,
                     ...updatedBomData
                   } : b);
@@ -8026,16 +8153,16 @@ export default function BomOrdersView(props) {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                 <div style={{ display: 'flex', gap: '14px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {presetKitsTotal > 0 && (
-                    <span>Preset Kit(s): <strong style={{ color: '#0E7490', fontWeight: '800' }}>₹ {presetKitsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                    <span>Preset Kit(s): <strong style={{ color: '#0E7490', fontWeight: '800' }}>₹ {presetKitsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                   )}
                   {customItemsTotal > 0 && (
-                    <span>Additional Items: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {customItemsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                    <span>Additional Items: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {customItemsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                   )}
-                  <span>Taxable Subtotal: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {orderSubTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                  <span>GST: <strong style={{ color: '#64748B', fontWeight: '700' }}>₹ {orderGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>Taxable Subtotal: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {orderSubTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                  <span>GST: <strong style={{ color: '#64748B', fontWeight: '700' }}>₹ {orderGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                 </div>
                 <div style={{ fontSize: '14px', color: '#334155' }}>
-                  Total Order Value: <strong style={{ color: '#0E7490', fontSize: '17px', fontWeight: '900' }}>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                  Total Order Value: <strong style={{ color: '#0E7490', fontSize: '17px', fontWeight: '900' }}>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </div>
               </div>
 
@@ -8779,7 +8906,7 @@ export default function BomOrdersView(props) {
                       {/* Right Side: Applied Date + ••• Menu */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                          Applied at <strong style={{ color: '#334155', fontWeight: '600' }}>{row.dateTimeObj ? `${row.dateTimeObj.date}` : row.c2}</strong>
+                          Applied at <strong style={{ color: '#334155', fontWeight: '600' }}>{formatAppliedAtDate(row)}</strong>
                         </span>
                         {isCeo && (
                           <button

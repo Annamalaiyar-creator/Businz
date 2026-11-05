@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X, Zap, Check, CheckCircle, Sliders, Layers, RefreshCw,
   FileText, ShieldCheck, DollarSign, ChevronDown, ChevronUp,
@@ -13,7 +13,14 @@ import {
   DEFAULT_RAW_MATERIAL_RATES,
   calculateHdgStructure
 } from '../../utils/hdgStructureConfigurator';
+import {
+  ALUMINIUM_PROFILE_FAMILIES,
+  ALUMINIUM_CATALOG,
+  getProfileFamilyForRail
+} from '../../utils/aluminiumStructureConfigurator';
 import AluminiumStructureConfiguratorView from './AluminiumStructureConfiguratorView';
+import PmSuryaGharConfiguratorView from './PmSuryaGharConfiguratorView';
+import MasterStructureProfileDropdown from './MasterStructureProfileDropdown';
 
 /**
  * High-Definition Interactive 2D Solar Table Schematic (Side Elevation & Top Layout)
@@ -595,14 +602,27 @@ export default function HdgStructureConfiguratorModal({
 }) {
   if (!isOpen) return null;
 
-  // Master System Category: 'hdg' (Ground Mount & Elevated Steel) vs 'aluminium' (Rooftop Mini Rail & Standing Seam)
+  // Master System Category: 'hdg' (Ground Mount & Elevated Steel) vs 'aluminium' (Rooftop Mini Rail & Standing Seam) vs 'pm_surya_ghar'
   const [structureCategory, setStructureCategory] = useState(initialData.structureCategory || 'hdg');
+  const [selectedAluRailId, setSelectedAluRailId] = useState(initialData.selectedAluRailId || 'ssr_100');
+
+  useEffect(() => {
+    if (initialData.structureCategory) {
+      setStructureCategory(initialData.structureCategory);
+    }
+  }, [initialData.structureCategory, isOpen]);
 
   // Configuration State
   const [columnProfile, setColumnProfile] = useState(initialData.columnProfile || 'C Section');
   const [rowModel, setRowModel] = useState(initialData.rowModel || '2 Row');
   const [tableSize, setTableSize] = useState(initialData.tableSize || 3);
   const [setCount, setSetCount] = useState(initialData.setCount || 1);
+  const [isCustomSetCount, setIsCustomSetCount] = useState(
+    ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100].includes(Number(initialData.setCount || 1))
+  );
+
+  const safeSetCount = Math.max(1, parseInt(setCount, 10) || 1);
+  const isSetCountValid = !isNaN(parseInt(setCount, 10)) && parseInt(setCount, 10) >= 1;
 
   // Leg Heights
   const [selectedPairIndex, setSelectedPairIndex] = useState(0);
@@ -646,6 +666,33 @@ export default function HdgStructureConfiguratorModal({
     }
   };
 
+  const handleMasterStructureChange = (val) => {
+    if (val === 'pm_surya_ghar') {
+      setStructureCategory('pm_surya_ghar');
+    } else if (val.startsWith('alu_fam_')) {
+      const famId = val.replace('alu_fam_', '');
+      const targetFamily = ALUMINIUM_PROFILE_FAMILIES.find(f => f.familyId === famId);
+      setStructureCategory('aluminium');
+      setSelectedAluRailId(targetFamily ? targetFamily.defaultRailId : 'ssr_100');
+    } else if (val === 'hdg_square_tube') {
+      setStructureCategory('hdg');
+      handleProfileChange('Square Tube');
+    } else {
+      setStructureCategory('hdg');
+      handleProfileChange('C Section');
+    }
+  };
+
+  const currentStructureValue = useMemo(() => {
+    if (structureCategory === 'pm_surya_ghar') return 'pm_surya_ghar';
+    if (structureCategory === 'aluminium') {
+      const rail = ALUMINIUM_CATALOG.find(r => r.id === selectedAluRailId);
+      const family = getProfileFamilyForRail(rail);
+      return family ? `alu_fam_${family.familyId}` : 'alu_fam_ssr';
+    }
+    return columnProfile === 'Square Tube' ? 'hdg_square_tube' : 'hdg_c_section';
+  }, [structureCategory, columnProfile, selectedAluRailId]);
+
   // Handle Leg Pair Preset Selection
   const handlePairSelect = (idx) => {
     setSelectedPairIndex(idx);
@@ -686,17 +733,17 @@ export default function HdgStructureConfiguratorModal({
         hexM10: hexM10Rate,
         anchorM10: anchorM10Rate
       },
-      setCount
+      setCount: safeSetCount
     });
   }, [
     columnProfile, rowModel, tableSize, leg1Height, leg2Height,
     hasBracing, hasCrossBracing, hdgRate, galvalRate,
-    allenM8Rate, hexM12Rate, hexM10Rate, anchorM10Rate, setCount
+    allenM8Rate, hexM12Rate, hexM10Rate, anchorM10Rate, safeSetCount
   ]);
 
   // Derived wattage calculations
   const totalPanelsPerTable = (rowModel === '1 Row' ? 1 : rowModel === '2 Row' ? 2 : 3) * tableSize;
-  const totalPanels = totalPanelsPerTable * setCount;
+  const totalPanels = totalPanelsPerTable * safeSetCount;
   const capacityKw = ((totalPanels * 550) / 1000).toFixed(2);
   const capacityKwPerTable = ((totalPanelsPerTable * 550) / 1000).toFixed(2);
   const totalWatts = totalPanels * 550;
@@ -716,8 +763,12 @@ export default function HdgStructureConfiguratorModal({
   // Apply to Quotation Handler
   const handleApply = () => {
     if (!onApplyToQuote) return;
+    if (!isSetCountValid) {
+      alert('Please enter a valid table count (minimum 1) before proceeding.');
+      return;
+    }
 
-    const mult = Math.max(1, parseInt(setCount) || 1);
+    const mult = safeSetCount;
     const grpId = 'hdg_cfg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const grpTitle = `${columnProfile === 'Square Tube' ? 'SHS' : 'HDG C-Section'} ${result.tableTitle}`;
 
@@ -851,7 +902,7 @@ export default function HdgStructureConfiguratorModal({
         overflow: 'hidden',
         animation: 'fadeIn 0.2s ease-out'
       }}>
-        {/* 1. Header (Clean Light Gradient) */}
+        {/* 1. Header (Clean Unified Header) */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderBottom: '1px solid #E2E8F0',
@@ -866,102 +917,55 @@ export default function HdgStructureConfiguratorModal({
               width: '42px',
               height: '42px',
               borderRadius: '12px',
-              background: structureCategory === 'aluminium'
+              background: structureCategory === 'pm_surya_ghar'
+                ? 'linear-gradient(135deg, #D97706 0%, #B45309 100%)'
+                : structureCategory === 'aluminium'
                 ? 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)'
                 : 'linear-gradient(135deg, #075985 0%, #0E7490 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 10px rgba(14, 116, 144, 0.25)'
+              boxShadow: structureCategory === 'pm_surya_ghar'
+                ? '0 4px 10px rgba(180, 83, 9, 0.25)'
+                : structureCategory === 'aluminium'
+                ? '0 4px 10px rgba(3, 105, 161, 0.25)'
+                : '0 4px 10px rgba(14, 116, 144, 0.25)'
             }}>
               <Zap style={{ width: '20px', height: '20px', color: '#FDE047' }} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.3px' }}>
-                  {structureCategory === 'aluminium' ? 'Aluminium Rooftop MMS Configurator' : 'Solar HDG Structure Configurator'}
+                  {structureCategory === 'pm_surya_ghar'
+                    ? 'PM Surya Ghar Solar BOS Kit Configurator'
+                    : structureCategory === 'aluminium'
+                    ? 'Aluminium Rooftop MMS Configurator'
+                    : 'Solar HDG Structure Configurator'}
                 </h2>
                 <span style={{
-                  backgroundColor: '#ECFEFF',
-                  color: '#0E7490',
-                  border: '1px solid #CFFAFE',
+                  backgroundColor: structureCategory === 'pm_surya_ghar' ? '#FEF3C7' : '#ECFEFF',
+                  color: structureCategory === 'pm_surya_ghar' ? '#B45309' : '#0E7490',
+                  border: `1px solid ${structureCategory === 'pm_surya_ghar' ? '#FDE68A' : '#CFFAFE'}`,
                   fontSize: '11px',
                   fontWeight: '800',
                   padding: '2px 8px',
                   borderRadius: '12px'
                 }}>
-                  {structureCategory === 'aluminium' ? 'NALCO Benchmark Engine' : 'Live Quotation Engine'}
+                  {structureCategory === 'pm_surya_ghar'
+                    ? 'Muft Bijli Yojana'
+                    : structureCategory === 'aluminium'
+                    ? 'NALCO Benchmark Engine'
+                    : 'Live Quotation Engine'}
                 </span>
               </div>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
-                {structureCategory === 'aluminium'
+                {structureCategory === 'pm_surya_ghar'
+                  ? 'Turnkey Solar Sizing Engine: Solar PV Modules + Inverter + Structure + BOS Kit'
+                  : structureCategory === 'aluminium'
                   ? 'Mini Rails & Standing Seam Rooftop Systems • Mathematical Formula Parity with Price List Workout'
                   : 'C-Section 100×50×15 & Square Tube 60×60 • Pre-Engineered Unified 1-Row, 2-Row & 3-Row Tables'}
               </p>
             </div>
-          </div>
-
-          {/* System Category Switcher Pills */}
-          <div style={{
-            display: 'flex',
-            backgroundColor: '#F1F5F9',
-            padding: '3px',
-            borderRadius: '12px',
-            gap: '4px',
-            border: '1px solid #E2E8F0'
-          }}>
-            <button
-              type="button"
-              onClick={() => setStructureCategory('hdg')}
-              style={{
-                padding: '7px 15px',
-                borderRadius: '9px',
-                border: 'none',
-                backgroundColor: structureCategory === 'hdg' ? '#0E7490' : 'transparent',
-                color: structureCategory === 'hdg' ? '#FFFFFF' : '#475569',
-                fontSize: '12px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.15s ease',
-                boxShadow: structureCategory === 'hdg' ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
-              }}
-            >
-              <span>🏗️ HDG & SHS Ground / Elevated</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setStructureCategory('aluminium')}
-              style={{
-                padding: '7px 15px',
-                borderRadius: '9px',
-                border: 'none',
-                backgroundColor: structureCategory === 'aluminium' ? '#0E7490' : 'transparent',
-                color: structureCategory === 'aluminium' ? '#FFFFFF' : '#475569',
-                fontSize: '12px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.15s ease',
-                boxShadow: structureCategory === 'aluminium' ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
-              }}
-            >
-              <span>⚡ Aluminium Mini Rail & Standing Seam</span>
-              <span style={{
-                backgroundColor: structureCategory === 'aluminium' ? '#FDE047' : '#E2E8F0',
-                color: structureCategory === 'aluminium' ? '#0F172A' : '#64748B',
-                fontSize: '9.5px',
-                fontWeight: '800',
-                padding: '1px 5px',
-                borderRadius: '4px'
-              }}>
-                ADD-ON
-              </span>
-            </button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1010,10 +1014,20 @@ export default function HdgStructureConfiguratorModal({
         </div>
 
         {/* ========================================================= */}
-        {/* CONDITIONAL CONTENT: ALUMINIUM ADDON vs EXISTING HDG BODY */}
+        {/* CONDITIONAL CONTENT: ALUMINIUM vs PM SURYA GHAR vs HDG    */}
         {/* ========================================================= */}
         {structureCategory === 'aluminium' ? (
           <AluminiumStructureConfiguratorView
+            initialRailId={selectedAluRailId}
+            masterStructureValue={currentStructureValue}
+            onMasterStructureChange={handleMasterStructureChange}
+            onApplyToQuote={onApplyToQuote}
+            onClose={onClose}
+          />
+        ) : structureCategory === 'pm_surya_ghar' ? (
+          <PmSuryaGharConfiguratorView
+            masterStructureValue={currentStructureValue}
+            onMasterStructureChange={handleMasterStructureChange}
             onApplyToQuote={onApplyToQuote}
             onClose={onClose}
           />
@@ -1149,37 +1163,11 @@ export default function HdgStructureConfiguratorModal({
             gap: '16px'
           }}>
             {/* Step 1: Column Profile */}
-            <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  1. Column Profile
-                </label>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490' }}>
-                  {columnProfile === 'C Section' ? 'CS 100×50×15' : 'SHS 60×60'}
-                </span>
-              </div>
-              <select
-                value={columnProfile}
-                onChange={e => handleProfileChange(e.target.value)}
-                style={{
-                  width: '100%',
-                  height: '40px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #CBD5E1',
-                  backgroundColor: '#F8FAFC',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  color: '#0F172A',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'border-color 0.15s ease'
-                }}
-              >
-                <option value="C Section">C Section — CS 100×50×15 (2.0mm HDG)</option>
-                <option value="Square Tube">Square Tube — SHS 60×60 (2.0mm Heavy Duty)</option>
-              </select>
-            </div>
+            <MasterStructureProfileDropdown
+              value={currentStructureValue}
+              onChange={handleMasterStructureChange}
+              activeBadge={columnProfile === 'Square Tube' ? 'SHS 60x60' : 'CS 100x50x15'}
+            />
 
             {/* Step 2: Row Model */}
             <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
@@ -1427,11 +1415,12 @@ export default function HdgStructureConfiguratorModal({
                 </span>
               </div>
               <select
-                value={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100].includes(setCount) ? setCount : 'custom'}
+                value={isCustomSetCount ? 'custom' : (Number(setCount) || 1)}
                 onChange={e => {
                   if (e.target.value === 'custom') {
-                    // keep current value
+                    setIsCustomSetCount(true);
                   } else {
+                    setIsCustomSetCount(false);
                     setSetCount(Number(e.target.value));
                   }
                 }}
@@ -1462,29 +1451,46 @@ export default function HdgStructureConfiguratorModal({
                 <option value="custom">Custom Quantity...</option>
               </select>
 
-              {![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100].includes(setCount) && (
-                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10000"
-                    value={setCount}
-                    onChange={e => setSetCount(Math.max(1, parseInt(e.target.value) || 1))}
-                    placeholder="Enter table count..."
-                    style={{
-                      width: '100%',
-                      height: '36px',
-                      borderRadius: '6px',
-                      border: '1px solid #CBD5E1',
-                      padding: '0 10px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      color: '#0F172A'
-                    }}
-                  />
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', whiteSpace: 'nowrap' }}>
-                    Tables
-                  </span>
+              {isCustomSetCount && (
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: !isSetCountValid ? '#DC2626' : '#475569' }}>
+                      Enter Custom Table Count <span style={{ color: '#EF4444' }}>*</span>
+                    </span>
+                    {!isSetCountValid && (
+                      <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: '800' }}>Min 1 Table required</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={setCount}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d+$/.test(val)) {
+                          setSetCount(val);
+                        }
+                      }}
+                      placeholder="e.g. 18"
+                      autoFocus
+                      style={{
+                        flex: 1,
+                        height: '38px',
+                        borderRadius: '8px',
+                        border: !isSetCountValid ? '1.5px solid #EF4444' : '1.5px solid #0E7490',
+                        backgroundColor: '#FFFFFF',
+                        padding: '0 12px',
+                        fontSize: '14px',
+                        fontWeight: '800',
+                        color: '#0F172A',
+                        outline: 'none'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>
+                      Tables
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1946,25 +1952,31 @@ export default function HdgStructureConfiguratorModal({
                 </button>
                 <button
                   type="button"
+                  disabled={!isSetCountValid}
                   onClick={handleApply}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '8px',
-                    background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                    background: isSetCountValid ? 'linear-gradient(135deg, #059669 0%, #10B981 100%)' : '#94A3B8',
                     color: 'white',
                     border: 'none',
                     borderRadius: '10px',
                     padding: '9px 24px',
                     fontSize: '13px',
                     fontWeight: '900',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
+                    cursor: isSetCountValid ? 'pointer' : 'not-allowed',
+                    boxShadow: isSetCountValid ? '0 4px 12px rgba(16, 185, 129, 0.35)' : 'none',
+                    opacity: isSetCountValid ? 1 : 0.75,
                     transition: 'all 0.15s ease'
                   }}
                 >
                   <CheckCircle size={16} />
-                  <span>Apply to Quotation (₹{result.totalQuotedPrice.toLocaleString('en-IN')})</span>
+                  <span>
+                    {isSetCountValid
+                      ? `Apply to Quotation (₹${result.totalQuotedPrice.toLocaleString('en-IN')})`
+                      : 'Enter Valid Table Count'}
+                  </span>
                 </button>
               </div>
             </div>

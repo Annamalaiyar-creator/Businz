@@ -291,6 +291,39 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
     }
   }
 
+  // Clean & deduplicate identical items by combining quantities and pruning mutually-exclusive clamp variations
+  kitGroupsMap.forEach(group => {
+    const grpItemsMap = new Map();
+    group.items.forEach(it => {
+      const rawName = (it.name || it.itemName || '').trim();
+      if (!rawName) return;
+      const cleanName = rawName.replace(/\s*\*\s*/g, '*');
+      if (grpItemsMap.has(cleanName)) {
+        const ex = grpItemsMap.get(cleanName);
+        const q1 = parseFloat(ex.qty || ex.bomQty || 0) || 0;
+        const q2 = parseFloat(it.qty || it.bomQty || 0) || 0;
+        ex.qty = q1 + q2;
+        ex.bomQty = q1 + q2;
+      } else {
+        grpItemsMap.set(cleanName, { ...it, name: cleanName });
+      }
+    });
+    let list = Array.from(grpItemsMap.values());
+    if (list.some(it => /universal\s+mid\s+clamp/i.test(it.name)) && list.some(it => /mid\s+clamp\s+3[05]mm/i.test(it.name))) {
+      list = list.filter(it => !/mid\s+clamp\s+3[05]mm/i.test(it.name));
+    }
+    const end30 = list.find(it => /end\s+clamp\s+30\s*mm/i.test(it.name));
+    const end35 = list.find(it => /end\s+clamp\s+35\s*mm/i.test(it.name));
+    if (end30 && end35) {
+      const targetQty = Math.max(parseFloat(end30.qty || end30.bomQty) || 0, parseFloat(end35.qty || end35.bomQty) || 0);
+      list = list.filter(it => it !== end30);
+      end35.name = 'End Clamp 35 mm';
+      end35.qty = targetQty || 8;
+      end35.bomQty = targetQty || 8;
+    }
+    group.items = list;
+  });
+
   const kitGroups = Array.from(kitGroupsMap.values());
   const hasMultipleKits = kitGroups.length > 1;
   const hasAnyKits = kitGroups.length > 0;

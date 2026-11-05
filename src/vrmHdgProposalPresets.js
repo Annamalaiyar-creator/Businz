@@ -18,21 +18,59 @@ export const VRM_HDG_PRESETS = basePresets;
 // Cache basePresets lookup for fast access
 const basePresetsMap = basePresets || {};
 
-// Normalizer helper to enforce 5% GST default for DCR BOS Solar Proposal Kits
-const normalizePresetGst = (preset) => {
+// Normalizer helper to clean preset components, prune duplicate clamps, combine fasteners, and enforce GST
+const normalizePreset = (preset) => {
   if (!preset) return preset;
+  let items = Array.isArray(preset.items) ? [...preset.items] : [];
+
+  if (items.length > 0) {
+    const map = new Map();
+    items.forEach(it => {
+      const rawName = (it.name || '').trim();
+      if (!rawName) return;
+      const cleanName = rawName.replace(/\s*\*\s*/g, '*');
+      if (map.has(cleanName)) {
+        const ex = map.get(cleanName);
+        const q1 = parseFloat(ex.qty) || 0;
+        const q2 = parseFloat(it.qty) || 0;
+        ex.qty = String(q1 + q2);
+      } else {
+        map.set(cleanName, { ...it, name: cleanName });
+      }
+    });
+    items = Array.from(map.values());
+
+    // Prune duplicate mid clamps (Universal Mid Clamp replaces Mid Clamp 35mm / 30mm)
+    if (items.some(it => /universal\s+mid\s+clamp/i.test(it.name)) && items.some(it => /mid\s+clamp\s+3[05]mm/i.test(it.name))) {
+      items = items.filter(it => !/mid\s+clamp\s+3[05]mm/i.test(it.name));
+    }
+
+    // Prune duplicate end clamps (End Clamp 30mm & 35mm redundant pair)
+    const end30 = items.find(it => /end\s+clamp\s+30\s*mm/i.test(it.name));
+    const end35 = items.find(it => /end\s+clamp\s+35\s*mm/i.test(it.name));
+    if (end30 && end35) {
+      const targetQty = Math.max(parseFloat(end30.qty) || 0, parseFloat(end35.qty) || 0);
+      items = items.filter(it => it !== end30);
+      end35.name = 'End Clamp 35 mm';
+      end35.qty = String(targetQty || 8);
+    }
+  }
+
   const isDcrBos = (preset.category && (preset.category === 'DCR BOS Solar Kits' || preset.category === 'BOS Solar Kits' || preset.category.includes('DCR BOS'))) ||
                    (preset.label && preset.label.includes('BOS KITS'));
   if (isDcrBos) {
-    const updatedItems = Array.isArray(preset.items) ? preset.items.map(it => ({ ...it, gstRate: '5%' })) : [];
+    items = items.map(it => ({ ...it, gstRate: '5%' }));
     return {
       ...preset,
       gstRate: '5%',
       gst: '5%',
-      items: updatedItems
+      items
     };
   }
-  return preset;
+  return {
+    ...preset,
+    items
+  };
 };
 
 // Load custom presets synchronously from localStorage on init
@@ -65,7 +103,7 @@ const buildActivePresets = () => {
   const merged = { ...basePresetsMap, ...customPresetsCache };
   const normalized = {};
   Object.keys(merged).forEach(key => {
-    normalized[key] = normalizePresetGst(merged[key]);
+    normalized[key] = normalizePreset(merged[key]);
   });
   cachedActivePresets = normalized;
   return normalized;
@@ -212,7 +250,7 @@ export function deleteCustomPreset(presetId) {
     const merged = { ...basePresetsMap, ...customPresetsCache };
     const normalized = {};
     Object.keys(merged).forEach(key => {
-      normalized[key] = normalizePresetGst(merged[key]);
+      normalized[key] = normalizePreset(merged[key]);
     });
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));

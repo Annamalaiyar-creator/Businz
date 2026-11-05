@@ -73,10 +73,25 @@ export default function ConfirmingBomModal({
     }
   }
 
-  const calculatedSubtotal = presetKitsTotal + customItemsTotal;
-  const orderSubTotal = cleanNum(confirmingBomModal.subTotal) || calculatedSubtotal;
-  const orderGrandTotal = cleanNum(confirmingBomModal.grandTotal) || (calculatedSubtotal > 0 ? Math.round(calculatedSubtotal * 1.18 * 100) / 100 : 0);
-  const orderGstAmount = cleanNum(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
+  const calculatedSubtotal = Math.round((presetKitsTotal + customItemsTotal) * 100) / 100;
+  // Strict Reconciliation: If line items exist, orderSubTotal must strictly match the visible items (calculatedSubtotal).
+  // Never allow a ghost subtotal where the table shows ₹2,820 but the footer charges ₹1,06,400!
+  const hasSubtotalMismatch = Boolean(confirmingBomModal.subTotal && calculatedSubtotal > 0 && Math.abs(calculatedSubtotal - cleanNum(confirmingBomModal.subTotal)) > 1);
+  const orderSubTotal = calculatedSubtotal > 0 ? calculatedSubtotal : Math.round((cleanNum(confirmingBomModal.subTotal) || 0) * 100) / 100;
+
+  let orderGrandTotal = 0;
+  let orderGstAmount = 0;
+
+  if (hasSubtotalMismatch) {
+    // Items were modified or previous PI had ghost unlisted amount -> recompute GST and Grand Total cleanly from actual line items
+    orderGstAmount = Math.round(orderSubTotal * 0.18 * 100) / 100;
+    orderGrandTotal = Math.round((orderSubTotal + orderGstAmount) * 100) / 100;
+  } else {
+    const rawGrand = cleanNum(confirmingBomModal.grandTotal);
+    orderGrandTotal = rawGrand > 0 ? Math.round(rawGrand * 100) / 100 : Math.round(orderSubTotal * 1.18 * 100) / 100;
+    const rawGst = cleanNum(confirmingBomModal.gstAmount);
+    orderGstAmount = rawGst > 0 ? Math.round(rawGst * 100) / 100 : Math.max(0, Math.round((orderGrandTotal - orderSubTotal) * 100) / 100);
+  }
   const grandTotalCalc = orderGrandTotal;
 
     let sourcePi = null;
@@ -228,14 +243,20 @@ export default function ConfirmingBomModal({
                   dispatchPacking: packingItems,
                   status: 'Sales Confirmed - Sent to Dispatch',
                   salesConfirmed: true,
+                  salesReconfirmed: true,
+                  tabGroup: 'Sent',
+                  stBg: '#dcfce7',
+                  stFg: '#166534',
+                  stBorder: '1px solid #bbf7d0',
                   salesConfirmedAt: new Date().toISOString(),
+                  reconfirmedAt: new Date().toISOString(),
                   isSentToDispatch: true,
                   stockBlocked: true,
                   stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
                   stockDeducted: true,
-                  subTotal: confirmingBomModal.subTotal || orderSubTotal,
-                  gstAmount: confirmingBomModal.gstAmount || orderGstAmount,
-                  grandTotal: confirmingBomModal.grandTotal || orderGrandTotal
+                  subTotal: orderSubTotal,
+                  gstAmount: orderGstAmount,
+                  grandTotal: orderGrandTotal
                 };
 
                 // 1. Deduct / Reserve inventory across all stores (only if not already blocked on creation)
@@ -1647,16 +1668,16 @@ export default function ConfirmingBomModal({
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
               <div style={{ display: 'flex', gap: '14px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {presetKitsTotal > 0 && (
-                  <span>Preset Kit(s): <strong style={{ color: '#0E7490', fontWeight: '800' }}>₹ {presetKitsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>Preset Kit(s): <strong style={{ color: '#0E7490', fontWeight: '800' }}>₹ {presetKitsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                 )}
                 {customItemsTotal > 0 && (
-                  <span>Additional Items: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {customItemsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>Additional Items: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {customItemsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                 )}
-                <span>Taxable Subtotal: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {orderSubTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                <span>GST: <strong style={{ color: '#64748B', fontWeight: '700' }}>₹ {orderGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                <span>Taxable Subtotal: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {orderSubTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                <span>GST: <strong style={{ color: '#64748B', fontWeight: '700' }}>₹ {orderGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
               </div>
               <div style={{ fontSize: '14px', color: '#334155' }}>
-                Total Order Value: <strong style={{ color: '#0E7490', fontSize: '17px', fontWeight: '900' }}>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                Total Order Value: <strong style={{ color: '#0E7490', fontSize: '17px', fontWeight: '900' }}>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </div>
             </div>
 
