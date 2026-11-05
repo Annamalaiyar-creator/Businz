@@ -2633,6 +2633,115 @@ export default function VendorManagementView(props) {
                       </div>
                     </div>
                   </div>
+
+                {/* Sticky Bottom Action Bar Following with Scroll */}
+                <div
+                  style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    borderTop: '1.5px solid #CBD5E1',
+                    padding: '14px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-start',
+                    gap: '12px',
+                    zIndex: 50,
+                    boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+                    borderRadius: '12px',
+                    marginTop: '8px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setVendorConfirmModal({
+                      show: true,
+                      action: 'draft',
+                      title: 'Save Vendor as Draft?',
+                      message: 'Are you sure you want to save this vendor information as a Draft?',
+                      confirmLabel: 'Save Draft',
+                      confirmBtnColor: '#475569'
+                    })}
+                    style={{
+                      height: '38px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#334155',
+                      padding: '0 18px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                  >
+                    Save as Draft
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVendorConfirmModal({
+                      show: true,
+                      action: 'cancel',
+                      title: 'Cancel Vendor Onboarding?',
+                      message: 'Are you sure you want to cancel? Any entered vendor information will be cleared.',
+                      confirmLabel: 'Discard Changes',
+                      confirmBtnColor: '#EF4444'
+                    })}
+                    style={{
+                      height: '38px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#64748B',
+                      padding: '0 18px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVendorConfirmModal({
+                      show: true,
+                      action: 'submit',
+                      title: 'Submit Vendor for Review?',
+                      message: 'Are you sure you want to submit this vendor for onboarding approval & review?',
+                      confirmLabel: 'Submit Vendor',
+                      confirmBtnColor: '#0E7490'
+                    })}
+                    style={{
+                      height: '38px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: '#0E7490',
+                      color: '#FFFFFF',
+                      padding: '0 22px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      boxShadow: '0 2px 6px rgba(14, 116, 144, 0.3)',
+                      marginLeft: 'auto',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                  >
+                    Submit for Review
+                  </button>
+                </div>
               </form>
             ) : viewingVendor ? (
               /* Vendor Management View Mode: Full-Page Detail */
