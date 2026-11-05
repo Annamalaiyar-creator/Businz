@@ -20,17 +20,17 @@ export const COMPANY_LOCATIONS = {
   'VRM Structures (AP)': {
     name: 'VRM Structures India Pvt Ltd',
     locationLabel: 'VRM Structures (AP)',
-    address: 'No.684, Podalakur Road, Nellore, Andhra Pradesh - 524002',
-    gst: '37AAACT2727Q1ZS',
+    address: 'NO 150B, PERUMAL KOVIL STREET, Padi. Tada, District - Thirupati, TADA, Andhra Pradesh - 524401, India',
+    gst: '37AAGCV4262N1ZR',
     email: 'ap@vrmstructures.com',
     phone: '+91 98847 20789',
     state: 'Andhra Pradesh'
   },
   'Jashsun': {
-    name: 'Jashsun',
+    name: 'Jash Sun Power Dynamics Private Limited',
     locationLabel: 'Jashsun',
-    address: 'Chennai, Tamil Nadu, India',
-    gst: '33AAACJ1234F1Z8',
+    address: '2nd, 1/135A, JASH SUN, 2nd Street, Elavanthangal, Kelambakkam, Chengalpattu, Tamil Nadu - 603103, India',
+    gst: '33AAGCJ6197G1ZC',
     email: 'contact@jashsun.com',
     phone: '+91 98847 20789',
     state: 'Tamil Nadu'
@@ -40,10 +40,10 @@ export const COMPANY_LOCATIONS = {
 export const getCompanyProfile = (locationKey) => {
   if (!locationKey) return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
   const norm = String(locationKey).trim().toLowerCase();
-  if (norm.includes('ap') || norm.includes('andhra') || norm.includes('nellore')) {
+  if (norm.includes('ap') || norm.includes('andhra') || norm.includes('tada') || norm.includes('nellore')) {
     return COMPANY_LOCATIONS['VRM Structures (AP)'];
   }
-  if (norm.includes('jashsun')) {
+  if (norm.includes('jash') || norm.includes('sun')) {
     return COMPANY_LOCATIONS['Jashsun'];
   }
   return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
