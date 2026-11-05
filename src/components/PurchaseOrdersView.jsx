@@ -2750,40 +2750,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     <Mail style={{ width: '14px', height: '14px' }} /> Share as mail
                   </button>
                 </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setShowCancelConfirm(true)}
-                    style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}
-                  >
-                    Generate PDF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => executeCreatePO(e, 'Draft')}
-                    disabled={isSubmittingPO}
-                    style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '600', color: '#c2410c', cursor: isSubmittingPO ? 'not-allowed' : 'pointer', opacity: isSubmittingPO ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <FileText style={{ width: '15px', height: '15px' }} />
-                    {isSubmittingPO ? 'Saving...' : 'Save as Draft'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={triggerSaveConfirm}
-                    disabled={isSubmittingPO}
-                    style={{ backgroundColor: '#2563eb', border: 'none', borderRadius: '8px', padding: '8px 24px', fontSize: '13px', fontWeight: '600', color: 'white', cursor: isSubmittingPO ? 'not-allowed' : 'pointer', opacity: isSubmittingPO ? 0.6 : 1 }}
-                  >
-                    {isSubmittingPO ? 'Processing...' : 'Send for Approval'}
-                  </button>
-                </>
-              )}
+              ) : null}
             </div>
           </div>
 
