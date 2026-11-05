@@ -179,7 +179,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return () => window.removeEventListener('controlroom_ceo_subtab_change', handleSubTabChange);
   }, []);
 
-  const [selectedPeriod, setSelectedPeriod] = useState('MTD');
+  const [selectedPeriod, setSelectedPeriod] = useState('Today');
   const [personDeptFilter, setPersonDeptFilter] = useState('all');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
   const [activePersonModal, setActivePersonModal] = useState(null);

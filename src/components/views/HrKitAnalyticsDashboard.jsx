@@ -19,7 +19,7 @@ import { classifyKitComponent } from '../../utils/kitClassification';
 
 export default function HrKitAnalyticsDashboard({ 
   allBomList = [], 
-  selectedPeriod = 'MTD', 
+  selectedPeriod = 'Today', 
   onPeriodChange, 
   matchesSelectedPeriod 
 }) {
