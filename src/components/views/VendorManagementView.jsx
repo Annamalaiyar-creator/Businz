@@ -1448,14 +1448,14 @@ export default function VendorManagementView(props) {
   const [vRegAddress1, setVRegAddress1] = useState('');
   const [vRegAddress2, setVRegAddress2] = useState('');
   const [vCity, setVCity] = useState('');
-  const [vState, setVState] = useState('Select state');
+  const [vState, setVState] = useState('');
   const [vCountry, setVCountry] = useState('India');
   const [vPinCode, setVPinCode] = useState('');
   const [vBillingAddress, setVBillingAddress] = useState('');
   const [vBillingAddress1, setVBillingAddress1] = useState('');
   const [vBillingAddress2, setVBillingAddress2] = useState('');
   const [vBillingCity, setVBillingCity] = useState('');
-  const [vBillingState, setVBillingState] = useState('Select state');
+  const [vBillingState, setVBillingState] = useState('');
   const [vBillingCountry, setVBillingCountry] = useState('India');
   const [vBillingPinCode, setVBillingPinCode] = useState('');
   const [vSameAsRegistered, setVSameAsRegistered] = useState(true);
@@ -1956,7 +1956,7 @@ export default function VendorManagementView(props) {
       street: vRegAddress1,
       street2: vRegAddress2,
       city: vCity,
-      state: vState === 'Select state' ? '' : vState,
+      state: vState || '',
       pincode: vPinCode,
       country: vCountry,
       billingAddressObj: {
@@ -1966,7 +1966,7 @@ export default function VendorManagementView(props) {
         street: vSameAsRegistered ? vRegAddress1 : vBillingAddress1,
         street2: vSameAsRegistered ? vRegAddress2 : vBillingAddress2,
         city: vSameAsRegistered ? vCity : vBillingCity,
-        state: vSameAsRegistered ? (vState === 'Select state' ? '' : vState) : (vBillingState === 'Select state' ? '' : vBillingState),
+        state: vSameAsRegistered ? (vState || '') : (vBillingState || ''),
         zip: vSameAsRegistered ? vPinCode : vBillingPinCode,
         pincode: vSameAsRegistered ? vPinCode : vBillingPinCode,
         country: vSameAsRegistered ? vCountry : vBillingCountry
@@ -1978,7 +1978,7 @@ export default function VendorManagementView(props) {
         street: vRegAddress1,
         street2: vRegAddress2,
         city: vCity,
-        state: vState === 'Select state' ? '' : vState,
+        state: vState || '',
         zip: vPinCode,
         pincode: vPinCode,
         country: vCountry
@@ -2019,13 +2019,13 @@ export default function VendorManagementView(props) {
     setVRegAddress1('');
     setVRegAddress2('');
     setVCity('');
-    setVState('Select state');
+    setVState('');
     setVPinCode('');
     setVBillingAddress('');
     setVBillingAddress1('');
     setVBillingAddress2('');
     setVBillingCity('');
-    setVBillingState('Select state');
+    setVBillingState('');
     setVBillingPinCode('');
     setVSameAsRegistered(true);
     setVDesignation('');
@@ -2419,14 +2419,23 @@ export default function VendorManagementView(props) {
                             />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-state" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               State <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            {renderSelect(vState, (e) => {
-                              const val = e.target.value;
-                              setVState(val);
-                              if (vSameAsRegistered) setVBillingState(val);
-                            }, ['Andhra Pradesh', 'Telangana', 'Tamil Nadu', 'Karnataka', 'Maharashtra'], { height: '38px' })}
+                            <input
+                              id="vendor-management-state"
+                              name="state"
+                              aria-label="State"
+                              type="text"
+                              value={vState}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setVState(val);
+                                if (vSameAsRegistered) setVBillingState(val);
+                              }}
+                              placeholder="Enter state"
+                              style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
+                            />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
@@ -2539,10 +2548,20 @@ export default function VendorManagementView(props) {
                             <input id="vendor-management-city" name="city" aria-label="City" disabled={vSameAsRegistered} type="text" value={vSameAsRegistered ? vCity : vBillingCity} onChange={(e) => setVBillingCity(e.target.value)} placeholder="Enter city" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white' }}  />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-billing-state" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               State <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            {renderSelect(vSameAsRegistered ? vState : vBillingState, (e) => setVBillingState(e.target.value), ['Andhra Pradesh', 'Telangana', 'Tamil Nadu', 'Karnataka', 'Maharashtra'], { height: '38px', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', disabled: vSameAsRegistered })}
+                            <input
+                              id="vendor-management-billing-state"
+                              name="billingState"
+                              aria-label="Billing State"
+                              disabled={vSameAsRegistered}
+                              type="text"
+                              value={vSameAsRegistered ? vState : vBillingState}
+                              onChange={(e) => setVBillingState(e.target.value)}
+                              placeholder="Enter state"
+                              style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', color: vSameAsRegistered ? '#64748b' : '#334155' }}
+                            />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
