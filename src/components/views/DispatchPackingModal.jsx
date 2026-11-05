@@ -344,8 +344,15 @@ export default function DispatchPackingModal({
         resolvedUrl = await getMediaFromCacheAsync(media.name || media.id);
       } catch (_) {}
     }
-    if (!resolvedUrl && media.name) {
-      resolvedUrl = `/api/uploads/${encodeURIComponent(media.name)}`;
+    if (!resolvedUrl && (media.name || media.originalName)) {
+      const searchName = media.name || media.originalName;
+      try {
+        const findRes = await fetch(`/api/media/find/${encodeURIComponent(searchName)}`).then(r => r.json());
+        if (findRes && findRes.found && findRes.url) {
+          resolvedUrl = findRes.url;
+          saveMediaToCache(searchName, resolvedUrl);
+        }
+      } catch (_) {}
     }
     const finalMedia = { ...media, url: resolvedUrl || media.dataUrl, bomCode: dispatchPackingModal.bomCode };
     if (typeof setActiveMediaPreviewModal === 'function') {
@@ -2083,17 +2090,32 @@ export default function DispatchPackingModal({
 
                               for (const f of Array.from(files)) {
                                 try {
-                                  const metadata = await uploadBomDocumentFile({
+                                  let metadata = await uploadBomDocumentFile({
                                     file: f,
                                     bomCode,
                                     category: 'dispatch/images'
                                   });
+                                  let canonicalUrl = metadata?.url;
+                                  if (!canonicalUrl && typeof uploadMediaFile === 'function') {
+                                    try {
+                                      const uRes = await uploadMediaFile(f, f.name);
+                                      if (uRes && uRes.url) {
+                                        canonicalUrl = uRes.url;
+                                      }
+                                    } catch (_) {}
+                                  }
+                                  if (f.name && canonicalUrl) {
+                                    saveMediaToCache(f.name, canonicalUrl);
+                                  }
                                   const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                                   const newPhoto = {
                                     id: photoId,
+                                    name: f.name,
+                                    originalName: f.name,
                                     uploadedAt: now.toISOString(),
                                     uploadTime: fullFormattedTime,
-                                    ...metadata
+                                    ...metadata,
+                                    url: canonicalUrl || metadata?.url
                                   };
                                   setDispatchPackingModal(prev => {
                                     if (!prev) return prev;

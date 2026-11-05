@@ -108,12 +108,24 @@ export async function uploadBomDocumentFile({ file, bomCode, category }) {
     saveMediaToCache(file.name, dataUrl);
   }
   const sessionId = getActiveSessionId();
+  const empCode = typeof localStorage !== 'undefined' ? (localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('businz_logged_emp_id') || '') : '';
+  const userRole = typeof localStorage !== 'undefined' ? (localStorage.getItem('controlroom_user_role') || localStorage.getItem('businz_user_role') || '') : '';
+  const userName = typeof localStorage !== 'undefined' ? (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('businz_logged_user_name') || '') : '';
 
   const headers = {
     'Content-Type': 'application/json'
   };
   if (sessionId) {
     headers['x-session-id'] = sessionId;
+  }
+  if (empCode) {
+    headers['x-employee-code'] = empCode;
+  }
+  if (userRole) {
+    headers['x-user-role'] = userRole;
+  }
+  if (userName) {
+    headers['x-user-name'] = userName;
   }
 
   // 1. Attempt backend server storage endpoint
@@ -184,6 +196,43 @@ export async function uploadBomDocumentFile({ file, bomCode, category }) {
     }
   } catch (supErr) {
     console.warn('[BOM Storage] Direct Supabase upload fallback note:', supErr);
+  }
+
+  // 2.5 Server Media Fallback (/api/media/upload)
+  try {
+    const mediaRes = await fetch('/api/media/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: file.name,
+        dataUrl: dataUrl,
+        mimeType: mime
+      })
+    });
+    if (mediaRes.ok) {
+      const mediaData = await mediaRes.json();
+      if (mediaData && mediaData.url) {
+        saveMediaToCache(file.name, mediaData.url);
+        if (mediaData.filename) {
+          saveMediaToCache(mediaData.filename, mediaData.url);
+        }
+        return {
+          name: file.name,
+          originalName: file.name,
+          url: mediaData.url,
+          filename: mediaData.filename,
+          size: (file.size / 1024).toFixed(1) + ' KB',
+          sizeBytes: file.size,
+          type: mime,
+          mimeType: mime,
+          uploadedAt: new Date().toISOString(),
+          dataUrl: dataUrl,
+          previewUrl: typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null
+        };
+      }
+    }
+  } catch (mErr) {
+    console.warn('[BOM Storage] Media upload fallback note:', mErr);
   }
 
   // 3. Resilient client-side fallback preserving full document metadata & preview
