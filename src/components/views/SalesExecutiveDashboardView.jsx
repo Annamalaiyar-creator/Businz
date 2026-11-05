@@ -2021,7 +2021,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             }}>
               {/* Runway Bar 1: Revenue Realized */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", marginBottom: "5px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px", fontSize: "11.5px", marginBottom: "5px" }}>
                   <span style={{ fontWeight: "700", color: "#0F172A" }}>
                     Revenue Realized: <strong style={{ color: "#0E7490" }}>{formatLakhsCr(targetAchievedVal)}</strong> of {formatLakhsCr(monthlyTargetNum)}
                   </span>
@@ -2040,7 +2040,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
               {/* Runway Bar 2: Calendar Time Elapsed */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", marginBottom: "5px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px", fontSize: "11.5px", marginBottom: "5px" }}>
                   <span style={{ fontWeight: "600", color: "#64748B" }}>
                     Calendar Cycle Elapsed: Day {now.getDate()} of {lastDayOfMonth}
                   </span>
@@ -2625,59 +2625,124 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
 
             <div style={{ border: '1px solid #F1F5F9', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'left' }}>
-                        Customer
-                      </th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right' }}>Invoiced</th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right' }}>Outstanding</th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right' }}>Overdue</th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right' }}>Credit Limit</th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'center' }}>Credit Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentOutstandingRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px', fontStyle: 'italic' }}>
-                          No customer invoices or outstandings recorded yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      currentOutstandingRows.map(c => (
-                        <tr key={c.id} className="table-row-hover" style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '10px 14px', fontWeight: '700', color: '#1E293B', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.customer}>
+              {isMobile ? (
+                /* Mobile Cards View: Full visibility with no cut-off columns */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px' }}>
+                  {currentOutstandingRows.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px', fontStyle: 'italic' }}>
+                      No customer invoices or outstandings recorded yet.
+                    </div>
+                  ) : (
+                    currentOutstandingRows.map(c => (
+                      <div key={c.id} style={{
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '12px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}>
+                        {/* Customer Name & Credit Status Pill */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', lineHeight: 1.3 }}>
                             {c.customer}
-                          </td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', color: '#475569' }}>{c.invoiced}</td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: '700', color: '#1E293B' }}>{c.outstanding}</td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: '700', color: c.overdue !== '—' ? '#DC2626' : '#64748B' }}>{c.overdue}</td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', color: '#64748B' }}>{c.creditLimit}</td>
-                          <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '3px 10px',
-                              borderRadius: '14px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              backgroundColor: c.creditStatus === 'Within limit' ? '#ECFDF5' : c.creditStatus.includes('used') ? '#FFFBEB' : '#FEF2F2',
-                              border: `1px solid ${c.creditStatus === 'Within limit' ? '#D1FAE5' : c.creditStatus.includes('used') ? '#FEF3C7' : '#FEE2E2'}`,
-                              color: c.creditStatus === 'Within limit' ? '#059669' : c.creditStatus.includes('used') ? '#D97706' : '#DC2626'
-                            }}>
-                              {c.creditStatus}
-                            </span>
+                          </span>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 10px',
+                            borderRadius: '14px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            flexShrink: 0,
+                            backgroundColor: c.creditStatus === 'Within limit' ? '#ECFDF5' : c.creditStatus.includes('used') ? '#FFFBEB' : '#FEF2F2',
+                            border: `1px solid ${c.creditStatus === 'Within limit' ? '#D1FAE5' : c.creditStatus.includes('used') ? '#FEF3C7' : '#FEE2E2'}`,
+                            color: c.creditStatus === 'Within limit' ? '#059669' : c.creditStatus.includes('used') ? '#D97706' : '#DC2626'
+                          }}>
+                            {c.creditStatus}
+                          </span>
+                        </div>
+
+                        {/* All 4 Metrics: Invoiced, Outstanding, Overdue, Credit Limit */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Invoiced</div>
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: '#334155', marginTop: '2px' }}>{c.invoiced}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Outstanding</div>
+                            <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>{c.outstanding}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Overdue</div>
+                            <div style={{ fontSize: '12px', fontWeight: '800', color: c.overdue !== '—' ? '#DC2626' : '#64748B', marginTop: '2px' }}>{c.overdue}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Credit Limit</div>
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', marginTop: '2px' }}>{c.creditLimit}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'left', minWidth: '180px' }}>
+                          Customer
+                        </th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right', minWidth: '80px' }}>Invoiced</th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right', minWidth: '90px' }}>Outstanding</th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right', minWidth: '80px' }}>Overdue</th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right', minWidth: '90px' }}>Credit Limit</th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'center', minWidth: '110px' }}>Credit Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentOutstandingRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px', fontStyle: 'italic' }}>
+                            No customer invoices or outstandings recorded yet.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      ) : (
+                        currentOutstandingRows.map(c => (
+                          <tr key={c.id} className="table-row-hover" style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '10px 14px', fontWeight: '700', color: '#1E293B', minWidth: '180px', whiteSpace: 'normal', wordBreak: 'break-word' }} title={c.customer}>
+                              {c.customer}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', color: '#475569', whiteSpace: 'nowrap' }}>{c.invoiced}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: '700', color: '#1E293B', whiteSpace: 'nowrap' }}>{c.outstanding}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: '700', color: c.overdue !== '—' ? '#DC2626' : '#64748B', whiteSpace: 'nowrap' }}>{c.overdue}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', color: '#64748B', whiteSpace: 'nowrap' }}>{c.creditLimit}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 10px',
+                                borderRadius: '14px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                backgroundColor: c.creditStatus === 'Within limit' ? '#ECFDF5' : c.creditStatus.includes('used') ? '#FFFBEB' : '#FEF2F2',
+                                border: `1px solid ${c.creditStatus === 'Within limit' ? '#D1FAE5' : c.creditStatus.includes('used') ? '#FEF3C7' : '#FEE2E2'}`,
+                                color: c.creditStatus === 'Within limit' ? '#059669' : c.creditStatus.includes('used') ? '#D97706' : '#DC2626'
+                              }}>
+                                {c.creditStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2704,62 +2769,130 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
 
             <div style={{ border: '1px solid #F1F5F9', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'left' }}>
-                        Opportunity
-                      </th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right' }}>Value</th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'center' }}>Status</th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'left' }}>Reason</th>
-                      <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right' }}>Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {realLostCancelledData.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} style={{ padding: '32px 16px', textAlign: 'center', color: '#166534', backgroundColor: '#F0FDF4' }}>
-                          <CheckCircle size={24} style={{ margin: '0 auto 6px auto', display: 'block', color: '#16A34A' }} />
-                          <strong style={{ fontSize: '13px' }}>Zero lost or cancelled opportunities in this period!</strong>
-                          <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#15803D' }}>
-                            100% active deal conversion velocity across your pipeline.
-                          </p>
-                        </td>
+              {isMobile ? (
+                /* Mobile Cards View for Lost & Cancelled Deals */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px' }}>
+                  {realLostCancelledData.length === 0 ? (
+                    <div style={{ padding: '24px 16px', textAlign: 'center', color: '#166534', backgroundColor: '#F0FDF4', borderRadius: '10px' }}>
+                      <CheckCircle size={24} style={{ margin: '0 auto 6px auto', display: 'block', color: '#16A34A' }} />
+                      <strong style={{ fontSize: '13px' }}>Zero lost or cancelled opportunities in this period!</strong>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#15803D' }}>
+                        100% active deal conversion velocity across your pipeline.
+                      </p>
+                    </div>
+                  ) : (
+                    realLostCancelledData.map(l => (
+                      <div key={l.id} style={{
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '12px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', lineHeight: 1.3 }}>
+                            {l.opportunity}
+                          </span>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 10px',
+                            borderRadius: '14px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            flexShrink: 0,
+                            backgroundColor: l.status === 'Lost' ? '#FEF2F2' : '#F1F5F9',
+                            border: `1px solid ${l.status === 'Lost' ? '#FEE2E2' : '#E2E8F0'}`,
+                            color: l.status === 'Lost' ? '#DC2626' : '#64748B'
+                          }}>
+                            {l.status}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid #E2E8F0', fontSize: '12px' }}>
+                          <div>
+                            <span style={{ color: '#64748B', fontSize: '11px' }}>Reason: </span>
+                            <strong style={{ color: '#334155' }}>{l.reason}</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748B', fontSize: '11px' }}>Value: </span>
+                            <strong style={{ color: '#0F172A', fontSize: '13px' }}>{l.value}</strong>
+                          </div>
+                        </div>
+                        {l.closedDate && (
+                          <div style={{ fontSize: '11px', color: '#94A3B8', textAlign: 'right' }}>
+                            Date: {l.closedDate}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                  {realLostCancelledData.length > 0 && (
+                    <div style={{ padding: '8px 10px', backgroundColor: '#FEF2F2', borderRadius: '8px', textAlign: 'right', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>
+                      Total lost / cancelled value: {formatLakhsCr(totalLostVal)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', minWidth: '560px', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'left', minWidth: '160px' }}>
+                          Opportunity
+                        </th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right', minWidth: '80px' }}>Value</th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'center', minWidth: '90px' }}>Status</th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'left', minWidth: '120px' }}>Reason</th>
+                        <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px', textAlign: 'right', minWidth: '90px' }}>Date</th>
                       </tr>
-                    ) : (
-                      realLostCancelledData.map(l => (
-                        <tr key={l.id} className="table-row-hover" style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '10px 14px', fontWeight: '700', color: '#1E293B' }}>{l.opportunity}</td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: '700', color: '#1E293B' }}>{l.value}</td>
-                          <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '3px 10px',
-                              borderRadius: '14px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              backgroundColor: l.status === 'Lost' ? '#FEF2F2' : '#F1F5F9',
-                              border: `1px solid ${l.status === 'Lost' ? '#FEE2E2' : '#E2E8F0'}`,
-                              color: l.status === 'Lost' ? '#DC2626' : '#64748B'
-                            }}>
-                              {l.status}
-                            </span>
+                    </thead>
+                    <tbody>
+                      {realLostCancelledData.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '32px 16px', textAlign: 'center', color: '#166534', backgroundColor: '#F0FDF4' }}>
+                            <CheckCircle size={24} style={{ margin: '0 auto 6px auto', display: 'block', color: '#16A34A' }} />
+                            <strong style={{ fontSize: '13px' }}>Zero lost or cancelled opportunities in this period!</strong>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#15803D' }}>
+                              100% active deal conversion velocity across your pipeline.
+                            </p>
                           </td>
-                          <td style={{ padding: '10px 14px', color: '#64748B' }}>{l.reason}</td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', color: '#94A3B8' }}>{l.closedDate}</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {realLostCancelledData.length > 0 && (
-                <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderTop: '1px solid #F1F5F9', textAlign: 'right', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>
-                  Total lost / cancelled value: {formatLakhsCr(totalLostVal)}
+                      ) : (
+                        realLostCancelledData.map(l => (
+                          <tr key={l.id} className="table-row-hover" style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '10px 14px', fontWeight: '700', color: '#1E293B', minWidth: '160px', whiteSpace: 'normal', wordBreak: 'break-word' }}>{l.opportunity}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: '700', color: '#1E293B', whiteSpace: 'nowrap' }}>{l.value}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 10px',
+                                borderRadius: '14px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                backgroundColor: l.status === 'Lost' ? '#FEF2F2' : '#F1F5F9',
+                                border: `1px solid ${l.status === 'Lost' ? '#FEE2E2' : '#E2E8F0'}`,
+                                color: l.status === 'Lost' ? '#DC2626' : '#64748B'
+                              }}>
+                                {l.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 14px', color: '#64748B', whiteSpace: 'normal', wordBreak: 'break-word' }}>{l.reason}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', color: '#94A3B8', whiteSpace: 'nowrap' }}>{l.closedDate}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                  {realLostCancelledData.length > 0 && (
+                    <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderTop: '1px solid #F1F5F9', textAlign: 'right', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>
+                      Total lost / cancelled value: {formatLakhsCr(totalLostVal)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
