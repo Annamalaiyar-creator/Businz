@@ -11,11 +11,11 @@ const PRESET_MATERIALS = [
   { name: 'GI Steel Coil 2mm', account: 'Raw Material', unit: 'MT', rate: 45000, tax: 18 },
   { name: 'GI Steel Coil 1.6mm', account: 'Raw Material', unit: 'MT', rate: 43000, tax: 18 },
   { name: 'CRC Sheet 1.2mm', account: 'Raw Material', unit: 'MT', rate: 52000, tax: 18 },
-  { name: 'Self Drilling Screw', account: 'Consumables', unit: 'NOS', rate: 3.5, tax: 16 },
+  { name: 'Self Drilling Screw', account: 'Consumables', unit: 'NOS', rate: 3.5, tax: 18 },
   { name: 'Hex Bolt M10', account: 'Fasteners', unit: 'NOS', rate: 6.2, tax: 18 },
   { name: 'Structural Steel I-Beam', account: 'Raw Material', unit: 'MT', rate: 48000, tax: 18 },
   { name: 'Electrical Copper Cable 4sqmm', account: 'Consumables', unit: 'MTR', rate: 120, tax: 18 },
-  { name: 'Cement Bag 50kg', account: 'Raw Material', unit: 'NOS', rate: 410, tax: 12 },
+  { name: 'Cement Bag 50kg', account: 'Raw Material', unit: 'NOS', rate: 410, tax: 18 },
   { name: 'Industrial Fan 5KW', account: 'Raw Material', unit: 'KW', rate: 18500, tax: 18 }
 ];
 
@@ -4085,10 +4085,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                                 style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}
                               >
                                 <option value={18}>18%</option>
-                                <option value={16}>16%</option>
-                                <option value={12}>12%</option>
                                 <option value={5}>5%</option>
                                 <option value={0}>0%</option>
+                                {item.tax !== undefined && item.tax !== '' && ![18, 5, 0].includes(Number(item.tax)) && (
+                                  <option value={Number(item.tax)}>{Number(item.tax)}%</option>
+                                )}
                               </select>
                             </td>
                             <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#1e293b' }}>
