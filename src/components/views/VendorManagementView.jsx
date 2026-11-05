@@ -2329,10 +2329,6 @@ export default function VendorManagementView(props) {
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label htmlFor="vendor-management-website" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Website</label>
-                        <input id="vendor-management-website" name="website" aria-label="Website" type="text" value={vWebsite} onChange={(e) => setVWebsite(e.target.value)} placeholder="Enter website" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="vendor-management-email" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Email <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
@@ -2707,10 +2703,6 @@ export default function VendorManagementView(props) {
                         <div>
                           <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginBottom: '2px' }}>Mobile Phone</span>
                           <strong style={{ fontSize: '14px', color: '#1E293B' }}>{viewingVendor.mobile || '—'}</strong>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginBottom: '2px' }}>Website</span>
-                          <strong style={{ fontSize: '14px', color: '#2563EB' }}>{viewingVendor.website || '—'}</strong>
                         </div>
                         <div>
                           <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginBottom: '2px' }}>PAN Number</span>
