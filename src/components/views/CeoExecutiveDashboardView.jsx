@@ -2037,7 +2037,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       gap: '3px'
                     }}
                   >
-                    Open PO Approval <ArrowRight size={12} />
+                    PO Approval <ArrowRight size={12} />
                   </button>
                 </div>
 
@@ -3459,7 +3459,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   gap: '4px'
                 }}
               >
-                Open PO Approval <ArrowRight size={12} />
+                PO Approval <ArrowRight size={12} />
               </button>
             </div>
 
@@ -4759,7 +4759,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Authorize pending Purchase Orders and review high-priority operational tasks</div>
               </div>
               <button onClick={() => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')} style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 14px', borderRadius: '8px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer' }}>
-                Open PO Approval Page →
+                PO Approval →
               </button>
             </div>
 
