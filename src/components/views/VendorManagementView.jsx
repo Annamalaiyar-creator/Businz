@@ -2144,57 +2144,7 @@ export default function VendorManagementView(props) {
                   <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Vendor Directory</h2>
                   <span style={{ fontSize: '12px', color: '#64748b' }}>Manage procurement suppliers and contact ledgers</span>
                 </div>
-                {showForm ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setVendorConfirmModal({
-                        show: true,
-                        action: 'draft',
-                        title: 'Save Vendor as Draft?',
-                        message: 'Are you sure you want to save this vendor information as a Draft?',
-                        confirmLabel: 'Save Draft',
-                        confirmBtnColor: '#475569'
-                      })}
-                      style={{ height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: 'white', color: '#475569', padding: '0 16px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}
-                    >
-                      Save as Draft
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVendorConfirmModal({
-                        show: true,
-                        action: 'cancel',
-                        title: 'Cancel Vendor Onboarding?',
-                        message: 'Are you sure you want to cancel? Any entered vendor information will be cleared.',
-                        confirmLabel: 'Discard Changes',
-                        confirmBtnColor: '#EF4444'
-                      })}
-                      style={{ height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: 'white', color: '#475569', padding: '0 16px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}
-                    >
-                      Cancel
-                    </button>
-                    <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden' }}>
-                      <button
-                        type="button"
-                        onClick={() => setVendorConfirmModal({
-                          show: true,
-                          action: 'submit',
-                          title: 'Submit Vendor for Review?',
-                          message: 'Are you sure you want to submit this vendor for onboarding approval & review?',
-                          confirmLabel: 'Submit Vendor',
-                          confirmBtnColor: '#2563eb'
-                        })}
-                        style={{ height: '36px', border: 'none', backgroundColor: '#2563eb', color: 'white', padding: '0 16px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px', borderRight: '1px solid rgba(255,255,255,0.2)' }}
-                      >
-                        Submit for Review
-                      </button>
-                      <button type="button" style={{ height: '36px', border: 'none', backgroundColor: '#2563eb', color: 'white', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>
-                        ▼
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+                {showForm ? null : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <button
                       type="button"
