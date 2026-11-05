@@ -2266,11 +2266,8 @@ export default function VendorManagementView(props) {
             )}
 
             {showForm ? (
-              <form onSubmit={handleCreateVendor} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '24px', alignItems: 'start', width: '100%', boxSizing: 'border-box' }}>
-                {/* Left Column (Forms) */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-                  {/* 1. Basic Information */}
+              <form onSubmit={handleCreateVendor} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
+                {/* 1. Basic Information */}
                   <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>1. Basic Information</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
@@ -2616,31 +2613,26 @@ export default function VendorManagementView(props) {
                         {renderSelect(vPrefComm, (e) => setVPrefComm(e.target.value), ['Email', 'Phone', 'WhatsApp', 'SMS'], { height: '38px' })}
                       </div>
                     </div>
-                  </div>
 
-                </div>
-
-                {/* Right Column (Sidebar card) */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {/* Compliance & Settings */}
-                  <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>4. Compliance & Settings</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
-                        <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vActiveVendor} onChange={(e) => setVActiveVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
-                        Active Vendor
-                      </label>
-                      <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
-                        <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vPreferredVendor} onChange={(e) => setVPreferredVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
-                        Preferred Vendor
-                      </label>
-                      <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
-                        <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vBlacklistedVendor} onChange={(e) => setVBlacklistedVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
-                        Blacklisted Vendor
-                      </label>
+                    {/* Compliance & Settings (Inside Contact Details) */}
+                    <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '16px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Compliance & Settings</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+                        <label htmlFor="vendor-management-active-vendor" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer', fontWeight: '600' }}>
+                          <input id="vendor-management-active-vendor" name="activeVendor" aria-label="Active Vendor" type="checkbox" checked={vActiveVendor} onChange={(e) => setVActiveVendor(e.target.checked)} style={{ cursor: 'pointer', accentColor: '#0E7490' }}  />
+                          Active Vendor
+                        </label>
+                        <label htmlFor="vendor-management-preferred-vendor" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer', fontWeight: '600' }}>
+                          <input id="vendor-management-preferred-vendor" name="preferredVendor" aria-label="Preferred Vendor" type="checkbox" checked={vPreferredVendor} onChange={(e) => setVPreferredVendor(e.target.checked)} style={{ cursor: 'pointer', accentColor: '#0E7490' }}  />
+                          Preferred Vendor
+                        </label>
+                        <label htmlFor="vendor-management-blacklisted-vendor" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer', fontWeight: '600' }}>
+                          <input id="vendor-management-blacklisted-vendor" name="blacklistedVendor" aria-label="Blacklisted Vendor" type="checkbox" checked={vBlacklistedVendor} onChange={(e) => setVBlacklistedVendor(e.target.checked)} style={{ cursor: 'pointer', accentColor: '#EF4444' }}  />
+                          Blacklisted Vendor
+                        </label>
+                      </div>
                     </div>
                   </div>
-                </div>
               </form>
             ) : viewingVendor ? (
               /* Vendor Management View Mode: Full-Page Detail */
