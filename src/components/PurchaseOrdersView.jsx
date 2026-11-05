@@ -7,6 +7,48 @@ import NotificationToast from './NotificationToast';
 import ModernDateRangePicker from './ModernDateRangePicker';
 import { getNextSequence } from '../utils/sequenceGenerator';
 
+export const COMPANY_LOCATIONS = {
+  'VRM Structures (Madhavaram)': {
+    name: 'VRM Structures India Pvt Ltd',
+    locationLabel: 'VRM Structures (Madhavaram)',
+    address: '1427, GNT Road, Nagappa Industrial Estate, Madhavaram, Chennai, Tamil Nadu - 600066',
+    gst: '33AAGCV4262N1ZZ',
+    email: 'contact@vrmstructures.com',
+    phone: '+91 98847 20789',
+    state: 'Tamil Nadu'
+  },
+  'VRM Structures (AP)': {
+    name: 'VRM Structures India Pvt Ltd',
+    locationLabel: 'VRM Structures (AP)',
+    address: 'No.684, Podalakur Road, Nellore, Andhra Pradesh - 524002',
+    gst: '37AAACT2727Q1ZS',
+    email: 'ap@vrmstructures.com',
+    phone: '+91 98847 20789',
+    state: 'Andhra Pradesh'
+  },
+  'Jashsun': {
+    name: 'Jashsun',
+    locationLabel: 'Jashsun',
+    address: 'Chennai, Tamil Nadu, India',
+    gst: '33AAACJ1234F1Z8',
+    email: 'contact@jashsun.com',
+    phone: '+91 98847 20789',
+    state: 'Tamil Nadu'
+  }
+};
+
+export const getCompanyProfile = (locationKey) => {
+  if (!locationKey) return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
+  const norm = String(locationKey).trim().toLowerCase();
+  if (norm.includes('ap') || norm.includes('andhra') || norm.includes('nellore')) {
+    return COMPANY_LOCATIONS['VRM Structures (AP)'];
+  }
+  if (norm.includes('jashsun')) {
+    return COMPANY_LOCATIONS['Jashsun'];
+  }
+  return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
+};
+
 const PRESET_MATERIALS = [
   { name: 'GI Steel Coil 2mm', account: 'Raw Material', unit: 'MT', rate: 45000, tax: 18 },
   { name: 'GI Steel Coil 1.6mm', account: 'Raw Material', unit: 'MT', rate: 43000, tax: 18 },
@@ -515,7 +557,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   // Form Fields State (Start Fresh / Empty)
   const [vendorName, setVendorName] = useState('');
-  const [branch, setBranch] = useState('');
+  const [branch, setBranch] = useState('VRM Structures (Madhavaram)');
+  const [companyLocation, setCompanyLocation] = useState('VRM Structures (Madhavaram)');
   const [contactPerson, setContactPerson] = useState('');
   const [contactNo, setContactNo] = useState('');
   const [email, setEmail] = useState('');
@@ -821,12 +864,18 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const assignedId = existingSelectedPo ? (existingSelectedPo.id || existingSelectedPo.zohoId || safePoNo) : (safePoNo || ('PO-' + String(poList.length + 1).padStart(5, '0')));
     const assignedZohoId = existingSelectedPo ? (existingSelectedPo.zohoId || existingSelectedPo.id) : undefined;
 
+    const compProfile = getCompanyProfile(companyLocation || branch);
+
     const newPO = {
       id: assignedId,
       zohoId: assignedZohoId,
       poNo: safePoNo || ('PO-' + String(poList.length + 1).padStart(5, '0')),
       vendor: vendorName || 'Fresh Vendor',
-      branch: branch || '',
+      branch: branch || companyLocation || 'VRM Structures (Madhavaram)',
+      companyLocation: companyLocation || branch || 'VRM Structures (Madhavaram)',
+      companyName: compProfile.name,
+      companyAddress: compProfile.address,
+      companyGst: compProfile.gst,
       contactPerson: contactPerson || '',
       contactNo: contactNo || '',
       email: email || '',
@@ -1314,7 +1363,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     setPoNumber(po.poNo || po.purchaseorder_number || '');
     setVendorName(effVendor);
-    setBranch(effBranch);
+    const resolvedLoc = po.companyLocation || effBranch || 'VRM Structures (Madhavaram)';
+    setBranch(resolvedLoc);
+    setCompanyLocation(resolvedLoc);
     setContactPerson(effContact);
     setContactNo(effContactNo);
     setEmail(effEmail);
@@ -1655,7 +1706,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       })
       .catch(() => { });
     setVendorName('');
-    setBranch('');
+    setBranch('VRM Structures (Madhavaram)');
+    setCompanyLocation('VRM Structures (Madhavaram)');
     setContactPerson('');
     setContactNo('');
     setEmail('');
@@ -3110,11 +3162,34 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                 {/* Header Row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#1E293B', margin: 0, letterSpacing: '-0.5px' }}>ARMS AI PVT LTD</h1>
-                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '4px' }}>No.684, Podalakur Road, Nellore - 524002, Nellore</span>
-                    <span style={{ fontSize: '11px', color: '#64748B' }}>GSTIN: 37AAACT2727Q1ZS | contact@armsai.com</span>
-                  </div>
+                  {(() => {
+                    const effLocation = currentPoObj?.companyLocation || currentPoObj?.branch || companyLocation || 'VRM Structures (Madhavaram)';
+                    const comp = getCompanyProfile(effLocation);
+                    return (
+                      <div>
+                        <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#1E293B', margin: 0, letterSpacing: '-0.5px' }}>
+                          {comp.name}
+                        </h1>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', color: '#64748B' }}>{comp.address}</span>
+                          <span style={{
+                            backgroundColor: '#ECFEFF',
+                            border: '1px solid #0E7490',
+                            color: '#0E7490',
+                            fontSize: '10px',
+                            fontWeight: '700',
+                            padding: '1px 8px',
+                            borderRadius: '4px'
+                          }}>
+                            {comp.locationLabel}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
+                          GSTIN: <strong>{comp.gst}</strong> | {comp.email} | {comp.phone}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
                     <div style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A', letterSpacing: '1px' }}>PURCHASE ORDER</div>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3913,6 +3988,126 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             /* ==================== CREATOR & EDITOR ACTIVE FIELDS LAYOUT ==================== */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
+              {/* Top Banner: Company Issuing Location & Entity Details */}
+              {(() => {
+                const currentCompany = getCompanyProfile(companyLocation);
+                return (
+                  <div className="section-card" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #0E7490',
+                    borderLeft: '5px solid #0E7490',
+                    borderRadius: '12px',
+                    padding: '16px 20px',
+                    boxShadow: '0 2px 8px rgba(14, 116, 144, 0.08)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '38px',
+                          height: '38px',
+                          borderRadius: '8px',
+                          backgroundColor: '#ECFEFF',
+                          color: '#0E7490',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '18px'
+                        }}>
+                          🏢
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <strong style={{ fontSize: '14px', color: '#0F172A', fontWeight: '800' }}>
+                              PO Issuing Location (Our Company)
+                            </strong>
+                            <span style={{
+                              fontSize: '10.5px',
+                              fontWeight: '700',
+                              backgroundColor: '#ECFEFF',
+                              color: '#0E7490',
+                              border: '1px solid #A5F3FC',
+                              padding: '1px 8px',
+                              borderRadius: '12px'
+                            }}>
+                              Buyer Entity
+                            </span>
+                          </div>
+                          <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                            Choose the company location. Its official address and GST number are applied to this Purchase Order & printout.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Location Dropdown */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <label htmlFor="po-company-location-select" style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>
+                          Location:
+                        </label>
+                        <select
+                          id="po-company-location-select"
+                          name="companyLocation"
+                          aria-label="PO Issuing Location"
+                          value={companyLocation}
+                          onChange={(e) => {
+                            const loc = e.target.value;
+                            setCompanyLocation(loc);
+                            setBranch(loc);
+                          }}
+                          style={{
+                            height: '38px',
+                            borderRadius: '8px',
+                            border: '1.5px solid #0E7490',
+                            padding: '0 14px',
+                            fontSize: '13px',
+                            fontWeight: '700',
+                            color: '#0E7490',
+                            backgroundColor: '#ECFEFF',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            minWidth: '240px'
+                          }}
+                        >
+                          <option value="VRM Structures (Madhavaram)">VRM Structures (Madhavaram)</option>
+                          <option value="VRM Structures (AP)">VRM Structures (AP)</option>
+                          <option value="Jashsun">Jashsun</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Live Company Details Preview */}
+                    <div style={{
+                      backgroundColor: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '12px 16px',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gap: '12px',
+                      alignItems: 'start',
+                      fontSize: '12px'
+                    }}>
+                      <div>
+                        <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Company Name</span>
+                        <strong style={{ fontSize: '13px', color: '#0F172A' }}>{currentCompany.name}</strong>
+                        <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600', marginTop: '2px' }}>📍 {currentCompany.locationLabel}</div>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>GST Number</span>
+                        <strong style={{ fontSize: '13px', color: '#059669', letterSpacing: '0.5px' }}>{currentCompany.gst}</strong>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>State: {currentCompany.state}</div>
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Registered Address (Printout View)</span>
+                        <span style={{ fontSize: '12px', color: '#334155', lineHeight: '1.4' }}>{currentCompany.address}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* 1. Vendor Information */}
               <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <strong style={{ fontSize: '14px', color: '#2563eb', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>1. Vendor Information</strong>
@@ -3947,8 +4142,23 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label htmlFor="purchase-orders-branch" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Branch</label>
-                    <input id="purchase-orders-branch" name="branch" aria-label="Branch" type="text" value={branch} onChange={(e) => setBranch(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
+                    <label htmlFor="purchase-orders-branch" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Branch / Location</label>
+                    <select
+                      id="purchase-orders-branch"
+                      name="branch"
+                      aria-label="Branch"
+                      value={companyLocation}
+                      onChange={(e) => {
+                        const loc = e.target.value;
+                        setCompanyLocation(loc);
+                        setBranch(loc);
+                      }}
+                      style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', cursor: 'pointer' }}
+                    >
+                      <option value="VRM Structures (Madhavaram)">VRM Structures (Madhavaram)</option>
+                      <option value="VRM Structures (AP)">VRM Structures (AP)</option>
+                      <option value="Jashsun">Jashsun</option>
+                    </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-vendor-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Vendor Name</label>
