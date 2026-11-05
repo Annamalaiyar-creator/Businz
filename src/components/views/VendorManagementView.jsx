@@ -2627,35 +2627,6 @@ export default function VendorManagementView(props) {
                     type="button"
                     onClick={() => setVendorConfirmModal({
                       show: true,
-                      action: 'draft',
-                      title: 'Save Vendor as Draft?',
-                      message: 'Are you sure you want to save this vendor information as a Draft?',
-                      confirmLabel: 'Save Draft',
-                      confirmBtnColor: '#475569'
-                    })}
-                    style={{
-                      height: '38px',
-                      borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
-                      backgroundColor: '#FFFFFF',
-                      color: '#334155',
-                      padding: '0 18px',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                  >
-                    Save as Draft
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setVendorConfirmModal({
-                      show: true,
                       action: 'cancel',
                       title: 'Cancel Vendor Onboarding?',
                       message: 'Are you sure you want to cancel? Any entered vendor information will be cleared.',
