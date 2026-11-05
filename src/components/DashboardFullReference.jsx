@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, TrendingUp, Package, FileText, ShoppingCart, Truck, Calendar, Filter, Wallet, CheckCircle2, Zap, ArrowUpRight, ArrowDownRight, SlidersHorizontal, ArrowUpDown, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Clock, TrendingUp, Package, FileText, ShoppingCart, Truck, Calendar, Filter, Wallet, CheckCircle2, Zap, ArrowUpRight, ArrowDownRight, SlidersHorizontal, ArrowUpDown, Sparkles, RotateCcw } from 'lucide-react';
 import POStatusOverview from './POStatusOverview';
 import StatusBadge from './StatusBadge';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
@@ -13,6 +13,8 @@ export default function DashboardFullReference({ userRole }) {
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthCode);
   const [selectedYear, setSelectedYear] = useState(currentYearStr);
+  const [selectedPeriod, setSelectedPeriod] = useState('MTD');
+  const [refreshing, setRefreshing] = useState(false);
   const [hoveredBarIdx, setHoveredBarIdx] = useState(null);
   const [poData, setPoData] = useState([]);
   const [grnData, setGrnData] = useState([]);
@@ -34,13 +36,28 @@ export default function DashboardFullReference({ userRole }) {
     } catch (e) {}
   };
 
-  // Fetch live Purchase Orders, Approval Pending Counts & GRNs
-  useEffect(() => {
-    Promise.all([
-      fetchWithTimeout('/api/purchaseorders', { timeout: 25000 }).then((res) => res.json()).catch(() => []),
-      fetchWithTimeout('/api/approvals-pending', { timeout: 25000 }).then((res) => res.json()).catch(() => ({ posPending: 0, grnsPending: 0, invoicesPending: 0 })),
-      fetchWithTimeout('/api/grns', { timeout: 25000 }).then((res) => res.json()).catch(() => [])
-    ]).then(([poResults, approvals, grnResults]) => {
+  // Safe fetch helper
+  const safeFetch = async (url, fallback) => {
+    try {
+      const res = await fetchWithTimeout(url, { timeout: 25000 });
+      if (!res || !res.ok) return fallback;
+      const text = await res.text();
+      if (!text || !text.trim()) return fallback;
+      return JSON.parse(text);
+    } catch (_) {
+      return fallback;
+    }
+  };
+
+  // Refresh live Purchase Orders, Approval Pending Counts & GRNs
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [poResults, approvals, grnResults] = await Promise.all([
+        safeFetch('/api/purchaseorders', []),
+        safeFetch('/api/approvals-pending', { posPending: 0, grnsPending: 0, invoicesPending: 0 }),
+        safeFetch('/api/grns', [])
+      ]);
       if (Array.isArray(poResults)) {
         setPoData(poResults);
       }
@@ -50,12 +67,17 @@ export default function DashboardFullReference({ userRole }) {
       if (Array.isArray(grnResults)) {
         setGrnData(grnResults);
       }
-      setLoading(false);
-    }).catch((err) => {
+    } catch (err) {
       console.error('Error fetching dashboard data:', err);
+    } finally {
       setLoading(false);
-    });
+      setTimeout(() => setRefreshing(false), 500);
+    }
   }, []);
+
+  useEffect(() => {
+    handleRefresh();
+  }, [handleRefresh]);
 
   const MONTH_CODE_TO_NUM = {
     'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
@@ -63,16 +85,72 @@ export default function DashboardFullReference({ userRole }) {
     'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
   };
 
-  // Filter POs by selected Month and Year
-  const targetMonthNum = MONTH_CODE_TO_NUM[selectedMonth] || selectedMonth;
-  const filteredPOs = poData.filter((po) => {
-    if (!po.poDate) return false;
-    const parts = po.poDate.split('-'); // e.g. "2026-09-02"
-    if (parts.length < 2) return false;
-    const poYr = parts[0];
-    const poMo = parts[1];
-    return poYr === selectedYear && (poMo === targetMonthNum || poMo === selectedMonth);
-  });
+  // Real date parser across all BUSINZ record formats
+  const parseRecordDate = (rec) => {
+    if (!rec) return null;
+    if (rec instanceof Date && !isNaN(rec.getTime())) return rec;
+    const candidates = [
+      rec.poDate, rec.date, rec.createdAt, rec.created_at,
+      rec.dateTimeObj?.date, rec.updatedAt, rec.updated_at
+    ];
+    for (const raw of candidates) {
+      if (!raw) continue;
+      const s = String(raw).trim();
+      if (!s) continue;
+      const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (dmy) {
+        const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+        if (!isNaN(d.getTime())) return d;
+      }
+      const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (ymd) {
+        const d = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+        if (!isNaN(d.getTime())) return d;
+      }
+      const parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return null;
+  };
+
+  // Real date-range matcher for Today, This Week, MTD, Q2 FY27, YTD
+  const matchesSelectedPeriod = (rec, period) => {
+    const d = parseRecordDate(rec);
+    if (!d) return period === 'YTD' || period === 'MTD';
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+    if (period === 'Today') {
+      return d >= todayStart && d <= todayEnd;
+    }
+    if (period === 'This Week') {
+      const weekStart = new Date(todayStart);
+      const dayOfWeek = weekStart.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      weekStart.setDate(weekStart.getDate() - diffToMonday);
+      return d >= weekStart && d <= todayEnd;
+    }
+    if (period === 'MTD') {
+      return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+    }
+    if (period === 'Q2 FY27') {
+      // Q2 of FY 2026-27: 1 Jul 2026 – 30 Sep 2026
+      const q2Start = new Date(2026, 6, 1, 0, 0, 0, 0);
+      const q2End = new Date(2026, 8, 30, 23, 59, 59, 999);
+      return d >= q2Start && d <= q2End;
+    }
+    if (period === 'YTD') {
+      const ytdStart = new Date(today.getFullYear(), 0, 1, 0, 0, 0, 0);
+      return d >= ytdStart && d <= todayEnd;
+    }
+    return true;
+  };
+
+  // Filter POs by selectedPeriod (Today, This Week, MTD, Q2 FY27, YTD)
+  const filteredPOs = useMemo(() => {
+    return poData.filter((po) => matchesSelectedPeriod(po, selectedPeriod));
+  }, [poData, selectedPeriod]);
 
   // Calculate live KPI metrics for selected Month/Year
   const parseAmt = (amtStr, po = null) => {
@@ -268,8 +346,65 @@ export default function DashboardFullReference({ userRole }) {
           </div>
         </div>
 
-        <div className="welcome-banner-status" style={{ display: 'flex', alignItems: 'center', gap: '16px', zIndex: 2 }}>
-          <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', zIndex: 2, flexWrap: 'wrap' }}>
+          {/* Period Selector Pills + Refresh Button (BUSINZ DESIGN SYSTEM) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
+            <div style={{
+              display: 'flex',
+              backgroundColor: '#F1F5F9',
+              padding: '3px',
+              borderRadius: '10px',
+              border: '1px solid #E2E8F0',
+              gap: '2px',
+              whiteSpace: 'nowrap',
+              overflowX: 'auto',
+              maxWidth: '100%'
+            }}>
+              {['Today', 'This Week', 'MTD', 'Q2 FY27', 'YTD'].map((period) => (
+                <button
+                  key={period}
+                  onClick={() => setSelectedPeriod(period)}
+                  style={{
+                    border: 'none',
+                    backgroundColor: selectedPeriod === period ? '#0E7490' : 'transparent',
+                    color: selectedPeriod === period ? '#FFFFFF' : '#475569',
+                    padding: '6px 12px',
+                    borderRadius: '7px',
+                    fontSize: '12px',
+                    fontWeight: selectedPeriod === period ? '800' : '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {period}
+                </button>
+              ))}
+            </div>
+
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              title="Refresh Live Data"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <RotateCcw size={15} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            </button>
+          </div>
+
+          <div className="welcome-banner-status" style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '14px' }}>
             <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current System Status</div>
             <div style={{ fontSize: '12px', fontWeight: '800', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
               <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#22C55E', boxShadow: '0 0 8px #22C55E' }}></span>
@@ -488,47 +623,47 @@ export default function DashboardFullReference({ userRole }) {
           }
         ] : [
           {
-            title: 'TOTAL PO VALUE',
+            title: `TOTAL PO VALUE (${selectedPeriod})`,
             value: `₹ ${totalValueCr} Cr`,
             trend: '16.2%',
             trendUp: true,
             icon: Wallet,
             iconColor: '#F97316',
             iconBg: '#FFF7ED',
-            bottomPrefix: 'This month, generated extra ',
+            bottomPrefix: `${selectedPeriod}, generated `,
             bottomHighlight: `₹ ${totalValueCr} Cr`
           },
           {
-            title: 'TOTAL PO QTY',
+            title: `TOTAL PO QTY (${selectedPeriod})`,
             value: `${posRaisedCount * 18} MT`,
             trend: '12.8%',
             trendUp: true,
             icon: Package,
             iconColor: '#0284C7',
             iconBg: '#F0F9FF',
-            bottomPrefix: 'This month, dispatched ',
+            bottomPrefix: `${selectedPeriod}, dispatched `,
             bottomHighlight: `+${posRaisedCount * 18} MT`
           },
           {
-            title: 'POS RAISED',
+            title: `POS RAISED (${selectedPeriod})`,
             value: `${posRaisedCount}`,
             trend: '10.3%',
             trendUp: true,
             icon: FileText,
             iconColor: '#0E7490',
             iconBg: '#ECFEFF',
-            bottomPrefix: 'This month, issued ',
+            bottomPrefix: `${selectedPeriod}, issued `,
             bottomHighlight: `${posRaisedCount} new POs`
           },
           {
-            title: 'POS APPROVED',
+            title: `POS APPROVED (${selectedPeriod})`,
             value: `${approvedCount}`,
             trend: '14.1%',
             trendUp: true,
             icon: CheckCircle2,
             iconColor: '#16A34A',
             iconBg: '#F0FDF4',
-            bottomPrefix: 'This month, approved ',
+            bottomPrefix: `${selectedPeriod}, approved `,
             bottomHighlight: `${approvedCount} orders`
           },
           {
