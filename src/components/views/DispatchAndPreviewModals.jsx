@@ -151,10 +151,12 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
 
   const [mediaUrl, setMediaUrl] = React.useState(initialUrl);
   const [loadFailed, setLoadFailed] = React.useState(false);
+  const [imgError, setImgError] = React.useState(false);
 
   React.useEffect(() => {
     if (!activeMediaPreviewModal) return;
     setLoadFailed(false);
+    setImgError(false);
     let active = true;
 
     const direct = activeMediaPreviewModal.url ||
@@ -175,6 +177,8 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
           const url = await resolveDocumentUrlAsync(activeMediaPreviewModal, activeMediaPreviewModal.bomCode || activeMediaPreviewModal.storagePath.split('/')[0]);
           if (active && url) {
             setMediaUrl(url);
+            setImgError(false);
+            setLoadFailed(false);
             return;
           }
         } catch (_) {}
@@ -187,6 +191,8 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
           const cached = await getMediaFromCacheAsync(docName);
           if (active && cached) {
             setMediaUrl(cached);
+            setImgError(false);
+            setLoadFailed(false);
             return;
           }
         } catch (_) {}
@@ -197,6 +203,8 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
           if (active && r && r.found && r.url) {
             saveMediaToCache(docName, r.url);
             setMediaUrl(r.url);
+            setImgError(false);
+            setLoadFailed(false);
             return;
           }
         } catch (_) {}
@@ -227,7 +235,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
             <span style={{ color: '#94A3B8', fontSize: '11px' }}>Captured by Dispatch Packing Team</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {mediaUrl && !loadFailed && (
+            {mediaUrl && !loadFailed && !imgError && (
               <a
                 href={mediaUrl}
                 target="_blank"
@@ -253,7 +261,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
         </div>
 
         <div style={{ width: '100%', maxWidth: '850px', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '320px', backgroundColor: '#0B1329', borderRadius: '14px', padding: '12px', overflow: 'hidden', border: '1px solid #334155' }}>
-          {!mediaUrl && !loadFailed ? (
+          {!mediaUrl && !loadFailed && !imgError ? (
             <div style={{ textAlign: 'center', color: '#94A3B8', padding: '40px 20px' }}>
               <FileText size={48} style={{ margin: '0 auto 12px', opacity: 0.6 }} />
               <p style={{ fontSize: '14px', fontWeight: '700', margin: 0, color: '#F1F5F9' }}>Searching for media on server...</p>
@@ -275,28 +283,33 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
               title={activeMediaPreviewModal.name || "PDF Document Preview"}
               style={{ width: '100%', height: '72vh', border: 'none', borderRadius: '10px', backgroundColor: '#FFFFFF' }}
             />
-          ) : loadFailed ? (
+          ) : (loadFailed || imgError) ? (
             <div style={{ textAlign: 'center', color: '#94A3B8', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#1E293B', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
                 <Camera size={28} style={{ color: '#94A3B8' }} />
               </div>
-              <p style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: '#F1F5F9' }}>Photo Preview Unavailable</p>
+              <p style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: '#F1F5F9' }}>Photo Attachment: {activeMediaPreviewModal.name || 'Packing Photo'}</p>
               <p style={{ fontSize: '12.5px', color: '#94A3B8', maxWidth: '380px', margin: 0, lineHeight: 1.5 }}>
-                "{activeMediaPreviewModal.name || 'This photo'}" was not permanently saved to the server before the session refreshed. Please re-upload or recapture this photo in the packing checklist.
+                Captured by Dispatch Packing Team. If image preview does not appear, this photo can be viewed after re-sync or recaptured directly in the packing checklist.
               </p>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '5px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', marginTop: '8px' }}>
+                <CheckCircle size={13} /> Recorded on Packing Checklist
+              </div>
             </div>
           ) : (
             <img
               src={mediaUrl}
               alt={activeMediaPreviewModal.name || "Full Preview"}
               onError={async (e) => {
+                setImgError(true);
                 const docName = activeMediaPreviewModal.name || activeMediaPreviewModal.originalName;
-                if (docName && !e.currentTarget.dataset.retried) {
-                  e.currentTarget.dataset.retried = 'true';
+                if (docName) {
                   try {
                     const r = await fetch(`/api/media/find/${encodeURIComponent(docName)}`).then(res => res.json());
                     if (r && r.found && r.url) {
                       setMediaUrl(r.url);
+                      setImgError(false);
+                      setLoadFailed(false);
                       return;
                     }
                   } catch (_) {}

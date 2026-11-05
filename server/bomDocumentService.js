@@ -50,13 +50,10 @@ const EXTENSION_MAP = {
  */
 export function validateBomCode(bomCode) {
   if (!bomCode || typeof bomCode !== 'string') {
-    throw new Error('Invalid BOM Code: must be a non-empty string');
+    return 'BOM-ORDER';
   }
-  const clean = bomCode.trim();
-  if (!/^[A-Za-z0-9_-]+$/.test(clean) || clean.includes('..')) {
-    throw new Error(`Invalid BOM Code format: "${clean}". Only alphanumeric, dashes, and underscores allowed.`);
-  }
-  return clean;
+  const clean = bomCode.trim().replace(/[^A-Za-z0-9_-]/g, '_');
+  return clean || 'BOM-ORDER';
 }
 
 /**

@@ -537,9 +537,37 @@ export default function DispatchPackingModal({
     }
 
     try {
+      const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
+      const matchingBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode));
       const rawMedia = dispatchPackingModal.dispatchPackingMedia;
-      const cleanMedia = rawMedia ? {
-        photos: (rawMedia.photos || []).map(p => {
+
+      // Intelligently merge modal media with existing store media to prevent overwriting
+      const existingStorePhotos = Array.isArray(matchingBom?.dispatchPackingMedia?.photos) ? matchingBom.dispatchPackingMedia.photos : [];
+      const currentModalPhotos = Array.isArray(rawMedia?.photos) ? rawMedia.photos : [];
+      const combinedRawPhotos = [...existingStorePhotos, ...currentModalPhotos];
+      const seenP = new Set();
+      const dedupedPhotos = combinedRawPhotos.filter(p => {
+        if (!p) return false;
+        const k = p.id || p.name;
+        if (!k || seenP.has(k)) return false;
+        seenP.add(k);
+        return true;
+      });
+
+      const existingStoreVideos = Array.isArray(matchingBom?.dispatchPackingMedia?.videos) ? matchingBom.dispatchPackingMedia.videos : [];
+      const currentModalVideos = Array.isArray(rawMedia?.videos) ? rawMedia.videos : [];
+      const combinedRawVideos = [...existingStoreVideos, ...currentModalVideos];
+      const seenV = new Set();
+      const dedupedVideos = combinedRawVideos.filter(v => {
+        if (!v) return false;
+        const k = v.id || v.name;
+        if (!k || seenV.has(k)) return false;
+        seenV.add(k);
+        return true;
+      });
+
+      const cleanMedia = {
+        photos: dedupedPhotos.map(p => {
           const directStorageUrl = p.storagePath ? `/api/uploads/${p.storageBucket || 'bom-documents'}/${p.storagePath}` : '';
           const bestUrl = (p.url && !p.url.startsWith('blob:'))
             ? p.url
@@ -551,7 +579,7 @@ export default function DispatchPackingModal({
             dataUrl: (p.dataUrl && !p.dataUrl.startsWith('blob:')) ? p.dataUrl : cleanBestUrl
           };
         }),
-        videos: (rawMedia.videos || []).map(v => {
+        videos: dedupedVideos.map(v => {
           const directStorageUrl = v.storagePath ? `/api/uploads/${v.storageBucket || 'bom-documents'}/${v.storagePath}` : '';
           const bestUrl = (v.url && !v.url.startsWith('blob:'))
             ? v.url
@@ -564,10 +592,7 @@ export default function DispatchPackingModal({
             uploading: false
           };
         })
-      } : null;
-
-      const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
-      const matchingBom = (bomStore || []).find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
+      };
 
       const resolvedCustomer = (dispatchPackingModal.customerName && dispatchPackingModal.customerName !== 'Customer' && dispatchPackingModal.customerName !== '-')
         ? dispatchPackingModal.customerName
@@ -743,8 +768,36 @@ export default function DispatchPackingModal({
         };
 
     const rawMedia = dispatchPackingModal.dispatchPackingMedia;
-    const cleanMedia = rawMedia ? {
-      photos: (rawMedia.photos || []).map(p => {
+    const targetCodeForSave = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
+    const matchingBom = (bomStore || []).find(b => b && (b.bomCode === targetCodeForSave || b.code === targetCodeForSave || b.id === targetCodeForSave));
+
+    // Intelligently merge modal media with existing store media to prevent overwriting
+    const existingStorePhotos = Array.isArray(matchingBom?.dispatchPackingMedia?.photos) ? matchingBom.dispatchPackingMedia.photos : [];
+    const currentModalPhotos = Array.isArray(rawMedia?.photos) ? rawMedia.photos : [];
+    const combinedRawPhotos = [...existingStorePhotos, ...currentModalPhotos];
+    const seenP = new Set();
+    const dedupedPhotos = combinedRawPhotos.filter(p => {
+      if (!p) return false;
+      const k = p.id || p.name;
+      if (!k || seenP.has(k)) return false;
+      seenP.add(k);
+      return true;
+    });
+
+    const existingStoreVideos = Array.isArray(matchingBom?.dispatchPackingMedia?.videos) ? matchingBom.dispatchPackingMedia.videos : [];
+    const currentModalVideos = Array.isArray(rawMedia?.videos) ? rawMedia.videos : [];
+    const combinedRawVideos = [...existingStoreVideos, ...currentModalVideos];
+    const seenV = new Set();
+    const dedupedVideos = combinedRawVideos.filter(v => {
+      if (!v) return false;
+      const k = v.id || v.name;
+      if (!k || seenV.has(k)) return false;
+      seenV.add(k);
+      return true;
+    });
+
+    const cleanMedia = {
+      photos: dedupedPhotos.map(p => {
         const directStorageUrl = p.storagePath ? `/api/uploads/${p.storageBucket || 'bom-documents'}/${p.storagePath}` : '';
         const bestUrl = (p.url && !p.url.startsWith('blob:'))
           ? p.url
@@ -756,7 +809,7 @@ export default function DispatchPackingModal({
           dataUrl: (p.dataUrl && !p.dataUrl.startsWith('blob:')) ? p.dataUrl : cleanBestUrl
         };
       }),
-      videos: (rawMedia.videos || []).map(v => {
+      videos: dedupedVideos.map(v => {
         const directStorageUrl = v.storagePath ? `/api/uploads/${v.storageBucket || 'bom-documents'}/${v.storagePath}` : '';
         const bestUrl = (v.url && !v.url.startsWith('blob:'))
           ? v.url
@@ -769,7 +822,7 @@ export default function DispatchPackingModal({
           uploading: false
         };
       })
-    } : null;
+    };
 
     const packedByUserId = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') || '' : '').trim();
     const loggedName = typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') || '' : '';
@@ -782,7 +835,6 @@ export default function DispatchPackingModal({
       return lower === 'anu' || lower.includes('dispatch') || lower.includes('fulfillment');
     };
 
-    const matchingBom = (bomStore || []).find(b => b.bomCode === dispatchPackingModal.bomCode || b.code === dispatchPackingModal.bomCode || b.id === dispatchPackingModal.id);
     let resolvedSpName = dispatchPackingModal.salesPerson || matchingBom?.salesPerson || dispatchPackingModal.createdBy || matchingBom?.createdBy || 'Sales Department';
     if (isDispatchUser(resolvedSpName)) {
       if (matchingBom?.createdBy && !isDispatchUser(matchingBom.createdBy)) {
@@ -2081,7 +2133,7 @@ export default function DispatchPackingModal({
                             setShowAddPhotoMenu(false);
                             const files = e.target.files;
                             if (files && files.length > 0) {
-                              const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
+                              const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.orderNo || dispatchPackingModal.id || 'BOM-ORDER';
                               setUploadingCount(prev => prev + files.length);
                               const now = new Date();
                               const uploadTimestamp = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -2090,37 +2142,89 @@ export default function DispatchPackingModal({
 
                               for (const f of Array.from(files)) {
                                 try {
-                                  let metadata = await uploadBomDocumentFile({
-                                    file: f,
-                                    bomCode,
-                                    category: 'dispatch/images'
-                                  });
-                                  let canonicalUrl = metadata?.url;
-                                  if (!canonicalUrl && typeof uploadMediaFile === 'function') {
+                                  let canonicalUrl = '';
+                                  let storageMeta = null;
+
+                                  // 1. Direct stream upload to VPS disk via /api/media/upload-raw
+                                  if (typeof uploadMediaFile === 'function') {
                                     try {
                                       const uRes = await uploadMediaFile(f, f.name);
                                       if (uRes && uRes.url) {
                                         canonicalUrl = uRes.url;
+                                        saveMediaToCache(f.name, canonicalUrl);
+                                        if (uRes.filename) saveMediaToCache(uRes.filename, canonicalUrl);
                                       }
-                                    } catch (_) {}
+                                    } catch (uErr) {
+                                      console.warn('uploadMediaFile fallback:', uErr);
+                                    }
                                   }
+
+                                  // 2. Also register with BOM document storage service
+                                  try {
+                                    storageMeta = await uploadBomDocumentFile({
+                                      file: f,
+                                      bomCode,
+                                      category: 'dispatch/images'
+                                    });
+                                    if (storageMeta?.url && !canonicalUrl) {
+                                      canonicalUrl = storageMeta.url;
+                                    }
+                                  } catch (bErr) {
+                                    console.warn('uploadBomDocumentFile non-fatal:', bErr);
+                                  }
+
+                                  // 3. Read compressed dataUrl for instant client preview
+                                  let fileDataUrl = '';
+                                  try {
+                                    fileDataUrl = await new Promise((resolve) => {
+                                      const reader = new FileReader();
+                                      reader.onload = (ev) => resolve(ev.target?.result || '');
+                                      reader.onerror = () => resolve('');
+                                      reader.readAsDataURL(f);
+                                    });
+                                  } catch (_) {}
+
                                   if (f.name && canonicalUrl) {
                                     saveMediaToCache(f.name, canonicalUrl);
                                   }
+
                                   const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                                  const finalUrl = canonicalUrl || storageMeta?.url || `/api/uploads/${encodeURIComponent(f.name)}`;
+                                  if (f.name) saveMediaToCache(f.name, finalUrl);
+                                  if (photoId) saveMediaToCache(photoId, finalUrl);
+
                                   const newPhoto = {
                                     id: photoId,
                                     name: f.name,
                                     originalName: f.name,
                                     uploadedAt: now.toISOString(),
                                     uploadTime: fullFormattedTime,
-                                    ...metadata,
-                                    url: canonicalUrl || metadata?.url
+                                    ...(storageMeta || {}),
+                                    url: finalUrl,
+                                    dataUrl: fileDataUrl || finalUrl
                                   };
+
                                   setDispatchPackingModal(prev => {
                                     if (!prev) return prev;
-                                    const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                                    const updatedMedia = { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] };
+                                    const tCode = prev.bomCode || prev.code || prev.id;
+                                    const sMatch = (bomStore || []).find(b => b && (b.bomCode === tCode || b.code === tCode || b.id === tCode));
+                                    const curPhotos = Array.isArray(prev.dispatchPackingMedia?.photos) ? prev.dispatchPackingMedia.photos : [];
+                                    const sPhotos = Array.isArray(sMatch?.dispatchPackingMedia?.photos) ? sMatch.dispatchPackingMedia.photos : [];
+                                    const combined = [...sPhotos, ...curPhotos, newPhoto];
+                                    const seen = new Set();
+                                    const deduped = combined.filter(p => {
+                                      if (!p) return false;
+                                      const k = p.id || p.name;
+                                      if (!k || seen.has(k)) return false;
+                                      seen.add(k);
+                                      return true;
+                                    });
+
+                                    const updatedMedia = {
+                                      ...(prev.dispatchPackingMedia || {}),
+                                      photos: deduped,
+                                      videos: Array.isArray(prev.dispatchPackingMedia?.videos) ? prev.dispatchPackingMedia.videos : (sMatch?.dispatchPackingMedia?.videos || [])
+                                    };
                                     syncModalMediaToStore(updatedMedia);
                                     return {
                                       ...prev,
@@ -2503,8 +2607,26 @@ export default function DispatchPackingModal({
                     };
 
                     setDispatchPackingModal(prev => {
-                      const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
-                      const updatedMedia = { ...existingMedia, photos: [...(existingMedia.photos || []), capturedPhoto] };
+                      if (!prev) return prev;
+                      const tCode = prev.bomCode || prev.code || prev.id;
+                      const sMatch = (bomStore || []).find(b => b && (b.bomCode === tCode || b.code === tCode || b.id === tCode));
+                      const curPhotos = Array.isArray(prev?.dispatchPackingMedia?.photos) ? prev.dispatchPackingMedia.photos : [];
+                      const sPhotos = Array.isArray(sMatch?.dispatchPackingMedia?.photos) ? sMatch.dispatchPackingMedia.photos : [];
+                      const combined = [...sPhotos, ...curPhotos, capturedPhoto];
+                      const seen = new Set();
+                      const deduped = combined.filter(p => {
+                        if (!p) return false;
+                        const k = p.id || p.name;
+                        if (!k || seen.has(k)) return false;
+                        seen.add(k);
+                        return true;
+                      });
+
+                      const updatedMedia = {
+                        ...(prev.dispatchPackingMedia || {}),
+                        photos: deduped,
+                        videos: Array.isArray(prev.dispatchPackingMedia?.videos) ? prev.dispatchPackingMedia.videos : (sMatch?.dispatchPackingMedia?.videos || [])
+                      };
                       syncModalMediaToStore(updatedMedia);
                       return {
                         ...prev,
@@ -2524,11 +2646,13 @@ export default function DispatchPackingModal({
                               if (!prev) return prev;
                               const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
                               const updatedPhotos = (existingMedia.photos || []).map(p =>
-                                p.id === capturedId ? { ...p, url: uRes.url, dataUrl: uRes.url } : p
+                                (p.id === capturedId || p.name === capturedName) ? { ...p, url: uRes.url, dataUrl: uRes.url } : p
                               );
+                              const nextMedia = { ...existingMedia, photos: updatedPhotos };
+                              syncModalMediaToStore(nextMedia);
                               return {
                                 ...prev,
-                                dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
+                                dispatchPackingMedia: nextMedia
                               };
                             });
                             syncBOMMediaItem('photo', capturedId, uRes.url);

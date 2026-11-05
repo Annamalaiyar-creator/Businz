@@ -2044,9 +2044,19 @@ app.post('/api/media/upload-raw', (req, res) => {
     writeStream.on('finish', () => {
       const stats = fs.existsSync(targetPath) ? fs.statSync(targetPath) : { size: 0 };
       console.log(`[MEDIA UPLOAD] Raw file saved: ${uniqueName} (${stats.size} bytes)`);
+      const fileUrl = `/api/uploads/${uniqueName}`;
+      try {
+        saveCachedMedia(decodedName, fileUrl);
+        saveCachedMedia(uniqueName, fileUrl);
+        saveCachedMedia(safeBase, fileUrl);
+        if (decodedName.includes('.')) {
+          const rawStem = path.basename(decodedName, path.extname(decodedName));
+          saveCachedMedia(rawStem, fileUrl);
+        }
+      } catch (_) {}
       res.json({
         success: true,
-        url: `/api/uploads/${uniqueName}`,
+        url: fileUrl,
         filename: uniqueName,
         originalName: decodedName,
         size: stats.size
@@ -5811,13 +5821,24 @@ const stripHeavyDocsFromBom = (b) => {
   }
   if (stripped.dispatchPackingMedia && typeof stripped.dispatchPackingMedia === 'object') {
     const rawMedia = stripped.dispatchPackingMedia;
-    const photoCount = Array.isArray(rawMedia.photos) ? rawMedia.photos.length : 0;
-    const videoCount = Array.isArray(rawMedia.videos) ? rawMedia.videos.length : 0;
+    const stripMediaItem = (item) => {
+      if (!item || typeof item !== 'object') return item;
+      const { dataUrl, fileData, base64, buffer, ...meta } = item;
+      const resolvedUrl = meta.url || (meta.storagePath ? `/api/uploads/${meta.storageBucket || 'bom-documents'}/${meta.storagePath}` : (meta.name ? `/api/uploads/${encodeURIComponent(meta.name)}` : undefined));
+      return {
+        ...meta,
+        url: resolvedUrl,
+        dataUrl: (dataUrl && typeof dataUrl === 'string' && dataUrl.length < 50000) ? dataUrl : undefined
+      };
+    };
+    const cleanPhotos = Array.isArray(rawMedia.photos) ? rawMedia.photos.map(stripMediaItem) : [];
+    const cleanVideos = Array.isArray(rawMedia.videos) ? rawMedia.videos.map(stripMediaItem) : [];
     stripped.dispatchPackingMedia = {
-      photosCount: photoCount,
-      videosCount: videoCount,
-      hasMedia: photoCount > 0 || videoCount > 0,
-      isLightweightRef: true
+      photos: cleanPhotos,
+      videos: cleanVideos,
+      photosCount: cleanPhotos.length,
+      videosCount: cleanVideos.length,
+      hasMedia: cleanPhotos.length > 0 || cleanVideos.length > 0
     };
   }
 

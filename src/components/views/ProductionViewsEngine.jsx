@@ -1919,16 +1919,48 @@ export default function ProductionViewsEngine(props) {
                 } else if (activeTab === 'Dispatch Orders') {
                   const targetCode = targetRow.bomCode || targetRow.code || targetRow.id;
                   const originalBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode));
+                  const combinedPhotos = [
+                    ...(Array.isArray(originalBom?.dispatchPackingMedia?.photos) ? originalBom.dispatchPackingMedia.photos : []),
+                    ...(Array.isArray(targetRow?.dispatchPackingMedia?.photos) ? targetRow.dispatchPackingMedia.photos : [])
+                  ];
+                  const seenPh = new Set();
+                  const mergedPhotos = combinedPhotos.filter(p => {
+                    if (!p) return false;
+                    const k = p.id || p.name;
+                    if (!k || seenPh.has(k)) return false;
+                    seenPh.add(k);
+                    return true;
+                  });
+                  const combinedVideos = [
+                    ...(Array.isArray(originalBom?.dispatchPackingMedia?.videos) ? originalBom.dispatchPackingMedia.videos : []),
+                    ...(Array.isArray(targetRow?.dispatchPackingMedia?.videos) ? targetRow.dispatchPackingMedia.videos : [])
+                  ];
+                  const seenVd = new Set();
+                  const mergedVideos = combinedVideos.filter(v => {
+                    if (!v) return false;
+                    const k = v.id || v.name;
+                    if (!k || seenVd.has(k)) return false;
+                    seenVd.add(k);
+                    return true;
+                  });
+                  const resolvedMedia = (mergedPhotos.length > 0 || mergedVideos.length > 0)
+                    ? { photos: mergedPhotos, videos: mergedVideos, photosCount: mergedPhotos.length, videosCount: mergedVideos.length }
+                    : (originalBom?.dispatchPackingMedia || targetRow?.dispatchPackingMedia || { photos: [], videos: [] });
+
                   const fullBomToLoad = originalBom ? {
                     ...targetRow,
                     ...originalBom,
                     customerName: (originalBom.customerName && originalBom.customerName !== 'Teorainn Solar Pvt Ltd') ? originalBom.customerName : (targetRow.customerName || originalBom.customerName),
                     companyName: (originalBom.companyName && originalBom.companyName !== 'Teorainn Solar Pvt Ltd') ? originalBom.companyName : (targetRow.companyName || originalBom.companyName || originalBom.customerName),
                     dispatchPacking: (Array.isArray(originalBom.dispatchPacking) && originalBom.dispatchPacking.length > 0) ? originalBom.dispatchPacking : (targetRow.dispatchPacking || []),
+                    dispatchPackingMedia: resolvedMedia,
                     status: (originalBom.status || targetRow.rawStatus || targetRow.status),
                     salesPerson: (originalBom.salesPerson || targetRow.salesPerson),
                     salesPersonCode: (originalBom.salesPersonCode || targetRow.salesPersonCode)
-                  } : targetRow;
+                  } : {
+                    ...targetRow,
+                    dispatchPackingMedia: resolvedMedia
+                  };
 
                   const isAccountsDone = Boolean(targetRow.isAccountsDone || targetRow.accountsVerification?.verified);
                   const isInvoiceDone = Boolean(targetRow.invoiceConfirmed || targetRow.status === 'Invoice Confirmed');
@@ -1999,16 +2031,48 @@ export default function ProductionViewsEngine(props) {
             } else if (activeTab === 'Dispatch Orders') {
               const recCode = rec.bomCode || rec.code || rec.id;
               const origRec = (bomStore || []).find(b => b && (b.bomCode === recCode || b.code === recCode || b.id === recCode));
+              const recCombinedPhotos = [
+                ...(Array.isArray(origRec?.dispatchPackingMedia?.photos) ? origRec.dispatchPackingMedia.photos : []),
+                ...(Array.isArray(rec?.dispatchPackingMedia?.photos) ? rec.dispatchPackingMedia.photos : [])
+              ];
+              const seenRecPh = new Set();
+              const mergedRecPhotos = recCombinedPhotos.filter(p => {
+                if (!p) return false;
+                const k = p.id || p.name;
+                if (!k || seenRecPh.has(k)) return false;
+                seenRecPh.add(k);
+                return true;
+              });
+              const recCombinedVideos = [
+                ...(Array.isArray(origRec?.dispatchPackingMedia?.videos) ? origRec.dispatchPackingMedia.videos : []),
+                ...(Array.isArray(rec?.dispatchPackingMedia?.videos) ? rec.dispatchPackingMedia.videos : [])
+              ];
+              const seenRecVd = new Set();
+              const mergedRecVideos = recCombinedVideos.filter(v => {
+                if (!v) return false;
+                const k = v.id || v.name;
+                if (!k || seenRecVd.has(k)) return false;
+                seenRecVd.add(k);
+                return true;
+              });
+              const resolvedRecMedia = (mergedRecPhotos.length > 0 || mergedRecVideos.length > 0)
+                ? { photos: mergedRecPhotos, videos: mergedRecVideos, photosCount: mergedRecPhotos.length, videosCount: mergedRecVideos.length }
+                : (origRec?.dispatchPackingMedia || rec?.dispatchPackingMedia || { photos: [], videos: [] });
+
               const fullRec = origRec ? {
                 ...rec,
                 ...origRec,
                 customerName: (origRec.customerName && origRec.customerName !== 'Teorainn Solar Pvt Ltd') ? origRec.customerName : (rec.customerName || origRec.customerName),
                 companyName: (origRec.companyName && origRec.companyName !== 'Teorainn Solar Pvt Ltd') ? origRec.companyName : (rec.companyName || origRec.companyName || origRec.customerName),
                 dispatchPacking: (Array.isArray(origRec.dispatchPacking) && origRec.dispatchPacking.length > 0) ? origRec.dispatchPacking : (rec.dispatchPacking || []),
+                dispatchPackingMedia: resolvedRecMedia,
                 status: (origRec.status || rec.rawStatus || rec.status),
                 salesPerson: (origRec.salesPerson || rec.salesPerson),
                 salesPersonCode: (origRec.salesPersonCode || rec.salesPersonCode)
-              } : rec;
+              } : {
+                ...rec,
+                dispatchPackingMedia: resolvedRecMedia
+              };
 
               const isRecCancelled = Boolean(rec.cancelled || rec.status === 'CANCELLED' || rec.status === 'Cancelled' || rec.status === 'Cancelled & Stock Restored' || (typeof rec.status === 'string' && rec.status.toLowerCase().includes('cancel')));
               const isRecAccountsDone = Boolean(rec.isAccountsDone || rec.accountsVerification?.verified || fullRec.isAccountsDone || fullRec.accountsVerification?.verified);
