@@ -7904,6 +7904,101 @@ app.post(['/api/deliverychallans', '/api/delivery-challans'], async (req, res) =
   });
 });
 
+// Endpoint to CANCEL a Delivery Challan in BUSINZ Authoritative Store
+app.post(['/api/deliverychallans/:id/cancel', '/api/delivery-challans/:id/cancel'], async (req, res) => {
+  const targetId = req.params.id;
+  const { remark, cancelReason, cancelledBy } = req.body || {};
+  if (!remark && !cancelReason) {
+    return res.status(400).json({ success: false, error: 'A cancellation remark is mandatory to cancel a Delivery Challan.' });
+  }
+
+  let localDCs = [];
+  const p = getStoreFilePath('dc_store.json');
+  try {
+    if (fs.existsSync(p)) localDCs = JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (_) {}
+
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const cleanTarget = normalize(targetId);
+
+  let found = false;
+  const updated = localDCs.map(dc => {
+    if (normalize(dc.id) === cleanTarget || normalize(dc.dcNo) === cleanTarget || normalize(dc.code) === cleanTarget) {
+      found = true;
+      return {
+        ...dc,
+        status: 'CANCELLED',
+        statusType: 'cancelled',
+        cancelled: true,
+        cancellationRemark: remark || cancelReason,
+        cancelReason: remark || cancelReason,
+        cancelledBy: cancelledBy || 'Procurement Head',
+        cancelledDate: new Date().toLocaleDateString('en-GB'),
+        cancelledAt: new Date().toISOString()
+      };
+    }
+    return dc;
+  });
+
+  if (!found) {
+    return res.status(404).json({ success: false, error: `Delivery Challan ${targetId} not found.` });
+  }
+
+  try {
+    fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8');
+    supabaseMemoryStore['dc_store'] = updated;
+    pushStoreToSupabase('dc_store', updated).catch(() => {});
+  } catch (_) {}
+
+  res.json({
+    success: true,
+    message: `Delivery Challan ${targetId} cancelled successfully.`,
+    deliverychallans: updated
+  });
+});
+
+// Endpoint to UPDATE a Delivery Challan
+app.put(['/api/deliverychallans/:id', '/api/delivery-challans/:id'], async (req, res) => {
+  const targetId = req.params.id;
+  let localDCs = [];
+  const p = getStoreFilePath('dc_store.json');
+  try {
+    if (fs.existsSync(p)) localDCs = JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (_) {}
+
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const cleanTarget = normalize(targetId);
+
+  let updatedRecord = null;
+  const updated = localDCs.map(dc => {
+    if (normalize(dc.id) === cleanTarget || normalize(dc.dcNo) === cleanTarget || normalize(dc.code) === cleanTarget) {
+      updatedRecord = {
+        ...dc,
+        ...req.body,
+        updatedAt: new Date().toISOString()
+      };
+      return updatedRecord;
+    }
+    return dc;
+  });
+
+  if (!updatedRecord) {
+    return res.status(404).json({ success: false, error: `Delivery Challan ${targetId} not found.` });
+  }
+
+  try {
+    fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8');
+    supabaseMemoryStore['dc_store'] = updated;
+    pushStoreToSupabase('dc_store', updated).catch(() => {});
+  } catch (_) {}
+
+  res.json({
+    success: true,
+    message: `Delivery Challan ${targetId} updated successfully.`,
+    deliverychallan: updatedRecord
+  });
+});
+
 
 // Real-time synchronization endpoint retrieving purchase order details strictly from BUSINZ local stores
 app.get('/api/purchaseorders/{*id}', async (req, res) => {

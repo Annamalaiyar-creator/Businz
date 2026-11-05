@@ -15,6 +15,7 @@ import realtimeNotificationService from './services/realtimeNotificationService'
 // Route/View-Level Code Splitting via React.lazy() (Preserves all behavior, isolates bundle weight)
 const PerformaInvoiceView = lazy(() => import('./components/PerformaInvoiceView'));
 const PurchaseOrdersView = lazy(() => import('./components/PurchaseOrdersView'));
+const DeliveryChallansView = lazy(() => import('./components/DeliveryChallansView'));
 const OtherViews = lazy(() => import('./components/OtherViews'));
 const DashboardFullReference = lazy(() => import('./components/DashboardFullReference'));
 const InventoryAutoConversion = lazy(() => import('./components/InventoryAutoConversion'));
@@ -746,6 +747,11 @@ function App() {
                 clearTargetPo={() => setTargetPoNo(null)} 
                 targetPoTab={targetPoTab}
                 clearTargetPoTab={() => setTargetPoTab(null)}
+                onNavigateTab={handleTabChange}
+              />
+            ) : activeTab === 'Delivery Challans' ? (
+              <DeliveryChallansView 
+                userRole={userRole} 
                 onNavigateTab={handleTabChange}
               />
             ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (

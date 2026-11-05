@@ -181,6 +181,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
       items: [
         { label: 'Dashboard', icon: LayoutDashboard },
         { label: 'Purchase Orders', icon: ShoppingCart },
+        { label: 'Delivery Challans', icon: Truck },
         { label: 'Items Directory', icon: Boxes },
         { label: 'Raw Material Directory', icon: Layers },
         { label: 'Inventory Stores', icon: Warehouse }
