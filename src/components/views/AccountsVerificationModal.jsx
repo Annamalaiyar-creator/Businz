@@ -1651,13 +1651,96 @@ export default function AccountsVerificationModal({
             ? accountsVerificationModal.dispatchPacking
             : [];
 
+        // Pre-fetch source PI items if available for maximum rate resolution accuracy
+        let sourcePiItems = [];
+        if (accountsVerificationModal.sourcePiNo || accountsVerificationModal.piNo) {
+          try {
+            const rawPiStore = typeof window !== 'undefined' ? (localStorage.getItem('controlroom_pi_store') || localStorage.getItem('businz_pi_store')) : null;
+            if (rawPiStore) {
+              const parsedPis = JSON.parse(rawPiStore);
+              const piList = Array.isArray(parsedPis) ? parsedPis : (parsedPis.pis || []);
+              const targetPiNo = accountsVerificationModal.sourcePiNo || accountsVerificationModal.piNo;
+              const matchedPi = piList.find(p => p.piNo === targetPiNo || p.id === targetPiNo);
+              if (matchedPi && Array.isArray(matchedPi.items)) {
+                sourcePiItems = matchedPi.items;
+              }
+            }
+          } catch (_) {}
+        }
+
         const dynamicAccItems = rawAccItems.map((it, idx) => {
           const q = parseFloat(it.qty || it.bomQty || 1) || 1;
-          const r = parseFloat(it.rate || it.unitPrice || 0) || 0;
           const matchingPacked = (accountsVerificationModal.dispatchPacking || []).find(p => (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code));
           const pQty = (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '')
             ? it.packedQty
             : (matchingPacked && matchingPacked.packedQty !== undefined && matchingPacked.packedQty !== null && matchingPacked.packedQty !== '' ? matchingPacked.packedQty : (it.packed ? q : 0));
+
+          let r = parseFloat(
+            it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate :
+            it.unitPrice !== undefined ? it.unitPrice :
+            it.unit_price !== undefined ? it.unit_price :
+            it.price !== undefined ? it.price :
+            it.unitRate !== undefined ? it.unitRate :
+            it.unit_rate !== undefined ? it.unit_rate :
+            it.selling_rate !== undefined ? it.selling_rate :
+            it.sellingPrice !== undefined ? it.sellingPrice : 0
+          ) || 0;
+
+          // Check line totals if unit rate was not directly provided
+          if (r === 0) {
+            const lineAmt = parseFloat(it.taxable || it.lineTotal || it.amount || it.amt || it.subtotal || it.total || 0) || 0;
+            if (lineAmt > 0 && q > 0) {
+              r = Math.round((lineAmt / q) * 100) / 100;
+            }
+          }
+
+          // Check original items array if it came from dispatchPacking
+          if (r === 0 && Array.isArray(accountsVerificationModal.items)) {
+            const match = accountsVerificationModal.items.find(m => 
+              (m.code && it.code && m.code === it.code) || 
+              (m.name && it.name && m.name.toLowerCase().trim() === it.name.toLowerCase().trim())
+            );
+            if (match) {
+              r = parseFloat(
+                match.rate !== undefined && match.rate !== null && match.rate !== '' ? match.rate :
+                match.unitPrice !== undefined ? match.unitPrice :
+                match.unit_price !== undefined ? match.unit_price :
+                match.price !== undefined ? match.price :
+                match.unitRate !== undefined ? match.unitRate : 0
+              ) || 0;
+              if (r === 0) {
+                const matchAmt = parseFloat(match.taxable || match.lineTotal || match.amount || match.amt || 0) || 0;
+                const matchQ = parseFloat(match.qty || match.bomQty || 1) || 1;
+                if (matchAmt > 0 && matchQ > 0) {
+                  r = Math.round((matchAmt / matchQ) * 100) / 100;
+                }
+              }
+            }
+          }
+
+          // Check source PI items
+          if (r === 0 && sourcePiItems.length > 0) {
+            const piMatch = sourcePiItems.find(piIt => 
+              (piIt.code && it.code && piIt.code === it.code) ||
+              (piIt.name && it.name && piIt.name.toLowerCase().trim() === it.name.toLowerCase().trim())
+            );
+            if (piMatch) {
+              r = parseFloat(
+                piMatch.rate !== undefined && piMatch.rate !== null && piMatch.rate !== '' ? piMatch.rate :
+                piMatch.unitPrice !== undefined ? piMatch.unitPrice :
+                piMatch.unit_price !== undefined ? piMatch.unit_price :
+                piMatch.price !== undefined ? piMatch.price : 0
+              ) || 0;
+              if (r === 0) {
+                const piAmt = parseFloat(piMatch.taxable || piMatch.lineTotal || piMatch.amount || piMatch.amt || 0) || 0;
+                const piQ = parseFloat(piMatch.qty || 1) || 1;
+                if (piAmt > 0 && piQ > 0) {
+                  r = Math.round((piAmt / piQ) * 100) / 100;
+                }
+              }
+            }
+          }
+
           return {
             ...it,
             code: it.code || `PRD-00${idx + 1}`,
@@ -1689,6 +1772,38 @@ export default function AccountsVerificationModal({
                 }]
               : [];
 
+        // Order Subtotal and Grand Total
+        const gTotal = cleanNum(accountsVerificationModal?.grandTotal) || orderValue || 0;
+        const sTotal = cleanNum(accountsVerificationModal?.subTotal) || cleanNum(accountsVerificationModal?.subtotal) || (gTotal > 0 ? Math.round((gTotal / 1.18) * 100) / 100 : 0);
+
+        // Fallback for Kit Price if 0 but order has value
+        let presetKitsTotal = pGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseFloat(g.setCount) || 1)), 0);
+        const knownCustomTotal = dynamicAccItems.filter(it => !it.isPresetItem && !it.presetGroupId).reduce((acc, it) => acc + (it.qty * it.rate), 0);
+        if (pGroups.length > 0 && presetKitsTotal === 0 && sTotal > knownCustomTotal) {
+          const unallocatedKitSub = sTotal - knownCustomTotal;
+          if (pGroups.length === 1) {
+            const sCount = parseFloat(pGroups[0].setCount) || 1;
+            pGroups[0].kitPrice = Math.round((unallocatedKitSub / sCount) * 100) / 100;
+            presetKitsTotal = unallocatedKitSub;
+          }
+        }
+
+        // Fallback for Loose/Individual Items: If items have rate 0, distribute order's taxable subtotal proportionally
+        const existingCoveredSubtotal = dynamicAccItems.reduce((acc, it) => acc + (it.qty * it.rate), 0) + presetKitsTotal;
+        const unallocatedRemaining = Math.max(0, sTotal - existingCoveredSubtotal);
+        const zeroRateItems = dynamicAccItems.filter(it => it.rate === 0 && !it.isPresetItem && !it.presetGroupId);
+
+        if (unallocatedRemaining > 0 && zeroRateItems.length > 0) {
+          const totalZeroQty = zeroRateItems.reduce((acc, it) => acc + it.qty, 0);
+          if (totalZeroQty > 0) {
+            const unitRatePerQty = Math.round((unallocatedRemaining / totalZeroQty) * 100) / 100;
+            zeroRateItems.forEach(it => {
+              it.rate = unitRatePerQty;
+              it.amt = Math.round(it.qty * it.rate * 100) / 100;
+            });
+          }
+        }
+
         const PRESET_THEMES = [
           { primary: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC', tagBg: '#CFFAFE', tagText: '#155E75', badge: 'SET 1' },
           { primary: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE', tagBg: '#E0E7FF', tagText: '#3730A3', badge: 'SET 2' },
@@ -1697,7 +1812,7 @@ export default function AccountsVerificationModal({
           { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', tagBg: '#EDE9FE', tagText: '#5B21B6', badge: 'SET 5' },
         ];
 
-        const accSubTotal = dynamicAccItems.reduce((acc, curr) => acc + curr.amt, 0);
+        const accSubTotal = dynamicAccItems.reduce((acc, curr) => acc + curr.amt, 0) + presetKitsTotal;
         const accCgst = accSubTotal * 0.09;
         const accSgst = accSubTotal * 0.09;
         const accGrandTotal = accSubTotal + accCgst + accSgst;
