@@ -113,6 +113,13 @@ export default function GoodsReceiptNoteView(props) {
   const [grnListStatusFilter, setGrnListStatusFilter] = useState('All');
   const [grnListActiveTab, setGrnListActiveTab] = useState('All');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Reliable, multi-tiered fetch for GRNs: Supabase Cloud -> Local Express API -> LocalStorage
   const fetchAndSetGRNs = useCallback(async () => {
@@ -2762,108 +2769,246 @@ export default function GoodsReceiptNoteView(props) {
                       </button>
                     </div>
 
-                    {/* Table Responsive Wrapper */}
-                    <div className="table-responsive" style={{ border: 'none', borderRadius: '0', margin: 0, overflowX: 'auto', width: '100%', boxSizing: 'border-box' }}>
-                      <table className="custom-table" style={{ fontSize: '13px', width: '100%', minWidth: '1000px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#475569', height: '48px' }}>
-                            <th style={{ width: '48px', minWidth: '48px', textAlign: 'center', padding: '12px 0' }}>
-                              <input id="goods-receipt-note-select-all" name="selectAll" aria-label="SelectAll"
-                                type="checkbox"
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    const allPageIds = currentRows.map(g => g.id);
-                                    setSelectedGrnRows(prev => Array.from(new Set([...prev, ...allPageIds])));
-                                  } else {
-                                    const pageIdsSet = new Set(currentRows.map(g => g.id));
-                                    setSelectedGrnRows(prev => prev.filter(id => !pageIdsSet.has(id)));
-                                  }
+                    {/* Mobile Cards View or Desktop Table Wrapper */}
+                    {isMobile ? (
+                      /* MOBILE RESPONSIVE CARD VIEW (Clean mobile view without cut-off) */
+                      <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {/* Mobile Select All Header */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '10px',
+                          border: '1px solid #E2E8F0',
+                          fontSize: '12px',
+                          color: '#475569'
+                        }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '700' }}>
+                            <input
+                              type="checkbox"
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const allPageIds = currentRows.map(g => g.id);
+                                  setSelectedGrnRows(prev => Array.from(new Set([...prev, ...allPageIds])));
+                                } else {
+                                  const pageIdsSet = new Set(currentRows.map(g => g.id));
+                                  setSelectedGrnRows(prev => prev.filter(id => !pageIdsSet.has(id)));
+                                }
+                              }}
+                              checked={currentRows.length > 0 && currentRows.every(g => selectedGrnRows.includes(g.id))}
+                              style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                            />
+                            <span>Select All ({currentRows.length})</span>
+                          </label>
+                          <span style={{ fontSize: '11px', color: '#64748B' }}>
+                            {selectedGrnRows.length > 0 ? `${selectedGrnRows.length} selected` : `Showing ${sortedGrns.length === 0 ? 0 : indexOfFirstRow + 1}-${Math.min(indexOfLastRow, sortedGrns.length)}`}
+                          </span>
+                        </div>
+
+                        {sortedGrns.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '36px 20px', color: '#94A3B8' }}>
+                            <Package size={38} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                            <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Goods Receipt Notes found</p>
+                            <p style={{ margin: '4px 0 0', fontSize: '12px' }}>Try adjusting your search or filters.</p>
+                          </div>
+                        ) : (
+                          currentRows.map((row, idx) => {
+                            const isChecked = selectedGrnRows.includes(row.id);
+                            return (
+                              <div
+                                key={row.id || idx}
+                                onClick={() => handleOpenViewGrn(row)}
+                                style={{
+                                  backgroundColor: isChecked ? '#ECFEFF' : '#FFFFFF',
+                                  border: isChecked ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                                  borderLeft: isChecked ? '4px solid #0E7490' : '1px solid #CBD5E1',
+                                  borderRadius: '12px',
+                                  padding: '14px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '10px',
+                                  cursor: 'pointer',
+                                  boxShadow: isChecked ? '0 4px 12px rgba(14,116,144,0.12)' : '0 1px 3px rgba(0,0,0,0.03)',
+                                  transition: 'all 0.15s ease'
                                 }}
-                                checked={currentRows.length > 0 && currentRows.every(g => selectedGrnRows.includes(g.id))}
-                                style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
-                               />
-                            </th>
-                            <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
-                            <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
-                            <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
-                            <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN Date</th>
-                            <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                            <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedGrns.length === 0 ? (
-                            <tr>
-                              <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
-                                No Goods Receipt Notes found matching the criteria.{!isAccountsUser ? ' Click "Create GRN" to record a receipt.' : ''}
-                              </td>
-                            </tr>
-                          ) : (
-                            currentRows.map((row, idx) => {
-                              const isChecked = selectedGrnRows.includes(row.id);
-                              return (
-                                <tr
-                                  key={row.id || idx}
-                                  style={{
-                                    borderBottom: idx === currentRows.length - 1 ? 'none' : '1px solid #f1f5f9',
-                                    transition: 'all 0.15s ease',
-                                    backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
-                                    borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
-                                  }}
-                                  className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}
-                                >
-                                  <td style={{ textAlign: 'center', width: '48px' }}>
-                                    <input id="goods-receipt-note-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                              >
+                                {/* Top row: Checkbox + GRN ID + Status Badge */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <input
                                       type="checkbox"
                                       checked={isChecked}
+                                      onClick={(e) => e.stopPropagation()}
                                       onChange={() => {
                                         setSelectedGrnRows(prev =>
                                           prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id]
                                         );
                                       }}
-                                      style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                                     />
-                                  </td>
-                                  <td style={{ fontWeight: '600', color: '#2563eb', textAlign: 'left', padding: '12px 16px' }}>
-                                    <a
-                                      href="#"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        handleOpenViewGrn(row);
-                                      }}
-                                      style={{ fontWeight: '600', color: '#2563eb', textDecoration: 'none' }}
-                                    >
+                                      style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                                    />
+                                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#2563EB', letterSpacing: '0.2px' }}>
                                       {row.id}
-                                    </a>
-                                  </td>
-                                  <td style={{ padding: '12px 16px', color: '#475569', textAlign: 'left', fontWeight: '500' }}>
-                                    {row.poRef}
-                                  </td>
-                                  <td style={{ padding: '12px 16px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
-                                    {row.vendor}
-                                  </td>
-                                  <td style={{ padding: '12px 16px', color: '#64748b', textAlign: 'left' }}>
-                                    {row.date}
-                                  </td>
-                                  <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>
+                                    </span>
+                                  </div>
+                                  <StatusBadge status={getEffectiveGrnStatus(row)} size="sm" />
+                                </div>
+
+                                {/* Middle row: Vendor Name & PO Ref */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                  <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', lineHeight: '1.3' }}>
+                                    {row.vendor || '—'}
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
+                                    <span>PO:</span>
+                                    <strong style={{ color: '#0E7490' }}>{row.poRef || '—'}</strong>
+                                  </div>
+                                </div>
+
+                                {/* Bottom row: Date & Total Value */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  fontSize: '12px',
+                                  paddingTop: '8px',
+                                  borderTop: '1px dashed #E2E8F0'
+                                }}>
+                                  <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Calendar size={13} style={{ color: '#94A3B8' }} />
+                                    {row.date || '—'}
+                                  </span>
+                                  <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
                                     {row.val || '—'}
-                                  </td>
-                                  <td style={{ textAlign: 'center', padding: '12px 16px' }}>
-                                    <StatusBadge status={getEffectiveGrnStatus(row)} size="sm" />
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    ) : (
+                      /* Table Responsive Wrapper */
+                      <div className="table-responsive" style={{ border: 'none', borderRadius: '0', margin: 0, overflowX: 'auto', width: '100%', boxSizing: 'border-box' }}>
+                        <table className="custom-table" style={{ fontSize: '13px', width: '100%', minWidth: '1000px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#475569', height: '48px' }}>
+                              <th style={{ width: '48px', minWidth: '48px', textAlign: 'center', padding: '12px 0' }}>
+                                <input id="goods-receipt-note-select-all" name="selectAll" aria-label="SelectAll"
+                                  type="checkbox"
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      const allPageIds = currentRows.map(g => g.id);
+                                      setSelectedGrnRows(prev => Array.from(new Set([...prev, ...allPageIds])));
+                                    } else {
+                                      const pageIdsSet = new Set(currentRows.map(g => g.id));
+                                      setSelectedGrnRows(prev => prev.filter(id => !pageIdsSet.has(id)));
+                                    }
+                                  }}
+                                  checked={currentRows.length > 0 && currentRows.every(g => selectedGrnRows.includes(g.id))}
+                                  style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
+                                 />
+                              </th>
+                              <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
+                              <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
+                              <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
+                              <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN Date</th>
+                              <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
+                              <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedGrns.length === 0 ? (
+                              <tr>
+                                <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                                  No Goods Receipt Notes found matching the criteria.{!isAccountsUser ? ' Click "Create GRN" to record a receipt.' : ''}
+                                </td>
+                              </tr>
+                            ) : (
+                              currentRows.map((row, idx) => {
+                                const isChecked = selectedGrnRows.includes(row.id);
+                                return (
+                                  <tr
+                                    key={row.id || idx}
+                                    style={{
+                                      borderBottom: idx === currentRows.length - 1 ? 'none' : '1px solid #f1f5f9',
+                                      transition: 'all 0.15s ease',
+                                      backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                                      borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                                    }}
+                                    className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}
+                                  >
+                                    <td style={{ textAlign: 'center', width: '48px' }}>
+                                      <input id="goods-receipt-note-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          setSelectedGrnRows(prev =>
+                                            prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id]
+                                          );
+                                        }}
+                                        style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                                       />
+                                    </td>
+                                    <td style={{ fontWeight: '600', color: '#2563eb', textAlign: 'left', padding: '12px 16px' }}>
+                                      <a
+                                        href="#"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          handleOpenViewGrn(row);
+                                        }}
+                                        style={{ fontWeight: '600', color: '#2563eb', textDecoration: 'none' }}
+                                      >
+                                        {row.id}
+                                      </a>
+                                    </td>
+                                    <td style={{ padding: '12px 16px', color: '#475569', textAlign: 'left', fontWeight: '500' }}>
+                                      {row.poRef}
+                                    </td>
+                                    <td style={{ padding: '12px 16px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
+                                      {row.vendor}
+                                    </td>
+                                    <td style={{ padding: '12px 16px', color: '#64748b', textAlign: 'left' }}>
+                                      {row.date}
+                                    </td>
+                                    <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>
+                                      {row.val || '—'}
+                                    </td>
+                                    <td style={{ textAlign: 'center', padding: '12px 16px' }}>
+                                      <StatusBadge status={getEffectiveGrnStatus(row)} size="sm" />
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
 
                     {/* Standard Pagination Footer Layout (Rule 6 compliant) */}
                     {sortedGrns.length > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        justifyContent: isMobile ? 'center' : 'space-between',
+                        alignItems: isMobile ? 'stretch' : 'center',
+                        gap: isMobile ? '12px' : '16px',
+                        padding: isMobile ? '12px 14px' : '14px 20px',
+                        fontSize: '13px',
+                        color: '#64748B',
+                        borderTop: '1px solid #F1F5F9',
+                        backgroundColor: '#FFFFFF'
+                      }}>
                         {/* Left Side: Rows per page selector + Showing X to Y entries */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: isMobile ? 'space-between' : 'flex-start',
+                          gap: isMobile ? '8px' : '16px',
+                          flexWrap: 'wrap'
+                        }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span>Showing per page</span>
                             <select id="goods-receipt-note-grn-rows-per-page" name="grnRowsPerPage" aria-label="GrnRowsPerPage"
@@ -2879,7 +3024,13 @@ export default function GoodsReceiptNoteView(props) {
                         </div>
 
                         {/* Right Side: Page navigation controls adjacent to Go to page */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: isMobile ? 'center' : 'flex-end',
+                          gap: '12px',
+                          flexWrap: 'wrap'
+                        }}>
                           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             <button
                               disabled={safeCurrentPage === 1}

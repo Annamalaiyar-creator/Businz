@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
 import StatusBadge from './StatusBadge';
@@ -158,6 +158,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [openPresetIdx, setOpenPresetIdx] = useState(null); // Selected item row index opening preset materials dropdown
 
   const [selectedPOs, setSelectedPOs] = useState([]);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSelectAll = (e, items) => {
     if (e.target.checked) {
@@ -1913,8 +1920,112 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               ))}
             </div>
 
-            {/* PO Table */}
+            {/* PO Table or Mobile Cards */}
             <div className="section-card" style={{ padding: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+              {isMobile ? (
+                /* Mobile Cards View */
+                <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Mobile Select All Header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    fontSize: '12px',
+                    color: '#475569'
+                  }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '700' }}>
+                      <input
+                        type="checkbox"
+                        onChange={(e) => handleSelectAll(e, filteredPOList)}
+                        checked={filteredPOList.length > 0 && filteredPOList.every(po => selectedPOs.includes(po.poNo))}
+                        style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                      />
+                      <span>Select All ({filteredPOList.length})</span>
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#64748B' }}>
+                      {selectedPOs.length > 0 ? `${selectedPOs.length} selected` : `Showing ${filteredPOList.length === 0 ? 0 : indexOfFirstRow + 1}-${Math.min(indexOfLastRow, filteredPOList.length)}`}
+                    </span>
+                  </div>
+
+                  {filteredPOList.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '36px 20px', color: '#94A3B8' }}>
+                      <ShoppingCart size={38} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                      <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Purchase Orders found</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px' }}>Try adjusting your search or filters.</p>
+                    </div>
+                  ) : (
+                    currentRows.map((po, idx) => {
+                      const isChecked = selectedPOs.includes(po.poNo);
+                      return (
+                        <div
+                          key={po.poNo || idx}
+                          onClick={() => handleStartView(po)}
+                          style={{
+                            backgroundColor: isChecked ? '#ECFEFF' : '#FFFFFF',
+                            border: isChecked ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                            borderLeft: isChecked ? '4px solid #0E7490' : '1px solid #CBD5E1',
+                            borderRadius: '12px',
+                            padding: '14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            cursor: 'pointer',
+                            boxShadow: isChecked ? '0 4px 12px rgba(14,116,144,0.12)' : '0 1px 3px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {/* Top row: Checkbox + PO No + Status */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={() => handleSelectRow(po.poNo)}
+                                style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                              />
+                              <span style={{ fontSize: '14px', fontWeight: '800', color: '#2563EB', letterSpacing: '0.2px' }}>
+                                {po.poNo}
+                              </span>
+                            </div>
+                            {renderStatusBadge(po.statusType, po.status)}
+                          </div>
+
+                          {/* Middle row: Company / Vendor Name */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', lineHeight: '1.3' }}>
+                              {po.vendor || '—'}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap' }}>
+                              <span>PO Date: <strong>{po.poDate || '—'}</strong></span>
+                              {po.deliveryDate && <span>• Due: <strong>{po.deliveryDate}</strong></span>}
+                            </div>
+                          </div>
+
+                          {/* Bottom row: Total Value */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            fontSize: '12px',
+                            paddingTop: '8px',
+                            borderTop: '1px dashed #E2E8F0'
+                          }}>
+                            <span style={{ color: '#64748B' }}>Total Value:</span>
+                            <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                              {po.amount || '—'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
               <div className="table-responsive" style={{ border: 'none', borderRadius: '16px', margin: 0, overflowX: 'auto', width: '100%', boxSizing: 'border-box' }}>
                 <table className="custom-table" style={{ fontSize: '13px', width: '100%', minWidth: '1000px', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
@@ -2009,14 +2120,32 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     })()}
                   </tbody>
                 </table>
+              </div>
+              )}
                 {/* 4. PAGINATION FOOTER */}
                 {filteredPOList.length > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', fontSize: '13px', color: '#64748b', borderTop: '1px solid #f1f5f9' }}>
-                    <div>
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    justifyContent: isMobile ? 'center' : 'space-between',
+                    alignItems: isMobile ? 'stretch' : 'center',
+                    gap: isMobile ? '12px' : '16px',
+                    padding: isMobile ? '12px 14px' : '16px 24px',
+                    fontSize: '13px',
+                    color: '#64748b',
+                    borderTop: '1px solid #f1f5f9'
+                  }}>
+                    <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
                       Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, filteredPOList.length)} of {filteredPOList.length} entries
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: isMobile ? 'space-between' : 'flex-end',
+                      gap: '16px',
+                      flexWrap: 'wrap'
+                    }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>Rows per page:</span>
                         <select id="purchase-orders-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
@@ -2084,7 +2213,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   </div>
                 )}
               </div>
-            </div>
 
             {/* Floating Selection Toolbar (exact reference design) */}
             {selectedPOs.length > 0 && (

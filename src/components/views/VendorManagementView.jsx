@@ -64,6 +64,14 @@ export default function VendorManagementView(props) {
     setProdFilterStatusSelect('All');
   }, [activeTab]);
 
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [showBOMForm, setShowBOMForm] = useState(false);
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
@@ -2963,8 +2971,117 @@ export default function VendorManagementView(props) {
                   ))}
                 </div>
 
-                {/* 3. TABLE CARD */}
+                {/* 3. TABLE CARD OR MOBILE CARDS */}
                 <div className="section-card" style={{ padding: 0, overflowX: 'auto', width: '100%', boxSizing: 'border-box', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+                  {isMobile ? (
+                    /* Mobile Cards View */
+                    <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {/* Mobile Select All Header */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '10px',
+                        border: '1px solid #E2E8F0',
+                        fontSize: '12px',
+                        color: '#475569'
+                      }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '700' }}>
+                          <input
+                            type="checkbox"
+                            onChange={handleSelectAllVendors}
+                            checked={currentVendorRows.length > 0 && currentVendorRows.every(row => selectedVendors.includes(row.code))}
+                            style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                          />
+                          <span>Select All ({currentVendorRows.length})</span>
+                        </label>
+                        <span style={{ fontSize: '11px', color: '#64748B' }}>
+                          {selectedVendors.length > 0 ? `${selectedVendors.length} selected` : `Showing ${(vCurrentPage - 1) * vRowsPerPage + 1}-${Math.min(vCurrentPage * vRowsPerPage, filteredVendors.length)}`}
+                        </span>
+                      </div>
+
+                      {filteredVendors.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '36px 20px', color: '#94A3B8' }}>
+                          <Users size={38} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                          <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#475569' }}>No vendors found</p>
+                          <p style={{ margin: '4px 0 0', fontSize: '12px' }}>Try adjusting your search or filters.</p>
+                        </div>
+                      ) : (
+                        currentVendorRows.map((vendor, idx) => {
+                          const isChecked = selectedVendors.includes(vendor.code);
+                          return (
+                            <div
+                              key={vendor.code || idx}
+                              onClick={() => setQuickPreviewRecord(vendor)}
+                              style={{
+                                backgroundColor: isChecked ? '#ECFEFF' : '#FFFFFF',
+                                border: isChecked ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                                borderLeft: isChecked ? '4px solid #0E7490' : '1px solid #CBD5E1',
+                                borderRadius: '12px',
+                                padding: '14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '10px',
+                                cursor: 'pointer',
+                                boxShadow: isChecked ? '0 4px 12px rgba(14,116,144,0.12)' : '0 1px 3px rgba(0,0,0,0.03)',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {/* Top row: Checkbox + Vendor Name + Status */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={() => handleSelectVendorRow(vendor.code)}
+                                    style={{ accentColor: '#0E7490', cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                                  />
+                                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', letterSpacing: '0.2px' }}>
+                                    {vendor.name}
+                                  </span>
+                                </div>
+                                {renderStatusBadge(vendor.status)}
+                              </div>
+
+                              {/* Middle row: Contact & Phone */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12.5px', color: '#475569' }}>
+                                {vendor.contact && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ color: '#64748B' }}>Contact:</span>
+                                    <strong style={{ color: '#1E293B' }}>{vendor.contact}</strong>
+                                  </div>
+                                )}
+                                {vendor.phone && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748B' }}>
+                                    <Phone size={13} style={{ color: '#0E7490' }} />
+                                    <span>{vendor.phone}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Bottom row: Terms */}
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                fontSize: '12px',
+                                paddingTop: '8px',
+                                borderTop: '1px dashed #E2E8F0'
+                              }}>
+                                <span style={{ color: '#64748B' }}>Payment Terms:</span>
+                                <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0E7490' }}>
+                                  {vendor.terms || '30 Days'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  ) : (
                   <table className="custom-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#fafbfc', borderBottom: '1px solid #e2e8f0', height: '48px' }}>
@@ -3059,14 +3176,31 @@ export default function VendorManagementView(props) {
                       )}
                     </tbody>
                   </table>
+                  )}
 
                   {/* 4. PAGINATION FOOTER */}
                   {totalVendorPages > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', fontSize: '13px', color: '#64748b', borderTop: '1px solid #f1f5f9' }}>
-                      <span>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      justifyContent: isMobile ? 'center' : 'space-between',
+                      alignItems: isMobile ? 'stretch' : 'center',
+                      gap: isMobile ? '12px' : '16px',
+                      padding: isMobile ? '12px 14px' : '16px 24px',
+                      fontSize: '13px',
+                      color: '#64748b',
+                      borderTop: '1px solid #f1f5f9'
+                    }}>
+                      <span style={{ textAlign: isMobile ? 'center' : 'left' }}>
                         Showing {(vCurrentPage - 1) * vRowsPerPage + 1} to {Math.min(vCurrentPage * vRowsPerPage, filteredVendors.length)} of {filteredVendors.length} entries
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: isMobile ? 'space-between' : 'flex-end',
+                        gap: '16px',
+                        flexWrap: 'wrap'
+                      }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ fontSize: '13px', color: '#64748b' }}>Rows per page:</span>
                           {renderSelect(vRowsPerPage, (e) => { setVRowsPerPage(parseInt(e.target.value)); setVCurrentPage(1); }, [5, 10, 15, 20, 25, 50], { height: '32px', width: '70px' })}
