@@ -13,7 +13,7 @@ export default function DashboardFullReference({ userRole }) {
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthCode);
   const [selectedYear, setSelectedYear] = useState(currentYearStr);
-  const [selectedPeriod, setSelectedPeriod] = useState('MTD');
+  const [selectedPeriod, setSelectedPeriod] = useState('Today');
   const [refreshing, setRefreshing] = useState(false);
   const [hoveredBarIdx, setHoveredBarIdx] = useState(null);
   const [poData, setPoData] = useState([]);
