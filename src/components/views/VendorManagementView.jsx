@@ -1063,7 +1063,9 @@ export default function VendorManagementView(props) {
     { key: 'type', label: 'Vendor Type', required: false, hint: 'Manufacturer, Supplier, Trader', guessPatterns: [/^vendor\s*type/i, /^type/i, /^category/i] },
     { key: 'cat', label: 'Category / Nature of Supply', required: false, hint: 'e.g. Steel & Metals, Fasteners, Cables', guessPatterns: [/^category/i, /^cat/i, /^material/i] },
     { key: 'terms', label: 'Payment Terms', required: false, hint: 'e.g. Net 30 Days, 50% Advance', guessPatterns: [/^payment\s*terms/i, /^terms/i, /^credit/i] },
-    { key: 'address', label: 'Address', required: false, hint: 'Factory or office street address', guessPatterns: [/^address/i, /^street/i, /^location/i] },
+    { key: 'address_1', label: 'Address 1', required: false, hint: 'Building, Door / Flat No, Street', guessPatterns: [/^address\s*1/i, /^address_1/i, /^street\s*1/i, /^street/i, /^line\s*1/i] },
+    { key: 'address_2', label: 'Address 2', required: false, hint: 'Area, Landmark, Road', guessPatterns: [/^address\s*2/i, /^address_2/i, /^street\s*2/i, /^street2/i, /^line\s*2/i, /^landmark/i, /^area/i] },
+    { key: 'address', label: 'Full Address', required: false, hint: 'Factory or office street address', guessPatterns: [/^full\s*address/i, /^address/i, /^location/i] },
     { key: 'city', label: 'City', required: false, hint: 'City or town', guessPatterns: [/^city/i, /^district/i] },
     { key: 'state', label: 'State', required: false, hint: 'State / province', guessPatterns: [/^state/i] },
     { key: 'pincode', label: 'Pincode / ZIP', required: false, hint: 'Postal PIN code', guessPatterns: [/^pincode/i, /^pin\s*code/i, /^zip/i] }
@@ -1080,7 +1082,8 @@ export default function VendorManagementView(props) {
       "Vendor Type": "Manufacturer",
       "Category": "Steel & Metals",
       "Payment Terms": "Net 30 Days",
-      "Address": "Plot 45, SIPCOT Industrial Park",
+      "Address 1": "Plot 45, Phase II, SIPCOT Industrial Park",
+      "Address 2": "Near Toll Plaza, GNT Road",
       "City": "Chennai",
       "State": "Tamil Nadu",
       "Pincode": "602105"
@@ -1442,11 +1445,15 @@ export default function VendorManagementView(props) {
   const [vPAN, setVPAN] = useState('');
   const [vWebsite, setVWebsite] = useState('');
   const [vRegAddress, setVRegAddress] = useState('');
+  const [vRegAddress1, setVRegAddress1] = useState('');
+  const [vRegAddress2, setVRegAddress2] = useState('');
   const [vCity, setVCity] = useState('');
   const [vState, setVState] = useState('Select state');
   const [vCountry, setVCountry] = useState('India');
   const [vPinCode, setVPinCode] = useState('');
   const [vBillingAddress, setVBillingAddress] = useState('');
+  const [vBillingAddress1, setVBillingAddress1] = useState('');
+  const [vBillingAddress2, setVBillingAddress2] = useState('');
   const [vBillingCity, setVBillingCity] = useState('');
   const [vBillingState, setVBillingState] = useState('Select state');
   const [vBillingCountry, setVBillingCountry] = useState('India');
@@ -1924,6 +1931,11 @@ export default function VendorManagementView(props) {
     else if (!vActiveVendor) vStatus = 'Inactive';
     else if (vPreferredVendor) vStatus = 'Preferred';
 
+    const vFullRegAddress = [vRegAddress1, vRegAddress2].filter(Boolean).join(', ') || vRegAddress;
+    const vFullBillingAddress = vSameAsRegistered
+      ? vFullRegAddress
+      : ([vBillingAddress1, vBillingAddress2].filter(Boolean).join(', ') || vBillingAddress);
+
     const newVendorPayload = {
       name: vName,
       companyName: vName,
@@ -1937,7 +1949,42 @@ export default function VendorManagementView(props) {
       spend: '₹ 0.00',
       terms: vPaymentTerms === 'Select payment terms' ? 'Net 30 Days' : vPaymentTerms,
       gstin: vGST || '',
-      pan: vPAN || ''
+      pan: vPAN || '',
+      address: vFullRegAddress,
+      address_1: vRegAddress1,
+      address_2: vRegAddress2,
+      street: vRegAddress1,
+      street2: vRegAddress2,
+      city: vCity,
+      state: vState === 'Select state' ? '' : vState,
+      pincode: vPinCode,
+      country: vCountry,
+      billingAddressObj: {
+        address: vSameAsRegistered ? (vRegAddress1 || vFullRegAddress) : (vBillingAddress1 || vFullBillingAddress),
+        address_1: vSameAsRegistered ? vRegAddress1 : vBillingAddress1,
+        address_2: vSameAsRegistered ? vRegAddress2 : vBillingAddress2,
+        street: vSameAsRegistered ? vRegAddress1 : vBillingAddress1,
+        street2: vSameAsRegistered ? vRegAddress2 : vBillingAddress2,
+        city: vSameAsRegistered ? vCity : vBillingCity,
+        state: vSameAsRegistered ? (vState === 'Select state' ? '' : vState) : (vBillingState === 'Select state' ? '' : vBillingState),
+        zip: vSameAsRegistered ? vPinCode : vBillingPinCode,
+        pincode: vSameAsRegistered ? vPinCode : vBillingPinCode,
+        country: vSameAsRegistered ? vCountry : vBillingCountry
+      },
+      shippingAddressObj: {
+        address: vRegAddress1 || vFullRegAddress,
+        address_1: vRegAddress1,
+        address_2: vRegAddress2,
+        street: vRegAddress1,
+        street2: vRegAddress2,
+        city: vCity,
+        state: vState === 'Select state' ? '' : vState,
+        zip: vPinCode,
+        pincode: vPinCode,
+        country: vCountry
+      },
+      billingAddress: vFullBillingAddress,
+      shippingAddress: vFullRegAddress
     };
 
     // Save new vendor and refresh live list
@@ -1969,10 +2016,14 @@ export default function VendorManagementView(props) {
     setVPAN('');
     setVWebsite('');
     setVRegAddress('');
+    setVRegAddress1('');
+    setVRegAddress2('');
     setVCity('');
     setVState('Select state');
     setVPinCode('');
     setVBillingAddress('');
+    setVBillingAddress1('');
+    setVBillingAddress2('');
     setVBillingCity('');
     setVBillingState('Select state');
     setVBillingPinCode('');
@@ -2329,32 +2380,109 @@ export default function VendorManagementView(props) {
                           Registered Address <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </strong>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <textarea id="vendor-management-registered-address" name="registeredAddress" aria-label="Enter registered address" value={vRegAddress} onChange={(e) => setVRegAddress(e.target.value)} placeholder="Enter registered address" style={{ height: '70px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none' }}  />
+                          <label htmlFor="vendor-management-registered-address-1" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            Address 1 <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span> <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 'normal' }}>(Building / Door / Flat / Street)</span>
+                          </label>
+                          <input
+                            id="vendor-management-registered-address-1"
+                            name="registeredAddress1"
+                            aria-label="Address 1 (Building / Door / Flat / Street)"
+                            type="text"
+                            value={vRegAddress1}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setVRegAddress1(val);
+                              setVRegAddress([val, vRegAddress2].filter(Boolean).join(', '));
+                              if (vSameAsRegistered) {
+                                setVBillingAddress1(val);
+                                setVBillingAddress([val, vRegAddress2].filter(Boolean).join(', '));
+                              }
+                            }}
+                            placeholder="e.g. Plot No 42, GNT Road, Industrial Estate"
+                            style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label htmlFor="vendor-management-registered-address-2" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            Address 2 <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 'normal' }}>(Area / Landmark / Road)</span>
+                          </label>
+                          <input
+                            id="vendor-management-registered-address-2"
+                            name="registeredAddress2"
+                            aria-label="Address 2 (Area / Landmark / Road)"
+                            type="text"
+                            value={vRegAddress2}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setVRegAddress2(val);
+                              setVRegAddress([vRegAddress1, val].filter(Boolean).join(', '));
+                              if (vSameAsRegistered) {
+                                setVBillingAddress2(val);
+                                setVBillingAddress([vRegAddress1, val].filter(Boolean).join(', '));
+                              }
+                            }}
+                            placeholder="e.g. Near Toll Plaza, Phase 2"
+                            style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
+                          />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label htmlFor="vendor-management-city" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               City <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            <input id="vendor-management-city" name="city" aria-label="City" type="text" value={vCity} onChange={(e) => setVCity(e.target.value)} placeholder="Enter city" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
+                            <input
+                              id="vendor-management-city"
+                              name="city"
+                              aria-label="City"
+                              type="text"
+                              value={vCity}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setVCity(val);
+                                if (vSameAsRegistered) setVBillingCity(val);
+                              }}
+                              placeholder="Enter city"
+                              style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
+                            />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               State <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            {renderSelect(vState, (e) => setVState(e.target.value), ['Andhra Pradesh', 'Telangana', 'Tamil Nadu', 'Karnataka', 'Maharashtra'], { height: '38px' })}
+                            {renderSelect(vState, (e) => {
+                              const val = e.target.value;
+                              setVState(val);
+                              if (vSameAsRegistered) setVBillingState(val);
+                            }, ['Andhra Pradesh', 'Telangana', 'Tamil Nadu', 'Karnataka', 'Maharashtra'], { height: '38px' })}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               Country <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            {renderSelect(vCountry, (e) => setVCountry(e.target.value), ['India', 'United States', 'Singapore'], { height: '38px' })}
+                            {renderSelect(vCountry, (e) => {
+                              const val = e.target.value;
+                              setVCountry(val);
+                              if (vSameAsRegistered) setVBillingCountry(val);
+                            }, ['India', 'United States', 'Singapore'], { height: '38px' })}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label htmlFor="vendor-management-pin-code" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               PIN Code <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            <input id="vendor-management-pin-code" name="pINCode" aria-label="PIN Code" type="text" value={vPinCode} onChange={(e) => setVPinCode(e.target.value)} placeholder="Enter PIN code" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
+                            <input
+                              id="vendor-management-pin-code"
+                              name="pINCode"
+                              aria-label="PIN Code"
+                              type="text"
+                              value={vPinCode}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setVPinCode(val);
+                                if (vSameAsRegistered) setVBillingPinCode(val);
+                              }}
+                              placeholder="Enter PIN code"
+                              style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
+                            />
                           </div>
                         </div>
                       </div>
@@ -2366,21 +2494,69 @@ export default function VendorManagementView(props) {
                             Billing Address (If Different) <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                           </strong>
                           <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#475569', cursor: 'pointer' }}>
-                            <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vSameAsRegistered} onChange={(e) => {
-                              setVSameAsRegistered(e.target.checked);
-                              if (e.target.checked) {
-                                setVBillingAddress(vRegAddress);
-                                setVBillingCity(vCity);
-                                setVBillingState(vState);
-                                setVBillingCountry(vCountry);
-                                setVBillingPinCode(vPinCode);
-                              }
-                            }} style={{ cursor: 'pointer' }}  />
+                            <input
+                              id="vendor-management-checkbox"
+                              name="checkbox"
+                              aria-label="Checkbox"
+                              type="checkbox"
+                              checked={vSameAsRegistered}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setVSameAsRegistered(checked);
+                                if (checked) {
+                                  setVBillingAddress1(vRegAddress1);
+                                  setVBillingAddress2(vRegAddress2);
+                                  setVBillingAddress([vRegAddress1, vRegAddress2].filter(Boolean).join(', ') || vRegAddress);
+                                  setVBillingCity(vCity);
+                                  setVBillingState(vState);
+                                  setVBillingCountry(vCountry);
+                                  setVBillingPinCode(vPinCode);
+                                }
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            />
                             Same as Registered Address
                           </label>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <textarea id="vendor-management-billing-address" name="billingAddress" aria-label="Enter billing address" disabled={vSameAsRegistered} value={vSameAsRegistered ? vRegAddress : vBillingAddress} onChange={(e) => setVBillingAddress(e.target.value)} placeholder="Enter billing address" style={{ height: '70px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', color: vSameAsRegistered ? '#64748b' : '#334155' }}  />
+                          <label htmlFor="vendor-management-billing-address-1" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            Address 1 <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span> <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 'normal' }}>(Building / Door / Flat / Street)</span>
+                          </label>
+                          <input
+                            id="vendor-management-billing-address-1"
+                            name="billingAddress1"
+                            aria-label="Billing Address 1"
+                            disabled={vSameAsRegistered}
+                            type="text"
+                            value={vSameAsRegistered ? vRegAddress1 : vBillingAddress1}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setVBillingAddress1(val);
+                              setVBillingAddress([val, vBillingAddress2].filter(Boolean).join(', '));
+                            }}
+                            placeholder="Enter billing address 1"
+                            style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', color: vSameAsRegistered ? '#64748b' : '#334155' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label htmlFor="vendor-management-billing-address-2" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            Address 2 <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 'normal' }}>(Area / Landmark / Road)</span>
+                          </label>
+                          <input
+                            id="vendor-management-billing-address-2"
+                            name="billingAddress2"
+                            aria-label="Billing Address 2"
+                            disabled={vSameAsRegistered}
+                            type="text"
+                            value={vSameAsRegistered ? vRegAddress2 : vBillingAddress2}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setVBillingAddress2(val);
+                              setVBillingAddress([vBillingAddress1, val].filter(Boolean).join(', '));
+                            }}
+                            placeholder="Enter billing address 2"
+                            style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', color: vSameAsRegistered ? '#64748b' : '#334155' }}
+                          />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2652,26 +2828,26 @@ export default function VendorManagementView(props) {
 
                     {/* Section 2: Addresses (Billing & Shipping) */}
                     <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}>
-                      <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1E3A8A', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>Address</h3>
+                      <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1E3A8A', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>Address Details</h3>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <strong style={{ fontSize: '12px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Billing Address</strong>
                           {(() => {
                             const b = viewingVendor.billingAddressObj || {};
-                            const street = b.address || b.street || b.address_1;
-                            const street2 = b.street2 || b.address_2;
-                            const cityStatePin = [b.city, b.state || b.province, b.zip || b.zipcode || b.postal_code || b.pincode].filter(Boolean).join(', ');
-                            const hasStructured = street || street2 || cityStatePin || b.country;
+                            const street = viewingVendor.address_1 || viewingVendor.street || b.address_1 || b.street || b.address;
+                            const street2 = viewingVendor.address_2 || viewingVendor.street2 || b.address_2 || b.street2;
+                            const cityStatePin = [b.city || viewingVendor.city, b.state || b.province || viewingVendor.state, b.zip || b.zipcode || b.postal_code || b.pincode || viewingVendor.pincode].filter(Boolean).join(', ');
+                            const hasStructured = street || street2 || cityStatePin || b.country || viewingVendor.country;
 
                             if (hasStructured) {
                               return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#334155', lineHeight: '1.6' }}>
-                                  {b.attention && <div><strong>Attention:</strong> {b.attention}</div>}
-                                  {street && <div>{street}</div>}
-                                  {street2 && <div>{street2}</div>}
-                                  {cityStatePin && <div>{cityStatePin}</div>}
-                                  {b.country && <div>{b.country || b.country_name}</div>}
-                                  {b.phone && <div style={{ marginTop: '4px', color: '#64748B', fontSize: '12px' }}>Phone: {b.phone}</div>}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                  {b.attention && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Attention</span>{b.attention}</div>}
+                                  {street && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Address 1</span>{street}</div>}
+                                  {street2 && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Address 2</span>{street2}</div>}
+                                  {cityStatePin && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>City, State, PIN</span>{cityStatePin}</div>}
+                                  {(b.country || viewingVendor.country) && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Country</span>{b.country || b.country_name || viewingVendor.country || 'India'}</div>}
+                                  {b.phone && <div style={{ marginTop: '2px', color: '#64748B', fontSize: '12px' }}>Phone: {b.phone}</div>}
                                 </div>
                               );
                             }
@@ -2683,20 +2859,20 @@ export default function VendorManagementView(props) {
                           <strong style={{ fontSize: '12px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Shipping Address</strong>
                           {(() => {
                             const s = viewingVendor.shippingAddressObj || {};
-                            const street = s.address || s.street || s.address_1;
-                            const street2 = s.street2 || s.address_2;
-                            const cityStatePin = [s.city, s.state || s.province, s.zip || s.zipcode || s.postal_code || s.pincode].filter(Boolean).join(', ');
-                            const hasStructured = street || street2 || cityStatePin || s.country;
+                            const street = viewingVendor.address_1 || viewingVendor.street || s.address_1 || s.street || s.address;
+                            const street2 = viewingVendor.address_2 || viewingVendor.street2 || s.address_2 || s.street2;
+                            const cityStatePin = [s.city || viewingVendor.city, s.state || s.province || viewingVendor.state, s.zip || s.zipcode || s.postal_code || s.pincode || viewingVendor.pincode].filter(Boolean).join(', ');
+                            const hasStructured = street || street2 || cityStatePin || s.country || viewingVendor.country;
 
                             if (hasStructured) {
                               return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#334155', lineHeight: '1.6' }}>
-                                  {s.attention && <div><strong>Attention:</strong> {s.attention}</div>}
-                                  {street && <div>{street}</div>}
-                                  {street2 && <div>{street2}</div>}
-                                  {cityStatePin && <div>{cityStatePin}</div>}
-                                  {s.country && <div>{s.country || s.country_name}</div>}
-                                  {s.phone && <div style={{ marginTop: '4px', color: '#64748B', fontSize: '12px' }}>Phone: {s.phone}</div>}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                  {s.attention && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Attention</span>{s.attention}</div>}
+                                  {street && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Address 1</span>{street}</div>}
+                                  {street2 && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Address 2</span>{street2}</div>}
+                                  {cityStatePin && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>City, State, PIN</span>{cityStatePin}</div>}
+                                  {(s.country || viewingVendor.country) && <div><span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', display: 'block' }}>Country</span>{s.country || s.country_name || viewingVendor.country || 'India'}</div>}
+                                  {s.phone && <div style={{ marginTop: '2px', color: '#64748B', fontSize: '12px' }}>Phone: {s.phone}</div>}
                                 </div>
                               );
                             }
@@ -3300,6 +3476,32 @@ export default function VendorManagementView(props) {
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
                        />
                     </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label htmlFor="vendor-management-edit-address-1" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>
+                        Address 1 <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 'normal' }}>(Building / Door / Flat / Street)</span>
+                      </label>
+                      <input id="vendor-management-edit-address-1" name="editAddress1" aria-label="Address 1"
+                        type="text"
+                        value={editingVendor.address_1 || editingVendor.street || editingVendor.billingAddressObj?.address_1 || editingVendor.billingAddressObj?.street || editingVendor.address || ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, address_1: e.target.value, street: e.target.value })}
+                        placeholder="Enter address line 1"
+                        style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
+                       />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label htmlFor="vendor-management-edit-address-2" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>
+                        Address 2 <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 'normal' }}>(Area / Landmark / Road)</span>
+                      </label>
+                      <input id="vendor-management-edit-address-2" name="editAddress2" aria-label="Address 2"
+                        type="text"
+                        value={editingVendor.address_2 || editingVendor.street2 || editingVendor.billingAddressObj?.address_2 || editingVendor.billingAddressObj?.street2 || ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, address_2: e.target.value, street2: e.target.value })}
+                        placeholder="Enter address line 2"
+                        style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
+                       />
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
@@ -3311,7 +3513,39 @@ export default function VendorManagementView(props) {
                     </button>
                     <button
                       onClick={() => {
-                        setVendorList(prev => prev.map(v => v.code === editingVendor.code ? editingVendor : v));
+                        const a1 = editingVendor.address_1 || editingVendor.street || '';
+                        const a2 = editingVendor.address_2 || editingVendor.street2 || '';
+                        const full = [a1, a2].filter(Boolean).join(', ') || editingVendor.address || '';
+                        const updated = {
+                          ...editingVendor,
+                          address: full,
+                          address_1: a1,
+                          address_2: a2,
+                          street: a1,
+                          street2: a2,
+                          billingAddressObj: {
+                            ...(editingVendor.billingAddressObj || {}),
+                            address: a1 || full,
+                            address_1: a1,
+                            address_2: a2,
+                            street: a1,
+                            street2: a2
+                          },
+                          shippingAddressObj: {
+                            ...(editingVendor.shippingAddressObj || {}),
+                            address: a1 || full,
+                            address_1: a1,
+                            address_2: a2,
+                            street: a1,
+                            street2: a2
+                          }
+                        };
+                        fetch('/api/vendors', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(updated)
+                        }).catch(() => {});
+                        setVendorList(prev => prev.map(v => (v.code === editingVendor.code || v.id === editingVendor.id) ? updated : v));
                         setEditingVendor(null);
                       }}
                       style={{ border: 'none', background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}

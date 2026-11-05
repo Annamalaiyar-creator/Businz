@@ -4220,6 +4220,10 @@ app.post('/api/vendors', async (req, res) => {
         const vName = String(item.name || item.companyName || `Vendor ${i + 1}`).trim();
         const vId = item.id || item.code || item.vendorCode || `VEND-${100 + currentVendors.length + 1}`;
 
+        const vAddress1 = item.address_1 || item.address1 || item.street || item.address || '';
+        const vAddress2 = item.address_2 || item.address2 || item.street2 || '';
+        const vFullAddress = [vAddress1, vAddress2].filter(Boolean).join(', ') || item.address || '';
+
         const vRecord = {
           id: vId,
           code: item.code || vId,
@@ -4241,10 +4245,37 @@ app.post('/api/vendors', async (req, res) => {
           pan: item.pan || item.pan_no || '—',
           currency: item.currency || item.currency_code || 'INR',
           website: item.website || '—',
-          address: item.address || '',
+          address: vFullAddress,
+          address_1: vAddress1,
+          address_2: vAddress2,
+          street: vAddress1,
+          street2: vAddress2,
           city: item.city || '',
           state: item.state || '',
-          pincode: item.pincode || '',
+          pincode: item.pincode || item.pinCode || item.zip || '',
+          country: item.country || 'India',
+          billingAddressObj: item.billingAddressObj || {
+            address: vAddress1 || vFullAddress,
+            address_1: vAddress1,
+            address_2: vAddress2,
+            street: vAddress1,
+            street2: vAddress2,
+            city: item.city || '',
+            state: item.state || '',
+            zip: item.pincode || item.pinCode || item.zip || '',
+            country: item.country || 'India'
+          },
+          shippingAddressObj: item.shippingAddressObj || {
+            address: vAddress1 || vFullAddress,
+            address_1: vAddress1,
+            address_2: vAddress2,
+            street: vAddress1,
+            street2: vAddress2,
+            city: item.city || '',
+            state: item.state || '',
+            zip: item.pincode || item.pinCode || item.zip || '',
+            country: item.country || 'India'
+          },
           createdAt: item.createdAt || new Date().toISOString()
         };
 
@@ -4279,6 +4310,10 @@ app.post('/api/vendors', async (req, res) => {
     const vendorName = String(incoming.name || incoming.companyName || 'New Vendor').trim();
     const vendorId = incoming.id || incoming.code || incoming.vendorCode || `VEND-${100 + localVendors.length + 1}`;
 
+    const vAddress1 = incoming.address_1 || incoming.address1 || incoming.street || incoming.address || '';
+    const vAddress2 = incoming.address_2 || incoming.address2 || incoming.street2 || '';
+    const vFullAddress = [vAddress1, vAddress2].filter(Boolean).join(', ') || incoming.address || '';
+
     const vendorRecord = {
       id: vendorId,
       code: incoming.code || vendorId,
@@ -4300,7 +4335,37 @@ app.post('/api/vendors', async (req, res) => {
       pan: incoming.pan || incoming.pan_no || '—',
       currency: incoming.currency || incoming.currency_code || 'INR',
       website: incoming.website || '—',
-      address: incoming.address || '',
+      address: vFullAddress,
+      address_1: vAddress1,
+      address_2: vAddress2,
+      street: vAddress1,
+      street2: vAddress2,
+      city: incoming.city || '',
+      state: incoming.state || '',
+      pincode: incoming.pincode || incoming.pinCode || incoming.zip || '',
+      country: incoming.country || 'India',
+      billingAddressObj: incoming.billingAddressObj || {
+        address: vAddress1 || vFullAddress,
+        address_1: vAddress1,
+        address_2: vAddress2,
+        street: vAddress1,
+        street2: vAddress2,
+        city: incoming.city || '',
+        state: incoming.state || '',
+        zip: incoming.pincode || incoming.pinCode || incoming.zip || '',
+        country: incoming.country || 'India'
+      },
+      shippingAddressObj: incoming.shippingAddressObj || {
+        address: vAddress1 || vFullAddress,
+        address_1: vAddress1,
+        address_2: vAddress2,
+        street: vAddress1,
+        street2: vAddress2,
+        city: incoming.city || '',
+        state: incoming.state || '',
+        zip: incoming.pincode || incoming.pinCode || incoming.zip || '',
+        country: incoming.country || 'India'
+      },
       createdAt: incoming.createdAt || new Date().toISOString()
     };
 
@@ -4847,14 +4912,30 @@ app.get('/api/vendors/:id', async (req, res) => {
     );
 
     if (v) {
-      const billingObj = v.billingAddressObj || {
-        address: v.address || 'Industrial Estate, Main Road',
+      const addr1 = v.address_1 || v.street || (v.billingAddressObj && (v.billingAddressObj.address_1 || v.billingAddressObj.street)) || v.address || '';
+      const addr2 = v.address_2 || v.street2 || (v.billingAddressObj && (v.billingAddressObj.address_2 || v.billingAddressObj.street2)) || '';
+
+      const billingObj = v.billingAddressObj ? { ...v.billingAddressObj } : {
+        address: addr1 || v.address || 'Industrial Estate, Main Road',
+        address_1: addr1,
+        address_2: addr2,
+        street: addr1,
+        street2: addr2,
         city: v.city || 'Chennai',
         state: v.state || 'Tamil Nadu',
         zip: v.pincode || '600001',
-        country: 'India'
+        country: v.country || 'India'
       };
-      const shippingObj = v.shippingAddressObj || billingObj;
+      if (!billingObj.address_1) billingObj.address_1 = addr1;
+      if (!billingObj.address_2) billingObj.address_2 = addr2;
+      if (!billingObj.street) billingObj.street = addr1;
+      if (!billingObj.street2) billingObj.street2 = addr2;
+
+      const shippingObj = v.shippingAddressObj ? { ...v.shippingAddressObj } : { ...billingObj };
+      if (!shippingObj.address_1) shippingObj.address_1 = addr1;
+      if (!shippingObj.address_2) shippingObj.address_2 = addr2;
+      if (!shippingObj.street) shippingObj.street = addr1;
+      if (!shippingObj.street2) shippingObj.street2 = addr2;
 
       const detailedVendor = {
         id: v.id || v.code,
@@ -4875,6 +4956,10 @@ app.get('/api/vendors/:id', async (req, res) => {
         pan: v.pan && v.pan !== '—' ? v.pan : '',
         currency: v.currency || 'INR',
         website: v.website || '—',
+        address_1: addr1,
+        address_2: addr2,
+        street: addr1,
+        street2: addr2,
         billingAddressObj: billingObj,
         shippingAddressObj: shippingObj,
         billingAddress: v.address || 'Industrial Estate, Main Road, Tamil Nadu',
