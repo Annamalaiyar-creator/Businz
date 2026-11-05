@@ -2154,6 +2154,43 @@ const MIME_BY_EXT = {
   '.json': 'application/json'
 };
 
+function extractDocCandidatesFromRecord(item) {
+  if (!item || typeof item !== 'object') return [];
+  return [
+    item.paymentProofDoc,
+    ...(Array.isArray(item.paymentProofDocs) ? item.paymentProofDocs : []),
+    item.deliveryAddressProofDoc,
+    ...(Array.isArray(item.deliveryAddressProofDocs) ? item.deliveryAddressProofDocs : []),
+    item.deliveryProofDoc,
+    item.addressProofDoc,
+    item.balanceProofDoc,
+    item.balancePaymentProofDoc,
+    item.proofDoc,
+    item.paymentSlip,
+    item.paymentDoc,
+    item.advancePaymentProofDoc,
+    item.proofDocData,
+    item.payments?.proofDocObj,
+    item.payments?.balanceProofDocObj,
+    ...(Array.isArray(item.payments?.proofDocObjs) ? item.payments.proofDocObjs : []),
+    ...(Array.isArray(item.payments?.paymentProofDocs) ? item.payments.paymentProofDocs : []),
+    item.payments?.proofDoc,
+    item.payments?.balanceProofDoc,
+    item.lrCopyDoc,
+    item.vehicleLoading?.lrCopyDoc,
+    ...(Array.isArray(item.vehicleLoading?.photos) ? item.vehicleLoading.photos : []),
+    ...(Array.isArray(item.vehicleLoading?.videos) ? item.vehicleLoading.videos : []),
+    ...(Array.isArray(item.dispatchPackingMedia?.photos) ? item.dispatchPackingMedia.photos : []),
+    ...(Array.isArray(item.dispatchPackingMedia?.videos) ? item.dispatchPackingMedia.videos : []),
+    ...(Array.isArray(item.loadingPhotos) ? item.loadingPhotos : []),
+    ...(Array.isArray(item.photos) ? item.photos : []),
+    ...(Array.isArray(item.vehiclePhotos) ? item.vehiclePhotos : []),
+    item.invoiceDoc,
+    item.signedInvoiceDoc,
+    ...(Array.isArray(item.uploadedDocuments) ? item.uploadedDocuments : [])
+  ].filter(Boolean);
+}
+
 const handleUploadFallback = async (req, res) => {
   try {
     let relPath = Array.isArray(req.params.filePath) ? req.params.filePath.join('/') : (req.params.filePath || '');
@@ -2266,39 +2303,39 @@ const handleUploadFallback = async (req, res) => {
       }
     }
 
-    // Tier 5: Check BOM store records in PostgreSQL / bom_store.json
+    // Tier 5: Check BOM, PI, and Invoice store records in PostgreSQL / JSON stores
     try {
-      const bomStoreFile = getStoreFilePath('bom_store.json');
-      let bomList = [];
-      if (fs.existsSync(bomStoreFile)) {
-        bomList = JSON.parse(fs.readFileSync(bomStoreFile, 'utf8') || '[]');
-      }
-      if (Array.isArray(bomList)) {
-        const normSearch = baseName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
-        for (const bom of bomList) {
-          const docCandidates = [
-            bom.paymentProofDoc,
-            ...(Array.isArray(bom.paymentProofDocs) ? bom.paymentProofDocs : []),
-            bom.deliveryAddressProofDoc,
-            ...(Array.isArray(bom.deliveryAddressProofDocs) ? bom.deliveryAddressProofDocs : []),
-            bom.balanceProofDoc,
-            bom.payments?.proofDocObj,
-            bom.payments?.balanceProofDocObj,
-            bom.lrCopyDoc,
-            bom.vehicleLoading?.lrCopyDoc,
-            ...(Array.isArray(bom.vehicleLoading?.photos) ? bom.vehicleLoading.photos : []),
-            ...(Array.isArray(bom.vehicleLoading?.videos) ? bom.vehicleLoading.videos : []),
-            ...(Array.isArray(bom.dispatchPackingMedia?.photos) ? bom.dispatchPackingMedia.photos : []),
-            ...(Array.isArray(bom.dispatchPackingMedia?.videos) ? bom.dispatchPackingMedia.videos : []),
-            ...(Array.isArray(bom.loadingPhotos) ? bom.loadingPhotos : []),
-            ...(Array.isArray(bom.photos) ? bom.photos : []),
-            ...(Array.isArray(bom.vehiclePhotos) ? bom.vehiclePhotos : [])
-          ].filter(Boolean);
+      const targetStoreFiles = ['bom_store.json', 'sales_pi_store.json', 'proforma_invoice_store.json', 'invoice_store.json'];
+      const normSearch = baseName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
+      const searchBaseWithoutExt = path.basename(baseName, path.extname(baseName)).replace(/[^a-z0-9]/gi, '').toLowerCase();
 
+      for (const storeFileName of targetStoreFiles) {
+        const storeFilePath = getStoreFilePath(storeFileName);
+        if (!fs.existsSync(storeFilePath)) continue;
+        let recordList = [];
+        try {
+          recordList = JSON.parse(fs.readFileSync(storeFilePath, 'utf8') || '[]');
+        } catch (_) { continue; }
+        if (!Array.isArray(recordList)) {
+          if (recordList && Array.isArray(recordList.pis)) recordList = recordList.pis;
+          else if (recordList && Array.isArray(recordList.boms)) recordList = recordList.boms;
+          else continue;
+        }
+
+        for (const record of recordList) {
+          const docCandidates = extractDocCandidatesFromRecord(record);
           for (const d of docCandidates) {
             const dName = typeof d === 'string' ? d : (d.name || d.originalName || '');
             const normD = dName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
-            if (normD && (normD === normSearch || normD.includes(normSearch) || normSearch.includes(normD))) {
+            const dBaseWithoutExt = path.basename(dName, path.extname(dName)).replace(/[^a-z0-9]/gi, '').toLowerCase();
+            const isMatch = normD && (
+              normD === normSearch ||
+              normD.includes(normSearch) ||
+              normSearch.includes(normD) ||
+              (searchBaseWithoutExt.length >= 3 && dBaseWithoutExt && (dBaseWithoutExt.includes(searchBaseWithoutExt) || searchBaseWithoutExt.includes(dBaseWithoutExt)))
+            );
+
+            if (isMatch) {
               if (d.storagePath) {
                 const spClean = d.storagePath.replace(/^bom-documents\//, '');
                 const diskP = path.join(uploadsDir, 'bom-documents', spClean);
@@ -2306,17 +2343,17 @@ const handleUploadFallback = async (req, res) => {
                   return sendMatchedFile(diskP);
                 }
               }
-              const dRaw = d.dataUrl || d.fileData || d.proofDocData;
+              const dRaw = d.dataUrl || d.fileData || d.proofDocData || ((typeof d === 'string' && d.startsWith('data:')) ? d : null);
               if (dRaw && typeof dRaw === 'string' && dRaw.startsWith('data:')) {
                 const m = dRaw.match(/^data:([^;]+);base64,(.+)$/);
                 if (m) {
                   const mime = m[1];
                   const buf = Buffer.from(m[2], 'base64');
                   try {
-                    if (process.env.BUSINZ_TEST_MODE !== 'true' && !isOptimizationTestMode()) {
-                      const saveDisk = path.join(uploadsDir, sanitizedName);
-                      if (!fs.existsSync(saveDisk)) fs.writeFileSync(saveDisk, buf);
-                    }
+                    const saveDisk = path.join(uploadsDir, sanitizedName);
+                    if (!fs.existsSync(saveDisk)) fs.writeFileSync(saveDisk, buf);
+                    saveCachedMedia(sanitizedName, `/api/uploads/${sanitizedName}`);
+                    if (dName && dName !== sanitizedName) saveCachedMedia(dName, `/api/uploads/${sanitizedName}`);
                   } catch (_) {}
                   return sendBufferData(buf, mime);
                 }
@@ -2401,46 +2438,61 @@ app.get('/api/media/find/:name', (req, res) => {
       }
     }
 
-    // Fast Path 4: Search BOM store records for matching documents
+    // Fast Path 4: Search BOM, PI, and Invoice store records for matching documents
     try {
-      const bomStoreFile = getStoreFilePath('bom_store.json');
-      let bomList = [];
-      if (fs.existsSync(bomStoreFile)) {
-        bomList = JSON.parse(fs.readFileSync(bomStoreFile, 'utf8') || '[]');
-      }
-      if (Array.isArray(bomList)) {
-        const normSearch = rawSearch.replace(/[\s_]+/g, ' ').trim();
-        for (const bom of bomList) {
-          const candidates = [
-            bom.paymentProofDoc,
-            ...(Array.isArray(bom.paymentProofDocs) ? bom.paymentProofDocs : []),
-            bom.deliveryAddressProofDoc,
-            ...(Array.isArray(bom.deliveryAddressProofDocs) ? bom.deliveryAddressProofDocs : []),
-            bom.balanceProofDoc,
-            bom.payments?.proofDocObj,
-            bom.payments?.balanceProofDocObj,
-            bom.lrCopyDoc,
-            bom.vehicleLoading?.lrCopyDoc,
-            ...(Array.isArray(bom.vehicleLoading?.photos) ? bom.vehicleLoading.photos : []),
-            ...(Array.isArray(bom.vehicleLoading?.videos) ? bom.vehicleLoading.videos : []),
-            ...(Array.isArray(bom.dispatchPackingMedia?.photos) ? bom.dispatchPackingMedia.photos : []),
-            ...(Array.isArray(bom.dispatchPackingMedia?.videos) ? bom.dispatchPackingMedia.videos : []),
-            ...(Array.isArray(bom.loadingPhotos) ? bom.loadingPhotos : []),
-            ...(Array.isArray(bom.photos) ? bom.photos : []),
-            ...(Array.isArray(bom.vehiclePhotos) ? bom.vehiclePhotos : [])
-          ].filter(Boolean);
+      const targetStoreFiles = ['bom_store.json', 'sales_pi_store.json', 'proforma_invoice_store.json', 'invoice_store.json'];
+      const normSearch = rawSearch.replace(/[\s_]+/g, ' ').trim();
+      const searchBaseWithoutExt = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '').toLowerCase();
 
-          for (const doc of candidates) {
+      for (const storeFileName of targetStoreFiles) {
+        const storeFilePath = getStoreFilePath(storeFileName);
+        if (!fs.existsSync(storeFilePath)) continue;
+        let recordList = [];
+        try {
+          recordList = JSON.parse(fs.readFileSync(storeFilePath, 'utf8') || '[]');
+        } catch (_) { continue; }
+        if (!Array.isArray(recordList)) {
+          if (recordList && Array.isArray(recordList.pis)) recordList = recordList.pis;
+          else if (recordList && Array.isArray(recordList.boms)) recordList = recordList.boms;
+          else continue;
+        }
+
+        for (const record of recordList) {
+          const docCandidates = extractDocCandidatesFromRecord(record);
+          for (const doc of docCandidates) {
             const dName = typeof doc === 'string' ? doc : (doc.name || doc.originalName || '');
             const normDoc = dName.replace(/[\s_]+/g, ' ').toLowerCase().trim();
-            if (normDoc && (normDoc === normSearch || normDoc.includes(normSearch) || normSearch.includes(normDoc))) {
+            const dBaseWithoutExt = path.basename(dName, path.extname(dName)).replace(/[^a-z0-9]/gi, '').toLowerCase();
+            const isMatch = normDoc && (
+              normDoc === normSearch ||
+              normDoc.includes(normSearch) ||
+              normSearch.includes(normDoc) ||
+              (searchBaseWithoutExt.length >= 3 && dBaseWithoutExt && (dBaseWithoutExt.includes(searchBaseWithoutExt) || searchBaseWithoutExt.includes(dBaseWithoutExt)))
+            );
+
+            if (isMatch) {
               if (doc.storagePath) {
                 const spClean = doc.storagePath.replace(/^bom-documents\//, '');
                 return res.json({ found: true, url: `/api/uploads/bom-documents/${spClean}`, filename: dName });
               }
-              const dData = doc.dataUrl || doc.fileData || doc.proofDocData;
-              if (dData && typeof dData === 'string') {
+              const dData = doc.dataUrl || doc.fileData || doc.proofDocData || ((typeof doc === 'string' && doc.startsWith('data:')) ? doc : null);
+              if (dData && typeof dData === 'string' && dData.startsWith('data:')) {
+                const matches = dData.match(/^data:([^;]+);base64,(.+)$/);
+                if (matches) {
+                  const buf = Buffer.from(matches[2], 'base64');
+                  const sanitizedName = dName.replace(/[^a-z0-9._-]/gi, '_');
+                  const diskPath = path.join(uploadsDir, sanitizedName);
+                  try {
+                    if (!fs.existsSync(diskPath)) fs.writeFileSync(diskPath, buf);
+                    saveCachedMedia(sanitizedName, `/api/uploads/${sanitizedName}`);
+                    if (dName && dName !== sanitizedName) saveCachedMedia(dName, `/api/uploads/${sanitizedName}`);
+                  } catch (_) {}
+                  return res.json({ found: true, url: `/api/uploads/${sanitizedName}`, filename: dName });
+                }
                 return res.json({ found: true, url: dData, filename: dName });
+              }
+              if (doc.url && typeof doc.url === 'string') {
+                return res.json({ found: true, url: doc.url, filename: dName });
               }
               return res.json({ found: true, url: `/api/uploads/${encodeURIComponent(dName)}`, filename: dName });
             }

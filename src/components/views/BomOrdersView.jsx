@@ -2577,7 +2577,7 @@ export default function BomOrdersView(props) {
             </div>
           </div>
           <div style={{ padding: '20px', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '340px', backgroundColor: '#0F172A' }}>
-            {!resolvedData ? (
+            {(!resolvedData || previewDocModal?._loadFailed) ? (
               rawDoc?._fetchingServer && !rawDoc?._fetchingServerDone ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
                   <div style={{ width: '36px', height: '36px', border: '3px solid #0E7490', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 14px', animation: 'spin 0.8s linear infinite' }} />
@@ -2634,16 +2634,16 @@ export default function BomOrdersView(props) {
                         if (data?.found && data?.url) {
                           const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
                           saveMediaToCache(docName, cleanUrl);
-                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: cleanUrl, dataUrl: cleanUrl } } : null);
-                        } else if (!e.currentTarget.src.includes('/api/uploads/')) {
-                          e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: cleanUrl, dataUrl: cleanUrl }, _loadFailed: false } : null);
+                        } else {
+                          setPreviewDocModal(prev => prev ? { ...prev, _loadFailed: true } : null);
                         }
                       }).catch(() => {
-                        if (!e.currentTarget.src.includes('/api/uploads/')) {
-                          e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
-                        }
+                        setPreviewDocModal(prev => prev ? { ...prev, _loadFailed: true } : null);
                       });
+                    return;
                   }
+                  setPreviewDocModal(prev => prev ? { ...prev, _loadFailed: true } : null);
                 }}
                 style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
               />

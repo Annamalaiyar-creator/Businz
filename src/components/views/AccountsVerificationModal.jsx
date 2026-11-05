@@ -12,6 +12,63 @@ import { supabase } from "../../supabaseClient";
 import StatusBadge from "../StatusBadge";
 // VRMBomPrintSheet removed per user mandate: strictly display itemized interactive BOM table with centered kit pricing in accounts login
 
+function ResilientDocThumbnail({ docUrl, docName, isPdf, fallbackColor = '#2563EB', alt = 'Document' }) {
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState(docUrl);
+
+  useEffect(() => {
+    setCurrentUrl(docUrl);
+    setLoadFailed(false);
+  }, [docUrl]);
+
+  if (isPdf) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
+        <FileText size={30} />
+        <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
+        <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
+      </div>
+    );
+  }
+
+  if (currentUrl && !loadFailed) {
+    return (
+      <img
+        src={currentUrl}
+        alt={alt}
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        onError={() => {
+          if (docName) {
+            fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+              .then(r => r.json())
+              .then(data => {
+                if (data?.found && data?.url) {
+                  const clean = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                  setCurrentUrl(clean);
+                } else {
+                  setLoadFailed(true);
+                }
+              })
+              .catch(() => setLoadFailed(true));
+          } else {
+            setLoadFailed(true);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: fallbackColor, textAlign: 'center', padding: '4px' }}>
+      <FileText size={26} />
+      <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {docName || 'Document'}
+      </span>
+      <span style={{ fontSize: '9px', color: fallbackColor, fontWeight: '700' }}>Click to View</span>
+    </div>
+  );
+}
+
 export default function AccountsVerificationModal({
   accountsVerificationModal,
   setAccountsVerificationModal,
@@ -94,6 +151,22 @@ export default function AccountsVerificationModal({
 
     if (!immediate && docName) {
       immediate = getMediaFromCache(docName);
+    }
+
+    const srcPiNo = accountsVerificationModal.sourcePiNo || accountsVerificationModal.piNo;
+    if (!immediate && srcPiNo && typeof window !== 'undefined') {
+      try {
+        const rawPis = localStorage.getItem('controlroom_pi_store') || localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('businz_pi_store');
+        if (rawPis) {
+          const parsed = JSON.parse(rawPis);
+          const piList = Array.isArray(parsed) ? parsed : (parsed.pis || []);
+          const pi = piList.find(p => p.piNo === srcPiNo || p.id === srcPiNo);
+          if (pi) {
+            const piData = pi.proofDocData || pi.payments?.proofDocData || (typeof pi.paymentProofDoc === 'string' && pi.paymentProofDoc.startsWith('data:') ? pi.paymentProofDoc : pi.paymentProofDoc?.dataUrl);
+            if (piData) immediate = piData;
+          }
+        }
+      } catch (_) {}
     }
 
     if (immediate && !immediate.startsWith('blob:')) {
@@ -1172,37 +1245,13 @@ export default function AccountsVerificationModal({
                             }}
                             title="Click to view full payment slip"
                           >
-                            {isDocPdf ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
-                                <FileText size={30} />
-                                <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
-                                <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
-                              </div>
-                            ) : pDocDataUrl ? (
-                              <img
-                                src={pDocDataUrl}
-                                alt={docName}
-                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                                onError={(e) => {
-                                  if (docName) {
-                                    const cleanName = encodeURIComponent(docName);
-                                    if (!e.currentTarget.src.includes(`/api/uploads/${cleanName}`)) {
-                                      e.currentTarget.src = `/api/uploads/${cleanName}`;
-                                      return;
-                                    }
-                                  }
-                                  e.currentTarget.style.display = 'none';
-                                }}
-                              />
-                            ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#2563EB', textAlign: 'center', padding: '4px' }}>
-                                <FileText size={26} />
-                                <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {docName}
-                                </span>
-                                <span style={{ fontSize: '9px', color: '#2563EB', fontWeight: '700' }}>Click to View</span>
-                              </div>
-                            )}
+                            <ResilientDocThumbnail
+                              docUrl={pDocDataUrl}
+                              docName={docName}
+                              isPdf={isDocPdf}
+                              fallbackColor="#2563EB"
+                              alt={docName}
+                            />
                           </div>
 
                           <div style={{ minWidth: 0 }}>
@@ -1593,29 +1642,13 @@ export default function AccountsVerificationModal({
                       }}
                       title="Click to view full address proof"
                     >
-                      {isAddrDocPdf ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
-                          <FileText size={32} />
-                          <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
-                          <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
-                        </div>
-                      ) : aDocDataUrl ? (
-                        <img
-                          src={aDocDataUrl}
-                          alt="Address Proof"
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          onError={(e) => {
-                            if (addrDocName && !e.currentTarget.src.includes('/api/uploads/')) {
-                              e.currentTarget.src = `/api/uploads/${encodeURIComponent(addrDocName)}`;
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#0E7490' }}>
-                          <Loader2 className="animate-spin" size={20} />
-                          <span style={{ fontSize: '10px', fontWeight: '700' }}>Loading Proof...</span>
-                        </div>
-                      )}
+                      <ResilientDocThumbnail
+                        docUrl={aDocDataUrl}
+                        docName={addrDocName}
+                        isPdf={isAddrDocPdf}
+                        fallbackColor="#0E7490"
+                        alt="Address Proof"
+                      />
                     </div>
 
                     <div style={{ flex: 1, minWidth: '220px' }}>
@@ -2249,8 +2282,8 @@ function RecordedProofViewerModal({
   useEffect(() => {
     let active = true;
 
-    // 1. If explicit URL already provided, we're done
-    if (explicitUrl) {
+    // 1. If explicit URL already provided and is data/blob, we're done
+    if (explicitUrl && (explicitUrl.startsWith('data:') || explicitUrl.startsWith('blob:'))) {
       setDocUrl(explicitUrl);
       setLoading(false);
       return;
@@ -2270,11 +2303,13 @@ function RecordedProofViewerModal({
     if (direct && !direct.startsWith('blob:')) {
       if (direct.startsWith('/uploads/')) direct = `/api${direct}`;
       setDocUrl(direct);
-      setLoading(false);
-      return;
+      if (direct.startsWith('data:')) {
+        setLoading(false);
+        return;
+      }
     }
 
-    setLoading(true);
+    setLoading(!explicitUrl && !direct);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -2283,6 +2318,30 @@ function RecordedProofViewerModal({
 
     const resolveAsync = async () => {
       try {
+        // Fast: Check source PI in local storage
+        const srcPiNo = viewingProofDocModal?.sourcePiNo || viewingProofDocModal?.piNo;
+        if (srcPiNo && typeof window !== 'undefined') {
+          try {
+            const rawPis = localStorage.getItem('controlroom_pi_store') || localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('businz_pi_store');
+            if (rawPis) {
+              const parsed = JSON.parse(rawPis);
+              const list = Array.isArray(parsed) ? parsed : (parsed.pis || []);
+              const pi = list.find(p => p.piNo === srcPiNo || p.id === srcPiNo);
+              if (pi) {
+                const piData = !isAddressDoc
+                  ? (pi.proofDocData || pi.payments?.proofDocData || (typeof pi.paymentProofDoc === 'string' && pi.paymentProofDoc.startsWith('data:') ? pi.paymentProofDoc : pi.paymentProofDoc?.dataUrl))
+                  : (pi.deliveryProofDoc?.dataUrl || (typeof pi.deliveryProofDoc === 'string' && pi.deliveryProofDoc.startsWith('data:') ? pi.deliveryProofDoc : null));
+                if (piData && active) {
+                  setDocUrl(piData);
+                  setLoading(false);
+                  setImageError(false);
+                  return;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
         // 3. Storage resolver (Supabase / VPS bucket)
         if (rawProof && (rawProof.storageBucket || rawProof.storagePath)) {
           try {
@@ -2292,6 +2351,7 @@ function RecordedProofViewerModal({
               setDocUrl(cleanUrl);
               if (docName) saveMediaToCache(docName, cleanUrl);
               setLoading(false);
+              setImageError(false);
               return;
             }
           } catch (_) {}
@@ -2304,6 +2364,7 @@ function RecordedProofViewerModal({
             if (active && cUrl) {
               setDocUrl(cUrl);
               setLoading(false);
+              setImageError(false);
               return;
             }
           } catch (_) {}
@@ -2318,6 +2379,7 @@ function RecordedProofViewerModal({
                 setDocUrl(cleanUrl);
                 saveMediaToCache(docName, cleanUrl);
                 setLoading(false);
+                setImageError(false);
                 return;
               }
             }
@@ -2331,6 +2393,7 @@ function RecordedProofViewerModal({
               if (headRes && headRes.ok && active) {
                 setDocUrl(directUploadUrl);
                 setLoading(false);
+                setImageError(false);
                 return;
               }
             } catch (_) {}
@@ -2345,6 +2408,7 @@ function RecordedProofViewerModal({
               if (headRes && headRes.ok && active) {
                 setDocUrl(catUrl);
                 setLoading(false);
+                setImageError(false);
                 return;
               }
             } catch (_) {}

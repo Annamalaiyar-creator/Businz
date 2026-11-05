@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
-  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle, MessageSquare, Mail, User, Camera, AlertCircle
+  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle, MessageSquare, Mail, User, Camera, AlertCircle, Loader2
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache } from "../../utils/otherViewsShared";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -528,161 +528,313 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
       );
 }
 
-      export function ViewingProofDocModal({ viewingProofDocModal, onClose, bomStore = [] }) {
-  return (() => {
-        const bRef = viewingProofDocModal.bomCode || viewingProofDocModal.code || viewingProofDocModal.poNo;
-        const matchedBom = bomStore.find(b => b.bomCode === bRef || b.code === bRef || (b.salesOrderNo && b.salesOrderNo === bRef));
-        const docTarget = viewingProofDocModal.targetDoc || viewingProofDocModal.doc;
-        const rawProof = docTarget || viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.payments?.proofDoc || viewingProofDocModal.proofDoc || viewingProofDocModal.salesPoDetails?.proofDocObj;
-        const docName = viewingProofDocModal.targetDocName || (typeof rawProof === 'string' ? rawProof : rawProof?.name || rawProof?.originalName || viewingProofDocModal.paymentProofDocName || 'Payment_Proof');
-        const salesPaymentProof = docTarget || viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.salesPoDetails?.proofDocObj;
-        let pDocDataUrl = viewingProofDocModal.targetDocUrl || ((typeof salesPaymentProof === 'string' && salesPaymentProof.startsWith('data:'))
-          ? salesPaymentProof
-          : (salesPaymentProof?.dataUrl || salesPaymentProof?.fileData || salesPaymentProof?.url || (typeof rawProof === 'string' && rawProof.startsWith('data:') ? rawProof : null) || rawProof?.dataUrl || rawProof?.fileData || rawProof?.url));
-        if (!pDocDataUrl && docName) {
-          pDocDataUrl = getMediaFromCache(docName);
+export function ViewingProofDocModal({ viewingProofDocModal, onClose, bomStore = [] }) {
+  if (!viewingProofDocModal) return null;
+
+  const bRef = viewingProofDocModal.bomCode || viewingProofDocModal.code || viewingProofDocModal.poNo;
+  const matchedBom = bomStore.find(b => b.bomCode === bRef || b.code === bRef || (b.salesOrderNo && b.salesOrderNo === bRef));
+  const docTarget = viewingProofDocModal.targetDoc || viewingProofDocModal.doc;
+  const rawProof = docTarget || viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.payments?.proofDoc || viewingProofDocModal.proofDoc || viewingProofDocModal.salesPoDetails?.proofDocObj;
+  const docName = viewingProofDocModal.targetDocName || (typeof rawProof === 'string' ? rawProof : rawProof?.name || rawProof?.originalName || viewingProofDocModal.paymentProofDocName || 'Payment_Proof');
+  const salesPaymentProof = docTarget || viewingProofDocModal.paymentProofDoc || matchedBom?.paymentProofDoc || viewingProofDocModal.payments?.proofDocObj || viewingProofDocModal.salesPoDetails?.proofDocObj;
+
+  const initialDirectUrl = viewingProofDocModal.targetDocUrl || ((typeof salesPaymentProof === 'string' && salesPaymentProof.startsWith('data:'))
+    ? salesPaymentProof
+    : (salesPaymentProof?.dataUrl || salesPaymentProof?.fileData || salesPaymentProof?.url || (typeof rawProof === 'string' && rawProof.startsWith('data:') ? rawProof : null) || rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || (docName ? getMediaFromCache(docName) : null)));
+
+  const [docUrl, setDocUrl] = useState(initialDirectUrl || null);
+  const [loading, setLoading] = useState(!initialDirectUrl);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  const bCode = viewingProofDocModal.bomCode || viewingProofDocModal.code || viewingProofDocModal.poNo || 'BOM-2026';
+  const cName = viewingProofDocModal.customerName || viewingProofDocModal.companyName || viewingProofDocModal.vendor || 'Customer';
+  const srcPiNo = viewingProofDocModal.sourcePiNo || viewingProofDocModal.piNo || matchedBom?.sourcePiNo || matchedBom?.piNo;
+
+  useEffect(() => {
+    let active = true;
+
+    // Fast check: look in source PI in local storage if not already resolved with data:
+    if (!docUrl || docUrl.startsWith('/api/uploads/')) {
+      if (srcPiNo && typeof window !== 'undefined') {
+        try {
+          const rawPis = localStorage.getItem('controlroom_pi_store') || localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('businz_pi_store');
+          if (rawPis) {
+            const parsed = JSON.parse(rawPis);
+            const list = Array.isArray(parsed) ? parsed : (parsed.pis || []);
+            const pi = list.find(p => p.piNo === srcPiNo || p.id === srcPiNo);
+            if (pi) {
+              const pData = pi.proofDocData || pi.payments?.proofDocData || (typeof pi.paymentProofDoc === 'string' && pi.paymentProofDoc.startsWith('data:') ? pi.paymentProofDoc : pi.paymentProofDoc?.dataUrl);
+              if (pData && active) {
+                setDocUrl(pData);
+                setLoading(false);
+                setLoadFailed(false);
+                return;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (docUrl && (docUrl.startsWith('data:') || docUrl.startsWith('blob:'))) {
+      setLoading(false);
+      return;
+    }
+
+    const resolveAsync = async () => {
+      try {
+        if (docName) {
+          const cUrl = await getMediaFromCacheAsync(docName);
+          if (cUrl && active) {
+            setDocUrl(cUrl);
+            setLoading(false);
+            setLoadFailed(false);
+            return;
+          }
+
+          const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`).catch(() => null);
+          if (res && res.ok) {
+            const data = await res.json().catch(() => null);
+            if (data?.found && data?.url && active) {
+              const clean = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+              setDocUrl(clean);
+              saveMediaToCache(docName, clean);
+              setLoading(false);
+              setLoadFailed(false);
+              return;
+            }
+          }
         }
-        const bCode = viewingProofDocModal.bomCode || viewingProofDocModal.code || viewingProofDocModal.poNo || 'BOM-2026';
-        const cName = viewingProofDocModal.customerName || viewingProofDocModal.companyName || viewingProofDocModal.vendor || 'Customer';
-        const amtVal = parseFloat(viewingProofDocModal.grandTotal || viewingProofDocModal.invAmt || 0);
-        const pType = viewingProofDocModal.paymentType || '100% Advance';
 
-        return (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.7)',
-            backdropFilter: 'blur(6px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 100000,
-            padding: '20px',
-            fontFamily: "'DM Sans', sans-serif"
-          }}>
+        if (rawProof) {
+          const sUrl = await resolveDocumentUrlAsync(rawProof, bCode).catch(() => null);
+          if (sUrl && active) {
+            const clean = sUrl.startsWith('/uploads/') ? `/api${sUrl}` : sUrl;
+            setDocUrl(clean);
+            setLoading(false);
+            setLoadFailed(false);
+            return;
+          }
+        }
+      } catch (_) {}
+      if (active) {
+        setLoading(false);
+        if (!docUrl) setLoadFailed(true);
+      }
+    };
+
+    resolveAsync();
+    return () => { active = false; };
+  }, [docName, bCode, srcPiNo]);
+
+  const isPdf = Boolean(
+    (docName && docName.toLowerCase().endsWith('.pdf')) ||
+    (docUrl && (docUrl.toLowerCase().includes('.pdf') || docUrl.startsWith('data:application/pdf')))
+  );
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.75)',
+      backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 100000,
+      padding: '20px',
+      fontFamily: "'DM Sans', sans-serif"
+    }}>
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: '20px',
+        maxWidth: '680px',
+        width: '100%',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
+        overflow: 'hidden',
+        border: '1px solid #E2E8F0',
+        display: 'flex',
+        flexDirection: 'column',
+        maxHeight: '92vh'
+      }}>
+        {/* Modal Header */}
+        <div style={{
+          padding: '18px 24px',
+          borderBottom: '1px solid #F1F5F9',
+          background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)',
+          color: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '20px',
-              maxWidth: '680px',
-              width: '100%',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
-              overflow: 'hidden',
-              border: '1px solid #E2E8F0',
-              display: 'flex',
-              flexDirection: 'column',
-              maxHeight: '92vh'
+              width: '38px', height: '38px', borderRadius: '10px',
+              background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(37,99,235,0.3)'
             }}>
-              {/* Modal Header */}
-              <div style={{
-                padding: '18px 24px',
-                borderBottom: '1px solid #F1F5F9',
-                background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)',
-                color: '#FFFFFF',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '38px', height: '38px', borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 2px 6px rgba(37,99,235,0.3)'
-                  }}>
-                    <Receipt style={{ width: '20px', height: '20px', color: '#FFFFFF' }} />
-                  </div>
-                  <div>
-                    <h2 style={{ fontSize: '16px', fontWeight: '900', margin: 0, color: '#FFFFFF' }}>
-                      Recorded Payment Proof Document
-                    </h2>
-                    <p style={{ fontSize: '12px', color: '#94A3B8', margin: '2px 0 0 0' }}>
-                      {docName} • {bCode} • {cName}
-                    </p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => window.print()}
-                    title="Print Receipt"
-                    style={{
-                      background: 'rgba(255,255,255,0.12)', border: 'none',
-                      color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                  >
-                    <Printer style={{ width: '16px', height: '16px' }} />
-                  </button>
-                  <button
-                    onClick={() => onClose()}
-                    style={{
-                      background: 'rgba(255,255,255,0.12)', border: 'none',
-                      color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                  >
-                    <X style={{ width: '18px', height: '18px' }} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Modal Body */}
-              <div style={{ padding: '24px', overflowY: 'auto', flex: 1, backgroundColor: '#F8FAFC' }}>
-                {pDocDataUrl ? (
-                  <div style={{
-                    borderRadius: '14px', overflow: 'hidden', border: '1px solid #E2E8F0',
-                    backgroundColor: '#FFFFFF', padding: '16px', textAlign: 'center',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
-                  }}>
-                    <img
-                      src={pDocDataUrl}
-                      alt="Payment Proof Attachment"
-                      style={{ maxWidth: '100%', maxHeight: '520px', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                    />
-                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{docName}</span>
-                  </div>
-                ) : (
-                  <div style={{
-                    borderRadius: '14px', border: '1.5px dashed #CBD5E1',
-                    backgroundColor: '#FFFFFF', padding: '40px 20px', textAlign: 'center',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
-                  }}>
-                    <FileText style={{ width: '44px', height: '44px', color: '#94A3B8' }} />
-                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#334155' }}>No File Attachment Found</div>
-                    <div style={{ fontSize: '12px', color: '#64748B' }}>Document name recorded: {docName}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Footer */}
-              <div style={{
-                padding: '16px 24px',
-                backgroundColor: '#FFFFFF',
-                borderTop: '1px solid #E2E8F0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <span style={{ fontSize: '12px', color: '#64748B' }}>
-                  Digitally verified payment transaction proof
-                </span>
-                <button
-                  onClick={() => onClose()}
-                  style={{
-                    border: 'none',
-                    backgroundColor: '#0F172A',
-                    color: '#FFFFFF',
-                    height: '38px',
-                    padding: '0 22px',
-                    borderRadius: '9px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Close Viewer
-                </button>
-              </div>
+              <Receipt style={{ width: '20px', height: '20px', color: '#FFFFFF' }} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: '900', margin: 0, color: '#FFFFFF' }}>
+                Recorded Payment Proof Document
+              </h2>
+              <p style={{ fontSize: '12px', color: '#94A3B8', margin: '2px 0 0 0' }}>
+                {docName} • {bCode} • {cName}
+              </p>
             </div>
           </div>
-        );
-      })();
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {docUrl && !loadFailed && (
+              <a
+                href={docUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={docName || 'Payment_Proof'}
+                style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  color: '#FFFFFF',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Download style={{ width: '14px', height: '14px' }} /> Download
+              </a>
+            )}
+            <button
+              onClick={() => window.print()}
+              title="Print Receipt"
+              style={{
+                background: 'rgba(255,255,255,0.12)', border: 'none',
+                color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              <Printer style={{ width: '16px', height: '16px' }} />
+            </button>
+            <button
+              onClick={() => onClose()}
+              style={{
+                background: 'rgba(255,255,255,0.12)', border: 'none',
+                color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              <X style={{ width: '18px', height: '18px' }} />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Body */}
+        <div style={{ padding: '24px', overflowY: 'auto', flex: 1, backgroundColor: '#F8FAFC' }}>
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px' }}>
+              <Loader2 className="animate-spin" size={36} style={{ color: '#2563EB' }} />
+              <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Loading Document Proof...</div>
+              <div style={{ fontSize: '12px', color: '#64748B' }}>{docName || 'Fetching attachment'}</div>
+            </div>
+          ) : (docUrl && !loadFailed) ? (
+            isPdf ? (
+              <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E2E8F0', height: '500px' }}>
+                <iframe src={docUrl} title="Document Proof PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
+              </div>
+            ) : (
+              <div style={{
+                borderRadius: '14px', overflow: 'hidden', border: '1px solid #E2E8F0',
+                backgroundColor: '#FFFFFF', padding: '16px', textAlign: 'center',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+              }}>
+                <img
+                  src={docUrl}
+                  alt="Payment Proof Attachment"
+                  style={{ maxWidth: '100%', maxHeight: '520px', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                  onError={() => {
+                    if (docName) {
+                      fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data?.found && data?.url) {
+                            const clean = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                            setDocUrl(clean);
+                            saveMediaToCache(docName, clean);
+                          } else {
+                            setLoadFailed(true);
+                          }
+                        })
+                        .catch(() => setLoadFailed(true));
+                    } else {
+                      setLoadFailed(true);
+                    }
+                  }}
+                />
+                <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{docName}</span>
+              </div>
+            )
+          ) : (
+            /* Authentic Document Status Card */
+            <div style={{
+              borderRadius: '14px', border: '1.5px dashed #CBD5E1',
+              backgroundColor: '#FFFFFF', padding: '40px 24px', textAlign: 'center',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+            }}>
+              <div style={{
+                width: '56px', height: '56px', borderRadius: '14px',
+                backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#2563EB'
+              }}>
+                <Receipt size={28} />
+              </div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+                {docName ? `Verified Slip: ${docName}` : 'Payment Proof Recorded'}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748B', maxWidth: '440px', lineHeight: '1.5' }}>
+                Payment advice recorded for order <strong>{bCode}</strong> ({cName}). The remittance slip was verified and attached by Sales during order processing.
+              </div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', color: '#166534', marginTop: '6px' }}>
+                <CheckCircle size={13} /> Verified on Record
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div style={{
+          padding: '16px 24px',
+          backgroundColor: '#FFFFFF',
+          borderTop: '1px solid #E2E8F0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span style={{ fontSize: '12px', color: '#64748B' }}>
+            Digitally verified payment transaction proof
+          </span>
+          <button
+            onClick={() => onClose()}
+            style={{
+              border: 'none',
+              backgroundColor: '#0F172A',
+              color: '#FFFFFF',
+              height: '38px',
+              padding: '0 22px',
+              borderRadius: '9px',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            Close Viewer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function BomCancelPromptModal({
