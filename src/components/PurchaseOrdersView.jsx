@@ -4181,16 +4181,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>Delivery To:</span>
-                  <label htmlFor="purchase-orders-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: '500', color: '#475569', fontSize: '12px' }}>
-                    <input id="purchase-orders-checkbox" aria-label="Checkbox" type="radio" name="deliveryType" value="Organization" checked={deliveryType === 'Organization'} onChange={() => setDeliveryType('Organization')}  /> Organization
-                  </label>
-                  <label htmlFor="purchase-orders-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: '500', color: '#475569', fontSize: '12px' }}>
-                    <input id="purchase-orders-checkbox" aria-label="Checkbox" type="radio" name="deliveryType" value="Customer" checked={deliveryType === 'Customer'} onChange={() => setDeliveryType('Customer')}  /> Customer
-                  </label>
-                </div>
-
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-delivery-address" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
