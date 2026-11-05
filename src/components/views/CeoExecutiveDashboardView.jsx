@@ -2084,7 +2084,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       backgroundColor: '#FFFFFF',
                       borderRadius: '14px',
                       border: '1px solid #E2E8F0',
-                      borderTop: `3.5px solid ${stage.color}`,
                       padding: '14px',
                       display: 'flex',
                       flexDirection: 'column',
