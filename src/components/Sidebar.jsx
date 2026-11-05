@@ -180,7 +180,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
       category: 'MAIN MENU',
       items: [
         { label: 'Dashboard', icon: LayoutDashboard },
-        { label: 'Purchase Orders', icon: ShoppingCart, badge: '12' },
+        { label: 'Purchase Orders', icon: ShoppingCart },
         { label: 'Items Directory', icon: Boxes },
         { label: 'Raw Material Directory', icon: Layers },
         { label: 'Inventory Stores', icon: Warehouse }
