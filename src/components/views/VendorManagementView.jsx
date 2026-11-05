@@ -2298,20 +2298,10 @@ export default function VendorManagementView(props) {
                         <input id="vendor-management-company-registration-number" name="companyRegistrationNumber" aria-label="Company Registration Number" type="text" value={vCompanyReg} onChange={(e) => setVCompanyReg(e.target.value)} placeholder="Enter registration number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                            GST Number <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => handleGstFetch(vGST)}
-                            disabled={isGstFetching || !vGST || vGST.trim().length < 2}
-                            style={{ border: 'none', background: 'none', color: (isGstFetching || !vGST || vGST.trim().length < 2) ? '#94a3b8' : '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}
-                          >
-                            {isGstFetching ? '⏳ Fetching GST...' : '🔍 Auto-Fetch Details'}
-                          </button>
-                        </div>
-                        <input id="vendor-management-v-gst" name="vGST" aria-label="Enter 15-digit GSTIN ( 37AAACT2727Q1ZS)"
+                        <label htmlFor="vendor-management-v-gst" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                          GST Number <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
+                        </label>
+                        <input id="vendor-management-v-gst" name="vGST" aria-label="Enter 15-digit GSTIN"
                           type="text"
                           value={vGST}
                           onChange={(e) => {
@@ -2325,17 +2315,11 @@ export default function VendorManagementView(props) {
                                 target.setSelectionRange(start, end);
                               }
                             });
-                            if (val.replace(/[^A-Z0-9]/gi, '').length >= 10) {
-                              handleGstFetch(val);
-                            }
                           }}
                           maxLength={15}
                           placeholder="Enter 15-digit GSTIN (e.g. 37AAACT2727Q1ZS)"
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}
                          />
-                        {gstLookupStatus && (
-                          <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 'bold' }}>{gstLookupStatus.msg}</span>
-                        )}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="vendor-management-pan-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
@@ -2619,55 +2603,14 @@ export default function VendorManagementView(props) {
                     </div>
                   </div>
 
-                  {/* 4. Other Details */}
-                  <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>4. Other Details</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                          Payment Terms <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                        </label>
-                        {renderSelect(vPaymentTerms, (e) => setVPaymentTerms(e.target.value), ['Net 15 Days', 'Net 30 Days', 'Net 45 Days', 'Net 60 Days'], { height: '38px' })}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                          Currency <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                        </label>
-                        {renderSelect(vCurrency, (e) => setVCurrency(e.target.value), ['INR - Indian Rupee', 'USD - US Dollar', 'EUR - Euro'], { height: '38px' })}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                          Vendor Category <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                        </label>
-                        {renderSelect(vCat, (e) => setVCat(e.target.value), ['Steel & Metals', 'Aluminium', 'Electrical', 'Fasteners', 'Packaging', 'Raw Materials', 'Components'], { height: '38px' })}
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 3' }}>
-                        <label htmlFor="vendor-management-notes" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes</label>
-                        <input id="vendor-management-notes" name="notes" aria-label="Notes" type="text" value={vTags} onChange={(e) => setVTags(e.target.value)} placeholder="Enter any additional notes" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Right Column (Sidebar cards) */}
+                {/* Right Column (Sidebar card) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-                  {/* 5. Documents */}
-                  <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>5. Documents</h3>
-                    <div style={{ border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center', backgroundColor: '#fafbfc' }}>
-                      <UploadCloud style={{ width: '28px', height: '28px', color: '#2563eb' }} />
-                      <span style={{ fontSize: '12px', color: '#475569', fontWeight: '500' }}>Drag and drop files here or</span>
-                      <button type="button" style={{ backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 16px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Browse Files</button>
-                      <span style={{ fontSize: '9px', color: '#94a3b8', lineHeight: '1.4' }}>Supported formats: PDF, DOC, DOCX, XLS, XLSX, PNG, JPG (Max 10MB)</span>
-                    </div>
-                  </div>
-
-                  {/* 6. Compliance & Settings */}
-                  <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>6. Compliance & Settings</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Compliance & Settings */}
+                  <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>4. Compliance & Settings</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
                         <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vActiveVendor} onChange={(e) => setVActiveVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
                         Active Vendor
@@ -2680,49 +2623,6 @@ export default function VendorManagementView(props) {
                         <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vBlacklistedVendor} onChange={(e) => setVBlacklistedVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
                         Blacklisted Vendor
                       </label>
-                    </div>
-                  </div>
-
-                  {/* 7. Tags */}
-                  <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>7. Tags</h3>
-                    <select id="vendor-management-select-2" name="select2" aria-label="Select 2" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
-                      <option>Select or type to add tags</option>
-                      <option>Reliable</option>
-                      <option>Fast Delivery</option>
-                      <option>Bulk Supplier</option>
-                    </select>
-                  </div>
-
-                  {/* 8. Notes (Internal) */}
-                  <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>8. Notes (Internal)</h3>
-                    <textarea id="vendor-management-v-internal-notes" name="vInternalNotes" aria-label="Add internal notes about this vendor" value={vInternalNotes} onChange={(e) => setVInternalNotes(e.target.value)} placeholder="Add internal notes about this vendor" style={{ width: '100%', height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none' }}  />
-                    <span style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'right' }}>{vInternalNotes.length} / 500</span>
-                  </div>
-
-                  {/* 9. Quick Summary */}
-                  <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#fafbfc' }}>
-                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>9. Quick Summary</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748b' }}>Vendor Type</span>
-                        <strong style={{ color: '#334155' }}>{vType === 'Select vendor type' ? '--' : vType}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: '#64748b' }}>Status</span>
-                        <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 'bold', backgroundColor: vBlacklistedVendor ? '#fee2e2' : '#dcfce7', color: vBlacklistedVendor ? '#991b1b' : '#166534' }}>
-                          {vBlacklistedVendor ? 'Blacklisted' : vActiveVendor ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748b' }}>Created By</span>
-                        <strong style={{ color: '#334155' }}>Arun</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748b' }}>Created Date</span>
-                        <strong style={{ color: '#334155' }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
-                      </div>
                     </div>
                   </div>
                 </div>
