@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
@@ -542,6 +542,61 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   // Items State (Dynamic array - start fresh empty)
   const [items, setItems] = useState([]);
+
+  // Bulk Items Modal State (Zoho Books Style)
+  const [showBulkItemModal, setShowBulkItemModal] = useState(false);
+  const [bulkItemSearch, setBulkItemSearch] = useState('');
+  const [selectedBulkItems, setSelectedBulkItems] = useState({}); // { [itemKey]: { item, qty: 1 } }
+  const [bulkCategoryFilter, setBulkCategoryFilter] = useState('All');
+
+  const availableCatalogItems = useMemo(() => {
+    const map = new Map();
+    // 1. Items from Zoho Books / Backend
+    (zohoItems || []).forEach(it => {
+      const name = String(it.name || '').trim();
+      if (name && !map.has(name.toLowerCase())) {
+        map.set(name.toLowerCase(), {
+          id: it.id || it.itemId || name,
+          name: it.name,
+          sku: it.sku || it.itemCode || '',
+          description: it.description || '',
+          account: it.account || 'Raw Material',
+          unit: (it.unit || 'MT').toUpperCase(),
+          rate: Number(it.rate) || 0,
+          tax: it.tax !== undefined && it.tax !== '' ? Number(it.tax) : 18
+        });
+      }
+    });
+    // 2. Preset / Standard Materials
+    PRESET_MATERIALS.forEach(it => {
+      if (!map.has(it.name.toLowerCase())) {
+        map.set(it.name.toLowerCase(), {
+          id: it.name,
+          name: it.name,
+          sku: '',
+          description: '',
+          account: it.account || 'Raw Material',
+          unit: it.unit || 'MT',
+          rate: Number(it.rate) || 0,
+          tax: it.tax || 18
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [zohoItems]);
+
+  const filteredBulkCatalog = useMemo(() => {
+    const q = bulkItemSearch.trim().toLowerCase();
+    return availableCatalogItems.filter(it => {
+      const matchesSearch = !q ||
+        it.name.toLowerCase().includes(q) ||
+        (it.sku && it.sku.toLowerCase().includes(q)) ||
+        (it.description && it.description.toLowerCase().includes(q)) ||
+        (it.account && it.account.toLowerCase().includes(q));
+      const matchesCat = bulkCategoryFilter === 'All' || it.account === bulkCategoryFilter;
+      return matchesSearch && matchesCat;
+    });
+  }, [availableCatalogItems, bulkItemSearch, bulkCategoryFilter]);
 
   // Pricing Charges
   const [shippingCharges, setShippingCharges] = useState(0);
@@ -4107,103 +4162,201 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((item, idx) => {
-                        const total = (item.qty || 0) * (item.rate || 0);
-                        const taxAmt = total * ((item.tax || 0) / 100);
-                        return (
-                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '8px 12px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <input id={`purchase-orders-or-item-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`orItemName_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Type or select Item Name"
-                                  type="text"
-                                  list={`po-item-datalist-${idx}`}
-                                  value={item.name || ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    const found = zohoItems.find(zi => zi.name.toLowerCase() === val.toLowerCase());
-                                    handleItemChange(idx, 'name', val);
-                                    if (found) {
-                                      handleItemChange(idx, 'rate', found.rate || 0);
-                                      handleItemChange(idx, 'unit', (found.unit || 'NOS').toUpperCase());
-                                      if (found.description && !item.description) {
-                                        handleItemChange(idx, 'description', found.description);
+                      {items.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748B', fontSize: '13px', backgroundColor: '#FAFAFA' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <Boxes size={28} style={{ color: '#94A3B8' }} />
+                              <div>No line items added yet. Click <strong>Add New Row</strong> or <strong>Add Items in Bulk</strong> below.</div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        items.map((item, idx) => {
+                          const total = (item.qty || 0) * (item.rate || 0);
+                          const taxAmt = total * ((item.tax || 0) / 100);
+                          return (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '8px 12px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <input id={`purchase-orders-or-item-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`orItemName_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Type or select Item Name"
+                                    type="text"
+                                    list={`po-item-datalist-${idx}`}
+                                    value={item.name || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const found = zohoItems.find(zi => zi.name.toLowerCase() === val.toLowerCase());
+                                      handleItemChange(idx, 'name', val);
+                                      if (found) {
+                                        handleItemChange(idx, 'rate', found.rate || 0);
+                                        handleItemChange(idx, 'unit', (found.unit || 'NOS').toUpperCase());
+                                        if (found.description && !item.description) {
+                                          handleItemChange(idx, 'description', found.description);
+                                        }
                                       }
-                                    }
-                                  }}
-                                  placeholder="Type or select Item Name..."
-                                  required
-                                  style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
-                                 />
-                                <datalist id={`po-item-datalist-${idx}`}>
-                                  {zohoItems.map((zi, zidx) => (
-                                    <option key={zidx} value={zi.name}>{zi.sku ? `[${zi.sku}] ${zi.name}` : zi.name}</option>
-                                  ))}
-                                </datalist>
-                                <input id={`purchase-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter item description / specifications"
-                                  type="text"
-                                  value={item.description || ''}
-                                  onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                                  placeholder="Enter item description / specifications..."
-                                  style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '11px', backgroundColor: '#f8fafc', color: '#334155', outline: 'none' }}
-                                 />
-                              </div>
-                            </td>
-                            <td style={{ padding: '8px 12px' }}>
-                              <select id={`purchase-orders-account-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`account_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Account" value={item.account} onChange={(e) => handleItemChange(idx, 'account', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px' }}>
-                                <option value="Raw Materials">Raw Materials</option>
-                                <option value="Finished Goods">Finished Goods</option>
-                              </select>
-                            </td>
-                            <td style={{ padding: '8px 12px' }}>
-                              <input id={`purchase-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty" type="number" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px', textAlign: 'center' }}  />
-                            </td>
-                            <td style={{ padding: '8px 12px' }}>
-                              <select id={`purchase-orders-unit-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`unit_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Unit" value={item.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}>
-                                {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR'].includes(item.unit) && (
-                                  <option value={item.unit}>{item.unit}</option>
-                                )}
-                                <option>MT</option>
-                                <option>NOS</option>
-                                <option>KG</option>
-                                <option>PCS</option>
-                                <option>MTR</option>
-                              </select>
-                            </td>
-                            <td style={{ padding: '8px 12px' }}>
-                              <input id={`purchase-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate" type="number" value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', textAlign: 'right' }}  />
-                            </td>
-                            <td style={{ padding: '8px 12px' }}>
-                              <select id={`purchase-orders-tax-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`tax18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Tax 18"
-                                value={item.tax !== undefined && item.tax !== '' ? Number(item.tax) : 18}
-                                onChange={(e) => handleItemChange(idx, 'tax', Number(e.target.value))}
-                                style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}
-                              >
-                                <option value={18}>18%</option>
-                                <option value={5}>5%</option>
-                                <option value={0}>0%</option>
-                                {item.tax !== undefined && item.tax !== '' && ![18, 5, 0].includes(Number(item.tax)) && (
-                                  <option value={Number(item.tax)}>{Number(item.tax)}%</option>
-                                )}
-                              </select>
-                            </td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#1e293b' }}>
-                              ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                              <button type="button" onClick={() => handleRemoveItem(idx)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
-                                <Trash2 style={{ width: '14px', height: '14px' }} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                                    }}
+                                    placeholder="Type or select Item Name..."
+                                    required
+                                    style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
+                                   />
+                                  <datalist id={`po-item-datalist-${idx}`}>
+                                    {zohoItems.map((zi, zidx) => (
+                                      <option key={zidx} value={zi.name}>{zi.sku ? `[${zi.sku}] ${zi.name}` : zi.name}</option>
+                                    ))}
+                                  </datalist>
+                                  <input id={`purchase-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter item description / specifications"
+                                    type="text"
+                                    value={item.description || ''}
+                                    onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                                    placeholder="Enter item description / specifications..."
+                                    style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '11px', backgroundColor: '#f8fafc', color: '#334155', outline: 'none' }}
+                                   />
+                                </div>
+                              </td>
+                              <td style={{ padding: '8px 12px' }}>
+                                <select id={`purchase-orders-account-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`account_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Account" value={item.account} onChange={(e) => handleItemChange(idx, 'account', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px' }}>
+                                  <option value="Raw Materials">Raw Materials</option>
+                                  <option value="Finished Goods">Finished Goods</option>
+                                </select>
+                              </td>
+                              <td style={{ padding: '8px 12px' }}>
+                                <input id={`purchase-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty" type="number" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px', textAlign: 'center' }}  />
+                              </td>
+                              <td style={{ padding: '8px 12px' }}>
+                                <select id={`purchase-orders-unit-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`unit_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Unit" value={item.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}>
+                                  {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR'].includes(item.unit) && (
+                                    <option value={item.unit}>{item.unit}</option>
+                                  )}
+                                  <option>MT</option>
+                                  <option>NOS</option>
+                                  <option>KG</option>
+                                  <option>PCS</option>
+                                  <option>MTR</option>
+                                </select>
+                              </td>
+                              <td style={{ padding: '8px 12px' }}>
+                                <input id={`purchase-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate" type="number" value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', textAlign: 'right' }}  />
+                              </td>
+                              <td style={{ padding: '8px 12px' }}>
+                                <select id={`purchase-orders-tax-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`tax18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Tax 18"
+                                  value={item.tax !== undefined && item.tax !== '' ? Number(item.tax) : 18}
+                                  onChange={(e) => handleItemChange(idx, 'tax', Number(e.target.value))}
+                                  style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}
+                                >
+                                  <option value={18}>18%</option>
+                                  <option value={5}>5%</option>
+                                  <option value={0}>0%</option>
+                                  {item.tax !== undefined && item.tax !== '' && ![18, 5, 0].includes(Number(item.tax)) && (
+                                    <option value={Number(item.tax)}>{Number(item.tax)}%</option>
+                                  )}
+                                </select>
+                              </td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#1e293b' }}>
+                                ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                <button type="button" onClick={() => handleRemoveItem(idx)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
+                                  <Trash2 style={{ width: '14px', height: '14px' }} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
 
-                <div style={{ margin: '0 20px' }}>
-                  <button type="button" onClick={handleAddItem} style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', background: 'transparent', color: '#2563eb', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}>
-                    <Plus style={{ width: '14px', height: '14px' }} /> Add Line Item
+                <div style={{ margin: '14px 20px 6px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {/* Add New Row Button (Matches Zoho Books layout) */}
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      backgroundColor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '13.5px',
+                      fontWeight: '600',
+                      color: '#1E293B',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        backgroundColor: '#3B82F6',
+                        color: '#FFFFFF',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        lineHeight: 1,
+                        flexShrink: 0
+                      }}
+                    >
+                      +
+                    </span>
+                    Add New Row
+                  </button>
+
+                  {/* Add Items in Bulk Button (Matches Zoho Books layout) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBulkItems({});
+                      setBulkItemSearch('');
+                      setBulkCategoryFilter('All');
+                      setShowBulkItemModal(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      backgroundColor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '13.5px',
+                      fontWeight: '600',
+                      color: '#1E293B',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        backgroundColor: '#3B82F6',
+                        color: '#FFFFFF',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        lineHeight: 1,
+                        flexShrink: 0
+                      }}
+                    >
+                      +
+                    </span>
+                    Add Items in Bulk
                   </button>
                 </div>
 
@@ -4475,6 +4628,442 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           </div>
         </div>
       )}
+
+      {/* ==================== ZOHO BOOKS STYLE "ADD ITEMS IN BULK" MODAL ==================== */}
+      {showBulkItemModal && (() => {
+        const selectedCount = Object.keys(selectedBulkItems).length;
+        const allFilteredSelected = filteredBulkCatalog.length > 0 && filteredBulkCatalog.every(it => selectedBulkItems[it.name]);
+
+        const toggleSelectAll = () => {
+          if (allFilteredSelected) {
+            setSelectedBulkItems({});
+          } else {
+            const next = { ...selectedBulkItems };
+            filteredBulkCatalog.forEach(it => {
+              if (!next[it.name]) {
+                next[it.name] = { item: it, qty: 1 };
+              }
+            });
+            setSelectedBulkItems(next);
+          }
+        };
+
+        const toggleSelectItem = (it) => {
+          setSelectedBulkItems(prev => {
+            const next = { ...prev };
+            if (next[it.name]) {
+              delete next[it.name];
+            } else {
+              next[it.name] = { item: it, qty: 1 };
+            }
+            return next;
+          });
+        };
+
+        const updateItemQty = (it, newQty) => {
+          const validQty = Math.max(1, Number(newQty) || 1);
+          setSelectedBulkItems(prev => ({
+            ...prev,
+            [it.name]: { item: it, qty: validQty }
+          }));
+        };
+
+        const handleConfirmBulkAdd = () => {
+          const selectedKeys = Object.keys(selectedBulkItems);
+          if (selectedKeys.length === 0) return;
+
+          const itemsToAdd = selectedKeys.map(k => {
+            const entry = selectedBulkItems[k];
+            const it = entry.item;
+            return {
+              name: it.name || '',
+              description: it.description || '',
+              account: it.account || 'Raw Material',
+              qty: Number(entry.qty) > 0 ? Number(entry.qty) : 1,
+              unit: it.unit || 'MT',
+              rate: Number(it.rate) || 0,
+              tax: it.tax !== undefined && it.tax !== '' ? Number(it.tax) : 18
+            };
+          });
+
+          setItems(prev => {
+            const cleanPrev = prev.filter(p => p.name && p.name.trim() !== '');
+            return [...cleanPrev, ...itemsToAdd];
+          });
+
+          setShowBulkItemModal(false);
+          setSelectedBulkItems({});
+          setBulkItemSearch('');
+          showCustomAlert(`Added ${itemsToAdd.length} items to Purchase Order.`, 'Items Added in Bulk', 'success');
+        };
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000,
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}>
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              width: '100%',
+              maxWidth: '740px',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+              overflow: 'hidden'
+            }}>
+              {/* Modal Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#F8FAFC'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#2563EB',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Boxes size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0F172A' }}>
+                      Add Items in Bulk
+                    </h3>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                      Select materials or items from your directory to insert into this Purchase Order
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowBulkItemModal(false)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    color: '#94A3B8',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#0F172A'; e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search & Category Filter Toolbar */}
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                  <input
+                    type="text"
+                    value={bulkItemSearch}
+                    onChange={(e) => setBulkItemSearch(e.target.value)}
+                    placeholder="Search items by name, SKU, or specification..."
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      paddingLeft: '36px',
+                      paddingRight: '12px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  {bulkItemSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setBulkItemSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#94A3B8',
+                        cursor: 'pointer',
+                        padding: '4px'
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Pills */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    {['All', 'Raw Material', 'Consumables', 'Fasteners'].map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setBulkCategoryFilter(cat)}
+                        style={{
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '11.5px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          backgroundColor: bulkCategoryFilter === cat ? '#2563EB' : '#F1F5F9',
+                          color: bulkCategoryFilter === cat ? '#FFFFFF' : '#475569',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: '#64748B' }}>
+                    Showing <strong>{filteredBulkCatalog.length}</strong> items
+                    {selectedCount > 0 && <span style={{ color: '#2563EB', fontWeight: '700', marginLeft: '6px' }}>({selectedCount} selected)</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Items List Table Header */}
+              <div style={{
+                padding: '8px 20px',
+                backgroundColor: '#F8FAFC',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'grid',
+                gridTemplateColumns: '40px 1fr 110px 120px 100px',
+                alignItems: 'center',
+                fontSize: '11px',
+                fontWeight: '700',
+                color: '#64748B',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                <div>
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAll}
+                    style={{ cursor: 'pointer', accentColor: '#2563EB' }}
+                  />
+                </div>
+                <div>Item Name & Account</div>
+                <div>Unit</div>
+                <div style={{ textAlign: 'right' }}>Rate</div>
+                <div style={{ textAlign: 'center' }}>Quantity</div>
+              </div>
+
+              {/* Scrollable Items List */}
+              <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', padding: '0 8px' }}>
+                {filteredBulkCatalog.length === 0 ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94A3B8' }}>
+                    <Boxes size={32} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+                    <div style={{ fontSize: '13px', fontWeight: '600' }}>No items match your search.</div>
+                    <div style={{ fontSize: '11.5px', marginTop: '4px' }}>Try searching with a different term or clear the filter.</div>
+                  </div>
+                ) : (
+                  filteredBulkCatalog.map(it => {
+                    const isSelected = !!selectedBulkItems[it.name];
+                    const curQty = selectedBulkItems[it.name]?.qty || 1;
+
+                    return (
+                      <div
+                        key={it.id || it.name}
+                        onClick={() => toggleSelectItem(it)}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '40px 1fr 110px 120px 100px',
+                          alignItems: 'center',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          margin: '4px 0',
+                          border: isSelected ? '1px solid #BFDBFE' : '1px solid transparent',
+                          backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectItem(it)}
+                            style={{ cursor: 'pointer', accentColor: '#2563EB' }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: '600', color: '#0F172A' }}>
+                            {it.name}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                            <span style={{ fontSize: '10.5px', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
+                              {it.account}
+                            </span>
+                            {it.sku && (
+                              <span style={{ fontSize: '10.5px', color: '#94A3B8' }}>
+                                SKU: {it.sku}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: '500' }}>
+                          {it.unit}
+                        </div>
+
+                        <div style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700', textAlign: 'right' }}>
+                          ₹{Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        >
+                          <input
+                            type="number"
+                            min="1"
+                            value={curQty}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateItemQty(it, val);
+                            }}
+                            style={{
+                              width: '60px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              border: isSelected ? '1.5px solid #2563EB' : '1px solid #CBD5E1',
+                              textAlign: 'center',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              backgroundColor: '#FFFFFF',
+                              color: '#0F172A',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                padding: '14px 20px',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#F8FAFC'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '12.5px', color: '#64748B' }}>
+                    {selectedCount > 0 ? (
+                      <>
+                        <strong style={{ color: '#2563EB' }}>{selectedCount}</strong> {selectedCount === 1 ? 'item' : 'items'} selected
+                      </>
+                    ) : (
+                      'Select one or more items above'
+                    )}
+                  </span>
+                  {selectedCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBulkItems({})}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#EF4444',
+                        fontSize: '11.5px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkItemModal(false)}
+                    style={{
+                      height: '36px',
+                      padding: '0 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#475569',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmBulkAdd}
+                    disabled={selectedCount === 0}
+                    style={{
+                      height: '36px',
+                      padding: '0 18px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: selectedCount === 0 ? '#94A3B8' : '#2563EB',
+                      color: '#FFFFFF',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
+                      boxShadow: selectedCount === 0 ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.3)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    Add {selectedCount > 0 ? `${selectedCount} ` : ''}Item{selectedCount !== 1 ? 's' : ''} to PO
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ==================== SAVE CONFIRMATION POPUP ==================== */}
       {showSaveConfirm && (
