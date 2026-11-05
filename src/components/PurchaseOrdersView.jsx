@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart, Building2, MapPin } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
 import StatusBadge from './StatusBadge';
@@ -4010,13 +4010,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           height: '38px',
                           borderRadius: '8px',
                           backgroundColor: '#ECFEFF',
+                          border: '1px solid #A5F3FC',
                           color: '#0E7490',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '18px'
+                          justifyContent: 'center'
                         }}>
-                          🏢
+                          <Building2 size={20} style={{ color: '#0E7490' }} />
                         </div>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -4092,7 +4092,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       <div>
                         <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Company Name</span>
                         <strong style={{ fontSize: '13px', color: '#0F172A' }}>{currentCompany.name}</strong>
-                        <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600', marginTop: '2px' }}>📍 {currentCompany.locationLabel}</div>
+                        <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <MapPin size={12} style={{ color: '#0E7490' }} />
+                          <span>{currentCompany.locationLabel}</span>
+                        </div>
                       </div>
                       <div>
                         <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>GST Number</span>
