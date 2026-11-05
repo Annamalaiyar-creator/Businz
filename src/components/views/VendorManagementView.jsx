@@ -2355,17 +2355,10 @@ export default function VendorManagementView(props) {
                         <input id="vendor-management-email" name="email" aria-label="Email" type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="Enter email address" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-mobile-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Mobile Number <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <select id="vendor-management-select-1" name="select1" aria-label="Select 1" style={{ width: '80px', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
-                            <option>+91</option>
-                            <option>+1</option>
-                            <option>option</option>
-                          </select>
-                          <input id="vendor-management-mobile-number" name="mobileNumber" aria-label="Enter mobile number" type="text" value={vPhone} onChange={(e) => setVPhone(e.target.value)} placeholder="Enter mobile number" style={{ flex: 1, height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
-                        </div>
+                        <input id="vendor-management-mobile-number" name="mobileNumber" aria-label="Enter mobile number" type="text" value={vPhone} onChange={(e) => setVPhone(e.target.value)} placeholder="Enter mobile number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                     </div>
                   </div>
