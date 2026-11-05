@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Plus, Check, Trash2, Eye, FileText, Search, AlertCircle, AlertTriangle, X, XCircle,
   CheckCircle, Clock, Calendar, Edit3, RotateCcw, UploadCloud, ChevronDown, ChevronUp,
-  Truck, ShoppingCart, Upload, Printer, Download, Layers, CreditCard, Bell, MoreHorizontal, FileCheck, CheckSquare,
+  Truck, ShoppingCart, Upload, Printer, Download, Layers, CreditCard, Bell, FileCheck, CheckSquare,
   Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save, Boxes, User,
   ArrowUpRight, ArrowDownRight, Receipt, TrendingUp, Factory
 } from 'lucide-react';
@@ -8903,48 +8903,11 @@ export default function BomOrdersView(props) {
                         </span>
                       </div>
 
-                      {/* Right Side: Applied Date + ••• Menu */}
+                      {/* Right Side: Applied Date */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
                           Applied at <strong style={{ color: '#334155', fontWeight: '600' }}>{formatAppliedAtDate(row)}</strong>
                         </span>
-                        {isCeo && (
-                          <button
-                            type="button"
-                            onClick={() => setExecutiveDossierOrder(row)}
-                            title="Open Executive 360° Order Dossier"
-                            style={{
-                              padding: '2px 7px',
-                              borderRadius: '4px',
-                              backgroundColor: '#0F172A',
-                              color: '#38BDF8',
-                              border: '1px solid #1E293B',
-                              fontSize: '10px',
-                              fontWeight: '700',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            360° Dossier
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending && !isCancelled })}
-                          title="More Options"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#64748B',
-                            cursor: 'pointer',
-                            padding: '3px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            borderRadius: '4px'
-                          }}
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
                       </div>
                     </div>
 
@@ -9330,40 +9293,6 @@ export default function BomOrdersView(props) {
           <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px', paddingRight: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
             <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedRows.length}</strong> Selected
           </span>
-
-          {isCeo && (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
-                const targetRow = codeVal
-                  ? ((filteredRows || []).find(r => r.code === codeVal || r.bomCode === codeVal || r.id === codeVal) || (bomStore || []).find(r => r.code === codeVal || r.bomCode === codeVal || r.id === codeVal))
-                  : null;
-                if (targetRow) {
-                  setExecutiveDossierOrder(targetRow);
-                }
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '50px',
-                backgroundColor: '#0F172A',
-                color: '#38BDF8',
-                border: '1px solid #1E293B',
-                fontSize: '12px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.2)',
-                whiteSpace: 'nowrap',
-                flexShrink: 0
-              }}
-            >
-              <span>360° Dossier</span>
-            </button>
-          )}
 
           {/* View Details - Always accessible across all logins (Sales, Admin, etc.) and statuses */}
           <button
