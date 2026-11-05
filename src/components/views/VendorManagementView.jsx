@@ -2385,14 +2385,23 @@ export default function VendorManagementView(props) {
                             />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-country" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               Country <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            {renderSelect(vCountry, (e) => {
-                              const val = e.target.value;
-                              setVCountry(val);
-                              if (vSameAsRegistered) setVBillingCountry(val);
-                            }, ['India', 'United States', 'Singapore'], { height: '38px' })}
+                            <input
+                              id="vendor-management-country"
+                              name="country"
+                              aria-label="Country"
+                              type="text"
+                              value={vCountry}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setVCountry(val);
+                                if (vSameAsRegistered) setVBillingCountry(val);
+                              }}
+                              placeholder="Enter country"
+                              style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
+                            />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label htmlFor="vendor-management-pin-code" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
@@ -2511,10 +2520,20 @@ export default function VendorManagementView(props) {
                             />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-billing-country" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               Country <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            {renderSelect(vSameAsRegistered ? vCountry : vBillingCountry, (e) => setVBillingCountry(e.target.value), ['India', 'United States', 'Singapore'], { height: '38px', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', disabled: vSameAsRegistered })}
+                            <input
+                              id="vendor-management-billing-country"
+                              name="billingCountry"
+                              aria-label="Billing Country"
+                              disabled={vSameAsRegistered}
+                              type="text"
+                              value={vSameAsRegistered ? vCountry : vBillingCountry}
+                              onChange={(e) => setVBillingCountry(e.target.value)}
+                              placeholder="Enter country"
+                              style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', color: vSameAsRegistered ? '#64748b' : '#334155' }}
+                            />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label htmlFor="vendor-management-pin-code" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
