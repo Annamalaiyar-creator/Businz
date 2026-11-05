@@ -8679,6 +8679,57 @@ app.post('/api/purchaseorders/:id/reject', async (req, res) => {
   res.json({ success: true, message: `PO ${targetId} rejected by ${rejectedBy}.` });
 });
 
+// Endpoint to explicitly cancel a Purchase Order with mandatory remark (Native BUSINZ Store)
+app.post('/api/purchaseorders/:id/cancel', async (req, res) => {
+  const targetId = req.params.id;
+  const reason = req.body.reason || req.body.cancelReason || req.body.remark;
+  const cancelledBy = req.body.cancelledBy || 'Procurement Head';
+
+  if (!reason || String(reason).trim() === '') {
+    return res.status(400).json({ error: 'Cancellation remark is mandatory when cancelling a Purchase Order.' });
+  }
+
+  const now = new Date();
+  const cDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const cTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+  // Update local PO store
+  const localPOs = loadLocalPOs();
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const cleanTarget = normalize(targetId);
+  const matchedIdx = localPOs.findIndex(p => {
+    const pId = normalize(p.id);
+    const pNo = normalize(p.poNo);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget);
+  });
+
+  if (matchedIdx !== -1) {
+    localPOs[matchedIdx].status = 'CANCELLED';
+    localPOs[matchedIdx].statusType = 'cancelled';
+    localPOs[matchedIdx].cancelledBy = cancelledBy;
+    localPOs[matchedIdx].cancelledDate = cDate;
+    localPOs[matchedIdx].cancelledTime = cTime;
+    localPOs[matchedIdx].cancelReason = reason;
+    localPOs[matchedIdx].cancellationRemark = reason;
+    saveLocalPOs(localPOs);
+  } else {
+    localPOs.unshift({
+      id: targetId,
+      poNo: targetId,
+      status: 'CANCELLED',
+      statusType: 'cancelled',
+      cancelledBy: cancelledBy,
+      cancelledDate: cDate,
+      cancelledTime: cTime,
+      cancelReason: reason,
+      cancellationRemark: reason
+    });
+    saveLocalPOs(localPOs);
+  }
+
+  res.json({ success: true, message: `PO ${targetId} cancelled by ${cancelledBy}.` });
+});
+
 // Endpoint to explicitly close a Purchase Order in BUSINZ Authoritative Store (Native BUSINZ Store)
 app.post('/api/purchaseorders/:id/close', async (req, res) => {
   const targetId = req.params.id;

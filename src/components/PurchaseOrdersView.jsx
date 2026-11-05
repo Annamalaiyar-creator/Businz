@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart, Building2, MapPin } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart, Building2, MapPin, Ban } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
 import StatusBadge from './StatusBadge';
@@ -230,6 +230,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const st = String(po.statusType || '').toLowerCase();
     const ost = String(po.order_status || '').toLowerCase();
     if (s === 'REJECTED' || st === 'rejected') return 'REJECTED';
+    if (s === 'CANCELLED' || s === 'Cancelled' || st === 'cancelled') return 'CANCELLED';
 
     const totOrd = Number(po.totalOrderedQty || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.qty || it.quantity || 0), 0) : 0));
     const totRec = Number(po.totalReceivedQty || po.totalReceived || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.previouslyReceived || 0), 0) : 0));
@@ -775,6 +776,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [formErrors, setFormErrors] = useState({});
   const [rejectingPo, setRejectingPo] = useState(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [cancellingPo, setCancellingPo] = useState(null);
+  const [cancellationRemarkInput, setCancellationRemarkInput] = useState('');
   const [approvingPo, setApprovingPo] = useState(null);
   const [approvalRemarksInput, setApprovalRemarksInput] = useState('');
 
@@ -1289,6 +1292,55 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       });
   };
 
+  const handleCancelPoSubmit = (poTarget) => {
+    if (!poTarget) return;
+    if (!cancellationRemarkInput || String(cancellationRemarkInput).trim() === '') {
+      alert('Cancellation remark is mandatory when cancelling a Purchase Order.');
+      return;
+    }
+    const poId = poTarget.poNo || poTarget.id;
+
+    // Immediately reflect CANCELLED state in currently active view and list
+    setViewingPoStatus('CANCELLED');
+    setPoList(prev => prev.map(p => {
+      if (p.poNo === poId || p.id === poId) {
+        return {
+          ...p,
+          status: 'CANCELLED',
+          statusType: 'cancelled',
+          cancelReason: cancellationRemarkInput,
+          cancellationRemark: cancellationRemarkInput,
+          cancelledBy: userRole || 'Procurement Head'
+        };
+      }
+      return p;
+    }));
+
+    fetch(`/api/purchaseorders/${encodeURIComponent(poId)}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason: cancellationRemarkInput,
+        cancelledBy: userRole || 'Procurement Head'
+      })
+    })
+      .then(res => (res.ok && res.headers.get('content-type')?.includes('application/json')) ? res.json() : null)
+      .then(() => {
+        setCancellingPo(null);
+        setCancellationRemarkInput('');
+        setSelectedPOs([]);
+        fetchZohoPOs(true);
+        showCustomAlert(`Purchase Order ${poId} has been cancelled successfully.`, 'PO Cancelled', 'warning');
+      })
+      .catch(() => {
+        setCancellingPo(null);
+        setCancellationRemarkInput('');
+        setSelectedPOs([]);
+        fetchZohoPOs(true);
+        showCustomAlert(`Purchase Order ${poId} has been cancelled successfully.`, 'PO Cancelled', 'warning');
+      });
+  };
+
   const resetForm = () => {
     try {
       sessionStorage.removeItem('controlroom_po_view_mode');
@@ -1785,6 +1837,57 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-24)' }}>
+      {/* Official PO Document Dedicated Print Isolation Stylesheet */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          html, body {
+            background: #FFFFFF !important;
+            color: #000000 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          /* Hide all application navigation, headers, sidebars, toolbars, timelines, and footers */
+          aside, nav, header, footer,
+          [class*="sidebar"],
+          [class*="Sidebar"],
+          .floating-action-bar,
+          .po-lifecycle-timeline,
+          .po-view-footer-actions,
+          .po-no-print,
+          .no-print {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
+          /* Isolated Official Purchase Order Printable Card */
+          #businz-po-official-document {
+            display: block !important;
+            visibility: visible !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 12px !important;
+            border: 1px solid #CBD5E1 !important;
+            border-top: 4px solid #0E7490 !important;
+            box-shadow: none !important;
+            background: #FFFFFF !important;
+            page-break-inside: auto !important;
+          }
+          #businz-po-official-document * {
+            visibility: visible !important;
+          }
+        }
+      `}</style>
 
       {/* ==================== VIEW 1: MAIN PO LIST SCREEN ==================== */}
       {viewMode === 'list' && (() => {
@@ -1803,7 +1906,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           'Proceed PO',
           'OPEN / PARTIALLY RECEIVED',
           'CLOSED / FULLY RECEIVED',
-          'REJECTED'
+          'REJECTED',
+          'CANCELLED'
         ];
 
         const filteredPOList = poList.filter(po => {
@@ -1830,6 +1934,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             (statusFilter === 'OPEN / PARTIALLY RECEIVED' && currentStage === 'PARTIALLY_RECEIVED') ||
             (statusFilter === 'CLOSED / FULLY RECEIVED' && currentStage === 'CLOSED') ||
             (statusFilter === 'REJECTED' && currentStage === 'REJECTED') ||
+            (statusFilter === 'CANCELLED' && currentStage === 'CANCELLED') ||
             statusStr === statusFilter;
 
           const matchesTab = poTab === 'All' || currentStage === poTab;
@@ -2000,7 +2105,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                 { id: 'PROCEED_PO', label: 'Proceed PO (GRN Ready)', count: poList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
                 { id: 'PARTIALLY_RECEIVED', label: 'Open / Partially Received', count: poList.filter(po => getPoStage(po) === 'PARTIALLY_RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'CLOSED', label: 'Closed / Fully Received', count: poList.filter(po => getPoStage(po) === 'CLOSED').length, bg: '#dcfce7', fg: '#15803d' },
-                { id: 'REJECTED', label: 'Rejected', count: poList.filter(po => getPoStage(po) === 'REJECTED').length, bg: '#fee2e2', fg: '#dc2626' }
+                { id: 'REJECTED', label: 'Rejected', count: poList.filter(po => getPoStage(po) === 'REJECTED').length, bg: '#fee2e2', fg: '#dc2626' },
+                { id: 'CANCELLED', label: 'Cancelled', count: poList.filter(po => getPoStage(po) === 'CANCELLED').length, bg: '#fee2e2', fg: '#b91c1c' }
               ]).map(tab => (
                 <button
                   key={tab.id}
@@ -2323,7 +2429,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
             {/* Floating Selection Toolbar (exact reference design) */}
             {selectedPOs.length > 0 && (
-              <div style={{
+              <div className="floating-action-bar po-no-print" style={{
                 position: 'fixed',
                 bottom: '24px',
                 left: '50%',
@@ -2573,18 +2679,29 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   return null;
                 })()}
 
-                {/* 4. Delete: For Procurement/Admin (not MD, not Accounts) */}
-                {!isExecutiveOrMD && !isAccounts && (
+                {/* 4. Cancel PO: Opens cancellation remark popup (Replacing Delete) */}
+                {!isAccounts && (
                   <button
                     onClick={() => {
-                      if (window.confirm(`Are you sure you want to delete ${selectedPOs.length} selected PO(s)?`)) {
-                        setSelectedPOs([]);
+                      if (selectedPOs && selectedPOs.length > 1) {
+                        alert("Please select a single Purchase Order to cancel.");
+                        return;
                       }
+                      const target = (selectedPOs && selectedPOs.length > 0)
+                        ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
+                        : (poList[0] || null);
+                      if (!target) return;
+                      if (String(target.status || '').toUpperCase() === 'CANCELLED') {
+                        alert(`PO ${target.poNo || target.id} is already cancelled.`);
+                        return;
+                      }
+                      setCancellingPo(target);
+                      setCancellationRemarkInput('');
                     }}
                     style={{
                       backgroundColor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      color: '#1E293B',
+                      border: '1px solid #FECACA',
+                      color: '#DC2626',
                       borderRadius: '10px',
                       padding: '6px 14px',
                       fontSize: '12px',
@@ -2599,7 +2716,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
                   >
-                    <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
+                    <Ban size={14} style={{ color: '#DC2626' }} /> Cancel PO
                   </button>
                 )}
 
@@ -2642,8 +2759,19 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                 {/* 6. Export / Print PDF */}
                 <button
                   onClick={() => {
+                    if (selectedPOs && selectedPOs.length > 1) {
+                      alert("Please select a single Purchase Order to export / print PDF.");
+                      return;
+                    }
+                    const target = (selectedPOs && selectedPOs.length > 0)
+                      ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
+                      : (poList[0] || null);
+                    if (!target) return;
                     setSelectedPOs([]);
-                    window.print();
+                    handleStartView(target);
+                    setTimeout(() => {
+                      window.print();
+                    }, 400);
                   }}
                   style={{
                     backgroundColor: '#FFFFFF',
@@ -2695,7 +2823,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', color: '#1e293b' }}>
 
           {/* Title Bar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="po-no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
@@ -3039,7 +3167,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
 
               {/* Visual PO Workflow History Timeline */}
-              <div className="section-card" style={{ padding: '20px', borderRadius: '12px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="section-card po-lifecycle-timeline po-no-print" style={{ padding: '20px', borderRadius: '12px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <strong style={{ fontSize: '13px', color: '#1E293B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PO Lifecycle & Workflow History</strong>
                   <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>PO Ref: {poNumber}</span>
@@ -3158,7 +3286,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               </div>
 
               {/* Official Purchase Order Header Card */}
-              <div className="section-card" style={{ padding: '30px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '24px', position: 'relative', borderTop: '4px solid #0E7490', backgroundColor: '#FFFFFF', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+              <div id="businz-po-official-document" className="section-card businz-po-document" style={{ padding: '30px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '24px', position: 'relative', borderTop: '4px solid #0E7490', backgroundColor: '#FFFFFF', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
 
                 {/* Header Row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -3717,7 +3845,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   const isDraftOrPending = !isAlreadyApproved && st !== 'REJECTED' && objStatus !== 'REJECTED';
 
                   return (
-                    <div style={{
+                    <div className="po-view-footer-actions po-no-print" style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
@@ -3770,6 +3898,48 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                         >
                           <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
                         </button>
+
+                        {/* Cancel PO action */}
+                        {!isClosed && String(viewingPoStatus || currentPoObj?.status || '').toUpperCase() !== 'CANCELLED' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCancellingPo(currentPoObj);
+                              setCancellationRemarkInput('');
+                            }}
+                            style={{
+                              backgroundColor: '#FEF2F2',
+                              border: '1px solid #FECACA',
+                              borderRadius: '8px',
+                              padding: '8px 18px',
+                              fontSize: '13px',
+                              fontWeight: '700',
+                              color: '#DC2626',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Ban size={15} style={{ color: '#DC2626' }} /> Cancel PO
+                          </button>
+                        )}
+                        {String(viewingPoStatus || currentPoObj?.status || '').toUpperCase() === 'CANCELLED' && (
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            borderRadius: '8px',
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            color: '#DC2626'
+                          }}>
+                            <Ban size={14} style={{ color: '#DC2626' }} /> Cancelled: {currentPoObj?.cancelReason || currentPoObj?.cancellationRemark || 'Order Cancelled'}
+                          </div>
+                        )}
                       </div>
 
                       {isDraftOrPending ? (
@@ -5318,6 +5488,69 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   } catch (_) {}
                   setViewMode('list');
                 }} style={{ backgroundColor: '#ffedd5', color: '#ea580c', border: 'none', borderRadius: '8px', padding: '6px 14px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>Discard Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CANCEL PURCHASE ORDER MODAL */}
+      {cancellingPo && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '24px', border: '1px solid #E2E8F0', width: '460px', maxWidth: '92vw', padding: '22px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ backgroundColor: '#DC2626', color: '#FFFFFF', fontSize: '12px', fontWeight: '800', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', letterSpacing: '0.12em', gap: '6px' }}>
+              <Ban size={15} /> CANCEL PURCHASE ORDER
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0F172A', margin: 0 }}>
+                Cancel PO {cancellingPo.poNo || cancellingPo.id}?
+              </h3>
+              <div style={{ fontSize: '12px', color: '#64748B', display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <div>Vendor: <strong style={{ color: '#0F172A' }}>{cancellingPo.vendor || cancellingPo.vendorName || vendorName}</strong></div>
+                <div>Amount: <strong style={{ color: '#0F172A' }}>{cancellingPo.amount || (grandTotal ? `₹${grandTotal.toLocaleString('en-IN')}` : '—')}</strong></div>
+                <div>Current Status: <strong style={{ color: '#0E7490' }}>{cancellingPo.status || 'Active'}</strong></div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                <label htmlFor="po-cancellation-remark-input" style={{ fontSize: '11px', fontWeight: 'bold', color: '#DC2626' }}>
+                  Cancellation Remark (Mandatory) *
+                </label>
+                <textarea
+                  id="po-cancellation-remark-input"
+                  name="cancellationRemarkInput"
+                  aria-label="Cancellation Remark"
+                  value={cancellationRemarkInput}
+                  onChange={(e) => setCancellationRemarkInput(e.target.value)}
+                  placeholder="Enter detailed reason / remark for cancelling this PO..."
+                  style={{ height: '70px', borderRadius: '8px', border: '1.5px solid #FCA5A5', padding: '8px 12px', fontSize: '12px', resize: 'none', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setCancellingPo(null); setCancellationRemarkInput(''); }}
+                  style={{ border: 'none', backgroundColor: 'transparent', color: '#64748B', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={!cancellationRemarkInput || String(cancellationRemarkInput).trim() === ''}
+                  onClick={() => handleCancelPoSubmit(cancellingPo)}
+                  style={{
+                    backgroundColor: (!cancellationRemarkInput || String(cancellationRemarkInput).trim() === '') ? '#FCA5A5' : '#DC2626',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 18px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    cursor: (!cancellationRemarkInput || String(cancellationRemarkInput).trim() === '') ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Confirm Cancellation
+                </button>
               </div>
             </div>
           </div>
