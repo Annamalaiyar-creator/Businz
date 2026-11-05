@@ -404,13 +404,7 @@ export default function DashboardFullReference({ userRole }) {
             </button>
           </div>
 
-          <div className="welcome-banner-status" style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '14px' }}>
-            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current System Status</div>
-            <div style={{ fontSize: '12px', fontWeight: '800', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#22C55E', boxShadow: '0 0 8px #22C55E' }}></span>
-              All Systems Operational
-            </div>
-          </div>
+
         </div>
 
         <div style={{
