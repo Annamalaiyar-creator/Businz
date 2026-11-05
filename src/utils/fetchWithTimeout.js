@@ -14,3 +14,16 @@ export async function fetchWithTimeout(resource, options = {}) {
     throw error;
   }
 }
+
+export async function safeFetchJson(url, options = {}, defaultValue = []) {
+  try {
+    const res = await fetch(url, options);
+    if (!res || !res.ok) return defaultValue;
+    const text = await res.text();
+    if (!text || !text.trim()) return defaultValue;
+    return JSON.parse(text);
+  } catch (_) {
+    return defaultValue;
+  }
+}
+

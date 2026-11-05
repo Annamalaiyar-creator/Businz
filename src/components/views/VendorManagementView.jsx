@@ -338,7 +338,8 @@ export default function VendorManagementView(props) {
   // Fetch live Purchase Orders & stored GRNs for GRN selection and list display
   useEffect(() => {
     fetch('/api/purchaseorders')
-      .then(res => res.json())
+      .then(res => (res && res.ok ? res.text() : ''))
+      .then(txt => (txt ? JSON.parse(txt) : []))
       .then(data => {
         if (Array.isArray(data)) {
           setLivePOs(data);
@@ -350,7 +351,8 @@ export default function VendorManagementView(props) {
   useEffect(() => {
     if (activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') {
       fetch('/api/grns')
-        .then(res => res.json())
+        .then(res => (res && res.ok ? res.text() : ''))
+        .then(txt => (txt ? JSON.parse(txt) : []))
         .then(data => {
           if (Array.isArray(data)) {
             const formattedList = data.map(g => ({
@@ -580,7 +582,8 @@ export default function VendorManagementView(props) {
           setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
 
           fetch('/api/grns')
-            .then(res => res.json())
+            .then(res => (res && res.ok ? res.text() : ''))
+            .then(txt => (txt ? JSON.parse(txt) : []))
             .then(grns => {
               if (Array.isArray(grns)) {
                 setGrnList(grns.map(g => ({
@@ -598,15 +601,20 @@ export default function VendorManagementView(props) {
                   documents: g.documents || []
                 })));
               }
-            });
+            })
+            .catch(() => {});
 
           fetch('/api/purchaseorders')
-            .then(res => res.json())
-            .then(d => { if (Array.isArray(d)) setLivePOs(d); });
+            .then(res => (res && res.ok ? res.text() : ''))
+            .then(txt => (txt ? JSON.parse(txt) : []))
+            .then(d => { if (Array.isArray(d)) setLivePOs(d); })
+            .catch(() => {});
 
           fetch('/api/items')
-            .then(res => res.json())
-            .then(items => { if (Array.isArray(items)) setItemsList(items); });
+            .then(res => (res && res.ok ? res.text() : ''))
+            .then(txt => (txt ? JSON.parse(txt) : []))
+            .then(items => { if (Array.isArray(items)) setItemsList(items); })
+            .catch(() => {});
         }
         setShowCreateGRN(false);
         resetCreateGRNForm();
@@ -718,12 +726,16 @@ export default function VendorManagementView(props) {
           });
 
         fetch('/api/purchaseorders')
-          .then(res => res.json())
-          .then(d => { if (Array.isArray(d)) setLivePOs(d); });
+          .then(res => (res && res.ok ? res.text() : ''))
+          .then(txt => (txt ? JSON.parse(txt) : []))
+          .then(d => { if (Array.isArray(d)) setLivePOs(d); })
+          .catch(() => {});
 
         fetch('/api/items')
-          .then(res => res.json())
-          .then(items => { if (Array.isArray(items)) setItemsList(items); });
+          .then(res => (res && res.ok ? res.text() : ''))
+          .then(txt => (txt ? JSON.parse(txt) : []))
+          .then(items => { if (Array.isArray(items)) setItemsList(items); })
+          .catch(() => {});
 
         setShowCreateGRN(false);
         resetCreateGRNForm();
@@ -774,8 +786,10 @@ export default function VendorManagementView(props) {
         setGrnToDelete(null);
         // Refresh live POs list
         fetch('/api/purchaseorders')
-          .then(res => res.json())
-          .then(d => { if (Array.isArray(d)) setLivePOs(d); });
+          .then(res => (res && res.ok ? res.text() : ''))
+          .then(txt => (txt ? JSON.parse(txt) : []))
+          .then(d => { if (Array.isArray(d)) setLivePOs(d); })
+          .catch(() => {});
       })
       .catch(err => {
         console.error('Error deleting GRN:', err);

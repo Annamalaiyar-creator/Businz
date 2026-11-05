@@ -633,7 +633,8 @@ export default function GoodsReceiptNoteView(props) {
     } catch (_) {}
 
     fetch('/api/purchaseorders')
-      .then(res => res.json())
+      .then(res => (res && res.ok ? res.text() : ''))
+      .then(txt => (txt ? JSON.parse(txt) : []))
       .then(data => {
         if (Array.isArray(data)) {
           setLivePOs(data);
@@ -1096,7 +1097,7 @@ export default function GoodsReceiptNoteView(props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newGRNRecord)
     })
-      .then(res => res.json())
+      .then(res => (res && res.ok ? res.text() : ''))
       .catch(() => {});
 
     setShowCreateGRN(false);
@@ -1291,7 +1292,7 @@ export default function GoodsReceiptNoteView(props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...payload, id: grnGeneratedId, grnNo: grnGeneratedId })
     })
-      .then(res => res.json())
+      .then(res => (res && res.ok ? res.text() : ''))
       .catch(() => {});
     setShowCreateGRN(false);
     resetCreateGRNForm();

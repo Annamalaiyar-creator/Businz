@@ -410,7 +410,8 @@ export default function DispatchDashboardView(props) {
   // Fetch live Purchase Orders & stored GRNs for GRN selection and list display
   useEffect(() => {
     fetch('/api/purchaseorders')
-      .then(res => res.json())
+      .then(res => (res && res.ok ? res.text() : ''))
+      .then(txt => (txt ? JSON.parse(txt) : []))
       .then(data => {
         if (Array.isArray(data)) {
           setLivePOs(data);
@@ -422,7 +423,8 @@ export default function DispatchDashboardView(props) {
   useEffect(() => {
     if (activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') {
       fetch('/api/grns')
-        .then(res => res.json())
+        .then(res => (res && res.ok ? res.text() : ''))
+        .then(txt => (txt ? JSON.parse(txt) : []))
         .then(data => {
           if (Array.isArray(data)) {
             const formattedList = data.map(g => ({
