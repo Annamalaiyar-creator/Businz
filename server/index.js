@@ -2930,6 +2930,11 @@ const saveLocalGRNs = (grns) => {
   saveDatabaseStore('grn_store', grns);
 };
 
+// Lightweight server heartbeat for dev proxy & load balancers
+app.get(['/api/health', '/api/ping'], (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: Date.now() });
+});
+
 // Health & PostgreSQL Database Status Check
 app.get('/api/db-status', async (req, res) => {
   try {

@@ -35,8 +35,9 @@ function autoStartBackendPlugin() {
       } catch (_) {}
 
       const checkBackend = () => {
-        const req = http.get(`${backendTarget}/api/customers`, (res) => {
-          // Backend is already up and responding
+        const req = http.get(`${backendTarget}/api/health`, (res) => {
+          // Backend is already up and responding - consume/drain stream to prevent socket descriptor leaks
+          res.resume();
         });
         req.on('error', () => {
           // Backend is not running, spawn it automatically
@@ -79,12 +80,16 @@ export default defineConfig({
       '/api': {
         target: backendTarget,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        timeout: 60000,
+        proxyTimeout: 60000
       },
       '/uploads': {
         target: backendTarget,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        timeout: 60000,
+        proxyTimeout: 60000
       }
     }
   },
@@ -95,12 +100,16 @@ export default defineConfig({
       '/api': {
         target: backendTarget,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        timeout: 60000,
+        proxyTimeout: 60000
       },
       '/uploads': {
         target: backendTarget,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        timeout: 60000,
+        proxyTimeout: 60000
       }
     }
   },
