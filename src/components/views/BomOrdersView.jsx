@@ -11,7 +11,7 @@ import jsPDF from 'jspdf';
 import { exportSmartMultiPagePdf } from '../../utils/smartPdfExporter';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, deleteCloudBomRow, saveCloudBomRow } from '../../utils/supabaseDataSync';
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
-import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
+import { VRM_PRODUCTS, isRailPreset, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
 import { uploadBomDocumentFile, validateClientFile } from '../../utils/bomStorageClient';
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from '../../utils/documentResolver';
@@ -4392,7 +4392,8 @@ export default function BomOrdersView(props) {
                   </th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
-                  <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                  <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty / Set <span style={{ color: '#EF4444' }}>*</span></th>
+                  <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
                   {bomMaterialsList.some(it => it.isPresetItem) && (
@@ -4408,7 +4409,7 @@ export default function BomOrdersView(props) {
               <tbody>
                 {bomMaterialsList.length === 0 ? (
                   <tr>
-                    <td colSpan={bomMaterialsList.some(it => it.isPresetItem) ? 10 : 9} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
+                    <td colSpan={bomMaterialsList.some(it => it.isPresetItem) ? 11 : 10} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
                       No items added yet. Pick a preset above or click <strong>Add Product / Item</strong> below.
                     </td>
                   </tr>
@@ -4679,6 +4680,43 @@ export default function BomOrdersView(props) {
                                 style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
                                />
                             )}
+                          </td>
+                          {/* Total Dispatch Quantity Column */}
+                          <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: isPresetItem ? '#ECFEFF' : '#F8FAFC' }}>
+                            {(() => {
+                              const totalDisp = calculateTotalDispatchQty(
+                                item,
+                                currentGroup?.setCount || 1,
+                                currentGroup?.presetName || item.presetName,
+                                currentGroup?.category || item.category
+                              );
+                              const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category) || isRailPreset(item.name, item.category);
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                  <div style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    backgroundColor: '#FFFFFF',
+                                    border: `1.5px solid ${isPresetItem ? theme.border : '#CBD5E1'}`,
+                                    borderRadius: '6px',
+                                    padding: '4px 8px'
+                                  }}>
+                                    <strong style={{ fontSize: '13px', color: isPresetItem ? theme.primary : '#0E7490', fontWeight: '800' }}>
+                                      {totalDisp}
+                                    </strong>
+                                    <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>
+                                      {item.uom || item.unit || 'NOS'}
+                                    </span>
+                                  </div>
+                                  {isPresetItem && (
+                                    <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                      {isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) > 1 ? 's' : ''}`}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td style={{ padding: '12px 10px' }}>
                             {isPresetItem ? (
@@ -7566,7 +7604,8 @@ export default function BomOrdersView(props) {
                   <th style={{ padding: '12px 10px', width: '25%' }}>Product / Component Name</th>
                   <th style={{ padding: '12px 10px', width: '18%' }}>Description</th>
                   <th style={{ padding: '12px 10px', width: '9%', textAlign: 'center' }}>UOM</th>
-                  <th style={{ padding: '12px 10px', width: '9%', textAlign: 'center' }}>Qty</th>
+                  <th style={{ padding: '12px 10px', width: '9%', textAlign: 'center' }}>Qty / Set</th>
+                  <th style={{ padding: '12px 10px', width: '12%', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                   <th style={{ padding: '12px 10px', width: '12%', textAlign: 'right' }}>Rate (₹)</th>
                   <th style={{ padding: '12px 10px', width: '13%', textAlign: 'right' }}>Total (₹)</th>
                   {!isAlreadyForwarded && <th style={{ padding: '12px 10px', width: '50px', textAlign: 'center' }}>Action</th>}
@@ -7777,6 +7816,44 @@ export default function BomOrdersView(props) {
                             <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
                             <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
                             <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
+                            
+                            {/* Total Dispatch Quantity Column */}
+                            <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: isPartBundle ? '#ECFEFF' : '#F8FAFC' }}>
+                              {(() => {
+                                const totalDisp = calculateTotalDispatchQty(
+                                  item,
+                                  pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1,
+                                  pInfo?.presetName || item.presetName || confirmingBomModal.presetName,
+                                  confirmingBomModal.category || item.category
+                                );
+                                const isRail = isRailPreset(pInfo?.presetName || item.presetName || confirmingBomModal.presetName) || isRailPreset(item.name, item.category);
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                    <div style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      backgroundColor: '#FFFFFF',
+                                      border: `1.5px solid ${isPartBundle ? theme.border : '#CBD5E1'}`,
+                                      borderRadius: '6px',
+                                      padding: '4px 8px'
+                                    }}>
+                                      <strong style={{ fontSize: '13px', color: isPartBundle ? theme.primary : '#0E7490', fontWeight: '800' }}>
+                                        {totalDisp}
+                                      </strong>
+                                      <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>
+                                        {item.uom || item.unit || 'NOS'}
+                                      </span>
+                                    </div>
+                                    {isPartBundle && (
+                                      <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                        {isRail ? 'Direct Rails Qty' : `${itemQty} × ${pInfo?.setCount || 1} Set${(pInfo?.setCount || 1) > 1 ? 's' : ''}`}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </td>
                             
                             {/* Rate Column: Consolidated & Centered in Middle for Presets (Like PI) */}
                             {isPartBundle ? (
@@ -10161,7 +10238,8 @@ export default function BomOrdersView(props) {
                         <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
                           <th style={{ padding: '8px 10px' }}>#</th>
                           <th style={{ padding: '8px 10px' }}>Product Description</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center' }}>BOM Qty</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center' }}>Qty / Set</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                           {hasDispatchPacking && (
                             <th style={{ padding: '8px 10px', textAlign: 'center', color: '#0E7490' }}>Packed Qty</th>
                           )}
@@ -10267,6 +10345,13 @@ export default function BomOrdersView(props) {
                               {it.category && <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '500' }}>{it.category}</span>}
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: isKitPart ? theme.primary : '#0E7490' }}>{q} {it.uom || ''}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: isKitPart ? '#ECFEFF' : '#F8FAFC' }}>
+                              {(() => {
+                                const matchedGrp = pGroups.find(g => g.groupId === it.presetGroupId) || pGroups[0];
+                                const totalDisp = calculateTotalDispatchQty(it, matchedGrp?.setCount || quickPreviewRecord.setCount || quickPreviewRecord.presetSetCount || 1, matchedGrp?.presetName || it.presetName || quickPreviewRecord.presetName);
+                                return `${totalDisp} ${it.uom || ''}`;
+                              })()}
+                            </td>
                             {hasDispatchPacking && (
                               <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800' }}>
                                 <span style={{

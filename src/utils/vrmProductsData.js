@@ -3912,10 +3912,68 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
   return finalRes;
 };
 
+/**
+ * Detects whether a preset or item is a "Rails Preset" (Mini Rail, Adhesive Rail, Long Rail, Double C Rail, C Rail, Struct Rail, etc.).
+ * For Rails presets, user mandated that the quantity entered by salesperson is directly the total dispatch quantity (multiplier = 1).
+ */
+export const isRailPreset = (presetName = '', category = '') => {
+  const norm = `${presetName || ''} ${category || ''}`.toLowerCase();
+  return (
+    norm.includes('mini rail') ||
+    norm.includes('adhesive rail') ||
+    norm.includes('double c rail') ||
+    norm.includes('c rail') ||
+    norm.includes('long rail') ||
+    norm.includes('struct rail') ||
+    norm.includes('short rail') ||
+    norm.includes('rail kit') ||
+    norm.includes('rail preset') ||
+    norm.includes('rails preset') ||
+    /\brails?\b/i.test(norm)
+  );
+};
+
+/**
+ * Calculates the Total Dispatch Quantity for an item in a preset kit or standalone item.
+ * - In printouts: Shows ONLY Qty / Set.
+ * - In software: Shows BOTH Qty / Set and Total Dispatch Quantity.
+ * - Special Rule for Rails Preset: entered quantity is directly the total dispatch quantity (multiplier = 1).
+ * - For other Presets: Total Dispatch Qty = (Qty / Set) * (Set Count).
+ */
+export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', presetCategory = '') => {
+  if (!item) return 0;
+  const baseQty = parseFloat(
+    item.qty !== undefined && item.qty !== null && item.qty !== ''
+      ? item.qty
+      : (item.bomQty !== undefined && item.bomQty !== null && item.bomQty !== ''
+        ? item.bomQty
+        : (item.quantity !== undefined && item.quantity !== null && item.quantity !== ''
+          ? item.quantity
+          : (item.totalDispatchQty || 0)))
+  ) || 0;
+  if (baseQty <= 0) return 0;
+
+  // Standalone custom items (not part of any preset) -> total dispatch qty = entered qty
+  if (!item.isPresetItem && !item.presetGroupId && !item.presetName && !presetName) {
+    return baseQty;
+  }
+
+  // Special Rails Rule: Salesperson's entered quantity is directly the total dispatch quantity!
+  const isRail = isRailPreset(presetName || item.presetName, presetCategory || item.category) || isRailPreset(item.name, item.category);
+  if (isRail) {
+    return baseQty;
+  }
+
+  const mult = Math.max(0.01, parseFloat(setCount) || 1);
+  return Math.round(baseQty * mult * 100) / 100;
+};
+
 export default {
   VRM_PRODUCTS,
   wordFingerprint,
-  resolveProductCode
+  resolveProductCode,
+  isRailPreset,
+  calculateTotalDispatchQty
 };
 
 

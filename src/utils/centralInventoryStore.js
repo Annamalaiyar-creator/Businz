@@ -202,7 +202,7 @@ class CentralInventoryStore {
               if (!isCompletedOrDeducted && !isCancelledOrRestored) {
                 (b.items || []).forEach(it => {
                   const c = String(it.code || '').toUpperCase().trim();
-                  const q = parseFloat(it.qty || it.bomQty || 0) || 0;
+                  const q = parseFloat(it.totalDispatchQty || it.qty || it.bomQty || 0) || 0;
                   if (c && q > 0) {
                     bomAllocMap.set(c, (bomAllocMap.get(c) || 0) + q);
                   }
@@ -517,7 +517,7 @@ class CentralInventoryStore {
                 (b.items || []).forEach(it => {
                   const c = String(it.code || '').toUpperCase().trim();
                   const n = String(it.name || '').toLowerCase().trim();
-                  const q = parseFloat(it.qty || it.bomQty || 0) || 0;
+                  const q = parseFloat(it.totalDispatchQty || it.qty || it.bomQty || 0) || 0;
                   const itemCode = String(item.code || '').toUpperCase().trim();
                   const isMr300Only = (c === 'MR-300MM') || ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
                   if (c && c === itemCode) bomAlloc += q;
@@ -742,7 +742,7 @@ class CentralInventoryStore {
     const timestamp = new Date().toISOString();
 
     itemsList.forEach(pItem => {
-      const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
+      const qty = parseFloat(pItem.totalDispatchQty || pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
       if (qty <= 0) return;
       const resCode = resolveProductCode(pItem);
       const rawCode = String(resCode || pItem.code || '').toUpperCase().trim();
@@ -806,7 +806,7 @@ class CentralInventoryStore {
       if (itemsStr) currentItems = JSON.parse(itemsStr);
       if (Array.isArray(currentItems) && currentItems.length > 0) {
         itemsList.forEach(pItem => {
-          const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
+          const qty = parseFloat(pItem.totalDispatchQty || pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
           if (qty <= 0) return;
           const resCode = resolveProductCode(pItem);
           const pCode = String(pItem.code || resCode || '').toUpperCase().trim();
@@ -839,7 +839,7 @@ class CentralInventoryStore {
       if (regStr) stockRegistry = JSON.parse(regStr);
       if (Array.isArray(stockRegistry) && stockRegistry.length > 0) {
         itemsList.forEach(pItem => {
-          const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
+          const qty = parseFloat(pItem.totalDispatchQty || pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
           if (qty <= 0) return;
           const pCode = String(pItem.code || '').toUpperCase().trim();
           const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
@@ -1025,7 +1025,7 @@ class CentralInventoryStore {
     // If items provided, add back to stock
     if (Array.isArray(itemsList) && itemsList.length > 0) {
       itemsList.forEach(pItem => {
-        const qty = parseFloat(pItem.qty || pItem.bomQty || 1) || 0;
+        const qty = parseFloat(pItem.totalDispatchQty || pItem.qty || pItem.bomQty || 1) || 0;
         const resCode = resolveProductCode(pItem);
         const pCode = String(pItem.code || resCode || '').toUpperCase().trim();
         const pName = String(pItem.name || pItem.description || '').trim();

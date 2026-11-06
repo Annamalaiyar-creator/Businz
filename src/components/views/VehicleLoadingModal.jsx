@@ -883,7 +883,7 @@ return (
               allPackedItems.map((item, idx) => {
                 const code = item.code || item.itemCode || item.productCode || `ITM-${idx + 1}`;
                 const name = item.name || item.itemName || 'Standard Component';
-                const qty = Number(item.qty || item.bomQty || item.packedQty || 1);
+                const qty = Number(item.totalDispatchQty || item.bomQty || item.qty || item.packedQty || 1);
                 const uom = item.uom || item.unit || 'Nos';
                 const isPacked = item.packed !== false;
                 return (

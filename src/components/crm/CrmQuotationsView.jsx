@@ -25,6 +25,7 @@ import {
   sendDirectWhatsApp
 } from '../../utils/whatsappDispatchService';
 import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
+import { isRailPreset, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
 export { is5PctSolarProduct };
 
 const QUOTATION_TERMS_PRESETS = [
@@ -1077,8 +1078,14 @@ export default function CrmQuotationsView({
       deliveryPincode: sameAsBilling ? billingPincode : deliveryPincode,
       items: quoteItems.map(it => {
         const resolvedUom = String(it.uom || it.unit || 'NOS').trim().toUpperCase() || 'NOS';
+        const gid = it.presetGroupId || (it.isPresetItem ? 'legacy_default' : null);
+        const currentGroup = (gid && presetGroups[gid]) || null;
+        const setCount = parseFloat(currentGroup?.setCount || 1) || 1;
+        const totalDispatchQty = it.totalDispatchQty || calculateTotalDispatchQty(it, setCount, currentGroup?.presetName || it.presetName, it.category);
         return {
           ...it,
+          qtyPerSet: it.qtyPerSet || it.qty,
+          totalDispatchQty: totalDispatchQty,
           uom: resolvedUom,
           unit: resolvedUom,
           hsn: it.hsn || getHsnCode(it),
@@ -1905,7 +1912,7 @@ export default function CrmQuotationsView({
           {/* Clean Modern Items Table */}
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
-              <table style={{ width: '100%', minWidth: quoteItems.some(it => it.isPresetItem) ? '1380px' : '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+              <table style={{ width: '100%', minWidth: quoteItems.some(it => it.isPresetItem) ? '1500px' : '1360px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                     <th style={{ padding: '12px 4px', width: '38px', minWidth: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
@@ -1928,7 +1935,8 @@ export default function CrmQuotationsView({
                     <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
                     <th style={{ padding: '12px 8px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
-                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty / Set <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 8px', fontWeight: '700', width: '125px', minWidth: '125px', textAlign: 'center', backgroundColor: '#ECFEFF', color: '#0E7490', borderTop: '2px solid #0E7490' }}>Total Dispatch Qty</th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
                     {quoteItems.some(it => it.isPresetItem) && (
@@ -1944,7 +1952,7 @@ export default function CrmQuotationsView({
                 <tbody>
                   {quoteItems.length === 0 ? (
                     <tr>
-                      <td colSpan={quoteItems.some(it => it.isPresetItem) ? 12 : 11} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
+                      <td colSpan={quoteItems.some(it => it.isPresetItem) ? 13 : 12} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
                         No items added yet. Pick a preset above or click <strong>+ Add Product / Item</strong> below.
                       </td>
                     </tr>
@@ -2191,17 +2199,45 @@ export default function CrmQuotationsView({
                            </td>
                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                                              <input id={`crm-quotations-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
+                               <input id={`crm-quotations-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty / Set"
                                  type="number"
                                  value={item.qty}
                                  placeholder="0"
                                  onChange={(e) => {
                                    const val = e.target.value;
-                                   setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
+                                   const numVal = parseFloat(val) || 0;
+                                   const setCount = parseFloat(currentGroup?.setCount || 1) || 1;
+                                   const calculatedDisp = calculateTotalDispatchQty({ ...item, qty: numVal }, setCount, currentGroup?.presetName || item.presetName, item.category);
+                                   setQuoteItems(prev => prev.map((mat, idx) => idx === i ? {
+                                     ...mat,
+                                     qty: val,
+                                     qtyPerSet: val,
+                                     totalDispatchQty: calculatedDisp
+                                   } : mat));
                                  }}
                                  style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white', cursor: 'text', fontWeight: '700' }}
                                 />
                              </div>
+                           </td>
+                           <td style={{ padding: '8px 10px', textAlign: 'center', backgroundColor: '#F0FDFA', verticalAlign: 'middle' }}>
+                             {(() => {
+                               const setCount = parseFloat(currentGroup?.setCount || 1) || 1;
+                               const calculatedDisp = calculateTotalDispatchQty(item, setCount, currentGroup?.presetName || item.presetName, item.category);
+                               const dispQty = item.totalDispatchQty || calculatedDisp;
+                               const numQty = parseFloat(item.qty) || 0;
+                               return (
+                                 <div>
+                                   <div style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
+                                     {dispQty}
+                                   </div>
+                                   {dispQty !== numQty && (
+                                     <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>
+                                       ({item.qty} × {setCount})
+                                     </div>
+                                   )}
+                                 </div>
+                               );
+                             })()}
                            </td>
                           <td style={{ padding: '12px 10px' }}>
                             {isPresetItem ? (
@@ -3818,7 +3854,7 @@ export default function CrmQuotationsView({
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                       <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#475569' }}>Item Description</th>
-                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#475569', width: '80px' }}>Qty</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#475569', width: '90px' }}>Qty / Set</th>
                       <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#475569', width: '110px' }}>Rate (₹)</th>
                       <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#475569', width: '120px' }}>Amount (₹)</th>
                     </tr>

@@ -115,7 +115,7 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   colHeaderSno: '#',
   colHeaderDesc: 'Item & Description',
   colHeaderHsn: 'HSN/SAC',
-  colHeaderQty: 'Qty',
+  colHeaderQty: 'Qty / Set',
   colHeaderUom: 'UOM',
   colHeaderRate: 'Rate',
   colHeaderDiscount: 'Disc%',
@@ -2502,12 +2502,12 @@ export function VRMProformaInvoicePrintSheet({
                       </th>
                     )}
                     {hasQty && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '52px', position: 'relative' }}>
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '60px', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <EditableText
-                            value={cfg.qtyColLabel || 'Qty'}
-                            fallback="Qty"
-                            onSave={(v) => onUpdateSetting?.({ qtyColLabel: v })}
+                            value={cfg.qtyColLabel || cfg.colHeaderQty || 'Qty / Set'}
+                            fallback="Qty / Set"
+                            onSave={(v) => onUpdateSetting?.({ qtyColLabel: v, colHeaderQty: v })}
                           />
                           {isEditable && (
                             <button

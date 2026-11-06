@@ -7,7 +7,7 @@ import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, getMediaF
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
-import { VRM_PRODUCTS } from "../../utils/vrmProductsData";
+import { VRM_PRODUCTS, calculateTotalDispatchQty } from "../../utils/vrmProductsData";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { uploadBomDocumentFile, deleteBomDocumentFile } from "../../utils/bomStorageClient";
@@ -418,12 +418,17 @@ export default function DispatchPackingModal({
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
     const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
     const isPacked = Boolean(isAccountsLocked || isAlreadySentToAccounts);
+    const setCount = parseFloat(it.setCount || dispatchPackingModal.presetSetCount || dispatchPackingModal.setCount) || 1;
+    const totalDispatchQty = it.totalDispatchQty || calculateTotalDispatchQty(it, setCount, it.presetName || dispatchPackingModal.presetName, it.category);
+    const qtyPerSet = it.qtyPerSet || it.qty || 1;
     return {
       name: it.name || it.c2 || 'Item',
       code,
-      bomQty: it.qty || 1,
+      qtyPerSet,
+      totalDispatchQty,
+      bomQty: totalDispatchQty,
       packed: isPacked,
-      packedQty: isPacked ? (it.qty || 1) : '',
+      packedQty: isPacked ? totalDispatchQty : '',
       isPresetItem: Boolean(it.isPresetItem),
       presetGroupId: it.presetGroupId || null,
       presetName: it.presetName || null,
@@ -437,13 +442,19 @@ export default function DispatchPackingModal({
         const nameStr = (p.name || p.itemName || '').toLowerCase().trim();
         const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || rawMatch.code || null));
         const isPacked = isAccountsLocked ? (p.packed !== false) : Boolean(p.packed || p.scanned || (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '' && Number(p.packedQty) > 0) || isAlreadySentToAccounts);
+        const setCount = parseFloat(p.setCount || rawMatch.setCount || dispatchPackingModal.presetSetCount || dispatchPackingModal.setCount) || 1;
+        const totalDispatchQty = p.totalDispatchQty || rawMatch.totalDispatchQty || calculateTotalDispatchQty(p, setCount, p.presetName || rawMatch.presetName || dispatchPackingModal.presetName, p.category || rawMatch.category);
+        const qtyPerSet = p.qtyPerSet || rawMatch.qtyPerSet || p.qty || rawMatch.qty || 1;
+        const resolvedBomQty = p.totalDispatchQty || rawMatch.totalDispatchQty || p.bomQty || totalDispatchQty;
         const resolvedPackedQty = (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '')
           ? p.packedQty
-          : (isPacked ? (p.bomQty || p.qty || rawMatch.qty || 1) : '');
+          : (isPacked ? resolvedBomQty : '');
         return {
           ...p,
           code,
-          bomQty: p.bomQty || p.qty || rawMatch.qty || 1,
+          qtyPerSet,
+          totalDispatchQty,
+          bomQty: resolvedBomQty,
           packed: isPacked,
           packedQty: resolvedPackedQty,
           isPresetItem: Boolean(p.isPresetItem || rawMatch.isPresetItem),
@@ -730,14 +741,20 @@ export default function DispatchPackingModal({
               ? Number(it.packedQty)
               : (it.bomQty || it.qty || 1)
           }))
-        : (dispatchPackingModal.items || []).map(it => ({
-            code: it.code,
-            name: it.name,
-            bomQty: it.qty || it.bomQty || 1,
-            qty: it.qty || it.bomQty || 1,
-            packed: true,
-            packedQty: it.qty || it.bomQty || 1
-          }));
+        : (dispatchPackingModal.items || []).map(it => {
+            const setCount = parseFloat(it.setCount || dispatchPackingModal.presetSetCount || dispatchPackingModal.setCount) || 1;
+            const dispQty = it.totalDispatchQty || calculateTotalDispatchQty(it, setCount, it.presetName || dispatchPackingModal.presetName, it.category);
+            return {
+              code: it.code,
+              name: it.name,
+              bomQty: dispQty,
+              qty: dispQty,
+              qtyPerSet: it.qtyPerSet || it.qty || 1,
+              totalDispatchQty: dispQty,
+              packed: true,
+              packedQty: dispQty
+            };
+          });
 
       nextStatus = needsSalesPaymentProof ? 'Packed — Awaiting Sales Payment Proof' : 'Packed & Awaiting Accounts Verification';
       isFullyConfirmed = true;
@@ -1507,7 +1524,8 @@ export default function DispatchPackingModal({
             ];
 
             const renderRow = (pItem, origIdx, itemNumberStr) => {
-              const itemBomQty = pItem.bomQty || pItem.qty || 1;
+              const itemBomQty = pItem.totalDispatchQty || pItem.bomQty || pItem.qty || 1;
+              const qtyPerSet = pItem.qtyPerSet || pItem.qty || 1;
               const currentPackedQty = (pItem.packedQty !== undefined && pItem.packedQty !== null && pItem.packedQty !== '') ? pItem.packedQty : (pItem.packed ? itemBomQty : '');
 
               return (
@@ -1518,7 +1536,7 @@ export default function DispatchPackingModal({
                     const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
                       ...pi,
                       packed: newPacked,
-                      packedQty: newPacked ? (pi.packedQty ? pi.packedQty : (pi.bomQty || pi.qty || 1)) : ''
+                      packedQty: newPacked ? (pi.packedQty ? pi.packedQty : (pi.totalDispatchQty || pi.bomQty || pi.qty || 1)) : ''
                     } : pi);
                     setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
                   }}
@@ -1569,7 +1587,13 @@ export default function DispatchPackingModal({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '13px' }}>
-                    {itemBomQty} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
+                    {qtyPerSet} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA', fontSize: '13px' }}>
+                    <div>{itemBomQty} <span style={{ fontSize: '11px', color: '#0E7490' }}>Nos</span></div>
+                    {itemBomQty !== qtyPerSet && (
+                      <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>({qtyPerSet} / set)</div>
+                    )}
                   </td>
                   <td style={{ padding: '10px 14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                     {isPackedAndReady ? (
@@ -1632,7 +1656,8 @@ export default function DispatchPackingModal({
             };
 
             const renderMobileCard = (pItem, origIdx, itemNumberStr) => {
-              const itemBomQty = pItem.bomQty || pItem.qty || 1;
+              const itemBomQty = pItem.totalDispatchQty || pItem.bomQty || pItem.qty || 1;
+              const qtyPerSet = pItem.qtyPerSet || pItem.qty || 1;
               const currentPackedQty = (pItem.packedQty !== undefined && pItem.packedQty !== null && pItem.packedQty !== '') ? pItem.packedQty : (pItem.packed ? itemBomQty : '');
 
               return (
@@ -1643,7 +1668,7 @@ export default function DispatchPackingModal({
                     const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
                       ...pi,
                       packed: newPacked,
-                      packedQty: newPacked ? (pi.packedQty ? pi.packedQty : (pi.bomQty || pi.qty || 1)) : ''
+                      packedQty: newPacked ? (pi.packedQty ? pi.packedQty : (pi.totalDispatchQty || pi.bomQty || pi.qty || 1)) : ''
                     } : pi);
                     setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
                   }}
@@ -1715,6 +1740,9 @@ export default function DispatchPackingModal({
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '8px', marginTop: '2px' }} onClick={e => e.stopPropagation()}>
                     <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
                       Ordered: <strong style={{ color: '#0F172A', fontWeight: '800' }}>{itemBomQty} Nos</strong>
+                      {itemBomQty !== qtyPerSet && (
+                        <span style={{ fontSize: '10px', color: '#0E7490', marginLeft: '4px', fontWeight: '700' }}>({qtyPerSet}/set)</span>
+                      )}
                     </div>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>Packed Qty:</span>
@@ -1817,7 +1845,7 @@ export default function DispatchPackingModal({
                                     type="button"
                                     onClick={() => {
                                       const shouldPack = !allSetPacked;
-                                      const updatedPacking = itemsToPack.map((pi, i) => setIndices.includes(i) ? { ...pi, packed: shouldPack, packedQty: shouldPack ? (pi.packedQty ? pi.packedQty : (pi.bomQty || pi.qty || 1)) : '' } : pi);
+                                      const updatedPacking = itemsToPack.map((pi, i) => setIndices.includes(i) ? { ...pi, packed: shouldPack, packedQty: shouldPack ? (pi.packedQty ? pi.packedQty : (pi.totalDispatchQty || pi.bomQty || pi.qty || 1)) : '' } : pi);
                                       setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
                                     }}
                                     style={{
@@ -1908,7 +1936,8 @@ export default function DispatchPackingModal({
                     <th style={{ padding: '13px 20px', width: '60px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Check</th>
                     <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Code</th>
                     <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Description</th>
-                    <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
+                    <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Qty / Set</th>
+                    <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Total Dispatch Qty</th>
                     <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Packed Qty</th>
                     <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Status</th>
                   </tr>
@@ -1939,7 +1968,7 @@ export default function DispatchPackingModal({
                           <React.Fragment key={`set-grp-${gid}`}>
                             {/* Set Header Row */}
                             <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1px solid ${theme.border}` }}>
-                              <td colSpan={6} style={{ padding: '10px 18px' }}>
+                              <td colSpan={7} style={{ padding: '10px 18px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <span style={{
@@ -1965,7 +1994,7 @@ export default function DispatchPackingModal({
                                       type="button"
                                       onClick={() => {
                                         const shouldPack = !allSetPacked;
-                                        const updatedPacking = itemsToPack.map((pi, i) => setIndices.includes(i) ? { ...pi, packed: shouldPack } : pi);
+                                        const updatedPacking = itemsToPack.map((pi, i) => setIndices.includes(i) ? { ...pi, packed: shouldPack, packedQty: shouldPack ? (pi.packedQty ? pi.packedQty : (pi.totalDispatchQty || pi.bomQty || pi.qty || 1)) : '' } : pi);
                                         setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
                                       }}
                                       style={{
@@ -2009,7 +2038,7 @@ export default function DispatchPackingModal({
                         return (
                           <React.Fragment key="loose-items-group">
                             <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                              <td colSpan={6} style={{ padding: '10px 18px' }}>
+                              <td colSpan={7} style={{ padding: '10px 18px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <span style={{
                                     padding: '3px 10px',

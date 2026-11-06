@@ -8,6 +8,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { resolveDocumentUrl } from "../../utils/documentResolver";
 import DispatchMediaThumbnail from "./DispatchMediaThumbnail";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
+import { isRailPreset, calculateTotalDispatchQty } from "../../utils/vrmProductsData";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
 
@@ -217,12 +218,23 @@ export default function ConfirmingBomModal({
                 const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
                 const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
 
-                const finalizedItems = (confirmingBomModal.items || []).map(i => ({ ...i, confirmed: true }));
+                const finalizedItems = (confirmingBomModal.items || []).map(i => {
+                  const setCount = parseFloat(i.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
+                  const totalDispatchQty = i.totalDispatchQty || calculateTotalDispatchQty(i, setCount, i.presetName || confirmingBomModal.presetName, i.category);
+                  return {
+                    ...i,
+                    confirmed: true,
+                    qtyPerSet: i.qtyPerSet || i.qty,
+                    totalDispatchQty: totalDispatchQty
+                  };
+                });
                 const packingItems = (confirmingBomModal.dispatchPacking && confirmingBomModal.dispatchPacking.length > 0)
                   ? confirmingBomModal.dispatchPacking
                   : finalizedItems.map(it => ({
                     name: it.name || it.c2 || 'Item',
-                    bomQty: it.qty || 1,
+                    bomQty: it.totalDispatchQty || it.qty || 1,
+                    qtyPerSet: it.qtyPerSet || it.qty || 1,
+                    totalDispatchQty: it.totalDispatchQty || it.qty || 1,
                     packed: false
                   }));
 
@@ -1421,10 +1433,11 @@ export default function ConfirmingBomModal({
                 <th style={{ padding: '12px 10px', width: '40px', textAlign: 'center' }}>#</th>
                 <th style={{ padding: '12px 10px', width: '25%' }}>Product / Component Name</th>
                 <th style={{ padding: '12px 10px', width: '18%' }}>Description</th>
-                <th style={{ padding: '12px 10px', width: '9%', textAlign: 'center' }}>UOM</th>
-                <th style={{ padding: '12px 10px', width: '9%', textAlign: 'center' }}>Qty</th>
-                <th style={{ padding: '12px 10px', width: '12%', textAlign: 'right' }}>Rate (₹)</th>
-                <th style={{ padding: '12px 10px', width: '13%', textAlign: 'right' }}>Total (₹)</th>
+                <th style={{ padding: '12px 10px', width: '8%', textAlign: 'center' }}>UOM</th>
+                <th style={{ padding: '12px 10px', width: '8%', textAlign: 'center' }}>Qty / Set</th>
+                <th style={{ padding: '12px 10px', width: '11%', textAlign: 'center', backgroundColor: '#ECFEFF', color: '#0E7490', borderTop: '2px solid #0E7490' }}>Total Dispatch Qty</th>
+                <th style={{ padding: '12px 10px', width: '11%', textAlign: 'right' }}>Rate (₹)</th>
+                <th style={{ padding: '12px 10px', width: '12%', textAlign: 'right' }}>Total (₹)</th>
                 {!isAlreadyForwarded && <th style={{ padding: '12px 10px', width: '50px', textAlign: 'center' }}>Action</th>}
               </tr>
             </thead>
@@ -1482,6 +1495,20 @@ export default function ConfirmingBomModal({
                         <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
                         <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
                         <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
+                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA' }}>
+                          {(() => {
+                            const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
+                            const dispQty = item.totalDispatchQty || calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
+                            return (
+                              <div>
+                                <span>{dispQty}</span>
+                                {dispQty !== itemQty && (
+                                  <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>({itemQty} × {setCount})</div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
                         
                         {/* Rate Column: Consolidated & Centered in Middle for Presets (Like PI) */}
                         {isPartBundle ? (
@@ -1595,17 +1622,41 @@ export default function ConfirmingBomModal({
                        />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input id={`confirming-bom-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
+                      <input id={`confirming-bom-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty / Set"
                         type="number"
                         min="1"
                         value={item.qty}
                         onChange={(e) => {
                           const val = e.target.value;
-                          const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, qty: val } : it);
+                          const numericVal = parseFloat(val) || 0;
+                          const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
+                          const calculatedDispatch = calculateTotalDispatchQty({ ...item, qty: numericVal }, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
+                          const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? {
+                            ...it,
+                            qty: val,
+                            qtyPerSet: val,
+                            totalDispatchQty: calculatedDispatch
+                          } : it);
                           setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                         }}
                         style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', color: '#0F172A', outline: 'none' }}
                        />
+                    </td>
+                    <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: '#F0FDFA' }}>
+                      {(() => {
+                        const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
+                        const dispQty = item.totalDispatchQty || calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
+                        return (
+                          <div>
+                            <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>{dispQty}</span>
+                            {dispQty !== cleanNum(item.qty) && (
+                              <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>
+                                ({item.qty} × {setCount})
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       <input id={`confirming-bom-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate"

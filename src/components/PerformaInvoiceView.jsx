@@ -8,7 +8,7 @@ import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS, stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
-import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
+import { normalizeProductName, resolveProductCode, isRailPreset, calculateTotalDispatchQty } from '../utils/vrmProductsData';
 import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
@@ -2936,11 +2936,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const sanitizedItems = (piItems || []).map(it => {
         const isPreset = Boolean(it.isPresetItem || it.presetGroupId);
         const resolvedUom = String(it.uom || it.unit || 'NOS').trim().toUpperCase() || 'NOS';
+        const grp = it.presetGroupId ? presetGroups[it.presetGroupId] : null;
+        const totalDisp = calculateTotalDispatchQty(
+          it,
+          grp?.setCount || 1,
+          grp?.presetName || it.presetName,
+          grp?.category || it.category
+        );
         return {
           ...it,
           uom: resolvedUom,
           unit: resolvedUom,
           isPresetItem: isPreset,
+          qtyPerSet: parseFloat(it.qty) || 0,
+          totalDispatchQty: totalDisp,
           rate: isPreset ? '0' : String(it.rate || '0'),
           taxable: isPreset ? 0 : ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)),
           hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it)).trim()
@@ -6240,7 +6249,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 {/* Items Table */}
               <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                <table style={{ width: '100%', minWidth: hasAnyPreset ? '1380px' : '1240px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                <table style={{ width: '100%', minWidth: hasAnyPreset ? '1480px' : '1360px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                       <th style={{ padding: '12px 4px', width: '38px', minWidth: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
@@ -6262,8 +6271,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
-                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>UOM</th>
-                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty / Set <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '135px', minWidth: '135px', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
                       {hasAnyPreset && (
@@ -6279,7 +6289,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <tbody>
                     {piItems.length === 0 ? (
                       <tr>
-                        <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
@@ -6334,7 +6344,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <React.Fragment key={i}>
                             {isFirstInGroup && (
                               <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{
@@ -6450,7 +6460,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
                               <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
                                       padding: '2px 8px',
@@ -6788,6 +6798,44 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF' }}
                                   />
                                 </div>
+                              </td>
+                              {/* Total Dispatch Quantity Column */}
+                              <td style={{ padding: '12px 6px', textAlign: 'center', backgroundColor: isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : '#F8FAFC' }}>
+                                {(() => {
+                                  const totalDispQty = calculateTotalDispatchQty(
+                                    item,
+                                    currentGroup?.setCount || 1,
+                                    currentGroup?.presetName || item.presetName,
+                                    currentGroup?.category || item.category
+                                  );
+                                  const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category) || isRailPreset(item.name, item.category);
+                                  return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                      <div style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        backgroundColor: '#FFFFFF',
+                                        border: `1.5px solid ${isPresetItem ? theme.border : '#CBD5E1'}`,
+                                        borderRadius: '6px',
+                                        padding: '4px 10px',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                      }}>
+                                        <strong style={{ fontSize: '13px', color: isPresetItem ? theme.primary : '#0E7490', fontWeight: '800' }}>
+                                          {totalDispQty}
+                                        </strong>
+                                        <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>
+                                          {item.uom || item.unit || 'NOS'}
+                                        </span>
+                                      </div>
+                                      {isPresetItem && (
+                                        <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600', letterSpacing: '0.2px' }}>
+                                          {isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) > 1 ? 's' : ''}`}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td style={{ padding: '12px 10px' }}>
                                 {isPresetItem ? (
