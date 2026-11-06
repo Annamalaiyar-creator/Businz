@@ -1501,7 +1501,13 @@ export default function ConfirmingBomModal({
                               return <span style={{ color: '#94A3B8', fontWeight: '700' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
                             }
                             const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
-                            const dispQty = item.totalDispatchQty || calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
+                            const dispQty = item.totalDispatchQty || calculateTotalDispatchQty(
+                              item,
+                              setCount,
+                              pInfo?.presetName || confirmingBomModal.presetName,
+                              item.category,
+                              pInfo?.unit || pInfo?.unitType || item.unit || item.uom
+                            );
                             return (
                               <div>
                                 <span>{dispQty}</span>
@@ -1651,7 +1657,13 @@ export default function ConfirmingBomModal({
                           return <span style={{ color: '#94A3B8', fontWeight: '700' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
                         }
                         const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
-                        const calcDisp = calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
+                        const calcDisp = calculateTotalDispatchQty(
+                          item,
+                          setCount,
+                          pInfo?.presetName || confirmingBomModal.presetName,
+                          item.category,
+                          pInfo?.unit || pInfo?.unitType || item.unit || item.uom
+                        );
                         const dispQty = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')
                           ? item.totalDispatchQty
                           : calcDisp;

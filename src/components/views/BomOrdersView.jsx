@@ -11,7 +11,7 @@ import jsPDF from 'jspdf';
 import { exportSmartMultiPagePdf } from '../../utils/smartPdfExporter';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, deleteCloudBomRow, saveCloudBomRow } from '../../utils/supabaseDataSync';
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
-import { VRM_PRODUCTS, isRailPreset, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
+import { VRM_PRODUCTS, isRailPreset, isKwPreset, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
 import { uploadBomDocumentFile, validateClientFile } from '../../utils/bomStorageClient';
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from '../../utils/documentResolver';
@@ -4720,12 +4720,14 @@ export default function BomOrdersView(props) {
                                 item,
                                 currentGroup?.setCount || 1,
                                 currentGroup?.presetName || item.presetName,
-                                currentGroup?.category || item.category
+                                currentGroup?.category || item.category,
+                                currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom
                               );
                               const totalDisp = item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== ''
                                 ? item.totalDispatchQty
                                 : calcTotalDisp;
-                              const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category) || isRailPreset(item.name, item.category);
+                              const isKw = isKwPreset(currentGroup?.presetName || item.presetName, currentGroup?.unit || currentGroup?.unitType || item.unit, item);
+                              const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category, item.subPresetName, item.name);
                               return (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                   <div style={{
@@ -4764,8 +4766,8 @@ export default function BomOrdersView(props) {
                                     </span>
                                   </div>
                                   {isPresetItem && (
-                                    <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600' }}>
-                                      {isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) > 1 ? 's' : ''}`}
+                                    <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                      {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) > 1 ? 's' : ''}`)}
                                     </span>
                                   )}
                                 </div>
@@ -7885,9 +7887,11 @@ export default function BomOrdersView(props) {
                                   item,
                                   pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1,
                                   pInfo?.presetName || item.presetName || confirmingBomModal.presetName,
-                                  confirmingBomModal.category || item.category
+                                  confirmingBomModal.category || item.category,
+                                  pInfo?.unitType || pInfo?.unit || item.unit || item.uom
                                 );
-                                const isRail = isRailPreset(pInfo?.presetName || item.presetName || confirmingBomModal.presetName) || isRailPreset(item.name, item.category);
+                                const isKw = isKwPreset(pInfo?.presetName || item.presetName || confirmingBomModal.presetName, pInfo?.unitType || pInfo?.unit, item);
+                                const isRail = isRailPreset(pInfo?.presetName || item.presetName || confirmingBomModal.presetName, confirmingBomModal.category || item.category, item.subPresetName, item.name);
                                 return (
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                     <div style={{
@@ -7907,8 +7911,8 @@ export default function BomOrdersView(props) {
                                       </span>
                                     </div>
                                     {isPartBundle && (
-                                      <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600' }}>
-                                        {isRail ? 'Direct Rails Qty' : `${itemQty} × ${pInfo?.setCount || 1} Set${(pInfo?.setCount || 1) > 1 ? 's' : ''}`}
+                                      <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                        {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `${itemQty} × ${pInfo?.setCount || 1} Set${(pInfo?.setCount || 1) > 1 ? 's' : ''}`)}
                                       </span>
                                     )}
                                   </div>
@@ -10470,7 +10474,13 @@ export default function BomOrdersView(props) {
                               {(() => {
                                 if (!isKitPart) return <span style={{ color: '#94A3B8', fontWeight: '700' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
                                 const matchedGrp = pGroups.find(g => g.groupId === it.presetGroupId) || pGroups[0];
-                                const totalDisp = calculateTotalDispatchQty(it, matchedGrp?.setCount || quickPreviewRecord.setCount || quickPreviewRecord.presetSetCount || 1, matchedGrp?.presetName || it.presetName || quickPreviewRecord.presetName);
+                                const totalDisp = calculateTotalDispatchQty(
+                                  it,
+                                  matchedGrp?.setCount || quickPreviewRecord.setCount || quickPreviewRecord.presetSetCount || 1,
+                                  matchedGrp?.presetName || it.presetName || quickPreviewRecord.presetName,
+                                  it.category,
+                                  matchedGrp?.unit || matchedGrp?.unitType || it.uom || it.unit
+                                );
                                 return `${totalDisp} ${it.uom || ''}`;
                               })()}
                             </td>

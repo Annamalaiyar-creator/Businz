@@ -3915,9 +3915,10 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
 /**
  * Detects whether a preset or item is a "Rails Preset" (Mini Rail, Adhesive Rail, Long Rail, Double C Rail, C Rail, Struct Rail, etc.).
  * For Rails presets, user mandated that the quantity entered by salesperson is directly the total dispatch quantity (multiplier = 1).
+ * Checks presetName, category, subPresetName, and item name.
  */
-export const isRailPreset = (presetName = '', category = '') => {
-  const norm = `${presetName || ''} ${category || ''}`.toLowerCase();
+export const isRailPreset = (presetName = '', category = '', subPresetName = '', itemName = '') => {
+  const norm = `${presetName || ''} ${category || ''} ${subPresetName || ''} ${itemName || ''}`.toLowerCase();
   return (
     norm.includes('mini rail') ||
     norm.includes('adhesive rail') ||
@@ -3934,13 +3935,34 @@ export const isRailPreset = (presetName = '', category = '') => {
 };
 
 /**
+ * Detects whether a preset or item is capacity-based (kW).
+ * User rule: when unit is kW (or name indicates kW, e.g. "3 kW DCR Kit"), the salesperson
+ * enters the ENTIRE total quantity needed for that kW capacity directly.
+ * Therefore, kW presets MUST NOT be multiplied by set count (multiplier is strictly 1).
+ */
+export const isKwPreset = (presetName = '', unit = '', item = {}) => {
+  const normUnit = String(unit || item?.unit || item?.uom || item?.unitType || item?.presetUnit || '').trim().toLowerCase();
+  if (normUnit === 'kw' || normUnit === 'kwh') return true;
+  if (item?.isKwBased) return true;
+  const normName = `${presetName || ''} ${item?.presetName || ''} ${item?.subPresetName || ''} ${item?.name || ''}`.toLowerCase();
+  return (
+    normName.includes(' kw ') ||
+    normName.endsWith(' kw') ||
+    normName.startsWith('kw ') ||
+    /\b\d+\s*kw\b/i.test(normName)
+  );
+};
+
+/**
  * Calculates the Total Dispatch Quantity for an item in a preset kit or standalone item.
  * - In printouts: Shows ONLY Qty / Set.
  * - In software: Shows BOTH Qty / Set and Total Dispatch Quantity.
- * - Special Rule for Rails Preset: entered quantity is directly the total dispatch quantity (multiplier = 1).
- * - For other Presets: Total Dispatch Qty = (Qty / Set) * (Set Count).
+ * - Special Rule 1 (Standalone): entered quantity is directly the total dispatch quantity (multiplier = 1).
+ * - Special Rule 2 (kW Presets): salesperson enters entire capacity quantity directly -> multiplier = 1 (NOT multiplied).
+ * - Special Rule 3 (Rails Presets): salesperson enters direct roof sheet requirement -> multiplier = 1 (NOT multiplied, even inside table sets).
+ * - Special Rule 4 (Table / Structure Presets with Unit = 'Set' or 'Kit'): salesperson enters qty for 1 set -> multiplied by Set Count.
  */
-export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', presetCategory = '') => {
+export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', presetCategory = '', unit = '') => {
   if (!item) return 0;
   const baseQty = parseFloat(
     item.qty !== undefined && item.qty !== null && item.qty !== ''
@@ -3953,17 +3975,34 @@ export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', p
   ) || 0;
   if (baseQty <= 0) return 0;
 
-  // Standalone custom items (not part of any preset) -> total dispatch qty = entered qty
+  // 1. Standalone custom items (not part of any preset) -> entered quantity is directly the total dispatch qty (multiplier = 1)
   if (!item.isPresetItem && !item.presetGroupId && !item.presetName && !presetName) {
     return baseQty;
   }
 
-  // Special Rails Rule: Salesperson's entered quantity is directly the total dispatch quantity!
-  const isRail = isRailPreset(presetName || item.presetName, presetCategory || item.category) || isRailPreset(item.name, item.category);
+  // 2. kW Capacity Rule: If the preset or item has unit = kW (or name indicates kW),
+  // the salesperson enters the ENTIRE total quantity for that kW capacity directly -> multiplier = 1 (NOT multiplied by setCount).
+  const isKw = isKwPreset(presetName || item.presetName, unit || item.unit || item.uom, item);
+  if (isKw) {
+    return baseQty;
+  }
+
+  // 3. Rails Rule: Mini Rails, Adhesive Rails, Short Rails, Long Rails, etc.
+  // Whether parent preset or sub-preset (e.g. Mini Rails inside 2*3 table, or 2*3 inside Mini Rails):
+  // Rails quantity is entered directly for roof sheet ribs -> multiplier = 1 (NOT multiplied by table setCount).
+  const isRail = isRailPreset(presetName || item.presetName, presetCategory || item.category, item.subPresetName, item.name);
   if (isRail) {
     return baseQty;
   }
 
+  // 4. Sub-Preset with its own independent set count:
+  if (item.isSubPreset && item.subSetCount) {
+    const subMult = Math.max(0.01, parseFloat(item.subSetCount) || 1);
+    return Math.round(baseQty * subMult * 100) / 100;
+  }
+
+  // 5. Structure / Table Presets (Unit = Set / Kit):
+  // Salesperson enters quantity for 1 set/kit -> multiplied by the set count.
   const mult = Math.max(0.01, parseFloat(setCount) || 1);
   return Math.round(baseQty * mult * 100) / 100;
 };
@@ -3973,6 +4012,7 @@ export default {
   wordFingerprint,
   resolveProductCode,
   isRailPreset,
+  isKwPreset,
   calculateTotalDispatchQty
 };
 

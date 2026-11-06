@@ -8,7 +8,7 @@ import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS, stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
-import { normalizeProductName, resolveProductCode, isRailPreset, calculateTotalDispatchQty } from '../utils/vrmProductsData';
+import { normalizeProductName, resolveProductCode, isRailPreset, isKwPreset, calculateTotalDispatchQty } from '../utils/vrmProductsData';
 import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
@@ -6812,12 +6812,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     item,
                                     currentGroup?.setCount || 1,
                                     currentGroup?.presetName || item.presetName,
-                                    currentGroup?.category || item.category
+                                    currentGroup?.category || item.category,
+                                    currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom
                                   );
                                   const dispVal = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')
                                     ? item.totalDispatchQty
                                     : (calcDispQty || '');
-                                  const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category) || isRailPreset(item.name, item.category);
+                                  const isKw = isKwPreset(currentGroup?.presetName || item.presetName, currentGroup?.unit || currentGroup?.unitType || item.unit, item);
+                                  const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category, item.subPresetName, item.name);
                                   return (
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                       <div style={{
@@ -6856,8 +6858,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         </span>
                                       </div>
                                       {isPresetItem && (
-                                        <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600', letterSpacing: '0.2px' }}>
-                                          {isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1}`}
+                                        <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600', letterSpacing: '0.2px' }}>
+                                          {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1}`)}
                                         </span>
                                       )}
                                     </div>
