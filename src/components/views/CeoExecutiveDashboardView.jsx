@@ -195,6 +195,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [personSearchQuery, setPersonSearchQuery] = useState('');
   const [activePersonModal, setActivePersonModal] = useState(null);
   const [viewingRepBomsModal, setViewingRepBomsModal] = useState(null);
+  const [viewingPiModal, setViewingPiModal] = useState(null);
+  const [viewingBomModal, setViewingBomModal] = useState(null);
+  const [otcScope, setOtcScope] = useState('ALL'); // 'ALL' = Full Factory Order Pipeline | 'PERIOD' = Filtered by selectedPeriod
   const [activeKpiPopup, setActiveKpiPopup] = useState(null); // 'pi' | 'bom' | 'po' | 'dispatch' | 'billing' | 'accounts' | 'kits'
   const [kpiPopupSearch, setKpiPopupSearch] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -346,10 +349,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const challansList = useMemo(() => allChallansList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allChallansList, selectedPeriod]);
   const grnList = useMemo(() => allGrnList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allGrnList, selectedPeriod]);
 
-  // Lifecycle-filtered BOM orders for the BOM sub-tab
+  // Lifecycle-filtered BOM orders for the BOM sub-tab & Order-to-Cash summary
   const displayBomList = useMemo(() => {
-    if (selectedBomLifecycleStage === 'ALL') return bomList;
-    return bomList.filter(b => {
+    const sourceBoms = otcScope === 'ALL' ? allBomList : bomList;
+    if (selectedBomLifecycleStage === 'ALL') return sourceBoms;
+    return sourceBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
       if (selectedBomLifecycleStage === 'STEP 01') {
         return Boolean(b.sourcePiNo || b.piNo || b.piNumber || b.bomConverted || b.source_pi_no || b.sourcePi || b.pi_no);
@@ -371,7 +375,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       }
       return true;
     });
-  }, [bomList, selectedBomLifecycleStage]);
+  }, [allBomList, bomList, otcScope, selectedBomLifecycleStage]);
+
+  const displayPiList = useMemo(() => {
+    return otcScope === 'ALL' ? allPiList : piList;
+  }, [allPiList, piList, otcScope]);
 
   // Dynamic logged-in user name & initials resolution
   const [currentLoggedName, setCurrentLoggedName] = useState(() => {
@@ -485,14 +493,50 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         fetchWithTimeout('/api/purchaseorders', { timeout: 8000 })
           .then(r => r.json())
           .catch(() => fetchCloudStore('po_store', [])),
-        fetchCloudStore('sales_pi_store', [])
-          .then(res => (Array.isArray(res) && res.length > 0) ? res : fetchCloudStore('proforma_invoices', []))
-          .catch(() => []),
-        fetchWithTimeout('/api/boms', { timeout: 3000 })
+        fetchWithTimeout('/api/proforma-invoices', { timeout: 6000 })
           .then(r => r.json())
           .then(j => Array.isArray(j?.data) ? j.data : (Array.isArray(j) ? j : []))
-          .catch(() => fetchCloudStore('bom_orders', []))
-          .then(res => (Array.isArray(res) && res.length > 0) ? res : fetchCloudStore('bom_store', [])),
+          .catch(() => [])
+          .then(async (dbPis) => {
+            if (Array.isArray(dbPis) && dbPis.length > 0) return dbPis;
+            const cloud1 = await fetchCloudStore('sales_pi_store', []).catch(() => []);
+            if (Array.isArray(cloud1) && cloud1.length > 0) return cloud1;
+            return fetchCloudStore('proforma_invoices', []).catch(() => []);
+          })
+          .then(remotePis => {
+            const map = new Map();
+            (remotePis || []).forEach(p => {
+              const k = String(p.piNo || p.id || '').trim().toLowerCase();
+              if (k) map.set(k, p);
+            });
+            (localPis || []).forEach(p => {
+              const k = String(p.piNo || p.id || '').trim().toLowerCase();
+              if (k && !map.has(k)) map.set(k, p);
+            });
+            return Array.from(map.values());
+          }),
+        fetchWithTimeout('/api/boms', { timeout: 8000 })
+          .then(r => r.json())
+          .then(j => Array.isArray(j?.data) ? j.data : (Array.isArray(j) ? j : []))
+          .catch(() => [])
+          .then(async (dbBoms) => {
+            if (Array.isArray(dbBoms) && dbBoms.length > 0) return dbBoms;
+            const cloud1 = await fetchCloudStore('bom_orders', []).catch(() => []);
+            if (Array.isArray(cloud1) && cloud1.length > 0) return cloud1;
+            return fetchCloudStore('bom_store', []).catch(() => []);
+          })
+          .then(remoteBoms => {
+            const map = new Map();
+            (remoteBoms || []).forEach(b => {
+              const k = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
+              if (k) map.set(k, b);
+            });
+            (localBoms || []).forEach(b => {
+              const k = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
+              if (k && !map.has(k)) map.set(k, b);
+            });
+            return Array.from(map.values());
+          }),
         fetchCloudStore('invoice_store', []).catch(() => []),
         fetchCloudStore('workorder_store', [])
           .then(res => (Array.isArray(res) && res.length > 0) ? res : fetchCloudStore('vrm_prod_workorders', []))
@@ -1355,31 +1399,38 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       return '₹ 0';
     };
 
-    const activeBoms = bomList.filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'));
-    const totalBomVal = activeBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+    const targetBoms = otcScope === 'ALL' ? allBomList : bomList;
+    const targetPis = otcScope === 'ALL' ? allPiList : piList;
+    const targetInvs = otcScope === 'ALL' ? allInvList : invList;
+    const targetDispatches = otcScope === 'ALL' ? allDispatchesList : dispatchesList;
+    const multiplier = otcScope === 'ALL' ? 1 : periodMultiplier;
 
-    const confirmedPis = piList.filter(p => {
+    const activeBoms = targetBoms.filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'));
+    const totalBomVal = activeBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
+
+    const confirmedPis = targetPis.filter(p => {
       const st = String(p.status || '').toLowerCase();
       return st.includes('confirm') || st.includes('bom') || st.includes('convert') || p.bomConverted;
     });
+    const totalPiVal = targetPis.reduce((acc, p) => acc + parseAmt(p.grandTotal || p.totalAmount || p.amount || 0), 0) * multiplier;
 
     const packedBoms = activeBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
       return b.packingStatus === 'PACKING_VERIFIED' || st.includes('packed') || b.isAccountsDone || b.accountsVerification?.verified || b.invoiceConfirmed || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted;
     });
     const pendingPackingBoms = Math.max(0, activeBoms.length - packedBoms.length);
-    const packedVal = packedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+    const packedVal = packedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
     const accountsVerifiedBoms = activeBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
       return Boolean(b.isAccountsDone || b.accountsVerification?.verified || b.invoiceConfirmed || st.includes('invoice') || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted);
     });
     const pendingAccountsBoms = packedBoms.filter(b => !b.isAccountsDone && !b.accountsVerification?.verified && !b.invoiceConfirmed).length;
-    const accountsVerifiedVal = accountsVerifiedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+    const accountsVerifiedVal = accountsVerifiedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
     const invoicedBoms = activeBoms.filter(b => Boolean(b.invoiceConfirmed || String(b.status || '').toLowerCase().includes('invoice') || b.fullyCompleted || String(b.status || '').toLowerCase().includes('dispatched') || String(b.status || '').toLowerCase().includes('completed')));
-    const totalInvoicedCount = Math.max(invList.length, invoicedBoms.length);
-    const invoicedVal = (totalInvoicedNum > 0 ? totalInvoicedNum : invoicedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0)) * periodMultiplier;
+    const totalInvoicedCount = Math.max(targetInvs.length, invoicedBoms.length);
+    const invoicedVal = (totalInvoicedNum > 0 && otcScope !== 'ALL' ? totalInvoicedNum : invoicedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0)) * multiplier;
 
     const completedDispatchBoms = activeBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
@@ -1389,21 +1440,21 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       const st = String(b.status || '').toLowerCase();
       return (b.invoiceConfirmed || st.includes('loading')) && !b.fullyCompleted && !st.includes('completed') && !st.includes('dispatched');
     });
-    const totalDispatchedCount = Math.max(completedDispatchBoms.length, dispatchesList.length);
-    const dispatchedVal = completedDispatchBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * periodMultiplier;
+    const totalDispatchedCount = Math.max(completedDispatchBoms.length, targetDispatches.length);
+    const dispatchedVal = completedDispatchBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
-    const baseTotal = Math.max(1, piList.length, activeBoms.length);
+    const baseTotal = Math.max(1, targetPis.length, activeBoms.length);
 
     return [
       {
         step: 'STEP 01',
         stage: 'Proforma Invoice',
         subtitle: 'Sales Commercial PI',
-        primaryMetric: `${piList.length} PIs`,
-        value: fmtCompact(totalPiPipelineNum * periodMultiplier),
+        primaryMetric: `${targetPis.length} PIs`,
+        value: fmtCompact(totalPiVal),
         valueLabel: 'Pipeline Value',
         statusBadge: `${confirmedPis.length} Confirmed`,
-        progressPct: piList.length > 0 ? Math.min(100, Math.max(18, Math.round((confirmedPis.length / Math.max(1, piList.length)) * 100))) : 0,
+        progressPct: targetPis.length > 0 ? Math.min(100, Math.max(18, Math.round((confirmedPis.length / Math.max(1, targetPis.length)) * 100))) : 0,
         icon: Receipt,
         color: '#0E7490',
         bg: '#ECFEFF',
@@ -1492,7 +1543,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         action: 'Dispatch Log'
       }
     ];
-  }, [piList, bomList, invList, dispatchesList, periodMultiplier, totalPiPipelineNum, totalInvoicedNum]);
+  }, [allPiList, piList, allBomList, bomList, allInvList, invList, allDispatchesList, dispatchesList, otcScope, periodMultiplier, totalPiPipelineNum, totalInvoicedNum]);
 
   // Real Risk Alerts & Watchlist
   const realRiskAlerts = useMemo(() => {
@@ -3807,8 +3858,47 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {/* Pipeline Scope Selector: All Orders vs Period */}
+                <div style={{ display: 'inline-flex', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <button
+                    type="button"
+                    onClick={() => setOtcScope('ALL')}
+                    style={{
+                      border: 'none',
+                      backgroundColor: otcScope === 'ALL' ? '#0E7490' : 'transparent',
+                      color: otcScope === 'ALL' ? '#FFFFFF' : '#475569',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    ⚡ All Pipeline ({allBomList.length + allPiList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOtcScope('PERIOD')}
+                    style={{
+                      border: 'none',
+                      backgroundColor: otcScope === 'PERIOD' ? '#0E7490' : 'transparent',
+                      color: otcScope === 'PERIOD' ? '#FFFFFF' : '#475569',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    📅 {selectedPeriod} ({bomList.length + piList.length})
+                  </button>
+                </div>
+
                 {selectedBomLifecycleStage !== 'ALL' && (
                   <button
+                    type="button"
                     onClick={() => setSelectedBomLifecycleStage('ALL')}
                     style={{
                       border: '1px solid #0E7490',
@@ -3825,7 +3915,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       boxShadow: '0 1px 3px rgba(14, 116, 144, 0.15)'
                     }}
                   >
-                    ✕ Clear Filter (Show All {bomList.length} BOMs)
+                    ✕ Clear Filter (Show All)
                   </button>
                 )}
                 <div style={{
@@ -3844,7 +3934,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     {selectedBomLifecycleStage === 'STEP 01' ? 'PIs Showing:' : 'Orders Showing:'}
                   </span>
                   <span style={{ color: '#0E7490', fontWeight: '800' }}>
-                    {selectedBomLifecycleStage === 'STEP 01' ? `${piList.length} of ${allPiList.length}` : `${displayBomList.length} of ${bomList.length}`}
+                    {selectedBomLifecycleStage === 'STEP 01' ? `${displayPiList.length} PIs` : `${displayBomList.length} of ${otcScope === 'ALL' ? allBomList.length : bomList.length}`}
                   </span>
                 </div>
               </div>
@@ -4090,7 +4180,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
               {selectedBomLifecycleStage === 'STEP 01' ? (
                 /* Proforma Invoices Table for STEP 01 */
-                <table style={{ width: '100%', minWidth: '780px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <table style={{ width: '100%', minWidth: '850px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
                       <th style={{ padding: '8px 10px' }}>PI Number</th>
@@ -4100,17 +4190,38 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       <th style={{ padding: '8px 10px', textAlign: 'right' }}>Total Amount</th>
                       <th style={{ padding: '8px 10px', textAlign: 'center' }}>BOM Status</th>
                       <th style={{ padding: '8px 10px' }}>Status</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {piList.length > 0 ? (
-                      piList.slice(0, 15).map((row, idx) => {
+                    {displayPiList.length > 0 ? (
+                      displayPiList.map((row, idx) => {
                         const amt = parseAmt(row.grandTotal || row.totalAmount || row.amount || 0);
                         const isBOMConverted = Boolean(row.bomConverted || row.bomCode);
+                        const matchingBom = isBOMConverted ? allBomList.find(b => (b.bomCode === row.bomCode || b.id === row.bomCode || b.sourcePiNo === row.piNo)) : null;
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>
-                              {row.piNo || row.id}
+                            <td style={{ padding: '8px 10px' }}>
+                              <button
+                                type="button"
+                                onClick={() => setViewingPiModal(row)}
+                                title="Click to view full Proforma Invoice details"
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  padding: 0,
+                                  fontSize: '11.5px',
+                                  fontWeight: '800',
+                                  color: '#0E7490',
+                                  textDecoration: 'underline',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                {row.piNo || row.id} <Eye size={12} />
+                              </button>
                             </td>
                             <td style={{ padding: '8px 10px', color: '#64748B', whiteSpace: 'nowrap' }}>
                               {row.date || row.piDate || '—'}
@@ -4126,9 +4237,32 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                               {isBOMConverted ? (
-                                <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 7px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0' }}>
-                                  ✓ BOM Generated {row.bomCode ? `(${row.bomCode})` : ''}
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (matchingBom) {
+                                      setViewingBomModal(matchingBom);
+                                    } else if (onNavigateTab) {
+                                      onNavigateTab('BOM Orders');
+                                    }
+                                  }}
+                                  title="Click to view Linked BOM order"
+                                  style={{
+                                    border: '1px solid #BBF7D0',
+                                    backgroundColor: '#F0FDF4',
+                                    color: '#16A34A',
+                                    fontSize: '9.5px',
+                                    fontWeight: '800',
+                                    padding: '2px 7px',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  ✓ BOM Generated {row.bomCode ? `(${row.bomCode})` : ''} <Eye size={10} />
+                                </button>
                               ) : (
                                 <span style={{ fontSize: '9.5px', fontWeight: '700', padding: '2px 7px', borderRadius: '6px', backgroundColor: '#FEF3C7', color: '#D97706', border: '1px solid #FDE68A' }}>
                                   Pending BOM
@@ -4140,12 +4274,33 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                 {row.status || 'Active'}
                               </span>
                             </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => setViewingPiModal(row)}
+                                style={{
+                                  border: '1px solid #0E7490',
+                                  backgroundColor: '#ECFEFF',
+                                  color: '#0E7490',
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Eye size={12} /> View PI
+                              </button>
+                            </td>
                           </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                        <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
                           No commercial Proforma Invoices recorded yet.
                         </td>
                       </tr>
@@ -4154,7 +4309,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 </table>
               ) : (
                 /* BOM Orders Table for STEP 02-06 & ALL */
-                <table style={{ width: '100%', minWidth: '850px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <table style={{ width: '100%', minWidth: '920px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
                       <th style={{ padding: '8px 10px' }}>BOM Code</th>
@@ -4164,11 +4319,12 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       <th style={{ padding: '8px 10px', textAlign: 'center' }}>Dispatch Qty / Items</th>
                       <th style={{ padding: '8px 10px', textAlign: 'center' }}>Lifecycle Stage</th>
                       <th style={{ padding: '8px 10px' }}>Status</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {displayBomList.length > 0 ? (
-                      displayBomList.slice(0, 15).map((row, idx) => {
+                      displayBomList.map((row, idx) => {
                         const amt = parseAmt(row.grandTotal || row.totalAmount || row.amount || row.value || 0);
                         const items = Array.isArray(row.items) ? row.items : [];
                         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
@@ -4188,13 +4344,64 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           stageBadge = { label: 'Step 2 · Confirmed', color: '#0284C7', bg: '#F0F9FF', border: '#BAE6FD' };
                         }
 
+                        const linkedPiNo = row.sourcePiNo || row.piNo || row.piNumber || row.source_pi_no;
+                        const matchingPi = linkedPiNo ? allPiList.find(p => (p.piNo === linkedPiNo || p.id === linkedPiNo)) : null;
+
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>
-                              {row.bomCode || row.id}
+                            <td style={{ padding: '8px 10px' }}>
+                              <button
+                                type="button"
+                                onClick={() => setViewingBomModal(row)}
+                                title="Click to view full BOM Order details"
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  padding: 0,
+                                  fontSize: '11.5px',
+                                  fontWeight: '800',
+                                  color: '#0E7490',
+                                  textDecoration: 'underline',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                {row.bomCode || row.id} <Eye size={12} />
+                              </button>
                             </td>
-                            <td style={{ padding: '8px 10px', fontWeight: '700', color: '#475569', fontSize: '10.5px' }}>
-                              {row.sourcePiNo || row.piNo || row.piNumber || row.source_pi_no || 'Direct BOM'}
+                            <td style={{ padding: '8px 10px' }}>
+                              {linkedPiNo ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (matchingPi) {
+                                      setViewingPiModal(matchingPi);
+                                    } else if (onNavigateTab) {
+                                      onNavigateTab('Performa Invoice');
+                                    }
+                                  }}
+                                  title="Click to view Linked Proforma Invoice"
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    padding: 0,
+                                    fontSize: '10.5px',
+                                    fontWeight: '700',
+                                    color: '#0284C7',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                >
+                                  {linkedPiNo} <ExternalLink size={10} />
+                                </button>
+                              ) : (
+                                <span style={{ color: '#94A3B8', fontSize: '10px' }}>Direct BOM</span>
+                              )}
                             </td>
                             <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
                               {row.customerName || row.customer || '-'}
@@ -4210,29 +4417,56 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                 : '1 Order'}
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                              <span style={{
-                                fontSize: '9.5px',
-                                fontWeight: '800',
-                                padding: '2px 7px',
-                                borderRadius: '6px',
-                                backgroundColor: stageBadge.bg,
-                                color: stageBadge.color,
-                                border: `1px solid ${stageBadge.border}`
-                              }}>
+                              <button
+                                type="button"
+                                onClick={() => setViewingBomModal(row)}
+                                title="Click to view Lifecycle progress"
+                                style={{
+                                  border: `1px solid ${stageBadge.border}`,
+                                  backgroundColor: stageBadge.bg,
+                                  color: stageBadge.color,
+                                  fontSize: '9.5px',
+                                  fontWeight: '800',
+                                  padding: '2px 7px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer'
+                                }}
+                              >
                                 {stageBadge.label}
-                              </span>
+                              </button>
                             </td>
                             <td style={{ padding: '8px 10px' }}>
                               <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490' }}>
                                 {row.status || 'Active'}
                               </span>
                             </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => setViewingBomModal(row)}
+                                style={{
+                                  border: '1px solid #0E7490',
+                                  backgroundColor: '#ECFEFF',
+                                  color: '#0E7490',
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Eye size={12} /> View BOM
+                              </button>
+                            </td>
                           </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                        <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
                           {selectedBomLifecycleStage !== 'ALL'
                             ? `No BOM orders found in stage "${funnelStages.find(s => s.step === selectedBomLifecycleStage)?.stage || selectedBomLifecycleStage}". Click "Clear Filter" to view all.`
                             : 'No active factory production BOM orders created yet.'}
@@ -6416,6 +6650,706 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           </div>
         </div>
       )}
+
+      {/* MODAL: PROFORMA INVOICE (PI) DETAIL VIEW */}
+      {viewingPiModal && (() => {
+        const pi = viewingPiModal;
+        const piNo = pi.piNo || pi.id || 'PI';
+        const piDate = pi.date || pi.piDate || '—';
+        const customer = pi.customerName || pi.customer || pi.companyName || '—';
+        const salesPerson = pi.salesPerson || pi.createdBy || 'Sales Team';
+        const items = Array.isArray(pi.items) ? pi.items : [];
+        const grandTotal = parseAmt(pi.grandTotal || pi.totalAmount || pi.amount || 0);
+        const subtotal = parseAmt(pi.subtotal || pi.taxableAmount || (grandTotal > 0 ? grandTotal / 1.18 : 0));
+        const taxTotal = parseAmt(pi.taxTotal || (grandTotal - subtotal));
+        const paymentTerms = pi.paymentTerms || pi.terms || '100% Advance / Net 30';
+        const isBOMConverted = Boolean(pi.bomConverted || pi.bomCode);
+        const matchingBom = isBOMConverted ? allBomList.find(b => (b.bomCode === pi.bomCode || b.id === pi.bomCode || b.sourcePiNo === piNo)) : null;
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}>
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              width: '920px',
+              maxWidth: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}>
+              {/* Header */}
+              <div style={{
+                padding: '16px 22px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#F8FAFC'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: '#ECFEFF',
+                    color: '#0E7490',
+                    border: '1px solid #A5F3FC',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Receipt size={20} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+                        Proforma Invoice • {piNo}
+                      </span>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        backgroundColor: '#ECFEFF',
+                        color: '#0E7490',
+                        border: '1px solid #A5F3FC'
+                      }}>
+                        {pi.status || 'Active'}
+                      </span>
+                      {isBOMConverted && (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          backgroundColor: '#F0FDF4',
+                          color: '#16A34A',
+                          border: '1px solid #BBF7D0'
+                        }}>
+                          ✓ BOM Generated {pi.bomCode ? `(${pi.bomCode})` : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                      Commercial Sales PI • Generated on {piDate} • Executive: <strong>{salesPerson}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setViewingPiModal(null)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748B',
+                    backgroundColor: '#F1F5F9'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Info Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Customer / Client</div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginTop: '3px' }}>{customer}</div>
+                    {pi.customerPhone && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>📞 {pi.customerPhone}</div>}
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Payment Terms</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', marginTop: '3px' }}>{paymentTerms}</div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Date: {piDate}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Total Line Items</div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginTop: '3px' }}>{items.length} Products / Kits</div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Sales Rep: {salesPerson}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#ECFEFF', padding: '10px 12px', borderRadius: '10px', border: '1px solid #A5F3FC' }}>
+                    <div style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '800', textTransform: 'uppercase' }}>PI Grand Total</div>
+                    <div style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', marginTop: '3px' }}>
+                      ₹ {Math.round(grandTotal).toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#0E7490', marginTop: '2px' }}>Incl. GST (18%)</div>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    Quoted Products & Preset Kits ({items.length})
+                  </div>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                          <th style={{ padding: '8px 10px', width: '35px' }}>#</th>
+                          <th style={{ padding: '8px 10px' }}>Product / Component</th>
+                          <th style={{ padding: '8px 10px', width: '80px' }}>HSN / SAC</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>UOM</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>GST</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Total (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.length > 0 ? (
+                          items.map((it, idx) => {
+                            const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
+                            const r = parseFloat(it.rate || it.price || 0) || 0;
+                            const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
+                            const taxRate = parseFloat(taxRateStr) || 18;
+                            const taxable = q * r;
+                            const itemTotal = taxable + (taxable * (taxRate / 100));
+                            return (
+                              <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
+                                <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                  <div>{it.name || it.productName || 'Item'}</div>
+                                  {(it.presetName || it.subPresetName) && (
+                                    <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600', marginTop: '1px' }}>
+                                      {it.subPresetName ? `↳ Sub-Kit: ${it.subPresetName}` : `Preset: ${it.presetName}`}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#64748B' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#475569' }}>₹ {r.toLocaleString('en-IN')}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                                  ₹ {Math.round(itemTotal).toLocaleString('en-IN')}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                              No individual line items listed.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Financial Summary */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: '4px'
+                }}>
+                  <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                      <span>Subtotal (Taxable):</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {Math.round(subtotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                      <span>Estimated GST (18%):</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {Math.round(taxTotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      borderTop: '2px solid #0E7490',
+                      paddingTop: '6px',
+                      fontSize: '14px',
+                      color: '#0E7490'
+                    }}>
+                      <span><strong>Total Quoted:</strong></span>
+                      <strong style={{ fontSize: '15px' }}>₹ {Math.round(grandTotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '12px 22px',
+                backgroundColor: '#F8FAFC',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {isBOMConverted && matchingBom && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingPiModal(null);
+                        setViewingBomModal(matchingBom);
+                      }}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #BBF7D0',
+                        backgroundColor: '#F0FDF4',
+                        color: '#16A34A',
+                        fontSize: '11.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Factory size={13} /> View Linked BOM ({matchingBom.bomCode || matchingBom.id}) →
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingPiModal(null);
+                      if (onNavigateTab) {
+                        onNavigateTab('Performa Invoice', null, null, null);
+                      }
+                    }}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid #0E7490',
+                      backgroundColor: '#ECFEFF',
+                      color: '#0E7490',
+                      fontSize: '11.5px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <ExternalLink size={13} /> Open in Proforma Invoice View ↗
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setViewingPiModal(null)}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: BOM ORDER & LIFECYCLE DETAIL VIEW */}
+      {viewingBomModal && (() => {
+        const bom = viewingBomModal;
+        const bomCode = bom.bomCode || bom.id || 'BOM';
+        const bomDate = bom.bomDate || bom.date || bom.createdAt || '—';
+        const customer = bom.customerName || bom.customer || '—';
+        const salesPerson = bom.salesPerson || bom.createdBy || 'Sales / Engineering';
+        const linkedPiNo = bom.sourcePiNo || bom.piNo || bom.piNumber || bom.source_pi_no;
+        const matchingPi = linkedPiNo ? allPiList.find(p => (p.piNo === linkedPiNo || p.id === linkedPiNo)) : null;
+        const items = Array.isArray(bom.items) ? bom.items : (Array.isArray(bom.materials) ? bom.materials : []);
+        const grandTotal = parseAmt(bom.grandTotal || bom.totalAmount || bom.amount || bom.value || 0);
+        const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
+        const st = String(bom.status || '').toLowerCase();
+
+        // 6 Lifecycle stage indicators
+        const stages = [
+          { num: 1, label: 'PI Commercial', done: Boolean(linkedPiNo), active: !bom.salesConfirmed },
+          { num: 2, label: 'BOM Confirmed', done: Boolean(bom.salesConfirmed || st.includes('confirm')), active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED' },
+          { num: 3, label: 'Dispatch Packed', done: Boolean(bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')), active: bom.packingStatus === 'PACKING_VERIFIED' && !bom.isAccountsDone },
+          { num: 4, label: 'Accounts Verified', done: Boolean(bom.isAccountsDone || bom.accountsVerification?.verified), active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed },
+          { num: 5, label: 'GST Invoiced', done: Boolean(bom.invoiceConfirmed || st.includes('invoice')), active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted },
+          { num: 6, label: 'Final Dispatched', done: Boolean(bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')), active: Boolean(bom.fullyCompleted) }
+        ];
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}>
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              width: '920px',
+              maxWidth: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}>
+              {/* Header */}
+              <div style={{
+                padding: '16px 22px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#F8FAFC'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: '#F0F9FF',
+                    color: '#0284C7',
+                    border: '1px solid #BAE6FD',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Factory size={20} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+                        BOM Order • {bomCode}
+                      </span>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        backgroundColor: '#ECFEFF',
+                        color: '#0E7490',
+                        border: '1px solid #A5F3FC'
+                      }}>
+                        {bom.status || 'Active'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                      Customer Project: <strong>{customer}</strong> • Date: {bomDate} • Rep: {salesPerson}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setViewingBomModal(null)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748B',
+                    backgroundColor: '#F1F5F9'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* 6-Stage Progress Stepper Bar */}
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '12px',
+                  padding: '12px 14px',
+                  border: '1px solid #E2E8F0'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    Order-to-Cash Lifecycle Progress
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px' }}>
+                    {stages.map((stg) => {
+                      const isComplete = stg.done;
+                      const isCurrent = stg.active;
+                      return (
+                        <div
+                          key={stg.num}
+                          style={{
+                            backgroundColor: isComplete ? '#F0FDF4' : (isCurrent ? '#ECFEFF' : '#FFFFFF'),
+                            border: `1.5px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#0E7490' : '#E2E8F0')}`,
+                            borderRadius: '8px',
+                            padding: '6px 8px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            textAlign: 'center',
+                            gap: '2px'
+                          }}
+                        >
+                          <span style={{
+                            fontSize: '9.5px',
+                            fontWeight: '800',
+                            color: isComplete ? '#16A34A' : (isCurrent ? '#0E7490' : '#94A3B8')
+                          }}>
+                            {isComplete ? '✓ STEP ' + stg.num : 'STEP ' + stg.num}
+                          </span>
+                          <span style={{
+                            fontSize: '10.5px',
+                            fontWeight: '700',
+                            color: isComplete ? '#15803D' : (isCurrent ? '#0E7490' : '#64748B'),
+                            lineHeight: 1.15
+                          }}>
+                            {stg.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Info Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Linked PI Reference</div>
+                    {linkedPiNo ? (
+                      <div style={{ marginTop: '3px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (matchingPi) {
+                              setViewingBomModal(null);
+                              setViewingPiModal(matchingPi);
+                            } else if (onNavigateTab) {
+                              setViewingBomModal(null);
+                              onNavigateTab('Performa Invoice');
+                            }
+                          }}
+                          style={{
+                            border: 'none',
+                            background: 'none',
+                            padding: 0,
+                            fontSize: '13px',
+                            fontWeight: '800',
+                            color: '#0284C7',
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {linkedPiNo} <Receipt size={13} />
+                        </button>
+                        <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>Click to view Commercial PI</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px' }}>Direct Factory BOM</div>
+                    )}
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Dispatch Units</div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginTop: '3px' }}>
+                      {Math.round(totalUnits).toLocaleString('en-IN')} Units
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Across {items.length} Material Items</div>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Packing & Dispatch</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: bom.packingStatus === 'PACKING_VERIFIED' ? '#16A34A' : '#D97706', marginTop: '3px' }}>
+                      {bom.packingStatus === 'PACKING_VERIFIED' ? '✓ Packing Verified' : 'Pending Packing'}
+                    </div>
+                    {bom.dispatchDetails?.transporterName && (
+                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                        🚚 {bom.dispatchDetails.transporterName} {bom.dispatchDetails.vehicleNo ? `(${bom.dispatchDetails.vehicleNo})` : ''}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ backgroundColor: '#F0F9FF', padding: '10px 12px', borderRadius: '10px', border: '1px solid #BAE6FD' }}>
+                    <div style={{ fontSize: '10.5px', color: '#0284C7', fontWeight: '800', textTransform: 'uppercase' }}>BOM Order Value</div>
+                    <div style={{ fontSize: '16px', fontWeight: '900', color: '#0284C7', marginTop: '3px' }}>
+                      ₹ {Math.round(grandTotal).toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#0284C7', marginTop: '2px' }}>
+                      {bom.invoiceConfirmed ? '✓ Invoiced & Locked' : 'Pending Invoice'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    BOM Bill of Materials ({items.length})
+                  </div>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                          <th style={{ padding: '8px 10px', width: '35px' }}>#</th>
+                          <th style={{ padding: '8px 10px' }}>Material / Component</th>
+                          <th style={{ padding: '8px 10px', width: '90px' }}>Category</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '80px' }}>Base Qty</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Dispatch Qty</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>UOM</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.length > 0 ? (
+                          items.map((it, idx) => {
+                            const dispQty = it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== ''
+                              ? it.totalDispatchQty
+                              : (it.qty || it.bomQty || it.quantity || '0');
+                            return (
+                              <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
+                                <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                  <div>{it.name || it.material || 'Material Item'}</div>
+                                  {(it.presetName || it.subPresetName) && (
+                                    <div style={{ fontSize: '10px', color: '#0284C7', fontWeight: '600', marginTop: '1px' }}>
+                                      {it.subPresetName ? `↳ Sub-Kit: ${it.subPresetName}` : `Preset: ${it.presetName}`}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#64748B' }}>{it.category || 'HDG'}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{it.qty || it.bomQty || 0}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
+                                  {dispQty}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                              No items in this BOM order.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '12px 22px',
+                backgroundColor: '#F8FAFC',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {linkedPiNo && matchingPi && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingBomModal(null);
+                        setViewingPiModal(matchingPi);
+                      }}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #A5F3FC',
+                        backgroundColor: '#ECFEFF',
+                        color: '#0E7490',
+                        fontSize: '11.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Receipt size={13} /> View Commercial PI ({linkedPiNo}) →
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingBomModal(null);
+                      if (onNavigateTab) {
+                        onNavigateTab('BOM Orders', null, null, null);
+                      }
+                    }}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid #0284C7',
+                      backgroundColor: '#F0F9FF',
+                      color: '#0284C7',
+                      fontSize: '11.5px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <ExternalLink size={13} /> Open in BOM Orders View ↗
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setViewingBomModal(null)}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
