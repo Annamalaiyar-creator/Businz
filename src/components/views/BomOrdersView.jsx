@@ -944,11 +944,22 @@ export default function BomOrdersView(props) {
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
   const currentUserName = props.currentUserName || props.userName || props.currentUser?.name || currentEmpName || defaultSalesPersonName || userRole;
 
+  const curCode = (currentEmpId || '').trim().toUpperCase();
+  const effectiveCurName = (currentEmpName || (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : '') || '').trim();
+  const curName = effectiveCurName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+  const curEmail = (currentLoggedEmail || '').trim().toLowerCase();
+
+  // Generic Sales Department (SE-1000 / sales / Sales Head) has full visibility across sales department BOMs
+  const isGenericSales = curCode === 'SE-1000' || curName === 'sales' || curName === 'sales department' || (userRole && userRole.toLowerCase().includes('sales head')) || (!curCode && !curName && !curEmail);
+
   // Role check: Only individual Sales personnel are isolated to their own BOMs.
   // Management & Fulfillment roles (Dispatch Head, Dispatch, Production Head, Floor Supervisor, Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Procurement Head, Billing) see all BOMs.
   const isRestrictedSalesUser = Boolean(
+    !isCeo &&
+    !isGenericSales &&
     userRole &&
-    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    userRole.toLowerCase() !== 'sales head' &&
     !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Production', 'Accounts Head', 'Accounts Executive', 'Accounts', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Procurement'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
   );
 
@@ -1039,11 +1050,22 @@ export default function BomOrdersView(props) {
       // Extract all identifying names and text from the BOM
       const bomNameText = [
         b.salesPerson, b.createdBy, b.convertedBy,
-        b.sales_person, b.created_by, b.converted_by
+        b.sales_person, b.created_by, b.converted_by, b.c8
       ].filter(Boolean).join(' ').toLowerCase();
 
       const bomEmail = String(b.salesPersonEmail || b.email || b.creatorEmail || '').toLowerCase().trim();
       const bomCode = String(b.salesPersonCode || b.createdById || b.convertedById || b.sales_person_code || b.created_by_id || '').toUpperCase().trim();
+
+      // Rule 0: If BOM was created, converted, or assigned to this user, ALWAYS show it!
+      if (curCode && (bomCode === curCode || b.salesPersonCode === curCode || b.createdById === curCode || b.convertedById === curCode)) {
+        return true;
+      }
+      if (userAliases.has(bomCode) || userAliases.has(b.salesPersonCode) || userAliases.has(b.createdById) || userAliases.has(b.convertedById)) {
+        return true;
+      }
+      if (curName && (bomNameText.includes(curName) || b.salesPerson?.toLowerCase() === curName || b.createdBy?.toLowerCase() === curName || b.convertedBy?.toLowerCase() === curName)) {
+        return true;
+      }
 
       if (activeRep) {
         // 1. Primary Rule: NAME MATCHING
@@ -1080,6 +1102,11 @@ export default function BomOrdersView(props) {
 
         return false;
       }
+
+      // Fallback for non-mapped sales users (like PerformaInvoiceView)
+      if (curName && bomNameText.includes(curName)) return true;
+      if (curCode && (bomCode === curCode || b.salesPersonCode === curCode)) return true;
+      if (curEmail && bomEmail === curEmail) return true;
 
       // 4. Source PI ownership check
       const sPiNo = b.sourcePiNo || b.piNo;
@@ -4684,12 +4711,15 @@ export default function BomOrdersView(props) {
                           {/* Total Dispatch Quantity Column */}
                           <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: isPresetItem ? '#ECFEFF' : '#F8FAFC' }}>
                             {(() => {
-                              const totalDisp = calculateTotalDispatchQty(
+                              const calcTotalDisp = calculateTotalDispatchQty(
                                 item,
                                 currentGroup?.setCount || 1,
                                 currentGroup?.presetName || item.presetName,
                                 currentGroup?.category || item.category
                               );
+                              const totalDisp = item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== ''
+                                ? item.totalDispatchQty
+                                : calcTotalDisp;
                               const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category) || isRailPreset(item.name, item.category);
                               return (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
@@ -4700,12 +4730,31 @@ export default function BomOrdersView(props) {
                                     backgroundColor: '#FFFFFF',
                                     border: `1.5px solid ${isPresetItem ? theme.border : '#CBD5E1'}`,
                                     borderRadius: '6px',
-                                    padding: '4px 8px'
+                                    padding: '2px 4px'
                                   }}>
-                                    <strong style={{ fontSize: '13px', color: isPresetItem ? theme.primary : '#0E7490', fontWeight: '800' }}>
-                                      {totalDisp}
-                                    </strong>
-                                    <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      value={totalDisp}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, totalDispatchQty: val } : mat));
+                                      }}
+                                      style={{
+                                        width: '64px',
+                                        height: '28px',
+                                        borderRadius: '4px',
+                                        border: 'none',
+                                        fontSize: '13px',
+                                        color: isPresetItem ? theme.primary : '#0E7490',
+                                        fontWeight: '800',
+                                        textAlign: 'center',
+                                        outline: 'none',
+                                        backgroundColor: 'transparent'
+                                      }}
+                                    />
+                                    <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '700', paddingRight: '4px' }}>
                                       {item.uom || item.unit || 'NOS'}
                                     </span>
                                   </div>
@@ -8115,6 +8164,66 @@ export default function BomOrdersView(props) {
                                 style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
                                />
                             )}
+                          </td>
+                          {/* Total Dispatch Quantity Column */}
+                          <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: isPartBundle ? theme.bg : '#F8FAFC' }}>
+                            {(() => {
+                              const calcTotalDisp = calculateTotalDispatchQty(
+                                item,
+                                pInfo?.setCount || 1,
+                                pInfo?.presetName || item.presetName,
+                                item.category
+                              );
+                              const totalDisp = item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== ''
+                                ? item.totalDispatchQty
+                                : calcTotalDisp;
+                              const isRail = isRailPreset(pInfo?.presetName || item.presetName, item.category) || isRailPreset(item.name, item.category);
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                  <div style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    backgroundColor: '#FFFFFF',
+                                    border: `1.5px solid ${isPartBundle ? theme.border : '#CBD5E1'}`,
+                                    borderRadius: '6px',
+                                    padding: '2px 4px'
+                                  }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      value={totalDisp}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, totalDispatchQty: val } : it);
+                                        setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                      }}
+                                      style={{
+                                        width: '64px',
+                                        height: '28px',
+                                        borderRadius: '4px',
+                                        border: 'none',
+                                        fontSize: '13px',
+                                        color: isPartBundle ? theme.primary : '#0E7490',
+                                        fontWeight: '800',
+                                        textAlign: 'center',
+                                        outline: 'none',
+                                        backgroundColor: 'transparent'
+                                      }}
+                                    />
+                                    <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '700', paddingRight: '4px' }}>
+                                      {item.uom || item.unit || 'NOS'}
+                                    </span>
+                                  </div>
+                                  {isPartBundle && (
+                                    <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                      {isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${pInfo?.setCount || 1} Set${(pInfo?.setCount || 1) > 1 ? 's' : ''}`}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                           {/* Rate Column for Editing / Verification */}
                           {isSourcePiLocked && isPartBundle ? (

@@ -425,16 +425,25 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         },
         {
-          category: '4. BOM & Production',
-          id: 'bom_production',
-          dashboardSubTab: 'production',
+          category: '4. BOM',
+          id: 'bom',
+          dashboardSubTab: 'bom',
           items: [
-            { label: 'BOM & Production Dashboard', targetTab: 'Dashboard', subTabTarget: 'production', icon: LayoutDashboard },
+            { label: 'BOM Dashboard', targetTab: 'Dashboard', subTabTarget: 'bom', icon: LayoutDashboard },
             { label: 'All BOMs', targetTab: 'BOM Orders', icon: GitBranch, badge: realBOMCount > 0 ? String(realBOMCount) : undefined }
           ]
         },
         {
-          category: '5. Dispatch & Logistics',
+          category: '5. Production',
+          id: 'production',
+          dashboardSubTab: 'production',
+          items: [
+            { label: 'Production Dashboard', targetTab: 'Dashboard', subTabTarget: 'production', icon: LayoutDashboard },
+            { label: 'Production Monitoring', targetTab: 'Production Monitoring', icon: Activity }
+          ]
+        },
+        {
+          category: '6. Dispatch & Logistics',
           id: 'dispatch_logistics',
           dashboardSubTab: 'dispatch',
           items: [
@@ -443,7 +452,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         },
         {
-          category: '6. Inventory',
+          category: '7. Inventory',
           id: 'inventory',
           dashboardSubTab: 'inventory-dashboard',
           items: [
@@ -453,7 +462,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         },
         {
-          category: '7. Purchase & Procurement',
+          category: '8. Purchase & Procurement',
           id: 'purchase_procurement',
           dashboardSubTab: 'procurement',
           items: [
@@ -465,7 +474,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         },
         ...(role !== 'HR' ? [
           {
-            category: '8. Accounts & Finance',
+            category: '9. Accounts & Finance',
             id: 'accounts_finance',
             dashboardSubTab: 'accounts',
             items: [
@@ -477,7 +486,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           }
         ] : []),
         {
-          category: role === 'HR' ? '8. Reports & Analytics' : '9. Reports & Analytics',
+          category: role === 'HR' ? '9. Reports & Analytics' : '10. Reports & Analytics',
           id: 'reports_analytics',
           dashboardSubTab: 'reports-dashboard',
           items: [

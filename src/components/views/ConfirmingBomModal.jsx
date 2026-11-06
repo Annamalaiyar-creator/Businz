@@ -1645,11 +1645,25 @@ export default function ConfirmingBomModal({
                     <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: '#F0FDFA' }}>
                       {(() => {
                         const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
-                        const dispQty = item.totalDispatchQty || calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
+                        const calcDisp = calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
+                        const dispQty = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')
+                          ? item.totalDispatchQty
+                          : calcDisp;
                         return (
-                          <div>
-                            <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>{dispQty}</span>
-                            {dispQty !== cleanNum(item.qty) && (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              value={dispQty}
+                              placeholder={String(calcDisp || 0)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, totalDispatchQty: val } : it);
+                                setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                              }}
+                              style={{ width: '85px', height: '36px', borderRadius: '6px', border: '1.5px solid #0E7490', padding: '0 6px', fontSize: '12px', fontWeight: '800', textAlign: 'center', color: '#0E7490', backgroundColor: 'white', outline: 'none' }}
+                            />
+                            {calcDisp !== cleanNum(item.qty) && (
                               <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>
                                 ({item.qty} × {setCount})
                               </div>

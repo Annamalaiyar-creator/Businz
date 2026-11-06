@@ -8,9 +8,9 @@ import ModernDateRangePicker from './ModernDateRangePicker';
 import { getNextSequence } from '../utils/sequenceGenerator';
 
 export const COMPANY_LOCATIONS = {
-  'VRM Structures (Madhavaram)': {
+  'VRM Structures India Pvt Ltd': {
     name: 'VRM Structures India Pvt Ltd',
-    locationLabel: 'VRM Structures (Madhavaram)',
+    locationLabel: 'VRM Structures India Pvt Ltd',
     address: '1427, GNT Road, Nagappa Industrial Estate, Madhavaram, Chennai, Tamil Nadu - 600066',
     gst: '33AAGCV4262N1ZZ',
     email: 'contact@vrmstructures.com',
@@ -36,9 +36,11 @@ export const COMPANY_LOCATIONS = {
     state: 'Tamil Nadu'
   }
 };
+// Alias legacy keys for backward compatibility
+COMPANY_LOCATIONS['VRM Structures (Madhavaram)'] = COMPANY_LOCATIONS['VRM Structures India Pvt Ltd'];
 
 export const getCompanyProfile = (locationKey) => {
-  if (!locationKey) return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
+  if (!locationKey) return COMPANY_LOCATIONS['VRM Structures India Pvt Ltd'];
   const norm = String(locationKey).trim().toLowerCase();
   if (norm.includes('ap') || norm.includes('andhra') || norm.includes('tada') || norm.includes('nellore')) {
     return COMPANY_LOCATIONS['VRM Structures (AP)'];
@@ -46,7 +48,7 @@ export const getCompanyProfile = (locationKey) => {
   if (norm.includes('jash') || norm.includes('sun')) {
     return COMPANY_LOCATIONS['Jashsun'];
   }
-  return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
+  return COMPANY_LOCATIONS['VRM Structures India Pvt Ltd'];
 };
 
 const PRESET_MATERIALS = [
@@ -558,8 +560,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   // Form Fields State (Start Fresh / Empty)
   const [vendorName, setVendorName] = useState('');
-  const [branch, setBranch] = useState('VRM Structures (Madhavaram)');
-  const [companyLocation, setCompanyLocation] = useState('VRM Structures (Madhavaram)');
+  const [branch, setBranch] = useState('VRM Structures India Pvt Ltd');
+  const [companyLocation, setCompanyLocation] = useState('VRM Structures India Pvt Ltd');
   const [contactPerson, setContactPerson] = useState('');
   const [contactNo, setContactNo] = useState('');
   const [email, setEmail] = useState('');
@@ -874,8 +876,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       zohoId: assignedZohoId,
       poNo: safePoNo || ('PO-' + String(poList.length + 1).padStart(5, '0')),
       vendor: vendorName || 'Fresh Vendor',
-      branch: branch || companyLocation || 'VRM Structures (Madhavaram)',
-      companyLocation: companyLocation || branch || 'VRM Structures (Madhavaram)',
+      branch: branch || companyLocation || 'VRM Structures India Pvt Ltd',
+      companyLocation: companyLocation || branch || 'VRM Structures India Pvt Ltd',
       companyName: compProfile.name,
       companyAddress: compProfile.address,
       companyGst: compProfile.gst,
@@ -1415,7 +1417,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     setPoNumber(po.poNo || po.purchaseorder_number || '');
     setVendorName(effVendor);
-    const resolvedLoc = po.companyLocation || effBranch || 'VRM Structures (Madhavaram)';
+    const resolvedLoc = po.companyLocation || effBranch || 'VRM Structures India Pvt Ltd';
     setBranch(resolvedLoc);
     setCompanyLocation(resolvedLoc);
     setContactPerson(effContact);
@@ -1758,8 +1760,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       })
       .catch(() => { });
     setVendorName('');
-    setBranch('VRM Structures (Madhavaram)');
-    setCompanyLocation('VRM Structures (Madhavaram)');
+    setBranch('VRM Structures India Pvt Ltd');
+    setCompanyLocation('VRM Structures India Pvt Ltd');
     setContactPerson('');
     setContactNo('');
     setEmail('');
@@ -3293,26 +3295,16 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                 {/* Header Row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   {(() => {
-                    const effLocation = currentPoObj?.companyLocation || currentPoObj?.branch || companyLocation || 'VRM Structures (Madhavaram)';
+                    const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber);
+                    const effLocation = currentPoObj?.companyLocation || currentPoObj?.branch || companyLocation || 'VRM Structures India Pvt Ltd';
                     const comp = getCompanyProfile(effLocation);
                     return (
                       <div>
                         <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#1E293B', margin: 0, letterSpacing: '-0.5px' }}>
                           {comp.name}
                         </h1>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                        <div style={{ marginTop: '4px' }}>
                           <span style={{ fontSize: '11px', color: '#64748B' }}>{comp.address}</span>
-                          <span style={{
-                            backgroundColor: '#ECFEFF',
-                            border: '1px solid #0E7490',
-                            color: '#0E7490',
-                            fontSize: '10px',
-                            fontWeight: '700',
-                            padding: '1px 8px',
-                            borderRadius: '4px'
-                          }}>
-                            {comp.locationLabel}
-                          </span>
                         </div>
                         <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
                           GSTIN: <strong>{comp.gst}</strong> | {comp.email} | {comp.phone}
@@ -4239,9 +4231,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             minWidth: '240px'
                           }}
                         >
-                          <option value="VRM Structures (Madhavaram)">VRM Structures (Madhavaram)</option>
+                          <option value="VRM Structures India Pvt Ltd">VRM Structures India Pvt Ltd</option>
                           <option value="VRM Structures (AP)">VRM Structures (AP)</option>
-                          <option value="Jashsun">Jashsun</option>
                         </select>
                       </div>
                     </div>
@@ -4327,9 +4318,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       }}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', cursor: 'pointer' }}
                     >
-                      <option value="VRM Structures (Madhavaram)">VRM Structures (Madhavaram)</option>
+                      <option value="VRM Structures India Pvt Ltd">VRM Structures India Pvt Ltd</option>
                       <option value="VRM Structures (AP)">VRM Structures (AP)</option>
-                      <option value="Jashsun">Jashsun</option>
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

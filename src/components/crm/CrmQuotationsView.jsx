@@ -2223,14 +2223,24 @@ export default function CrmQuotationsView({
                              {(() => {
                                const setCount = parseFloat(currentGroup?.setCount || 1) || 1;
                                const calculatedDisp = calculateTotalDispatchQty(item, setCount, currentGroup?.presetName || item.presetName, item.category);
-                               const dispQty = item.totalDispatchQty || calculatedDisp;
+                               const dispQty = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')
+                                 ? item.totalDispatchQty
+                                 : calculatedDisp;
                                const numQty = parseFloat(item.qty) || 0;
                                return (
-                                 <div>
-                                   <div style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
-                                     {dispQty}
-                                   </div>
-                                   {dispQty !== numQty && (
+                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                   <input
+                                     type="number"
+                                     min="0"
+                                     value={dispQty}
+                                     placeholder={String(calculatedDisp || 0)}
+                                     onChange={(e) => {
+                                       const val = e.target.value;
+                                       setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, totalDispatchQty: val } : mat));
+                                     }}
+                                     style={{ width: '85px', height: '36px', borderRadius: '6px', border: '1.5px solid #0E7490', padding: '0 6px', fontSize: '12.5px', fontWeight: '800', textAlign: 'center', color: '#0E7490', backgroundColor: 'white', outline: 'none' }}
+                                   />
+                                   {calculatedDisp !== numQty && (
                                      <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>
                                        ({item.qty} × {setCount})
                                      </div>

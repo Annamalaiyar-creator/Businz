@@ -4,7 +4,7 @@ import {
   Eye, Edit3, Trash2, Printer, FileText, CheckCircle, Clock, AlertCircle, Ban,
   Building2, ArrowLeft, ArrowRight, Send, Check, X, Shield, RefreshCw, RotateCcw,
   Upload, Download, Layers, Package, DollarSign, HelpCircle, Paperclip, ChevronUp,
-  Boxes, MapPin, AlertTriangle, ExternalLink
+  Boxes, MapPin, AlertTriangle, ExternalLink, Settings
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import ModernDateRangePicker from './ModernDateRangePicker';
@@ -15,9 +15,9 @@ import { getHsnCode } from '../utils/hsnCodeService';
 
 // ==================== COMPANY PROFILES (OFFICIAL BUSINZ LOCATIONS) ====================
 export const COMPANY_LOCATIONS = {
-  'VRM Structures (Madhavaram)': {
+  'VRM Structures India Pvt Ltd': {
     name: 'VRM Structures India Pvt Ltd',
-    locationLabel: 'VRM Structures (Madhavaram)',
+    locationLabel: 'VRM Structures India Pvt Ltd',
     address: '1427, GNT Road, Nagappa Industrial Estate, Madhavaram, Chennai, Tamil Nadu – 600066',
     gst: '33AAGCV4262N1ZZ',
     email: 'contact@vrmstructures.com',
@@ -43,9 +43,11 @@ export const COMPANY_LOCATIONS = {
     state: 'Tamil Nadu'
   }
 };
+// Alias legacy keys for backward compatibility
+COMPANY_LOCATIONS['VRM Structures (Madhavaram)'] = COMPANY_LOCATIONS['VRM Structures India Pvt Ltd'];
 
 export const getCompanyProfile = (locationKey) => {
-  if (!locationKey) return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
+  if (!locationKey) return COMPANY_LOCATIONS['VRM Structures India Pvt Ltd'];
   const norm = String(locationKey).trim().toLowerCase();
   if (norm.includes('ap') || norm.includes('andhra') || norm.includes('tada') || norm.includes('nellore')) {
     return COMPANY_LOCATIONS['VRM Structures (AP)'];
@@ -53,7 +55,7 @@ export const getCompanyProfile = (locationKey) => {
   if (norm.includes('jash') || norm.includes('sun')) {
     return COMPANY_LOCATIONS['Jashsun'];
   }
-  return COMPANY_LOCATIONS['VRM Structures (Madhavaram)'];
+  return COMPANY_LOCATIONS['VRM Structures India Pvt Ltd'];
 };
 
 const CHALLAN_TYPES = [
@@ -115,12 +117,12 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   const [editIdx, setEditIdx] = useState(null);
 
   // ==================== FORM STATE ====================
-  const [companyLocation, setCompanyLocation] = useState('VRM Structures (Madhavaram)');
+  const [companyLocation, setCompanyLocation] = useState('VRM Structures India Pvt Ltd');
   const [customerName, setCustomerName] = useState('');
   const [dcNumber, setDcNumber] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
   const [dcDate, setDcDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [challanType, setChallanType] = useState('For Job Work');
+  const [challanType, setChallanType] = useState('Job Work');
   const [warehouseLocation, setWarehouseLocation] = useState('VRM Structures - Madhavaram Main Warehouse');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
@@ -135,11 +137,49 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ==================== DC NUMBER PREFERENCES STATE (ZOHO STYLE) ====================
+  const [showDcPrefModal, setShowDcPrefModal] = useState(false);
+  const [dcNumberMode, setDcNumberMode] = useState(() => {
+    try {
+      return localStorage.getItem('businz_dc_number_mode') || 'auto';
+    } catch (_) {
+      return 'auto';
+    }
+  });
+  const [dcPrefPrefix, setDcPrefPrefix] = useState(() => {
+    try {
+      return localStorage.getItem('businz_dc_pref_prefix') || 'VRMS/JW/26-27/';
+    } catch (_) {
+      return 'VRMS/JW/26-27/';
+    }
+  });
+  const [dcPrefNextNum, setDcPrefNextNum] = useState(() => {
+    try {
+      return localStorage.getItem('businz_dc_pref_next_num') || '';
+    } catch (_) {
+      return '';
+    }
+  });
+  const [tempNumberMode, setTempNumberMode] = useState('auto');
+  const [tempPrefix, setTempPrefix] = useState('VRMS/JW/26-27/');
+  const [tempNextNum, setTempNextNum] = useState('001');
+  const [tempManualNum, setTempManualNum] = useState('');
+
   // Line items state
   const [items, setItems] = useState([]);
 
   // Bulk Item Modal
   const [showBulkItemModal, setShowBulkItemModal] = useState(false);
+
+  // ==================== JOB WORK RETURN STATE ====================
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnDc, setReturnDc] = useState(null);
+  const [returnDate, setReturnDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [returnRef, setReturnRef] = useState('');
+  const [returnReceivedBy, setReturnReceivedBy] = useState('');
+  const [returnRemarks, setReturnRemarks] = useState('');
+  const [returnReceivedRows, setReturnReceivedRows] = useState([]);
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
   const [bulkItemSearch, setBulkItemSearch] = useState('');
   const [selectedBulkItems, setSelectedBulkItems] = useState({});
 
@@ -240,13 +280,62 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
     setKnownCustomers(Array.from(custMap.values()));
   }, []);
 
-  // Generate next sequential DC Number
+  // Generate next sequential DC Number (VRMS/JW/26-27/001 format or customized preference)
   const fetchNextDcNumber = () => {
     try {
-      const seq = getNextSequence('DC', dcList);
-      return seq.code || `VRMS/DC/26-27/${String(dcList.length + 1).padStart(3, '0')}`;
+      if (dcNumberMode === 'manual' && dcNumber) {
+        return dcNumber;
+      }
+      if (dcPrefPrefix && dcPrefNextNum) {
+        return `${dcPrefPrefix}${dcPrefNextNum}`;
+      }
+      const seq = getNextSequence('JW', dcList);
+      const standardCode = seq.code || `VRMS/JW/26-27/${String(dcList.length + 1).padStart(3, '0')}`;
+      if (dcPrefPrefix && dcPrefPrefix !== 'VRMS/JW/26-27/') {
+        const lastSlash = standardCode.lastIndexOf('/');
+        const numPart = lastSlash !== -1 ? standardCode.slice(lastSlash + 1) : String(dcList.length + 1).padStart(3, '0');
+        return `${dcPrefPrefix}${numPart}`;
+      }
+      return standardCode;
     } catch (_) {}
-    return `VRMS/DC/26-27/${String(dcList.length + 1).padStart(3, '0')}`;
+    return `VRMS/JW/26-27/${String(dcList.length + 1).padStart(3, '0')}`;
+  };
+
+  const handleOpenDcPrefModal = () => {
+    const cur = dcNumber || fetchNextDcNumber();
+    const lastSlash = cur.lastIndexOf('/');
+    if (lastSlash !== -1) {
+      setTempPrefix(dcPrefPrefix || cur.slice(0, lastSlash + 1));
+      setTempNextNum(dcPrefNextNum || cur.slice(lastSlash + 1));
+    } else {
+      setTempPrefix(dcPrefPrefix || 'VRMS/JW/26-27/');
+      setTempNextNum(dcPrefNextNum || '001');
+    }
+    setTempManualNum(cur);
+    setTempNumberMode(dcNumberMode);
+    setShowDcPrefModal(true);
+  };
+
+  const handleSaveDcPreferences = () => {
+    try {
+      localStorage.setItem('businz_dc_number_mode', tempNumberMode);
+      localStorage.setItem('businz_dc_pref_prefix', tempPrefix);
+      localStorage.setItem('businz_dc_pref_next_num', tempNextNum);
+      if (tempNumberMode === 'manual') {
+        localStorage.setItem('businz_dc_pref_manual_num', tempManualNum);
+      }
+    } catch (_) {}
+    setDcNumberMode(tempNumberMode);
+    setDcPrefPrefix(tempPrefix);
+    setDcPrefNextNum(tempNextNum);
+
+    if (tempNumberMode === 'auto') {
+      const generated = `${tempPrefix || ''}${tempNextNum || '001'}`;
+      setDcNumber(generated);
+    } else {
+      setDcNumber(tempManualNum || dcNumber);
+    }
+    setShowDcPrefModal(false);
   };
 
   // ==================== LINE ITEMS HELPERS ====================
@@ -361,13 +450,13 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   };
 
   const handleStartFreshDC = () => {
-    setCompanyLocation('VRM Structures (Madhavaram)');
+    setCompanyLocation('VRM Structures India Pvt Ltd');
     setCustomerName('');
     setDcNumber(fetchNextDcNumber());
     setReferenceNo('');
     setDcDate(new Date().toISOString().split('T')[0]);
-    setChallanType('For Job Work');
-    setWarehouseLocation('VRM Structures - Madhavaram Main Warehouse');
+    setChallanType('Job Work');
+    setWarehouseLocation('');
     setDeliveryAddress('');
     setBillingAddress('');
     setTransporter('');
@@ -388,13 +477,13 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   const handleStartEdit = (dc) => {
     setActiveDc(dc);
     setEditIdx(dcList.findIndex(d => (d.dcNo === dc.dcNo || d.id === dc.id)));
-    setCompanyLocation(dc.companyLocation || dc.branch || 'VRM Structures (Madhavaram)');
+    setCompanyLocation(dc.companyLocation || dc.branch || 'VRM Structures India Pvt Ltd');
     setCustomerName(dc.customerName || dc.vendor || '');
     setDcNumber(dc.dcNo || dc.code || '');
     setReferenceNo(dc.referenceNo || dc.refNo || dc.bomCode || '');
     setDcDate(dc.dcDate || dc.date || new Date().toISOString().split('T')[0]);
-    setChallanType(dc.challanType || 'For Job Work');
-    setWarehouseLocation(dc.warehouseLocation || 'VRM Structures - Madhavaram Main Warehouse');
+    setChallanType(dc.challanType || 'Job Work');
+    setWarehouseLocation(dc.warehouseLocation || '');
     setDeliveryAddress(dc.deliveryAddress || '');
     setBillingAddress(dc.billingAddress || '');
     setTransporter(dc.transporter || '');
@@ -702,6 +791,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       if (dcTab !== 'All') {
         if (dcTab === 'Draft') matchesTab = st.toLowerCase().includes('draft');
         else if (dcTab === 'In Transit') matchesTab = st.toLowerCase().includes('transit');
+        else if (dcTab === 'At Job Work') matchesTab = st.toLowerCase().includes('job work') || st.toLowerCase() === 'at job work';
+        else if (dcTab === 'Partially Returned') matchesTab = st.toLowerCase().includes('partially');
         else if (dcTab === 'Delivered') matchesTab = st.toLowerCase().includes('deliver') || st.toLowerCase().includes('closed');
         else if (dcTab === 'Cancelled') matchesTab = st.toLowerCase().includes('cancel');
       }
@@ -743,10 +834,249 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       all: dcList.length,
       draft: dcList.filter(d => String(d.status || '').toLowerCase().includes('draft')).length,
       inTransit: dcList.filter(d => String(d.status || '').toLowerCase().includes('transit')).length,
+      atJobWork: dcList.filter(d => String(d.status || '').toLowerCase().includes('job work') || String(d.status || '').toLowerCase() === 'at job work').length,
+      partiallyReturned: dcList.filter(d => String(d.status || '').toLowerCase().includes('partially')).length,
       delivered: dcList.filter(d => String(d.status || '').toLowerCase().includes('deliver') || String(d.status || '').toLowerCase().includes('closed')).length,
       cancelled: dcList.filter(d => String(d.status || '').toLowerCase().includes('cancel')).length
     };
   }, [dcList]);
+
+  // ==================== JOB WORK RETURN HANDLERS ====================
+  const handleOpenReturnModal = (dc) => {
+    setReturnDc(dc);
+    setReturnDate(new Date().toISOString().split('T')[0]);
+    setReturnRef('');
+    setReturnReceivedBy('');
+    setReturnRemarks('');
+
+    // Pre-fill received items: each sent item has an initial receiving row
+    const initialRows = [];
+    if (Array.isArray(dc.items)) {
+      dc.items.forEach((it, idx) => {
+        const sentQty = Number(it.qty || it.dcQty || 1);
+        const alreadyReturned = (dc.returns || []).reduce((sum, ret) => {
+          const matched = (ret.returnedItems || []).filter(r => (
+            (r.sentItemIdx !== undefined ? r.sentItemIdx === idx : r.itemIdx === idx) ||
+            r.sentItemName === it.name ||
+            r.itemName === it.name
+          ));
+          return sum + matched.reduce((s, m) => s + Number(m.returnedQty || 0), 0);
+        }, 0);
+        const remaining = Math.max(0, sentQty - alreadyReturned);
+        initialRows.push({
+          id: `rec_${idx}_${Date.now()}`,
+          sentItemIdx: idx,
+          sentItemName: it.name || it.description || `Item ${idx + 1}`,
+          sentQty,
+          remainingSentQty: remaining,
+          receivedItemName: it.name || it.description || '',
+          receivedQty: remaining > 0 ? remaining : 0,
+          unit: it.unit || 'Nos'
+        });
+      });
+    }
+    setReturnReceivedRows(initialRows);
+    setShowReturnModal(true);
+  };
+
+  const handleAddReceivedRow = () => {
+    const firstSent = returnDc?.items?.[0];
+    setReturnReceivedRows(prev => [
+      ...prev,
+      {
+        id: `rec_${Date.now()}_${Math.random()}`,
+        sentItemIdx: 0,
+        sentItemName: firstSent?.name || firstSent?.description || 'Job Work Item',
+        sentQty: Number(firstSent?.qty || firstSent?.dcQty || 1),
+        remainingSentQty: 0,
+        receivedItemName: '',
+        receivedQty: '',
+        unit: firstSent?.unit || 'Nos'
+      }
+    ]);
+  };
+
+  const handleUpdateReceivedRow = (index, field, value) => {
+    setReturnReceivedRows(prev => {
+      const next = [...prev];
+      const updatedRow = { ...next[index], [field]: value };
+      if (field === 'sentItemIdx') {
+        const selectedSent = returnDc?.items?.[value];
+        if (selectedSent) {
+          const sentQty = Number(selectedSent.qty || selectedSent.dcQty || 1);
+          const alreadyReturned = (returnDc?.returns || []).reduce((sum, ret) => {
+            const matched = (ret.returnedItems || []).filter(r => (
+              (r.sentItemIdx !== undefined ? r.sentItemIdx === Number(value) : r.itemIdx === Number(value)) ||
+              r.sentItemName === selectedSent.name ||
+              r.itemName === selectedSent.name
+            ));
+            return sum + matched.reduce((s, m) => s + Number(m.returnedQty || 0), 0);
+          }, 0);
+          updatedRow.sentItemName = selectedSent.name || selectedSent.description || '';
+          updatedRow.sentQty = sentQty;
+          updatedRow.remainingSentQty = Math.max(0, sentQty - alreadyReturned);
+          if (!updatedRow.receivedItemName) {
+            updatedRow.receivedItemName = selectedSent.name || '';
+          }
+          if (!updatedRow.unit) {
+            updatedRow.unit = selectedSent.unit || 'Nos';
+          }
+        }
+      }
+      next[index] = updatedRow;
+      return next;
+    });
+  };
+
+  const handleRemoveReceivedRow = (index) => {
+    setReturnReceivedRows(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleReceiveAllRemaining = () => {
+    setReturnReceivedRows(prev => prev.map(r => ({
+      ...r,
+      receivedQty: r.remainingSentQty !== undefined ? r.remainingSentQty : r.receivedQty
+    })));
+  };
+
+  const handleSaveReturn = async () => {
+    if (!returnDc) return;
+    if (!returnDate) { alert('Please enter a Return Date.'); return; }
+    if (!returnReceivedBy.trim()) { alert('Please enter who received the goods.'); return; }
+
+    const validRows = returnReceivedRows.filter(r => Number(r.receivedQty) > 0);
+    if (validRows.length === 0) {
+      alert('Please enter at least one item with a received quantity greater than 0.');
+      return;
+    }
+
+    const missingName = validRows.some(r => !String(r.receivedItemName || '').trim());
+    if (missingName) {
+      alert('Please enter a Received Product / Finished Goods name for all items being received.');
+      return;
+    }
+
+    setReturnSubmitting(true);
+    try {
+      const returnedItems = validRows.map(r => ({
+        sentItemIdx: Number(r.sentItemIdx !== undefined ? r.sentItemIdx : 0),
+        itemIdx: Number(r.sentItemIdx !== undefined ? r.sentItemIdx : 0),
+        sentItemName: r.sentItemName || '',
+        itemName: r.receivedItemName.trim(),
+        receivedItemName: r.receivedItemName.trim(),
+        unit: r.unit || 'Nos',
+        sentQty: Number(r.sentQty || 0),
+        returnedQty: Number(r.receivedQty || 0)
+      }));
+
+      const newReturn = {
+        returnId: `RET-${Date.now()}`,
+        returnDate,
+        returnRef: returnRef.trim(),
+        receivedBy: returnReceivedBy.trim(),
+        remarks: returnRemarks.trim(),
+        returnedItems,
+        createdAt: new Date().toISOString()
+      };
+
+      // Calculate updated status
+      const allItems = returnDc.items || [];
+      const existingReturns = returnDc.returns || [];
+      const updatedReturns = [...existingReturns, newReturn];
+
+      const totalSentByIdx = {};
+      const totalReturnedByIdx = {};
+      allItems.forEach((it, idx) => {
+        totalSentByIdx[idx] = Number(it.qty || it.dcQty || 1);
+        totalReturnedByIdx[idx] = 0;
+      });
+      updatedReturns.forEach(ret => {
+        (ret.returnedItems || []).forEach(ri => {
+          const idx = ri.sentItemIdx !== undefined ? ri.sentItemIdx : ri.itemIdx;
+          if (idx !== undefined && totalReturnedByIdx[idx] !== undefined) {
+            totalReturnedByIdx[idx] = (totalReturnedByIdx[idx] || 0) + Number(ri.returnedQty || 0);
+          }
+        });
+      });
+
+      const allFullyReturned = allItems.every((_, idx) =>
+        (totalReturnedByIdx[idx] || 0) >= (totalSentByIdx[idx] || 0)
+      );
+      const anyReturned = updatedReturns.some(ret => (ret.returnedItems || []).length > 0);
+
+      let newStatus = returnDc.status;
+      if (allFullyReturned) {
+        newStatus = 'Closed';
+      } else if (anyReturned) {
+        newStatus = 'Partially Returned';
+      }
+
+      // Update the DC record (1 targeted update)
+      const updatedDc = {
+        ...returnDc,
+        returns: updatedReturns,
+        status: newStatus,
+        statusType: allFullyReturned ? 'closed' : 'partially_returned',
+        updatedAt: new Date().toISOString()
+      };
+
+      // Credit stock back for returned items (credited under received product name)
+      try {
+        returnedItems.forEach(ri => {
+          if (ri.returnedQty > 0) {
+            const stockName = ri.receivedItemName || ri.itemName;
+            centralInventoryStore.addStock && centralInventoryStore.addStock(
+              stockName,
+              ri.returnedQty,
+              `Job Work Inward — DC: ${returnDc.dcNo || returnDc.id}, Ret: ${newReturn.returnId} (${ri.receivedItemName !== ri.sentItemName ? `Processed from ${ri.sentItemName}` : 'Returned'})`
+            );
+          }
+        });
+      } catch (err) {
+        console.warn('Stock credit notice:', err);
+      }
+
+      // Save to localStorage
+      try {
+        const raw = localStorage.getItem('controlroom_dc_store');
+        const list = raw ? JSON.parse(raw) : [];
+        const updated = list.map(d =>
+          (d.dcNo === returnDc.dcNo || d.id === returnDc.id) ? updatedDc : d
+        );
+        localStorage.setItem('controlroom_dc_store', JSON.stringify(updated));
+      } catch (_) {}
+
+      // Sync to server
+      try {
+        await fetch(`/api/deliverychallans/${returnDc.dcNo || returnDc.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedDc)
+        });
+      } catch (_) {}
+
+      // Update local state (1 row only)
+      setDcList(prev => prev.map(d =>
+        (d.dcNo === returnDc.dcNo || d.id === returnDc.id) ? updatedDc : d
+      ));
+      setActiveDc(updatedDc);
+
+      setShowReturnModal(false);
+      setReturnDc(null);
+      showCustomAlert(
+        allFullyReturned
+          ? `All items received back. DC ${returnDc.dcNo} is now Closed ✅`
+          : `Partial return recorded for DC ${returnDc.dcNo}. Status: Partially Returned.`,
+        'Job Work Return Recorded',
+        'success'
+      );
+    } catch (err) {
+      console.error('Return save error:', err);
+      showCustomAlert('Failed to save return. Please try again.', 'Error', 'error');
+    } finally {
+      setReturnSubmitting(false);
+    }
+  };
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -971,7 +1301,9 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               { id: 'All', label: 'All orders', count: statusCounts.all, bg: '#e2e8f0', fg: '#475569' },
               { id: 'Draft', label: 'Draft', count: statusCounts.draft, bg: '#fff7ed', fg: '#c2410c' },
               { id: 'In Transit', label: 'In Transit', count: statusCounts.inTransit, bg: '#fef3c7', fg: '#92400e' },
-              { id: 'Delivered', label: 'Delivered', count: statusCounts.delivered, bg: '#dcfce7', fg: '#15803d' },
+              { id: 'At Job Work', label: 'At Job Work', count: statusCounts.atJobWork, bg: '#EFF6FF', fg: '#1D4ED8' },
+              { id: 'Partially Returned', label: 'Partially Returned', count: statusCounts.partiallyReturned, bg: '#FEF3C7', fg: '#B45309' },
+              { id: 'Delivered', label: 'Closed / Delivered', count: statusCounts.delivered, bg: '#dcfce7', fg: '#15803d' },
               { id: 'Cancelled', label: 'Cancelled', count: statusCounts.cancelled, bg: '#fee2e2', fg: '#b91c1c' }
             ].map(tab => (
               <button
@@ -1186,7 +1518,7 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
             </div>
           </div>
 
-          {/* Floating Selection Toolbar (Fixed at Bottom Center, Single Line, No 3-Dot Menu, No Delete) */}
+          {/* Floating Selection Toolbar (exact reference design matching PO) */}
           {selectedDCs.length > 0 && (
             <div className="floating-action-bar dc-no-print" style={{
               position: 'fixed',
@@ -1204,10 +1536,14 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               alignItems: 'center',
               whiteSpace: 'nowrap',
               gap: '8px',
-              zIndex: 10000
+              zIndex: 10000,
+              width: 'max-content',
+              maxWidth: 'calc(100vw - 32px)',
+              overflowX: 'auto',
+              fontFamily: "'Plus Jakarta Sans', sans-serif"
             }}>
-              <span style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginRight: '6px' }}>
-                {selectedDCs.length} Selected
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px', paddingRight: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedDCs.length}</strong> Selected
               </span>
 
               {/* Edit Info (Single selection) */}
@@ -1239,6 +1575,41 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
                   >
                     <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
+                  </button>
+                );
+              })()}
+
+              {/* Receive Back (Single selection, not cancelled / not closed) */}
+              {selectedDCs.length === 1 && (() => {
+                const target = dcList.find(d => (d.dcNo === selectedDCs[0] || d.id === selectedDCs[0]));
+                if (!target) return null;
+                const isCancelledOrClosed = ['cancelled', 'closed'].some(s => String(target.status || '').toLowerCase().includes(s));
+                if (isCancelledOrClosed) return null;
+                return (
+                  <button
+                    onClick={() => {
+                      setSelectedDCs([]);
+                      handleOpenReturnModal(target);
+                    }}
+                    style={{
+                      backgroundColor: '#0E7490',
+                      border: 'none',
+                      color: '#FFFFFF',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 2px rgba(14,116,144,0.25)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                  >
+                    <Package size={14} style={{ color: '#FFFFFF' }} /> Receive Back
                   </button>
                 );
               })()}
@@ -1388,146 +1759,33 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '8px',
-                  padding: '8px 18px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  color: '#475569',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <ArrowLeft size={14} /> Back to DC List
-              </button>
-            </div>
+            {/* Close / Back button top-right */}
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              title="Close and go back to DC List"
+              style={{
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: '8px',
+                padding: '8px 14px',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#64748B',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#1E293B'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
+            >
+              <X size={15} /> Close
+            </button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-            {/* Top Banner: Company Issuing Location & Entity Details (PO Issuing Location - CLEAN, NO BORDER) */}
-            {(() => {
-              const currentCompany = getCompanyProfile(companyLocation);
-              return (
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '14px',
-                  backgroundColor: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '16px 20px',
-                  boxShadow: 'none'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '8px',
-                        backgroundColor: '#ECFEFF',
-                        color: '#0E7490',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        <Building2 size={20} style={{ color: '#0E7490' }} />
-                      </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <strong style={{ fontSize: '14px', color: '#0F172A', fontWeight: '800' }}>
-                            PO Issuing Location (Our Company)
-                          </strong>
-                          <span style={{
-                            fontSize: '10.5px',
-                            fontWeight: '700',
-                            backgroundColor: '#ECFEFF',
-                            color: '#0E7490',
-                            padding: '2px 8px',
-                            borderRadius: '12px'
-                          }}>
-                            Dispatch Entity
-                          </span>
-                        </div>
-                        <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
-                          Choose the company location. Its official address and GST number are applied to this Delivery Challan & printout.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Location Dropdown */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <label htmlFor="dc-company-location-select" style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>
-                        Location:
-                      </label>
-                      <select
-                        id="dc-company-location-select"
-                        name="companyLocation"
-                        aria-label="PO Issuing Location"
-                        value={companyLocation}
-                        onChange={(e) => setCompanyLocation(e.target.value)}
-                        style={{
-                          height: '38px',
-                          borderRadius: '8px',
-                          border: '1px solid #CBD5E1',
-                          padding: '0 14px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          color: '#0E7490',
-                          backgroundColor: '#F8FAFC',
-                          cursor: 'pointer',
-                          outline: 'none',
-                          minWidth: '240px'
-                        }}
-                      >
-                        <option value="VRM Structures (Madhavaram)">VRM Structures (Madhavaram)</option>
-                        <option value="VRM Structures (AP)">VRM Structures (AP)</option>
-                        <option value="Jashsun">Jashsun</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Live Company Details Preview */}
-                  <div style={{
-                    backgroundColor: '#F8FAFC',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '12px 16px',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                    gap: '12px',
-                    alignItems: 'start',
-                    fontSize: '12px'
-                  }}>
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Company Name</span>
-                      <strong style={{ fontSize: '13px', color: '#0F172A' }}>{currentCompany.name}</strong>
-                      <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <MapPin size={12} style={{ color: '#0E7490' }} />
-                        <span>{currentCompany.locationLabel}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>GST Number</span>
-                      <strong style={{ fontSize: '13px', color: '#059669', letterSpacing: '0.5px' }}>{currentCompany.gst}</strong>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>State: {currentCompany.state}</div>
-                    </div>
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Registered Address (Printout View)</span>
-                      <span style={{ fontSize: '12px', color: '#334155', lineHeight: '1.4' }}>{currentCompany.address}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* 1. Consignee / Customer Information (section-card style matching PO) */}
             <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1535,7 +1793,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 1. Consignee & Dispatch Information
               </strong>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+              {/* Row 1: Customer Name | Delivery Challan# | Challan Type */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label htmlFor="dc-customer-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                     Customer / Consignee Name <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
@@ -1558,35 +1817,74 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label htmlFor="dc-location-source" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                    Location (Source of Supply)
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="dc-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                      Delivery Challan# <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleOpenDcPrefModal}
+                      title="Configure Delivery Challan# Preferences"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '1px 5px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        color: '#0E7490',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        borderRadius: '4px',
+                        backgroundColor: '#ECFEFF'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#CFFAFE'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ECFEFF'}
+                    >
+                      <Settings size={12} />
+                      <span>Configure</span>
+                    </button>
+                  </div>
                   <input
-                    id="dc-location-source"
+                    id="dc-number"
                     type="text"
                     readOnly
-                    value={`${getCompanyProfile(companyLocation).name} (State: ${getCompanyProfile(companyLocation).state})`}
-                    style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#334155', fontWeight: '600' }}
+                    value={dcNumber}
+                    onClick={handleOpenDcPrefModal}
+                    title="Delivery Challan# is non-editable here. Click to open Configure Preferences."
+                    placeholder={dcPrefPrefix ? `${dcPrefPrefix}001` : 'VRMS/JW/26-27/001'}
+                    required
+                    style={{
+                      height: '38px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      padding: '0 12px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      color: '#0E7490',
+                      backgroundColor: '#F8FAFC',
+                      cursor: 'pointer'
+                    }}
                   />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label htmlFor="dc-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                    Delivery Challan# <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
+                  <label htmlFor="dc-challan-type" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    Challan Type
                   </label>
                   <input
-                    id="dc-number"
+                    id="dc-challan-type"
                     type="text"
-                    value={dcNumber}
-                    onChange={(e) => setDcNumber(e.target.value)}
-                    placeholder="VRMS/DC/26-27/001"
-                    required
-                    style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0E7490' }}
+                    readOnly
+                    value="Job Work"
+                    style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#0E7490', fontWeight: '700', cursor: 'default' }}
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+              {/* Row 2: Reference# | Delivery Challan Date | Transporter Name | Vehicle Number */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label htmlFor="dc-reference-no" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                     Reference#
@@ -1613,36 +1911,6 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                     required
                     style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}
                   />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label htmlFor="dc-challan-type" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                    Challan Type <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                  </label>
-                  <select
-                    id="dc-challan-type"
-                    value={challanType}
-                    onChange={(e) => setChallanType(e.target.value)}
-                    style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}
-                  >
-                    {CHALLAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label htmlFor="dc-warehouse-location" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                    Warehouse Location
-                  </label>
-                  <select
-                    id="dc-warehouse-location"
-                    value={warehouseLocation}
-                    onChange={(e) => setWarehouseLocation(e.target.value)}
-                    style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}
-                  >
-                    {WAREHOUSE_LOCATIONS.map(w => <option key={w} value={w}>{w}</option>)}
-                  </select>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2129,16 +2397,63 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                     ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </strong>
                 </div>
-
-                <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px', fontSize: '11px', color: '#0F766E', lineHeight: '1.4' }}>
-                  ℹ️ Delivery Challans are non-chargeable statutory instruments. No sales consideration is collected on this transaction.
-                </div>
               </div>
 
             </div>
 
-            {/* Bottom Actions Row (Exact PO Style Buttons) */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+          </div>
+
+          {/* Sticky Bottom Action Bar Following with Scroll for Create / Edit Delivery Challan (Exact PO Design) */}
+          <div
+            className="dc-no-print"
+            style={{
+              position: 'sticky',
+              bottom: 0,
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              borderTop: '1.5px solid #CBD5E1',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              zIndex: 50,
+              boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+              borderRadius: '12px',
+              marginTop: '12px',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Save as Draft */}
+              <button
+                type="button"
+                onClick={() => handleSaveDC(true)}
+                disabled={isSubmitting}
+                style={{
+                  height: '40px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#334155',
+                  padding: '0 20px',
+                  fontWeight: '600',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                  transition: 'all 0.15s ease',
+                  opacity: isSubmitting ? 0.6 : 1
+                }}
+                onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+              >
+                {isSubmitting ? 'Saving...' : 'Save as Draft'}
+              </button>
+
+              {/* Cancel */}
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
@@ -2164,32 +2479,7 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 Cancel
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleSaveDC(true)}
-                disabled={isSubmitting}
-                style={{
-                  height: '40px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#334155',
-                  padding: '0 20px',
-                  fontWeight: '600',
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
-              >
-                {isSubmitting ? 'Saving...' : 'Save as Draft'}
-              </button>
-
+              {/* Create / Update Delivery Challan */}
               <button
                 type="button"
                 onClick={() => handleSaveDC(false)}
@@ -2208,15 +2498,23 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transition: 'all 0.15s ease'
+                  transition: 'all 0.15s ease',
+                  opacity: isSubmitting ? 0.6 : 1
                 }}
                 onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#1D4ED8'; }}
                 onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#2563EB'; }}
               >
-                {isSubmitting ? 'Submitting...' : viewMode === 'edit' ? 'Update Delivery Challan' : 'Create Delivery Challan'}
+                {isSubmitting ? 'Submitting...' : viewMode === 'edit' ? 'Save Changes' : 'Create Delivery Challan'}
               </button>
             </div>
 
+            {/* Grand Total Display (Matching PO) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+              <strong style={{ fontSize: '15px', color: '#2563EB', fontWeight: '800' }}>
+                ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong>
+            </div>
           </div>
 
         </div>
@@ -2226,7 +2524,7 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       {viewMode === 'view' && activeDc && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-          {/* View Details Header & Actions */}
+          {/* View Details Header */}
           <div className="dc-no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -2238,95 +2536,6 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               <span style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
                 Issued by {activeDc.companyName} on {activeDc.dcDate || activeDc.date}.
               </span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '8px',
-                  padding: '8px 18px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  color: '#475569',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <ArrowLeft size={14} /> Back to DC List
-              </button>
-
-              {!String(activeDc.status || '').toLowerCase().includes('cancel') && (
-                <button
-                  type="button"
-                  onClick={() => handleStartEdit(activeDc)}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #CBD5E1',
-                    borderRadius: '8px',
-                    padding: '8px 16px',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: '#334155',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => window.print()}
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '8px',
-                  padding: '8px 18px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  color: '#475569',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
-              </button>
-
-              {!String(activeDc.status || '').toLowerCase().includes('cancel') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCancellingDc(activeDc);
-                    setCancellationRemarkInput('');
-                  }}
-                  style={{
-                    backgroundColor: '#FEF2F2',
-                    border: '1px solid #FECACA',
-                    borderRadius: '8px',
-                    padding: '8px 18px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    color: '#DC2626',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Ban size={15} style={{ color: '#DC2626' }} /> Cancel DC
-                </button>
-              )}
             </div>
           </div>
 
@@ -2377,19 +2586,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#1E293B', margin: 0, letterSpacing: '-0.5px' }}>
                   {activeDc.companyName}
                 </h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                <div style={{ marginTop: '4px' }}>
                   <span style={{ fontSize: '11px', color: '#64748B' }}>{activeDc.companyAddress}</span>
-                  <span style={{
-                    backgroundColor: '#ECFEFF',
-                    border: '1px solid #0E7490',
-                    color: '#0E7490',
-                    fontSize: '10px',
-                    fontWeight: '700',
-                    padding: '1px 8px',
-                    borderRadius: '4px'
-                  }}>
-                    {activeDc.companyLocation || 'Main Unit'}
-                  </span>
                 </div>
                 <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
                   GSTIN: <strong>{activeDc.companyGst}</strong> | State: {activeDc.sourceOfSupply || 'Tamil Nadu'}
@@ -2459,9 +2657,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                   Challan Details
                 </strong>
                 <div style={{ color: '#334155', lineHeight: '1.6' }}>
-                  <div>Challan Type: <strong>{activeDc.challanType || 'For Job Work'}</strong></div>
+                  <div>Challan Type: <strong>{activeDc.challanType || 'Job Work'}</strong></div>
                   <div>Reference#: <strong>{activeDc.referenceNo || '—'}</strong></div>
-                  <div>Warehouse: <strong>{activeDc.warehouseLocation ? activeDc.warehouseLocation.replace('VRM Structures - ', '') : 'Main'}</strong></div>
                 </div>
               </div>
             </div>
@@ -2587,6 +2784,460 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               </div>
             </div>
 
+          </div>
+
+          {/* ==================== JOB WORK RETURN TRACKING & HISTORY CARD ==================== */}
+          {(() => {
+            const allItems = Array.isArray(activeDc.items) ? activeDc.items : [];
+            const returnsList = Array.isArray(activeDc.returns) ? activeDc.returns : [];
+
+            // Compute per-item return stats
+            let totalSent = 0;
+            let totalReturned = 0;
+
+            const itemStats = allItems.map((it, idx) => {
+              const sentQty = Number(it.qty || it.dcQty || 1);
+              totalSent += sentQty;
+              const matchingReturnedItems = [];
+              const retQty = returnsList.reduce((sum, ret) => {
+                const matchedList = (ret.returnedItems || []).filter(r => (
+                  (r.sentItemIdx !== undefined ? r.sentItemIdx === idx : r.itemIdx === idx) ||
+                  r.sentItemName === it.name ||
+                  r.itemName === it.name
+                ));
+                matchedList.forEach(m => matchingReturnedItems.push(m));
+                return sum + matchedList.reduce((s, m) => s + Number(m.returnedQty || 0), 0);
+              }, 0);
+              totalReturned += retQty;
+              const balance = Math.max(0, sentQty - retQty);
+              const receivedNames = Array.from(new Set(
+                matchingReturnedItems
+                  .map(m => m.receivedItemName || m.itemName)
+                  .filter(n => n && n !== (it.name || it.description))
+              ));
+              return {
+                ...it,
+                idx,
+                sentQty,
+                retQty,
+                balance,
+                receivedNames
+              };
+            });
+
+            const totalBalance = Math.max(0, totalSent - totalReturned);
+            const isFullyReturned = totalSent > 0 && totalBalance === 0;
+            const isPartiallyReturned = totalReturned > 0 && totalBalance > 0;
+            const isCancelled = String(activeDc.status || '').toLowerCase().includes('cancel');
+
+            return (
+              <div className="section-card dc-no-print" style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px'
+              }}>
+                {/* Header & Status */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      backgroundColor: '#EFF6FF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#2563EB'
+                    }}>
+                      <Boxes size={20} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#1E293B' }}>
+                        Job Work Return Tracking & Reconciliation
+                      </h3>
+                      <span style={{ fontSize: '12px', color: '#64748B' }}>
+                        Track materials sent for processing under Rule 55 and received back into inventory.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {isFullyReturned ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        backgroundColor: '#DCFCE7',
+                        color: '#15803D',
+                        fontSize: '12px',
+                        fontWeight: '700'
+                      }}>
+                        <CheckCircle size={14} /> Full Return Received (Settled)
+                      </span>
+                    ) : isPartiallyReturned ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        backgroundColor: '#FEF3C7',
+                        color: '#B45309',
+                        fontSize: '12px',
+                        fontWeight: '700'
+                      }}>
+                        <Clock size={14} /> Partially Returned ({totalReturned}/{totalSent})
+                      </span>
+                    ) : (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#475569',
+                        fontSize: '12px',
+                        fontWeight: '700'
+                      }}>
+                        <Clock size={14} /> Awaiting Return from Vendor
+                      </span>
+                    )}
+
+                    {!isCancelled && !isFullyReturned && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReturnModal(activeDc)}
+                        style={{
+                          backgroundColor: '#0E7490',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '7px 16px',
+                          fontSize: '12.5px',
+                          fontWeight: '700',
+                          color: '#FFFFFF',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 4px rgba(14,116,144,0.2)'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                      >
+                        <Package size={14} /> Record Return Entry
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3 Summary Cards */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '14px'
+                }}>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Total Quantity Sent</span>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#1E293B', marginTop: '4px' }}>
+                      {totalSent.toLocaleString('en-IN')} <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#64748B' }}>units</span>
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: '#F0FDF4', padding: '14px 16px', borderRadius: '10px', border: '1px solid #BBF7D0' }}>
+                    <span style={{ fontSize: '11px', color: '#15803D', fontWeight: '700', textTransform: 'uppercase' }}>Total Received Back</span>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#15803D', marginTop: '4px' }}>
+                      {totalReturned.toLocaleString('en-IN')} <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#15803D' }}>units</span>
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: totalBalance > 0 ? '#FFFBEB' : '#F8FAFC', padding: '14px 16px', borderRadius: '10px', border: totalBalance > 0 ? '1px solid #FDE68A' : '1px solid #E2E8F0' }}>
+                    <span style={{ fontSize: '11px', color: totalBalance > 0 ? '#92400E' : '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Remaining with Vendor</span>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: totalBalance > 0 ? '#B45309' : '#059669', marginTop: '4px' }}>
+                      {totalBalance.toLocaleString('en-IN')} <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#64748B' }}>units</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-Item Reconciliation Table */}
+                <div>
+                  <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#334155', margin: '0 0 10px 0' }}>
+                    Item-wise Return Status
+                  </h4>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', color: '#475569', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={{ padding: '8px 12px' }}>S.No</th>
+                          <th style={{ padding: '8px 12px' }}>Item Description</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Sent Qty</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Returned Qty</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Balance Pending</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'center' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemStats.map((item, idx) => (
+                          <tr key={idx} style={{ borderBottom: idx === itemStats.length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '8px 12px', color: '#64748B' }}>{idx + 1}</td>
+                            <td style={{ padding: '8px 12px', fontWeight: '600', color: '#1E293B' }}>
+                              <div>{item.name || item.description}</div>
+                              {item.receivedNames && item.receivedNames.length > 0 && (
+                                <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>↳ Inwarded as:</span>
+                                  <span style={{ backgroundColor: '#ECFEFF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #CFFAFE' }}>
+                                    {item.receivedNames.join(', ')}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600' }}>{item.sentQty} {item.unit || ''}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: '#15803D' }}>{item.retQty} {item.unit || ''}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: item.balance > 0 ? '#B45309' : '#059669' }}>
+                              {item.balance} {item.unit || ''}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                              {item.balance === 0 ? (
+                                <span style={{ fontSize: '11px', fontWeight: '700', color: '#15803D', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '10px' }}>
+                                  Fully Returned
+                                </span>
+                              ) : item.retQty > 0 ? (
+                                <span style={{ fontSize: '11px', fontWeight: '700', color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '10px' }}>
+                                  Partial
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748B', backgroundColor: '#F1F5F9', padding: '2px 8px', borderRadius: '10px' }}>
+                                  Pending
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Return Consignments Log */}
+                {returnsList.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#334155', margin: '0 0 10px 0' }}>
+                      Return Consignments Inwarded ({returnsList.length})
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {returnsList.map((ret, rIdx) => (
+                        <div key={rIdx} style={{
+                          backgroundColor: '#F8FAFC',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '8px',
+                          padding: '12px 16px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: '700', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '2px 8px', borderRadius: '4px' }}>
+                                #{rIdx + 1}
+                              </span>
+                              <strong style={{ fontSize: '13px', color: '#0F172A' }}>
+                                Return Date: {ret.returnDate}
+                              </strong>
+                              {ret.returnRef && (
+                                <span style={{ fontSize: '12px', color: '#64748B' }}>
+                                  (Ref: <strong>{ret.returnRef}</strong>)
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '11.5px', color: '#475569' }}>
+                              Received By: <strong>{ret.receivedBy}</strong>
+                            </span>
+                          </div>
+
+                          {/* Items in this return */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                            {(ret.returnedItems || []).map((ri, riIdx) => {
+                              const isDiff = ri.sentItemName && ri.sentItemName !== (ri.receivedItemName || ri.itemName);
+                              return (
+                                <span key={riIdx} style={{
+                                  fontSize: '11px',
+                                  backgroundColor: '#FFFFFF',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: '6px',
+                                  padding: '3px 8px',
+                                  color: '#334155',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  <strong style={{ color: '#0E7490' }}>{ri.receivedItemName || ri.itemName}</strong>
+                                  {isDiff && (
+                                    <span style={{ color: '#64748B', fontSize: '10.5px' }}>
+                                      (from {ri.sentItemName})
+                                    </span>
+                                  )}
+                                  <span style={{ fontWeight: '700', color: '#15803D' }}>
+                                    +{ri.returnedQty} {ri.unit || ''}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                          </div>
+
+                          {ret.remarks && (
+                            <div style={{ fontSize: '11px', color: '#64748B', fontStyle: 'italic', marginTop: '2px' }}>
+                              Notes: {ret.remarks}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Sticky Bottom Action Bar Following with Scroll for View Delivery Challan */}
+          <div
+            className="dc-no-print"
+            style={{
+              position: 'sticky',
+              bottom: 0,
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              borderTop: '1.5px solid #CBD5E1',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              zIndex: 50,
+              boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+              borderRadius: '12px',
+              marginTop: '16px',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* 1. Back to DC List */}
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#475569',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+              >
+                Back to DC List
+              </button>
+
+              {/* 2. Receive Back Button */}
+              {!['cancelled', 'closed'].some(s => String(activeDc.status || '').toLowerCase().includes(s)) && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenReturnModal(activeDc)}
+                  style={{
+                    backgroundColor: '#0E7490',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 18px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#FFFFFF',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '7px',
+                    boxShadow: '0 2px 6px rgba(14,116,144,0.3)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                >
+                  <Package size={15} /> Receive Back
+                </button>
+              )}
+
+              {/* 3. Edit Info */}
+              {!String(activeDc.status || '').toLowerCase().includes('cancel') && (
+                <button
+                  type="button"
+                  onClick={() => handleStartEdit(activeDc)}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: '#334155',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                >
+                  <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
+                </button>
+              )}
+
+              {/* 4. Export / Print PDF */}
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px',
+                  padding: '8px 18px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#475569',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+              >
+                <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
+              </button>
+            </div>
+
+            {/* Right: Total Value Display */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>DC Total:</span>
+              <strong style={{ fontSize: '15px', color: '#0E7490', fontWeight: '800' }}>
+                ₹ {Number(activeDc.totalAmount || activeDc.totalValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </strong>
+            </div>
           </div>
 
         </div>
@@ -2908,6 +3559,684 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                   Add Selected Items to DC
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: CONFIGURE DELIVERY CHALLAN# PREFERENCES (EXACT ZOHO BOOKS DESIGN) ==================== */}
+      {showDcPrefModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.45)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1200,
+          padding: '16px',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+            width: '100%',
+            maxWidth: '560px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+            overflow: 'hidden',
+            fontFamily: 'inherit'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#FFFFFF'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#1E293B' }}>
+                Configure Delivery Challan# Preferences
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowDcPrefModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'inline-flex'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Location & Associated Series header (matching Zoho Books) */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 1fr',
+                gap: '12px',
+                paddingBottom: '12px',
+                borderBottom: '1px solid #F1F5F9'
+              }}>
+                <div>
+                  <span style={{ fontSize: '10.5px', color: '#64748B', display: 'block', fontWeight: '600' }}>Location</span>
+                  <strong style={{ fontSize: '12.5px', color: '#1E293B' }}>VRM Structures India Pvt Ltd</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '10.5px', color: '#64748B', display: 'block', fontWeight: '600' }}>Associated Series</span>
+                  <span style={{ fontSize: '12.5px', color: '#334155', fontWeight: '600' }}>Default Transaction Series</span>
+                </div>
+              </div>
+
+              {/* Explanatory text */}
+              <p style={{ margin: 0, fontSize: '12.5px', color: '#334155', lineHeight: '1.5' }}>
+                Your delivery challan numbers are set on auto-generate mode to save your time. Are you sure about changing this setting?
+              </p>
+
+              {/* Radio Option 1: Auto-generate */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#1E293B' }}>
+                  <input
+                    type="radio"
+                    name="dc-number-mode"
+                    value="auto"
+                    checked={tempNumberMode === 'auto'}
+                    onChange={() => setTempNumberMode('auto')}
+                    style={{ accentColor: '#2563EB', width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <span>Continue auto-generating delivery challan numbers</span>
+                  <span title="Numbers will be incremented automatically using prefix and sequential digits." style={{ color: '#94A3B8', display: 'inline-flex', cursor: 'help' }}>
+                    <HelpCircle size={13} />
+                  </span>
+                </label>
+
+                {tempNumberMode === 'auto' && (
+                  <div style={{ marginLeft: '24px', display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Prefix</label>
+                      <input
+                        type="text"
+                        value={tempPrefix}
+                        onChange={(e) => setTempPrefix(e.target.value)}
+                        placeholder="e.g. VRMS/JW/26-27/ or DC/26-27/"
+                        style={{
+                          height: '36px',
+                          borderRadius: '6px',
+                          border: '1px solid #CBD5E1',
+                          padding: '0 10px',
+                          fontSize: '13px',
+                          color: '#1E293B',
+                          fontWeight: '600'
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Next Number</label>
+                      <input
+                        type="text"
+                        value={tempNextNum}
+                        onChange={(e) => setTempNextNum(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder="e.g. 001 or 0271"
+                        style={{
+                          height: '36px',
+                          borderRadius: '6px',
+                          border: '1px solid #CBD5E1',
+                          padding: '0 10px',
+                          fontSize: '13px',
+                          color: '#1E293B',
+                          fontWeight: '600'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ gridColumn: 'span 2', fontSize: '11.5px', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CFFAFE' }}>
+                      Resulting Next Challan#: <strong>{tempPrefix}{tempNextNum}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Radio Option 2: Manual entry */}
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#1E293B' }}>
+                  <input
+                    type="radio"
+                    name="dc-number-mode"
+                    value="manual"
+                    checked={tempNumberMode === 'manual'}
+                    onChange={() => setTempNumberMode('manual')}
+                    style={{ accentColor: '#2563EB', width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <span>Enter delivery challan numbers manually</span>
+                </label>
+                {tempNumberMode === 'manual' && (
+                  <div style={{ marginLeft: '24px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Enter Custom Delivery Challan#</label>
+                    <input
+                      type="text"
+                      value={tempManualNum}
+                      onChange={(e) => setTempManualNum(e.target.value)}
+                      placeholder="e.g. VRMS/JW/26-27/001 or DC/CUSTOM/01"
+                      style={{
+                        height: '36px',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        padding: '0 10px',
+                        fontSize: '13px',
+                        color: '#1E293B',
+                        fontWeight: '600'
+                      }}
+                    />
+                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748B' }}>
+                      Delivery Challan# on the form will be locked to this custom value.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer Buttons (Bottom Left aligned matching Zoho Books) */}
+            <div style={{
+              padding: '14px 20px',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              gap: '10px',
+              backgroundColor: '#FFFFFF'
+            }}>
+              <button
+                type="button"
+                onClick={handleSaveDcPreferences}
+                style={{
+                  height: '36px',
+                  padding: '0 20px',
+                  borderRadius: '6px',
+                  backgroundColor: '#2563EB',
+                  color: '#FFFFFF',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDcPrefModal(false)}
+                style={{
+                  height: '36px',
+                  padding: '0 16px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#334155',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  border: '1px solid #CBD5E1',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: RECEIVE BACK JOB WORK GOODS ==================== */}
+      {showReturnModal && returnDc && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.55)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 100000,
+          padding: '16px',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            width: '100%',
+            maxWidth: '840px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 24px',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#F8FAFC'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: '#ECFEFF',
+                  color: '#0E7490',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Package size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>
+                    Receive Back Job Work Goods
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                    <span>DC No: <strong style={{ color: '#0E7490' }}>{returnDc.dcNo || returnDc.id}</strong></span>
+                    <span>•</span>
+                    <span>Vendor: <strong>{returnDc.customerName || returnDc.vendor}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => { setShowReturnModal(false); setReturnDc(null); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Row 1: Return Date | Vendor Challan | Received By */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+                    Return Date <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={returnDate}
+                    onChange={(e) => setReturnDate(e.target.value)}
+                    required
+                    style={{
+                      height: '36px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      padding: '0 10px',
+                      fontSize: '13px'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+                    Vendor Challan
+                  </label>
+                  <input
+                    type="text"
+                    value={returnRef}
+                    onChange={(e) => setReturnRef(e.target.value)}
+                    placeholder="e.g. VEND-DC-881"
+                    style={{
+                      height: '36px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      padding: '0 10px',
+                      fontSize: '13px'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+                    Received By <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={returnReceivedBy}
+                    onChange={(e) => setReturnReceivedBy(e.target.value)}
+                    placeholder="e.g. Ramesh"
+                    required
+                    style={{
+                      height: '36px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      padding: '0 10px',
+                      fontSize: '13px'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* SECTION 1: OUTWARD MATERIAL SENT REFERENCE (JOB WORK REFERENCE) */}
+              <div style={{ backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Boxes size={15} style={{ color: '#0E7490' }} />
+                    <span>1. Outward Material Sent (Job Work Reference)</span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>
+                    Original Delivery Challan Goods Movement
+                  </span>
+                </div>
+
+                <div style={{ border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F1F5F9', color: '#475569', borderBottom: '1px solid #CBD5E1' }}>
+                        <th style={{ padding: '7px 10px', width: '45px' }}>S.No</th>
+                        <th style={{ padding: '7px 10px' }}>Sent Material Description</th>
+                        <th style={{ padding: '7px 10px', textAlign: 'right' }}>Sent Qty</th>
+                        <th style={{ padding: '7px 10px', textAlign: 'right' }}>Already Received</th>
+                        <th style={{ padding: '7px 10px', textAlign: 'right' }}>Remaining Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(returnDc?.items || []).map((it, idx) => {
+                        const sentQty = Number(it.qty || it.dcQty || 1);
+                        const alreadyReturned = (returnDc?.returns || []).reduce((sum, ret) => {
+                          const matched = (ret.returnedItems || []).filter(r => (
+                            (r.sentItemIdx !== undefined ? r.sentItemIdx === idx : r.itemIdx === idx) ||
+                            r.sentItemName === it.name ||
+                            r.itemName === it.name
+                          ));
+                          return sum + matched.reduce((s, m) => s + Number(m.returnedQty || 0), 0);
+                        }, 0);
+                        const remaining = Math.max(0, sentQty - alreadyReturned);
+
+                        return (
+                          <tr key={idx} style={{ borderBottom: idx === (returnDc?.items || []).length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '7px 10px', color: '#64748B' }}>{idx + 1}</td>
+                            <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                              {it.name || it.description}
+                            </td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '600' }}>
+                              {sentQty} {it.unit || ''}
+                            </td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#15803D', fontWeight: '600' }}>
+                              {alreadyReturned} {it.unit || ''}
+                            </td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: remaining > 0 ? '#B45309' : '#059669' }}>
+                              {remaining} {it.unit || ''}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SECTION 2: RECEIVED PRODUCTS (SEPARATE SECTION) */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1.5px solid #0E7490', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Package size={16} />
+                      <span>2. Received Product <span style={{ color: '#EF4444' }}>*</span></span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
+                      Enter the finished goods or processed items received back from job work (e.g. Rod processed into Mini Rail).
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleAddReceivedRow}
+                      style={{
+                        backgroundColor: '#0E7490',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: '#FFFFFF',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        boxShadow: '0 2px 4px rgba(14,116,144,0.25)'
+                      }}
+                    >
+                      <Plus size={14} /> Add Received Product
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', color: '#475569', borderBottom: '1px solid #E2E8F0' }}>
+                        <th style={{ padding: '9px 10px', width: '45px' }}>S.No</th>
+                        <th style={{ padding: '9px 10px' }}>
+                          Received Product <span style={{ color: '#EF4444' }}>*</span>
+                        </th>
+                        <th style={{ padding: '9px 10px', textAlign: 'right', width: '130px' }}>
+                          Received Qty <span style={{ color: '#EF4444' }}>*</span>
+                        </th>
+                        <th style={{ padding: '9px 10px', width: '90px' }}>Unit</th>
+                        <th style={{ padding: '9px 6px', width: '32px', textAlign: 'center' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {returnReceivedRows.map((row, idx) => {
+                        return (
+                          <tr key={row.id || idx} style={{ borderBottom: idx === returnReceivedRows.length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '8px 10px', color: '#64748B', verticalAlign: 'middle' }}>{idx + 1}</td>
+
+                            {/* Received Product */}
+                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
+                              <input
+                                type="text"
+                                value={row.receivedItemName}
+                                onChange={(e) => handleUpdateReceivedRow(idx, 'receivedItemName', e.target.value)}
+                                placeholder="e.g. Mini Rail, Finished Goods"
+                                required
+                                style={{
+                                  width: '100%',
+                                  height: '34px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #0E7490',
+                                  padding: '0 10px',
+                                  fontSize: '13px',
+                                  fontWeight: '700',
+                                  color: '#0F172A',
+                                  backgroundColor: '#FFFFFF',
+                                  boxSizing: 'border-box'
+                                }}
+                              />
+                            </td>
+
+                            {/* Received Qty */}
+                            <td style={{ padding: '6px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={row.receivedQty}
+                                onChange={(e) => handleUpdateReceivedRow(idx, 'receivedQty', Math.max(0, Number(e.target.value) || 0))}
+                                style={{
+                                  width: '110px',
+                                  height: '34px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #0E7490',
+                                  padding: '0 8px',
+                                  textAlign: 'right',
+                                  fontSize: '13px',
+                                  fontWeight: '700',
+                                  color: '#0E7490'
+                                }}
+                              />
+                            </td>
+
+                            {/* Unit */}
+                            <td style={{ padding: '6px 10px', verticalAlign: 'middle' }}>
+                              <input
+                                type="text"
+                                value={row.unit}
+                                onChange={(e) => handleUpdateReceivedRow(idx, 'unit', e.target.value)}
+                                placeholder="Unit"
+                                style={{
+                                  width: '80px',
+                                  height: '34px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #CBD5E1',
+                                  padding: '0 8px',
+                                  fontSize: '12px',
+                                  boxSizing: 'border-box'
+                                }}
+                              />
+                            </td>
+
+                            {/* Action (Remove row) */}
+                            <td style={{ padding: '6px 4px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              {returnReceivedRows.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveReceivedRow(idx)}
+                                  title="Remove item"
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    color: '#94A3B8',
+                                    cursor: 'pointer',
+                                    padding: '4px'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.color = '#EF4444'}
+                                  onMouseLeave={(e) => e.currentTarget.style.color = '#94A3B8'}
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Remarks / Notes */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+                  Inspection / Quality Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={returnRemarks}
+                  onChange={(e) => setReturnRemarks(e.target.value)}
+                  placeholder="e.g. Received in good order, machining completed as per drawing, zero defects observed..."
+                  style={{
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    padding: '8px 10px',
+                    fontSize: '12.5px',
+                    fontFamily: 'inherit',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Statutory Note */}
+              <div style={{
+                backgroundColor: '#F8FAFC',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                fontSize: '11.5px',
+                color: '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Shield size={16} style={{ color: '#0E7490', flexShrink: 0 }} />
+                <span>
+                  Acknowledging this return automatically credits inventory stock back for the received quantities and sets the DC status to <strong>Partially Returned</strong> or <strong>Closed</strong>.
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 24px',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px',
+              backgroundColor: '#FFFFFF'
+            }}>
+              <button
+                type="button"
+                onClick={() => { setShowReturnModal(false); setReturnDc(null); }}
+                style={{
+                  height: '38px',
+                  padding: '0 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  border: '1px solid #CBD5E1',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveReturn}
+                disabled={returnSubmitting}
+                style={{
+                  height: '38px',
+                  padding: '0 22px',
+                  borderRadius: '8px',
+                  backgroundColor: '#0E7490',
+                  color: '#FFFFFF',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  border: 'none',
+                  cursor: returnSubmitting ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 4px rgba(14,116,144,0.3)'
+                }}
+                onMouseEnter={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#0891B2'; }}
+                onMouseLeave={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#0E7490'; }}
+              >
+                <CheckCircle size={15} />
+                {returnSubmitting ? 'Inwarding...' : 'Confirm Goods Receipt & Inward'}
+              </button>
             </div>
           </div>
         </div>

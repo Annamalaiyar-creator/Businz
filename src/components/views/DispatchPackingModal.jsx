@@ -1589,10 +1589,48 @@ export default function DispatchPackingModal({
                   <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '13px' }}>
                     {qtyPerSet} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
                   </td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA', fontSize: '13px' }}>
-                    <div>{itemBomQty} <span style={{ fontSize: '11px', color: '#0E7490' }}>Nos</span></div>
-                    {itemBomQty !== qtyPerSet && (
-                      <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>({qtyPerSet} / set)</div>
+                  <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA', fontSize: '13px' }} onClick={e => e.stopPropagation()}>
+                    {isPackedAndReady ? (
+                      <div>
+                        <div>{itemBomQty} <span style={{ fontSize: '11px', color: '#0E7490' }}>Nos</span></div>
+                        {itemBomQty !== qtyPerSet && (
+                          <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>({qtyPerSet} / set)</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          value={pItem.totalDispatchQty !== undefined && pItem.totalDispatchQty !== null && pItem.totalDispatchQty !== '' ? pItem.totalDispatchQty : itemBomQty}
+                          placeholder={String(itemBomQty)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
+                              ...pi,
+                              totalDispatchQty: val,
+                              bomQty: val
+                            } : pi);
+                            setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                          }}
+                          style={{
+                            width: '75px',
+                            height: '32px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #0E7490',
+                            padding: '0 6px',
+                            fontSize: '12.5px',
+                            fontWeight: '800',
+                            textAlign: 'center',
+                            color: '#0E7490',
+                            backgroundColor: '#FFFFFF',
+                            outline: 'none'
+                          }}
+                        />
+                        {itemBomQty !== qtyPerSet && (
+                          <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>({qtyPerSet} / set)</div>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td style={{ padding: '10px 14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
@@ -1738,10 +1776,41 @@ export default function DispatchPackingModal({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '8px', marginTop: '2px' }} onClick={e => e.stopPropagation()}>
-                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
-                      Ordered: <strong style={{ color: '#0F172A', fontWeight: '800' }}>{itemBomQty} Nos</strong>
+                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      Dispatch: {isPackedAndReady ? (
+                        <strong style={{ color: '#0F172A', fontWeight: '800' }}>{itemBomQty} Nos</strong>
+                      ) : (
+                        <input
+                          type="number"
+                          min="0"
+                          value={pItem.totalDispatchQty !== undefined && pItem.totalDispatchQty !== null && pItem.totalDispatchQty !== '' ? pItem.totalDispatchQty : itemBomQty}
+                          placeholder={String(itemBomQty)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? {
+                              ...pi,
+                              totalDispatchQty: val,
+                              bomQty: val
+                            } : pi);
+                            setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                          }}
+                          style={{
+                            width: '60px',
+                            height: '28px',
+                            borderRadius: '4px',
+                            border: '1.5px solid #0E7490',
+                            padding: '0 4px',
+                            fontSize: '12px',
+                            fontWeight: '800',
+                            textAlign: 'center',
+                            color: '#0E7490',
+                            backgroundColor: '#FFFFFF',
+                            outline: 'none'
+                          }}
+                        />
+                      )}
                       {itemBomQty !== qtyPerSet && (
-                        <span style={{ fontSize: '10px', color: '#0E7490', marginLeft: '4px', fontWeight: '700' }}>({qtyPerSet}/set)</span>
+                        <span style={{ fontSize: '10px', color: '#0E7490', marginLeft: '2px', fontWeight: '700' }}>({qtyPerSet}/set)</span>
                       )}
                     </div>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>

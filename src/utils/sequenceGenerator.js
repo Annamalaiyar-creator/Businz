@@ -58,6 +58,8 @@ export function formatSequenceCode(moduleType, seqNumber, date = new Date()) {
     cleanType = 'CS';
   } else if (cleanType === 'QUOTE' || cleanType === 'QUOTATION' || cleanType === 'QT') {
     cleanType = 'QT';
+  } else if (cleanType === 'DC' || cleanType === 'JW') {
+    cleanType = 'JW';
   }
   const num = Math.max(1, parseInt(seqNumber, 10) || 1);
   const padded = String(num).padStart(3, '0');
@@ -87,6 +89,8 @@ export function extractMaxSequence(moduleType, fy, records = []) {
     typePattern = '(?:CS|CUST|CUSTOMER)';
   } else if (cleanType === 'QUOTE' || cleanType === 'QUOTATION' || cleanType === 'QT') {
     typePattern = '(?:QT|QUOTE|QUOTATION)';
+  } else if (cleanType === 'DC' || cleanType === 'JW') {
+    typePattern = '(?:JW|DC)';
   }
 
   // Matches VRMS/[TYPE]/26-27/001 OR VRM-[TYPE]-2026-01

@@ -6802,12 +6802,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               {/* Total Dispatch Quantity Column */}
                               <td style={{ padding: '12px 6px', textAlign: 'center', backgroundColor: isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : '#F8FAFC' }}>
                                 {(() => {
-                                  const totalDispQty = calculateTotalDispatchQty(
+                                  const calcDispQty = calculateTotalDispatchQty(
                                     item,
                                     currentGroup?.setCount || 1,
                                     currentGroup?.presetName || item.presetName,
                                     currentGroup?.category || item.category
                                   );
+                                  const dispVal = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')
+                                    ? item.totalDispatchQty
+                                    : (calcDispQty || '');
                                   const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category) || isRailPreset(item.name, item.category);
                                   return (
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
@@ -6816,21 +6819,39 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         alignItems: 'center',
                                         gap: '4px',
                                         backgroundColor: '#FFFFFF',
-                                        border: `1.5px solid ${isPresetItem ? theme.border : '#CBD5E1'}`,
+                                        border: `1.5px solid ${isPresetItem ? theme.border : '#0E7490'}`,
                                         borderRadius: '6px',
-                                        padding: '4px 10px',
+                                        padding: '2px 6px',
                                         boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                                       }}>
-                                        <strong style={{ fontSize: '13px', color: isPresetItem ? theme.primary : '#0E7490', fontWeight: '800' }}>
-                                          {totalDispQty}
-                                        </strong>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={dispVal}
+                                          placeholder={String(calcDispQty || 0)}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, totalDispatchQty: val } : mat));
+                                          }}
+                                          style={{
+                                            width: '70px',
+                                            height: '28px',
+                                            border: 'none',
+                                            fontSize: '13px',
+                                            color: isPresetItem ? theme.primary : '#0E7490',
+                                            fontWeight: '800',
+                                            textAlign: 'center',
+                                            outline: 'none',
+                                            backgroundColor: 'transparent'
+                                          }}
+                                        />
                                         <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>
                                           {item.uom || item.unit || 'NOS'}
                                         </span>
                                       </div>
                                       {isPresetItem && (
                                         <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600', letterSpacing: '0.2px' }}>
-                                          {isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) > 1 ? 's' : ''}`}
+                                          {isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1}`}
                                         </span>
                                       )}
                                     </div>
