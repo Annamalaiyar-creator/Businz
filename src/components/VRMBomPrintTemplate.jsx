@@ -230,32 +230,45 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         const pName = grpMeta.presetName || item.presetName || b.presetName || matchedPi?.presetName || 'Preset Kit';
         const nameExtractedSets = extractSetsFromName(pName) || extractSetsFromName(b.presetName) || extractSetsFromName(matchedPi?.presetName);
 
-        // Robust set count resolution: check group, BOM record, item, and extracted title
+        // Strict 1-to-1 fidelity with PI:
+        // Priority 1: Check grpMeta (the exact preset group from the PI / BOM)
         const metaSet = parseFloat(grpMeta.setCount || grpMeta.sets || grpMeta.quantity || grpMeta.count) || null;
-        const bomSet = parseFloat(b.presetSetCount || b.setCount || b.sets) || null;
-        const itemSet = parseFloat(item.setCount || item.sets || item.quantity) || null;
-        const piSet = parseFloat(matchedPi?.presetSetCount || matchedPi?.setCount || matchedPi?.sets || (matchedPi?.presetGroups && Object.values(matchedPi.presetGroups)[0]?.setCount)) || null;
+        // Priority 2: Check matched PI preset group directly by groupId or presetId or name
+        const piGroupMeta = matchedPi?.presetGroups 
+          ? (Array.isArray(matchedPi.presetGroups) 
+              ? matchedPi.presetGroups.find(g => g && (g.groupId === key || g.presetId === key || g.presetName === pName))
+              : matchedPi.presetGroups[key]) 
+          : null;
+        const piGroupSet = parseFloat(piGroupMeta?.setCount || piGroupMeta?.sets || piGroupMeta?.quantity) || null;
+
+        const isSingleKitOrder = Object.keys(presetGroupsObj).length <= 1;
+        const bomSet = isSingleKitOrder ? (parseFloat(b.presetSetCount || b.setCount || b.sets) || null) : null;
+        const piSet = isSingleKitOrder ? (parseFloat(matchedPi?.presetSetCount || matchedPi?.setCount || matchedPi?.sets) || null) : null;
 
         let sCount = 1;
-        if (bomSet && bomSet > 0) {
-          sCount = bomSet;
-        } else if (metaSet && metaSet > 0) {
+        if (metaSet && metaSet > 0) {
           sCount = metaSet;
+        } else if (piGroupSet && piGroupSet > 0) {
+          sCount = piGroupSet;
         } else if (nameExtractedSets && nameExtractedSets > 0) {
           sCount = nameExtractedSets;
-        } else if (itemSet && itemSet > 0) {
-          sCount = itemSet;
+        } else if (bomSet && bomSet > 0) {
+          sCount = bomSet;
         } else if (piSet && piSet > 0) {
           sCount = piSet;
-        } else if (metaSet) {
-          sCount = metaSet;
-        } else if (bomSet) {
-          sCount = bomSet;
-        } else if (nameExtractedSets) {
-          sCount = nameExtractedSets;
         }
 
-        const pUnit = grpMeta.unit || grpMeta.unitType || (item.unitType || (item.unit !== 'NOS' && item.unit !== 'NO' ? item.unit : null)) || b.presetUnit || matchedPi?.presetUnit || (matchedPi?.presetGroups && Object.values(matchedPi.presetGroups)[0]?.unit) || (String(pName).toLowerCase().includes('kw') ? 'kW' : 'Sets');
+        // Strict Unit fidelity: If unit is kW (or preset name mentions kW), unit is strictly 'kW'.
+        // Never convert kW to Sets! If Sets, unit is strictly 'Sets'.
+        const rawUnit = String(grpMeta.unit || grpMeta.unitType || piGroupMeta?.unit || piGroupMeta?.unitType || b.presetUnit || matchedPi?.presetUnit || '').trim().toLowerCase();
+        const isKw = Boolean(
+          rawUnit === 'kw' ||
+          grpMeta.isKwBased ||
+          piGroupMeta?.isKwBased ||
+          String(pName).toLowerCase().includes('kw')
+        );
+        const pUnit = isKw ? 'kW' : 'Sets';
+
         kitGroupsMap.set(key, {
           groupId: key,
           presetId: grpMeta.presetId || item.presetId || null,
@@ -266,10 +279,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         });
       }
       const currentGroup = kitGroupsMap.get(key);
-      const curItemSets = parseFloat(item.setCount || item.sets) || null;
-      if (curItemSets && curItemSets > (currentGroup.setCount || 1)) {
-        currentGroup.setCount = curItemSets;
-      }
+      // STRICT RULE: Line items must NEVER overwrite or inflate the kit's setCount or kW!
       currentGroup.items.push(item);
     } else {
       standaloneItems.push(item);
@@ -678,6 +688,11 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
           <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Number</span>
           <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '11.5px' }}>{bomNumber}</span>
+          {(b.sourcePiNo || b.piNo || b.piNumber || matchedPi?.piNo) && (
+            <span style={{ display: 'block', color: '#475569', fontSize: '9px', fontWeight: '700', marginTop: '1px' }}>
+              Ref PI: {b.sourcePiNo || b.piNo || b.piNumber || matchedPi?.piNo}
+            </span>
+          )}
         </div>
         <div style={{ padding: '6px 8px', borderRight: '1px solid #CBD5E1' }}>
           <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Date</span>

@@ -5920,7 +5920,9 @@ export default function BomOrdersView(props) {
                           presetKitPrice: (Object.values(presetGroups).length === 1 && Object.values(presetGroups)[0]?.kitPrice)
                             ? cleanNum(Object.values(presetGroups)[0].kitPrice, null)
                             : (totals.kitSubtotal || ((selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, null) : null)),
-                          presetSetCount: Object.values(presetGroups).reduce((s, g) => s + (parseFloat(g.setCount) || 1), 0) || (selectedPreset ? (parseFloat(presetSetCount) || 1) : null),
+                          presetSetCount: Object.values(presetGroups).length === 1
+                            ? (parseFloat(Object.values(presetGroups)[0]?.setCount) || 1)
+                            : (selectedPreset ? (parseFloat(presetSetCount) || 1) : null),
                           presetUnit: presetUnit || (Object.values(presetGroups)[0]?.unit) || 'Sets',
                           presetGroups: Object.values(presetGroups).map(g => ({
                             ...g,

@@ -1315,9 +1315,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const pGroups = pi.presetGroups || {};
     const pGroupList = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
-    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} ${g.unit || (g.setCount > 1 ? 'Sets' : 'Set')})`).join(' + ') : null);
+    const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} ${g.unit === 'kW' ? 'kW' : (g.setCount > 1 ? 'Sets' : 'Set')})`).join(' + ') : null);
     const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null));
-    const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseFloat(g.setCount) || 1), 0) : 1);
+    // Do NOT aggregate sum multiple kits into a single confusing number:
+    const pSetCount = pGroupList.length === 1 ? (parseFloat(pGroupList[0]?.setCount) || 1) : (pi.presetSetCount || null);
 
     const conversionData = {
       sourcePiNo: pi.piNo,
