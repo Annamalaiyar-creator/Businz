@@ -1497,6 +1497,9 @@ export default function ConfirmingBomModal({
                         <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
                         <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA' }}>
                           {(() => {
+                            if (!isPartBundle) {
+                              return <span style={{ color: '#94A3B8', fontWeight: '700' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
+                            }
                             const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
                             const dispQty = item.totalDispatchQty || calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
                             return (
@@ -1644,6 +1647,9 @@ export default function ConfirmingBomModal({
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: '#F0FDFA' }}>
                       {(() => {
+                        if (!isPartBundle) {
+                          return <span style={{ color: '#94A3B8', fontWeight: '700' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
+                        }
                         const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
                         const calcDisp = calculateTotalDispatchQty(item, setCount, pInfo?.presetName || confirmingBomModal.presetName, item.category);
                         const dispQty = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')

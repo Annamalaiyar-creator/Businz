@@ -2219,8 +2219,11 @@ export default function CrmQuotationsView({
                                 />
                              </div>
                            </td>
-                           <td style={{ padding: '8px 10px', textAlign: 'center', backgroundColor: '#F0FDFA', verticalAlign: 'middle' }}>
+                           <td style={{ padding: '8px 10px', textAlign: 'center', backgroundColor: isPresetItem ? '#F0FDFA' : '#F8FAFC', verticalAlign: 'middle' }}>
                              {(() => {
+                               if (!isPresetItem) {
+                                 return <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
+                               }
                                const setCount = parseFloat(currentGroup?.setCount || 1) || 1;
                                const calculatedDisp = calculateTotalDispatchQty(item, setCount, currentGroup?.presetName || item.presetName, item.category);
                                const dispQty = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')

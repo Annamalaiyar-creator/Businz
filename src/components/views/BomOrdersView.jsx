@@ -4711,6 +4711,11 @@ export default function BomOrdersView(props) {
                           {/* Total Dispatch Quantity Column */}
                           <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: isPresetItem ? '#ECFEFF' : '#F8FAFC' }}>
                             {(() => {
+                              if (!isPresetItem) {
+                                return (
+                                  <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>
+                                );
+                              }
                               const calcTotalDisp = calculateTotalDispatchQty(
                                 item,
                                 currentGroup?.setCount || 1,
@@ -7871,6 +7876,11 @@ export default function BomOrdersView(props) {
                             {/* Total Dispatch Quantity Column */}
                             <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: isPartBundle ? '#ECFEFF' : '#F8FAFC' }}>
                               {(() => {
+                                if (!isPartBundle) {
+                                  return (
+                                    <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>
+                                  );
+                                }
                                 const totalDisp = calculateTotalDispatchQty(
                                   item,
                                   pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1,
@@ -10458,6 +10468,7 @@ export default function BomOrdersView(props) {
                             <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: isKitPart ? theme.primary : '#0E7490' }}>{q} {it.uom || ''}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: isKitPart ? '#ECFEFF' : '#F8FAFC' }}>
                               {(() => {
+                                if (!isKitPart) return <span style={{ color: '#94A3B8', fontWeight: '700' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
                                 const matchedGrp = pGroups.find(g => g.groupId === it.presetGroupId) || pGroups[0];
                                 const totalDisp = calculateTotalDispatchQty(it, matchedGrp?.setCount || quickPreviewRecord.setCount || quickPreviewRecord.presetSetCount || 1, matchedGrp?.presetName || it.presetName || quickPreviewRecord.presetName);
                                 return `${totalDisp} ${it.uom || ''}`;

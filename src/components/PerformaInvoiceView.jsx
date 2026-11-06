@@ -6803,6 +6803,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               {/* Total Dispatch Quantity Column */}
                               <td style={{ padding: '12px 6px', textAlign: 'center', backgroundColor: isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : '#F8FAFC' }}>
                                 {(() => {
+                                  if (!isPresetItem) {
+                                    return (
+                                      <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>
+                                    );
+                                  }
                                   const calcDispQty = calculateTotalDispatchQty(
                                     item,
                                     currentGroup?.setCount || 1,
