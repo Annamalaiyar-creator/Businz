@@ -6321,14 +6321,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         let isFirstInGroup = false;
                         let groupCount = 0;
                         let itemIndexInGroup = 0;
+                        const isSub = Boolean(item.isSubPreset || item.subPresetName || item.subPresetId);
                         if (isPresetItem && groupId) {
-                          const itemsInGroup = piItems.filter(it => it.presetGroupId === groupId);
+                          const itemsInGroup = piItems.filter(it => it.presetGroupId === groupId && !it.isSubPreset && !it.subPresetName && !it.subPresetId);
                           groupCount = itemsInGroup.length;
                           isFirstInGroup = piItems.findIndex(it => it.presetGroupId === groupId) === i;
-                          itemIndexInGroup = itemsInGroup.findIndex(it => it === item) + 1;
+                          itemIndexInGroup = !isSub ? (itemsInGroup.findIndex(it => it === item) + 1) : 0;
                         }
 
-                        const isSub = Boolean(item.isSubPreset);
                         const subItems = isSub ? piItems.filter(it => it.presetGroupId === groupId && (it.subPresetId === item.subPresetId || it.subPresetName === item.subPresetName)) : [];
                         const subGroupCount = subItems.length;
                         const itemIndexInSubGroup = isSub ? subItems.findIndex(it => it === item) + 1 : 0;

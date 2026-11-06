@@ -2608,20 +2608,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             }
           ]} />
 
-          {/* Quick Submenu Navigation Bar for CRM & Leads */}
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>2. CRM & Leads Command Center</div>
-              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Direct access to Lead Directory, Assignment, Follow-up Monitoring, Customers, and Sales Team Performance</div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button onClick={() => onNavigateTab && onNavigateTab('Leads')} style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>All Leads</button>
-              <button onClick={() => onNavigateTab && onNavigateTab('Follow-ups')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Follow-up Monitoring</button>
-              <button onClick={() => onNavigateTab && onNavigateTab('Customers')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Customer Management</button>
-              <button onClick={() => setActiveSubTab('personnel')} style={{ border: '1px solid #0E7490', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>Sales Team Performance</button>
-            </div>
-          </div>
-
           {/* Recent Leads & Top Customers */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px' }}>
             <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>

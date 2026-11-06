@@ -4717,18 +4717,23 @@ export default function BomOrdersView(props) {
                                   <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>
                                 );
                               }
+                              const isSub = Boolean(item.isSubPreset || item.subPresetName || item.subPresetId);
+                              const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
+                              const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
+                              const nestedSub = isSub && currentGroup?.nestedSubPresets?.find(n => (n.id === item.subPresetId || n.name === item.subPresetName));
+                              const effectiveSetCount = isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1);
                               const calcTotalDisp = calculateTotalDispatchQty(
                                 item,
-                                currentGroup?.setCount || 1,
-                                currentGroup?.presetName || item.presetName,
+                                effectiveSetCount,
+                                effectivePresetName,
                                 currentGroup?.category || item.category,
-                                currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom
+                                effectiveUnit
                               );
                               const totalDisp = item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== ''
                                 ? item.totalDispatchQty
                                 : calcTotalDisp;
-                              const isKw = isKwPreset(currentGroup?.presetName || item.presetName, currentGroup?.unit || currentGroup?.unitType || item.unit, item);
-                              const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category, item.subPresetName, item.name);
+                              const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
+                              const isRail = isRailPreset(effectivePresetName, currentGroup?.category || item.category, item.subPresetName, item.name);
                               return (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                   <div style={{
@@ -7884,15 +7889,19 @@ export default function BomOrdersView(props) {
                                     <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>
                                   );
                                 }
+                                const isSub = Boolean(item.isSubPreset || item.subPresetName || item.subPresetId);
+                                const effectivePresetName = isSub ? item.subPresetName : (pInfo?.presetName || item.presetName || confirmingBomModal.presetName);
+                                const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (pInfo?.unitType || pInfo?.unit || item.unit || item.uom);
+                                const effectiveSetCount = isSub ? (item.subSetCount || 1) : (pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1);
                                 const totalDisp = calculateTotalDispatchQty(
                                   item,
-                                  pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1,
-                                  pInfo?.presetName || item.presetName || confirmingBomModal.presetName,
+                                  effectiveSetCount,
+                                  effectivePresetName,
                                   confirmingBomModal.category || item.category,
-                                  pInfo?.unitType || pInfo?.unit || item.unit || item.uom
+                                  effectiveUnit
                                 );
-                                const isKw = isKwPreset(pInfo?.presetName || item.presetName || confirmingBomModal.presetName, pInfo?.unitType || pInfo?.unit, item);
-                                const isRail = isRailPreset(pInfo?.presetName || item.presetName || confirmingBomModal.presetName, confirmingBomModal.category || item.category, item.subPresetName, item.name);
+                                const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
+                                const isRail = isRailPreset(effectivePresetName, confirmingBomModal.category || item.category, item.subPresetName, item.name);
                                 return (
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                     <div style={{
