@@ -352,7 +352,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return bomList.filter(b => {
       const st = String(b.status || '').toLowerCase();
       if (selectedBomLifecycleStage === 'STEP 01') {
-        return Boolean(b.piNo || b.piNumber || b.bomConverted);
+        return Boolean(b.sourcePiNo || b.piNo || b.piNumber || b.bomConverted || b.source_pi_no || b.sourcePi || b.pi_no);
       }
       if (selectedBomLifecycleStage === 'STEP 02') {
         return Boolean(b.salesConfirmed) || st.includes('confirm') || st.includes('bom');
