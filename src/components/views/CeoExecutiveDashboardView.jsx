@@ -3854,8 +3854,12 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   fontWeight: '700',
                   color: '#334155'
                 }}>
-                  <span style={{ color: '#64748B', fontWeight: '600' }}>Orders Showing:</span>
-                  <span style={{ color: '#0E7490', fontWeight: '800' }}>{displayBomList.length} of {bomList.length}</span>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>
+                    {selectedBomLifecycleStage === 'STEP 01' ? 'PIs Showing:' : 'Orders Showing:'}
+                  </span>
+                  <span style={{ color: '#0E7490', fontWeight: '800' }}>
+                    {selectedBomLifecycleStage === 'STEP 01' ? `${piList.length} of ${allPiList.length}` : `${displayBomList.length} of ${bomList.length}`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -4005,7 +4009,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           color: isSelected ? '#0E7490' : stage.color,
                           flexShrink: 0
                         }}>
-                          {isSelected ? '✓ Filter Active' : 'Filter BOMs'}
+                          {isSelected ? '✓ Filter Active' : (stage.step === 'STEP 01' ? 'View PIs' : 'Filter BOMs')}
                         </span>
                       </div>
                     </div>
@@ -4015,7 +4019,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             </div>
           </div>
 
-          {/* Active BOM Orders Ledger */}
+          {/* Active Ledger (Adaptive: Shows PIs when STEP 01 is selected, BOMs for STEP 02-06 or ALL) */}
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
@@ -4029,7 +4033,19 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                  Active Factory BOM Orders & Technical Specifications
+                  {selectedBomLifecycleStage === 'STEP 01'
+                    ? 'Active Commercial Proforma Invoices (PIs)'
+                    : selectedBomLifecycleStage === 'STEP 02'
+                    ? 'Factory BOM & Engineering Sales Orders'
+                    : selectedBomLifecycleStage === 'STEP 03'
+                    ? 'Dispatch Packing & Checklist Queue'
+                    : selectedBomLifecycleStage === 'STEP 04'
+                    ? 'Accounts & Payment Verification Queue'
+                    : selectedBomLifecycleStage === 'STEP 05'
+                    ? 'Billing, Invoicing & Stock Lock Queue'
+                    : selectedBomLifecycleStage === 'STEP 06'
+                    ? 'Final Dispatch & Vehicle Loading Orders'
+                    : 'Order-to-Cash Master Pipeline & BOM Ledger'}
                 </span>
                 {selectedBomLifecycleStage !== 'ALL' && (
                   <span style={{
@@ -4044,12 +4060,19 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    Filtered by: {funnelStages.find(s => s.step === selectedBomLifecycleStage)?.stage || selectedBomLifecycleStage} ({displayBomList.length})
+                    Filtered by: {funnelStages.find(s => s.step === selectedBomLifecycleStage)?.stage || selectedBomLifecycleStage} ({selectedBomLifecycleStage === 'STEP 01' ? piList.length : displayBomList.length})
                   </span>
                 )}
               </div>
               <button
-                onClick={() => onNavigateTab && onNavigateTab('BOM Orders')}
+                onClick={() => {
+                  if (!onNavigateTab) return;
+                  if (selectedBomLifecycleStage === 'STEP 01') onNavigateTab('Performa Invoice');
+                  else if (selectedBomLifecycleStage === 'STEP 03' || selectedBomLifecycleStage === 'STEP 06') onNavigateTab('Dispatch');
+                  else if (selectedBomLifecycleStage === 'STEP 04') onNavigateTab('Finance & Accounts');
+                  else if (selectedBomLifecycleStage === 'STEP 05') onNavigateTab('Invoice Management');
+                  else onNavigateTab('BOM Orders');
+                }}
                 style={{
                   border: 'none',
                   backgroundColor: '#0E7490',
@@ -4064,47 +4087,175 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   gap: '4px'
                 }}
               >
-                Open All BOM Orders <ArrowRight size={12} />
+                {selectedBomLifecycleStage === 'STEP 01'
+                  ? 'Open Proforma Invoices'
+                  : selectedBomLifecycleStage === 'STEP 03'
+                  ? 'Open Dispatch Packing'
+                  : selectedBomLifecycleStage === 'STEP 04'
+                  ? 'Open Accounts'
+                  : selectedBomLifecycleStage === 'STEP 05'
+                  ? 'Open Invoicing'
+                  : selectedBomLifecycleStage === 'STEP 06'
+                  ? 'Open Final Dispatch'
+                  : 'Open All BOM Orders'} <ArrowRight size={12} />
               </button>
             </div>
 
-            <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
-              <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                    <th style={{ padding: '8px 10px' }}>BOM Code</th>
-                    <th style={{ padding: '8px 10px' }}>Customer Project</th>
-                    <th style={{ padding: '8px 10px' }}>Profile Specification</th>
-                    <th style={{ padding: '8px 10px' }}>Batch Weight</th>
-                    <th style={{ padding: '8px 10px' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayBomList.length > 0 ? (
-                    displayBomList.slice(0, 15).map((row, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>{row.bomCode || row.id}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: '700' }}>{row.customerName || row.customer || '-'}</td>
-                        <td style={{ padding: '8px 10px', color: '#475569' }}>{row.profile || row.description || 'Solar Mounting Structure'}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: '800' }}>{row.totalWeight ? `${row.totalWeight} MT` : (row.weight ? `${row.weight} MT` : '0 MT')}</td>
-                        <td style={{ padding: '8px 10px' }}>
-                          <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490' }}>
-                            {row.status || 'Active'}
-                          </span>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
+              {selectedBomLifecycleStage === 'STEP 01' ? (
+                /* Proforma Invoices Table for STEP 01 */
+                <table style={{ width: '100%', minWidth: '780px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                      <th style={{ padding: '8px 10px' }}>PI Number</th>
+                      <th style={{ padding: '8px 10px' }}>Date</th>
+                      <th style={{ padding: '8px 10px' }}>Customer / Company</th>
+                      <th style={{ padding: '8px 10px' }}>Sales Executive</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Total Amount</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>BOM Status</th>
+                      <th style={{ padding: '8px 10px' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {piList.length > 0 ? (
+                      piList.slice(0, 15).map((row, idx) => {
+                        const amt = parseAmt(row.grandTotal || row.totalAmount || row.amount || 0);
+                        const isBOMConverted = Boolean(row.bomConverted || row.bomCode);
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>
+                              {row.piNo || row.id}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#64748B', whiteSpace: 'nowrap' }}>
+                              {row.date || row.piDate || '—'}
+                            </td>
+                            <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
+                              {row.customerName || row.customer || row.companyName || '-'}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#475569' }}>
+                              {row.salesPerson || row.createdBy || 'Sales Team'}
+                            </td>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0F172A', textAlign: 'right' }}>
+                              ₹ {Math.round(amt).toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              {isBOMConverted ? (
+                                <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 7px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                                  ✓ BOM Generated {row.bomCode ? `(${row.bomCode})` : ''}
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '9.5px', fontWeight: '700', padding: '2px 7px', borderRadius: '6px', backgroundColor: '#FEF3C7', color: '#D97706', border: '1px solid #FDE68A' }}>
+                                  Pending BOM
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490' }}>
+                                {row.status || 'Active'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                          No commercial Proforma Invoices recorded yet.
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
-                        {selectedBomLifecycleStage !== 'ALL'
-                          ? `No BOM orders found in stage "${funnelStages.find(s => s.step === selectedBomLifecycleStage)?.stage || selectedBomLifecycleStage}". Click "Clear Filter" to view all.`
-                          : 'No active factory production BOM orders created yet.'}
-                      </td>
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                /* BOM Orders Table for STEP 02-06 & ALL */
+                <table style={{ width: '100%', minWidth: '850px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                      <th style={{ padding: '8px 10px' }}>BOM Code</th>
+                      <th style={{ padding: '8px 10px' }}>Linked PI</th>
+                      <th style={{ padding: '8px 10px' }}>Customer Project</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Order Value</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Dispatch Qty / Items</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Lifecycle Stage</th>
+                      <th style={{ padding: '8px 10px' }}>Status</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {displayBomList.length > 0 ? (
+                      displayBomList.slice(0, 15).map((row, idx) => {
+                        const amt = parseAmt(row.grandTotal || row.totalAmount || row.amount || row.value || 0);
+                        const items = Array.isArray(row.items) ? row.items : [];
+                        const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
+                        const st = String(row.status || '').toLowerCase();
+                        
+                        // Current stage calculation
+                        let stageBadge = { label: 'Step 1 · In Progress', color: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC' };
+                        if (row.fullyCompleted || st.includes('completed') || st.includes('dispatched')) {
+                          stageBadge = { label: 'Step 6 · Dispatched', color: '#16A34A', bg: '#F0FDF4', border: '#BBF7D0' };
+                        } else if (row.invoiceConfirmed || st.includes('invoice') || st.includes('billing')) {
+                          stageBadge = { label: 'Step 5 · Invoiced', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' };
+                        } else if (row.isAccountsDone || row.accountsVerification?.verified || st.includes('accounts')) {
+                          stageBadge = { label: 'Step 4 · Accounts Done', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' };
+                        } else if (row.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')) {
+                          stageBadge = { label: 'Step 3 · Packed', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' };
+                        } else if (row.salesConfirmed || st.includes('confirm')) {
+                          stageBadge = { label: 'Step 2 · Confirmed', color: '#0284C7', bg: '#F0F9FF', border: '#BAE6FD' };
+                        }
+
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>
+                              {row.bomCode || row.id}
+                            </td>
+                            <td style={{ padding: '8px 10px', fontWeight: '700', color: '#475569', fontSize: '10.5px' }}>
+                              {row.sourcePiNo || row.piNo || row.piNumber || row.source_pi_no || 'Direct BOM'}
+                            </td>
+                            <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
+                              {row.customerName || row.customer || '-'}
+                            </td>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0F172A', textAlign: 'right' }}>
+                              ₹ {Math.round(amt).toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569', fontSize: '10.5px' }}>
+                              {totalUnits > 0
+                                ? `${Math.round(totalUnits).toLocaleString('en-IN')} units (${items.length} items)`
+                                : items.length > 0
+                                ? `${items.length} items`
+                                : '1 Order'}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <span style={{
+                                fontSize: '9.5px',
+                                fontWeight: '800',
+                                padding: '2px 7px',
+                                borderRadius: '6px',
+                                backgroundColor: stageBadge.bg,
+                                color: stageBadge.color,
+                                border: `1px solid ${stageBadge.border}`
+                              }}>
+                                {stageBadge.label}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490' }}>
+                                {row.status || 'Active'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                          {selectedBomLifecycleStage !== 'ALL'
+                            ? `No BOM orders found in stage "${funnelStages.find(s => s.step === selectedBomLifecycleStage)?.stage || selectedBomLifecycleStage}". Click "Clear Filter" to view all.`
+                            : 'No active factory production BOM orders created yet.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
