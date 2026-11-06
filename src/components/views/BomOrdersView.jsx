@@ -1658,6 +1658,7 @@ export default function BomOrdersView(props) {
           bomCode: bCode,
           customerName: bomToCancel.customerName || bomToCancel.clientName || 'Customer',
           salesPerson: bomToCancel.salesPerson || bomToCancel.createdBy || 'Sales Executive',
+          salesPersonEmpCode: bomToCancel.salesPersonId || bomToCancel.salesPersonEmpCode || bomToCancel.creatorEmpCode || null,
           reason: reasonText,
           cancelledBy: fullAttribution,
           cancelledByRole: position,

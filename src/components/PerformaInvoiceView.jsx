@@ -2582,6 +2582,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         isSubPreset: true,
         subPresetId,
         subPresetName,
+        subSetCount: multiplier,
+        subUnit: targetPreset.unit || 'Sets',
         baseQty: baseQ,
         qty: hasQty ? String(baseQ) : '',
         rate: '0',
@@ -6326,6 +6328,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           itemIndexInGroup = itemsInGroup.findIndex(it => it === item) + 1;
                         }
 
+                        const isSub = Boolean(item.isSubPreset);
+                        const subItems = isSub ? piItems.filter(it => it.presetGroupId === groupId && (it.subPresetId === item.subPresetId || it.subPresetName === item.subPresetName)) : [];
+                        const subGroupCount = subItems.length;
+                        const itemIndexInSubGroup = isSub ? subItems.findIndex(it => it === item) + 1 : 0;
+
                         const customItems = piItems.filter(it => !it.isPresetItem);
                         const isFirstCustomItem = !isPresetItem && piItems.findIndex(it => !it.isPresetItem) === i;
                         const customIndex = !isPresetItem ? customItems.findIndex(it => it === item) + 1 : null;
@@ -6691,15 +6698,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         fontWeight: '800',
                                         padding: '1px 6px',
                                         borderRadius: '4px',
-                                        backgroundColor: theme.tagBg,
-                                        color: theme.tagText,
-                                        border: `1px solid ${theme.border}`,
+                                        backgroundColor: isSub ? '#F0FDFA' : theme.tagBg,
+                                        color: isSub ? '#0D9488' : theme.tagText,
+                                        border: `1px solid ${isSub ? '#99F6E4' : theme.border}`,
                                         letterSpacing: '0.3px'
                                       }}>
-                                        {theme.badge} • Component {itemIndexInGroup} of {groupCount}
+                                        {isSub ? `↳ SUB-KIT • Component ${itemIndexInSubGroup} of ${subGroupCount}` : `${theme.badge} • Component ${itemIndexInGroup} of ${groupCount}`}
                                       </span>
-                                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }} title={currentGroup?.presetName || item.presetName}>
-                                        {currentGroup?.presetName || item.presetName}
+                                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }} title={isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName)}>
+                                        {isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName)}
                                       </span>
                                     </div>
                                   )}
@@ -6808,18 +6815,24 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>
                                     );
                                   }
+                                  const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
+                                  const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
+                                  const nestedSub = isSub && currentGroup?.nestedSubPresets?.find(n => (n.id === item.subPresetId || n.name === item.subPresetName));
+                                  const effectiveSetCount = isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1);
+
+                                  const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
+                                  const isRail = isRailPreset(effectivePresetName, item.category, item.subPresetName, item.name);
+
                                   const calcDispQty = calculateTotalDispatchQty(
                                     item,
-                                    currentGroup?.setCount || 1,
-                                    currentGroup?.presetName || item.presetName,
-                                    currentGroup?.category || item.category,
-                                    currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom
+                                    effectiveSetCount,
+                                    effectivePresetName,
+                                    item.category,
+                                    effectiveUnit
                                   );
                                   const dispVal = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')
                                     ? item.totalDispatchQty
                                     : (calcDispQty || '');
-                                  const isKw = isKwPreset(currentGroup?.presetName || item.presetName, currentGroup?.unit || currentGroup?.unitType || item.unit, item);
-                                  const isRail = isRailPreset(currentGroup?.presetName || item.presetName, currentGroup?.category || item.category, item.subPresetName, item.name);
                                   return (
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                       <div style={{
@@ -6827,7 +6840,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         alignItems: 'center',
                                         gap: '4px',
                                         backgroundColor: '#FFFFFF',
-                                        border: `1.5px solid ${isPresetItem ? theme.border : '#0E7490'}`,
+                                        border: `1.5px solid ${isPresetItem ? (isSub ? '#0D9488' : theme.border) : '#0E7490'}`,
                                         borderRadius: '6px',
                                         padding: '2px 6px',
                                         boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
@@ -6846,7 +6859,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             height: '28px',
                                             border: 'none',
                                             fontSize: '13px',
-                                            color: isPresetItem ? theme.primary : '#0E7490',
+                                            color: isPresetItem ? (isSub ? '#0F766E' : theme.primary) : '#0E7490',
                                             fontWeight: '800',
                                             textAlign: 'center',
                                             outline: 'none',
@@ -6859,7 +6872,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       </div>
                                       {isPresetItem && (
                                         <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600', letterSpacing: '0.2px' }}>
-                                          {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1}`)}
+                                          {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${effectiveSetCount}`)}
                                         </span>
                                       )}
                                     </div>

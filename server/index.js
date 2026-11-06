@@ -3107,6 +3107,7 @@ app.post('/api/workflow-notifications', async (req, res) => {
     const {
       recipientEmpCode,
       recipientRole,
+      recipientUserName,
       eventType,
       documentType,
       documentId,
@@ -3128,6 +3129,7 @@ app.post('/api/workflow-notifications', async (req, res) => {
     const result = await createInternalNotification({
       recipientEmpCode,
       recipientRole,
+      recipientUserName: recipientUserName || metadata?.recipientUserName || metadata?.salesPerson || null,
       eventType,
       documentType: documentType || 'BOM',
       documentId,
@@ -6456,10 +6458,12 @@ app.post('/api/boms', async (req, res) => {
           const custName = persistedBom.customerName || persistedBom.companyName || 'Customer';
 
           if (persistedBom.cancelled || String(persistedBom.status || '').toLowerCase().includes('cancel')) {
-            // Workflow: BOM Cancellation -> Notify Sales Person who created it
+            const assignedRep = persistedBom.salesPerson || persistedBom.createdBy || null;
+            // Workflow: BOM Cancellation -> Notify ONLY the specific Sales Person who owns it
             createInternalNotification({
-              recipientEmpCode: persistedBom.salesPersonId || null,
-              recipientRole: 'Sales Executive',
+              recipientEmpCode: persistedBom.salesPersonId || persistedBom.salesPersonEmpCode || null,
+              recipientUserName: assignedRep,
+              recipientRole: assignedRep ? null : 'Sales Executive',
               eventType: 'BOM_CANCELLED',
               documentType: 'bom',
               documentId: finalCode,
@@ -6470,6 +6474,10 @@ app.post('/api/boms', async (req, res) => {
               actorRole,
               targetTab: 'Sales BOM',
               targetRecordId: finalCode,
+              metadata: {
+                recipientUserName: assignedRep,
+                salesPerson: assignedRep
+              },
               dedupId: `bom_cancel_${finalCode}_${persistedBom.cancelledAt || Date.now()}`
             });
           } else if (persistedBom.status === 'COMPLETED & DISPATCHED' || persistedBom.status === 'Completed & Dispatched' || persistedBom.status === 'Dispatched' || persistedBom.tabGroup === 'Closed') {

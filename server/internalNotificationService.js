@@ -82,11 +82,21 @@ function isClientRecipient(client, notification) {
   }
 
   const targetEmp = String(notification.recipient_emp_code || '').toUpperCase().trim();
+  const targetUser = String(notification.recipient_user_name || notification.metadata?.recipientUserName || notification.metadata?.salesPerson || '').toLowerCase().trim();
   const targetRole = String(notification.recipient_role || '').toLowerCase().trim();
 
   // Specific user targeted by employee code: ONLY that specific employee receives it
   if (targetEmp) {
     return Boolean(clientEmp && targetEmp === clientEmp);
+  }
+
+  // Specific user targeted by name/salesperson: ONLY that specific user receives it (NOT all salespersons!)
+  if (targetUser && targetUser !== 'all' && targetUser !== 'sales executive' && targetUser !== 'sales' && targetUser !== 'system') {
+    const isMatch = Boolean(
+      (clientName && (clientName === targetUser || clientName.includes(targetUser) || targetUser.includes(clientName))) ||
+      (clientEmp && clientEmp.toLowerCase() === targetUser)
+    );
+    return isMatch;
   }
 
   // Department / Role queue targeted (only when no specific employee code is targeted)
@@ -154,6 +164,7 @@ export async function createInternalNotification(params = {}) {
   const {
     recipientEmpCode = null,
     recipientRole = null,
+    recipientUserName = null,
     eventType,
     documentType,
     documentId,
@@ -259,6 +270,9 @@ export async function createInternalNotification(params = {}) {
 
   // 2. Realtime broadcast to connected recipient clients immediately (sub-second)
   if (insertedNotification) {
+    if (!insertedNotification.recipient_user_name) {
+      insertedNotification.recipient_user_name = recipientUserName || metadata?.recipientUserName || metadata?.salesPerson || null;
+    }
     broadcastNotificationToClients(insertedNotification);
   }
 

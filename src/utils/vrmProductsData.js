@@ -3980,17 +3980,22 @@ export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', p
     return baseQty;
   }
 
+  // Determine the effective target preset name and unit for this item
+  // If the item is a sub-preset, prioritize its own subPresetName over the parent presetName
+  const effectivePreset = (item.isSubPreset && item.subPresetName) ? item.subPresetName : (presetName || item.presetName || '');
+  const effectiveUnit = (item.isSubPreset && item.subUnit) ? item.subUnit : (unit || item.unit || item.uom || '');
+
   // 2. kW Capacity Rule: If the preset or item has unit = kW (or name indicates kW),
   // the salesperson enters the ENTIRE total quantity for that kW capacity directly -> multiplier = 1 (NOT multiplied by setCount).
-  const isKw = isKwPreset(presetName || item.presetName, unit || item.unit || item.uom, item);
+  const isKw = isKwPreset(effectivePreset, effectiveUnit, item);
   if (isKw) {
     return baseQty;
   }
 
   // 3. Rails Rule: Mini Rails, Adhesive Rails, Short Rails, Long Rails, etc.
-  // Whether parent preset or sub-preset (e.g. Mini Rails inside 2*3 table, or 2*3 inside Mini Rails):
+  // When an item's own effective preset or item name is a rail:
   // Rails quantity is entered directly for roof sheet ribs -> multiplier = 1 (NOT multiplied by table setCount).
-  const isRail = isRailPreset(presetName || item.presetName, presetCategory || item.category, item.subPresetName, item.name);
+  const isRail = isRailPreset(effectivePreset, presetCategory || item.category, item.isSubPreset ? item.subPresetName : '', item.name);
   if (isRail) {
     return baseQty;
   }

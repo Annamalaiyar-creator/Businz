@@ -748,6 +748,7 @@ export default function ProductionViewsEngine(props) {
       bomCode: bCode,
       customerName: bomToCancel.customerName,
       salesPerson: salesPerson,
+      salesPersonEmpCode: bomToCancel.salesPersonId || bomToCancel.salesPersonEmpCode || bomToCancel.creatorEmpCode || null,
       reason: cleanReason,
       cancelledBy: fullAttribution,
       cancelledByRole: position,

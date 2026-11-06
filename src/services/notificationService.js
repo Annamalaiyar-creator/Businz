@@ -328,9 +328,12 @@ export function notifyDispatchCompletedToSales({ bomCode, customerName, salesPer
   });
 }
 
-export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, reason, cancelledBy }) {
+export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, salesPersonEmpCode, reason, cancelledBy }) {
+  const targetRep = (salesPerson && salesPerson !== 'Sales Executive' && salesPerson !== 'Sales') ? salesPerson : null;
   return sendServerWorkflowNotification({
-    recipientRole: 'Sales Executive',
+    recipientEmpCode: salesPersonEmpCode || null,
+    recipientUserName: targetRep,
+    recipientRole: targetRep ? null : 'Sales Executive',
     eventType: 'BOM_CANCELLED',
     documentType: 'BOM',
     documentId: bomCode,
@@ -338,6 +341,10 @@ export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerso
     message: `BOM ${bomCode} (${customerName || 'Customer'}) was cancelled by ${cancelledBy || 'Dispatch'}. Reason: ${reason || 'Cancelled by Dispatch'}`,
     targetTab: 'Sales BOM',
     targetRecordId: bomCode,
+    metadata: {
+      recipientUserName: targetRep,
+      salesPerson: targetRep
+    },
     dedupId: `bom_cancel_${bomCode}_${Date.now()}`
   });
 }
