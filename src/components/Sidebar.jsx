@@ -408,7 +408,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'crm_leads',
           dashboardSubTab: 'crm-dashboard',
           items: [
-            { label: 'CRM & Leads Dashboard', targetTab: 'Dashboard', subTabTarget: 'crm-dashboard', icon: LayoutDashboard },
             { label: 'All Leads', targetTab: 'Leads', icon: Users },
             { label: 'Customer Management', targetTab: 'Customers', icon: Building2 }
           ]
@@ -418,7 +417,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'sales_management',
           dashboardSubTab: 'sales',
           items: [
-            { label: 'Sales Dashboard', targetTab: 'Dashboard', subTabTarget: 'sales', icon: LayoutDashboard },
             { label: 'Quotations', targetTab: 'Quotations', icon: FileText },
             { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
             { label: 'New Monthly Customers', targetTab: 'Monthly Customers by Rep', icon: UserCheck }
@@ -429,7 +427,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'bom',
           dashboardSubTab: 'bom',
           items: [
-            { label: 'BOM Dashboard', targetTab: 'Dashboard', subTabTarget: 'bom', icon: LayoutDashboard },
             { label: 'All BOMs', targetTab: 'BOM Orders', icon: GitBranch, badge: realBOMCount > 0 ? String(realBOMCount) : undefined }
           ]
         },
@@ -438,7 +435,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'production',
           dashboardSubTab: 'production',
           items: [
-            { label: 'Production Dashboard', targetTab: 'Dashboard', subTabTarget: 'production', icon: LayoutDashboard },
             { label: 'Production Monitoring', targetTab: 'Production Monitoring', icon: Activity }
           ]
         },
@@ -447,7 +443,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'dispatch_logistics',
           dashboardSubTab: 'dispatch',
           items: [
-            { label: 'Dispatch Dashboard', targetTab: 'Dashboard', subTabTarget: 'dispatch', icon: LayoutDashboard },
             { label: 'Delivery Challans', targetTab: 'Delivery Challans', icon: FileText }
           ]
         },
@@ -456,7 +451,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'inventory',
           dashboardSubTab: 'inventory-dashboard',
           items: [
-            { label: 'Inventory Dashboard', targetTab: 'Dashboard', subTabTarget: 'inventory-dashboard', icon: LayoutDashboard },
             { label: 'Items Directory', targetTab: 'Items Directory', icon: Boxes },
             { label: 'Stock Status', targetTab: 'Stock Status', icon: Layers }
           ]
@@ -466,7 +460,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'purchase_procurement',
           dashboardSubTab: 'procurement',
           items: [
-            { label: 'Procurement Dashboard', targetTab: 'Dashboard', subTabTarget: 'procurement', icon: LayoutDashboard },
             { label: 'Purchase Orders (PO Approval)', targetTab: 'Purchase Orders', poTabTarget: 'WAITING FOR APPROVAL', icon: ShoppingCart, badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined },
             { label: 'Vendor Management', targetTab: 'Vendor Management', icon: Building2 },
             { label: 'Goods Receipt Notes', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined }
@@ -478,7 +471,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             id: 'accounts_finance',
             dashboardSubTab: 'accounts',
             items: [
-              { label: 'Accounts & Finance Dashboard', targetTab: 'Dashboard', subTabTarget: 'accounts', icon: LayoutDashboard },
               { label: 'Accounts Verification', targetTab: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined },
               { label: 'Invoices', targetTab: 'Invoice Management', icon: Receipt },
               { label: 'Payments', targetTab: 'Payments', icon: Wallet }
@@ -490,7 +482,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'reports_analytics',
           dashboardSubTab: 'reports-dashboard',
           items: [
-            { label: 'Reports & Analytics Dashboard', targetTab: 'Dashboard', subTabTarget: 'reports-dashboard', icon: LayoutDashboard },
             { label: 'Sales Reports', targetTab: 'Sales Reports', icon: BarChart3 },
             { label: 'Procurement Reports', targetTab: 'Procurement Reports', icon: FileBarChart }
           ]
