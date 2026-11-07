@@ -301,9 +301,10 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
   // Real date-range matcher for Today, This Week, MTD, Q2 FY27, YTD
   const matchesSelectedPeriod = (rec, period) => {
+    if (period === 'All' || period === 'All Time') return true;
     const d = parseRecordDate(rec);
     if (!d) {
-      return period === 'YTD';
+      return period === 'YTD' || period === 'All';
     }
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -349,9 +350,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const challansList = useMemo(() => allChallansList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allChallansList, selectedPeriod]);
   const grnList = useMemo(() => allGrnList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allGrnList, selectedPeriod]);
 
-  // Lifecycle-filtered BOM orders for the BOM sub-tab & Order-to-Cash summary
+  // Lifecycle-filtered BOM orders for the BOM sub-tab & Order-to-Cash summary (strictly synced to selectedPeriod)
   const displayBomList = useMemo(() => {
-    const sourceBoms = otcScope === 'ALL' ? allBomList : bomList;
+    const sourceBoms = bomList;
     if (selectedBomLifecycleStage === 'ALL') return sourceBoms;
     return sourceBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
@@ -375,11 +376,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       }
       return true;
     });
-  }, [allBomList, bomList, otcScope, selectedBomLifecycleStage]);
+  }, [bomList, selectedBomLifecycleStage]);
 
   const displayPiList = useMemo(() => {
-    return otcScope === 'ALL' ? allPiList : piList;
-  }, [allPiList, piList, otcScope]);
+    return piList;
+  }, [piList]);
 
   // Dynamic logged-in user name & initials resolution
   const [currentLoggedName, setCurrentLoggedName] = useState(() => {
@@ -1399,11 +1400,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       return '₹ 0';
     };
 
-    const targetBoms = otcScope === 'ALL' ? allBomList : bomList;
-    const targetPis = otcScope === 'ALL' ? allPiList : piList;
-    const targetInvs = otcScope === 'ALL' ? allInvList : invList;
-    const targetDispatches = otcScope === 'ALL' ? allDispatchesList : dispatchesList;
-    const multiplier = otcScope === 'ALL' ? 1 : periodMultiplier;
+    const targetBoms = bomList;
+    const targetPis = piList;
+    const targetInvs = invList;
+    const targetDispatches = dispatchesList;
+    const multiplier = 1;
 
     const activeBoms = targetBoms.filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'));
     const totalBomVal = activeBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
@@ -1414,6 +1415,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     });
     const totalPiVal = targetPis.reduce((acc, p) => acc + parseAmt(p.grandTotal || p.totalAmount || p.amount || 0), 0) * multiplier;
 
+    // STEP 03: Dispatch Packing
     const packedBoms = activeBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
       return b.packingStatus === 'PACKING_VERIFIED' || st.includes('packed') || b.isAccountsDone || b.accountsVerification?.verified || b.invoiceConfirmed || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted;
@@ -1421,26 +1423,28 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     const pendingPackingBoms = Math.max(0, activeBoms.length - packedBoms.length);
     const packedVal = packedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
-    const accountsVerifiedBoms = activeBoms.filter(b => {
+    // STEP 04: Accounts Verification (Subset of Packed Orders)
+    const accountsVerifiedBoms = packedBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
       return Boolean(b.isAccountsDone || b.accountsVerification?.verified || b.invoiceConfirmed || st.includes('invoice') || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted);
     });
-    const pendingAccountsBoms = packedBoms.filter(b => !b.isAccountsDone && !b.accountsVerification?.verified && !b.invoiceConfirmed).length;
+    const pendingAccountsBoms = Math.max(0, packedBoms.length - accountsVerifiedBoms.length);
     const accountsVerifiedVal = accountsVerifiedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
-    const invoicedBoms = activeBoms.filter(b => Boolean(b.invoiceConfirmed || String(b.status || '').toLowerCase().includes('invoice') || b.fullyCompleted || String(b.status || '').toLowerCase().includes('dispatched') || String(b.status || '').toLowerCase().includes('completed')));
-    const totalInvoicedCount = Math.max(targetInvs.length, invoicedBoms.length);
-    const invoicedVal = (totalInvoicedNum > 0 && otcScope !== 'ALL' ? totalInvoicedNum : invoicedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0)) * multiplier;
+    // STEP 05: Billing & Invoicing (Strict Subset of Accounts Verified Orders)
+    const invoicedBoms = accountsVerifiedBoms.filter(b => {
+      const st = String(b.status || '').toLowerCase();
+      return Boolean(b.invoiceConfirmed || b.invoiceNo || st.includes('invoice') || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted);
+    });
+    const pendingInvoicingBoms = Math.max(0, accountsVerifiedBoms.length - invoicedBoms.length);
+    const invoicedVal = invoicedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
-    const completedDispatchBoms = activeBoms.filter(b => {
+    // STEP 06: Final Dispatch (Strict Subset of Invoiced Orders)
+    const completedDispatchBoms = invoicedBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
       return Boolean(b.fullyCompleted || st.includes('completed') || st.includes('dispatched'));
     });
-    const awaitingLoadBoms = activeBoms.filter(b => {
-      const st = String(b.status || '').toLowerCase();
-      return (b.invoiceConfirmed || st.includes('loading')) && !b.fullyCompleted && !st.includes('completed') && !st.includes('dispatched');
-    });
-    const totalDispatchedCount = Math.max(completedDispatchBoms.length, targetDispatches.length);
+    const awaitingLoadBoms = Math.max(0, invoicedBoms.length - completedDispatchBoms.length);
     const dispatchedVal = completedDispatchBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
     const baseTotal = Math.max(1, targetPis.length, activeBoms.length);
@@ -1514,11 +1518,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         step: 'STEP 05',
         stage: 'Billing & Invoice',
         subtitle: '3-Way Match & Stock Lock',
-        primaryMetric: `${totalInvoicedCount} Billed`,
+        primaryMetric: `${invoicedBoms.length} Billed`,
         value: fmtCompact(invoicedVal),
         valueLabel: 'GST Invoiced',
-        statusBadge: `${Math.max(0, accountsVerifiedBoms.length - invoicedBoms.length)} Awaiting Billing`,
-        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((totalInvoicedCount / activeBoms.length) * 100)) : 0,
+        statusBadge: `${pendingInvoicingBoms} Awaiting Billing`,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((invoicedBoms.length / activeBoms.length) * 100)) : 0,
         icon: FileCheck,
         color: '#2563EB',
         bg: '#EFF6FF',
@@ -1530,11 +1534,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         step: 'STEP 06',
         stage: 'Final Dispatch',
         subtitle: 'Vehicle Loading & LR Copy',
-        primaryMetric: `${totalDispatchedCount} Dispatched`,
+        primaryMetric: `${completedDispatchBoms.length} Dispatched`,
         value: fmtCompact(dispatchedVal),
         valueLabel: 'Delivered Value',
-        statusBadge: `${awaitingLoadBoms.length} Ready to Load`,
-        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((totalDispatchedCount / activeBoms.length) * 100)) : 0,
+        statusBadge: `${awaitingLoadBoms} Ready to Load`,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((completedDispatchBoms.length / activeBoms.length) * 100)) : 0,
         icon: Truck,
         color: '#16A34A',
         bg: '#F0FDF4',
@@ -1978,7 +1982,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             border: '1px solid #E2E8F0',
             gap: '2px'
           }}>
-            {['Today', 'This Week', 'MTD', 'Q2 FY27', 'YTD'].map((period) => (
+            {['Today', 'This Week', 'MTD', 'Q2 FY27', 'YTD', 'All'].map((period) => (
               <button
                 key={period}
                 onClick={() => setSelectedPeriod(period)}
@@ -3896,7 +3900,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     {selectedBomLifecycleStage === 'STEP 01' ? 'PIs Showing:' : 'Orders Showing:'}
                   </span>
                   <span style={{ color: '#0E7490', fontWeight: '800' }}>
-                    {selectedBomLifecycleStage === 'STEP 01' ? `${displayPiList.length} PIs` : `${displayBomList.length} of ${allBomList.length}`}
+                    {selectedBomLifecycleStage === 'STEP 01' ? `${displayPiList.length} PIs (${selectedPeriod})` : `${displayBomList.length} of ${bomList.length} (${selectedPeriod})`}
                   </span>
                 </div>
               </div>
@@ -4098,7 +4102,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    Filtered by: {funnelStages.find(s => s.step === selectedBomLifecycleStage)?.stage || selectedBomLifecycleStage} ({selectedBomLifecycleStage === 'STEP 01' ? piList.length : displayBomList.length})
+                    Filtered by: {funnelStages.find(s => s.step === selectedBomLifecycleStage)?.stage || selectedBomLifecycleStage} ({selectedBomLifecycleStage === 'STEP 01' ? displayPiList.length : displayBomList.length})
                   </span>
                 )}
               </div>
