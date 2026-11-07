@@ -12,6 +12,7 @@ import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, fetchCloudStore } from '../utils/supabaseDataSync';
 import { getNextSequence } from '../utils/sequenceGenerator';
 import { getHsnCode } from '../utils/hsnCodeService';
+import { parseAddressString, formatAddressObj, getVendorLocations } from '../utils/otherViewsShared';
 
 // ==================== COMPANY PROFILES (OFFICIAL BUSINZ LOCATIONS) ====================
 export const COMPANY_LOCATIONS = {
@@ -119,13 +120,36 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   // ==================== FORM STATE ====================
   const [companyLocation, setCompanyLocation] = useState('VRM Structures India Pvt Ltd');
   const [customerName, setCustomerName] = useState('');
+  const [vendorGst, setVendorGst] = useState('');
   const [dcNumber, setDcNumber] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
   const [dcDate, setDcDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [challanType, setChallanType] = useState('Job Work');
   const [warehouseLocation, setWarehouseLocation] = useState('VRM Structures - Madhavaram Main Warehouse');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryAddress1, setDeliveryAddress1] = useState('');
+  const [deliveryAddress2, setDeliveryAddress2] = useState('');
+  const [deliveryCity, setDeliveryCity] = useState('');
+  const [deliveryState, setDeliveryState] = useState('');
+  const [deliveryPincode, setDeliveryPincode] = useState('');
+
   const [billingAddress, setBillingAddress] = useState('');
+  const [billingAddress1, setBillingAddress1] = useState('');
+  const [billingAddress2, setBillingAddress2] = useState('');
+  const [billingCity, setBillingCity] = useState('');
+  const [billingState, setBillingState] = useState('');
+  const [billingPincode, setBillingPincode] = useState('');
+  const [sameAsDelivery, setSameAsDelivery] = useState(false);
+  const [deliveryLocationId, setDeliveryLocationId] = useState('registered_office');
+  const [billingLocationId, setBillingLocationId] = useState('registered_office');
+
+  const currentCustomerObj = useMemo(() => {
+    return knownCustomers.find(c => c.name.toLowerCase() === (customerName || '').toLowerCase()) || null;
+  }, [knownCustomers, customerName]);
+
+  const customerLocations = useMemo(() => {
+    return getVendorLocations(currentCustomerObj);
+  }, [currentCustomerObj]);
   const [transporter, setTransporter] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [lrNo, setLrNo] = useState('');
@@ -378,11 +402,50 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
     setCustomerName(val);
     const found = knownCustomers.find(c => c.name.toLowerCase() === val.toLowerCase());
     if (found) {
-      if (found.address && (!deliveryAddress || deliveryAddress.trim() === '')) {
-        setDeliveryAddress(found.address);
+      if (found.gst && (!vendorGst || vendorGst.trim() === '')) {
+        setVendorGst(found.gst);
       }
-      if (found.billingAddress && (!billingAddress || billingAddress.trim() === '')) {
-        setBillingAddress(found.billingAddress);
+      const cLocs = getVendorLocations(found);
+      if (cLocs.length > 0) {
+        const reg = cLocs.find(l => l.id === 'registered_office') || cLocs[0];
+        const ship = cLocs.find(l => l.id === 'factory_plant') || cLocs[1] || reg;
+        setBillingLocationId(reg.id);
+        setBillingAddress1(reg.address1 || '');
+        setBillingAddress2(reg.address2 || '');
+        setBillingCity(reg.city || '');
+        setBillingState(reg.state || '');
+        setBillingPincode(reg.pincode || '');
+        setBillingAddress(formatAddressObj(reg));
+
+        setDeliveryLocationId(ship.id);
+        setDeliveryAddress1(ship.address1 || '');
+        setDeliveryAddress2(ship.address2 || '');
+        setDeliveryCity(ship.city || '');
+        setDeliveryState(ship.state || '');
+        setDeliveryPincode(ship.pincode || '');
+        setDeliveryAddress(formatAddressObj(ship));
+        if (ship.gst && (!vendorGst || vendorGst.trim() === '')) {
+          setVendorGst(ship.gst);
+        }
+      } else {
+        if (found.address) {
+          setDeliveryAddress(found.address);
+          const parsedDel = parseAddressString(found.address);
+          setDeliveryAddress1(parsedDel.address1 || '');
+          setDeliveryAddress2(parsedDel.address2 || '');
+          setDeliveryCity(parsedDel.city || '');
+          setDeliveryState(parsedDel.state || '');
+          setDeliveryPincode(parsedDel.pincode || '');
+        }
+        if (found.billingAddress) {
+          setBillingAddress(found.billingAddress);
+          const parsedBill = parseAddressString(found.billingAddress);
+          setBillingAddress1(parsedBill.address1 || '');
+          setBillingAddress2(parsedBill.address2 || '');
+          setBillingCity(parsedBill.city || '');
+          setBillingState(parsedBill.state || '');
+          setBillingPincode(parsedBill.pincode || '');
+        }
       }
     }
   };
@@ -452,13 +515,25 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   const handleStartFreshDC = () => {
     setCompanyLocation('VRM Structures India Pvt Ltd');
     setCustomerName('');
+    setVendorGst('');
     setDcNumber(fetchNextDcNumber());
     setReferenceNo('');
     setDcDate(new Date().toISOString().split('T')[0]);
     setChallanType('Job Work');
     setWarehouseLocation('');
     setDeliveryAddress('');
+    setDeliveryAddress1('');
+    setDeliveryAddress2('');
+    setDeliveryCity('');
+    setDeliveryState('');
+    setDeliveryPincode('');
     setBillingAddress('');
+    setBillingAddress1('');
+    setBillingAddress2('');
+    setBillingCity('');
+    setBillingState('');
+    setBillingPincode('');
+    setSameAsDelivery(false);
     setTransporter('');
     setVehicleNo('');
     setLrNo('');
@@ -479,13 +554,32 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
     setEditIdx(dcList.findIndex(d => (d.dcNo === dc.dcNo || d.id === dc.id)));
     setCompanyLocation(dc.companyLocation || dc.branch || 'VRM Structures India Pvt Ltd');
     setCustomerName(dc.customerName || dc.vendor || '');
+    setVendorGst(dc.vendorGst || dc.gstNo || dc.gstin || '');
     setDcNumber(dc.dcNo || dc.code || '');
     setReferenceNo(dc.referenceNo || dc.refNo || dc.bomCode || '');
     setDcDate(dc.dcDate || dc.date || new Date().toISOString().split('T')[0]);
     setChallanType(dc.challanType || 'Job Work');
     setWarehouseLocation(dc.warehouseLocation || '');
     setDeliveryAddress(dc.deliveryAddress || '');
+    const parsedDel = (dc.deliveryAddressObj && typeof dc.deliveryAddressObj === 'object')
+      ? dc.deliveryAddressObj
+      : parseAddressString(dc.deliveryAddress || '');
+    setDeliveryAddress1(dc.deliveryAddress1 || parsedDel.address1 || '');
+    setDeliveryAddress2(dc.deliveryAddress2 || parsedDel.address2 || '');
+    setDeliveryCity(dc.deliveryCity || parsedDel.city || '');
+    setDeliveryState(dc.deliveryState || parsedDel.state || '');
+    setDeliveryPincode(dc.deliveryPincode || parsedDel.pincode || '');
+
     setBillingAddress(dc.billingAddress || '');
+    const parsedBill = (dc.billingAddressObj && typeof dc.billingAddressObj === 'object')
+      ? dc.billingAddressObj
+      : parseAddressString(dc.billingAddress || '');
+    setBillingAddress1(dc.billingAddress1 || parsedBill.address1 || '');
+    setBillingAddress2(dc.billingAddress2 || parsedBill.address2 || '');
+    setBillingCity(dc.billingCity || parsedBill.city || '');
+    setBillingState(dc.billingState || parsedBill.state || '');
+    setBillingPincode(dc.billingPincode || parsedBill.pincode || '');
+    setSameAsDelivery(dc.deliveryAddress === dc.billingAddress && Boolean(dc.deliveryAddress));
     setTransporter(dc.transporter || '');
     setVehicleNo(dc.vehicleNo || '');
     setLrNo(dc.lrNo || '');
@@ -526,7 +620,10 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       alert("⚠️ Delivery Challan# is mandatory.");
       return;
     }
-    if (!deliveryAddress || deliveryAddress.trim() === '') {
+    const effDel = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: deliveryPincode }) || deliveryAddress.trim();
+    const effBill = formatAddressObj({ address1: billingAddress1, address2: billingAddress2, city: billingCity, state: billingState, pincode: billingPincode }) || billingAddress.trim() || effDel;
+
+    if (!effDel || (!deliveryAddress1.trim() && !deliveryCity.trim() && !deliveryAddress.trim())) {
       alert("⚠️ Delivery Address is mandatory.");
       return;
     }
@@ -553,8 +650,35 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       sourceOfSupply: compProfile.state,
       customerName: customerName.trim(),
       vendor: customerName.trim(),
-      deliveryAddress: deliveryAddress.trim(),
-      billingAddress: billingAddress.trim() || deliveryAddress.trim(),
+      vendorGst: (vendorGst || '').toUpperCase().trim(),
+      gstNo: (vendorGst || '').toUpperCase().trim(),
+      gstin: (vendorGst || '').toUpperCase().trim(),
+      deliveryAddress: effDel,
+      deliveryAddress1: deliveryAddress1.trim(),
+      deliveryAddress2: deliveryAddress2.trim(),
+      deliveryCity: deliveryCity.trim(),
+      deliveryState: deliveryState.trim(),
+      deliveryPincode: deliveryPincode.trim(),
+      deliveryAddressObj: {
+        address1: deliveryAddress1.trim(),
+        address2: deliveryAddress2.trim(),
+        city: deliveryCity.trim(),
+        state: deliveryState.trim(),
+        pincode: deliveryPincode.trim()
+      },
+      billingAddress: effBill,
+      billingAddress1: billingAddress1.trim(),
+      billingAddress2: billingAddress2.trim(),
+      billingCity: billingCity.trim(),
+      billingState: billingState.trim(),
+      billingPincode: billingPincode.trim(),
+      billingAddressObj: {
+        address1: billingAddress1.trim(),
+        address2: billingAddress2.trim(),
+        city: billingCity.trim(),
+        state: billingState.trim(),
+        pincode: billingPincode.trim()
+      },
       referenceNo: referenceNo.trim() || '—',
       refNo: referenceNo.trim() || '—',
       dcDate,
@@ -1793,8 +1917,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 1. Consignee & Dispatch Information
               </strong>
 
-              {/* Row 1: Customer Name | Delivery Challan# | Challan Type */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px' }}>
+              {/* Row 1: Customer Name | Vendor GST | Delivery Challan# | Challan Type */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 0.8fr', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label htmlFor="dc-customer-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                     Customer / Consignee Name <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
@@ -1814,6 +1938,21 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                       <option key={idx} value={c.name}>{c.name} {c.address ? `(${c.address.slice(0, 30)}…)` : ''}</option>
                     ))}
                   </datalist>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label htmlFor="dc-vendor-gst" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    Vendor / Consignee GST Number
+                  </label>
+                  <input
+                    id="dc-vendor-gst"
+                    type="text"
+                    placeholder="e.g. 33AABCT1332L1Z1"
+                    value={vendorGst}
+                    onChange={(e) => setVendorGst(e.target.value.toUpperCase())}
+                    maxLength={15}
+                    style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase', width: '100%', boxSizing: 'border-box' }}
+                  />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1943,38 +2082,382 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label htmlFor="dc-delivery-address" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                    Delivery Address <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                  </label>
-                  <textarea
-                    id="dc-delivery-address"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    rows="3"
-                    required
-                    placeholder="Enter consignee site / destination delivery address..."
-                    style={{ borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none' }}
-                  />
+                {/* Delivery / Shipping Address Card */}
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MapPin size={13} /> Delivery / Shipping Address <span style={{ color: '#EF4444' }}>*</span>
+                    </span>
+                    <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B' }}>Consignee Destination</span>
+                  </div>
+
+                  {/* Multi-Location / Branch Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', padding: '6px 10px', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+                      <Building2 size={13} color="#0E7490" />
+                      <span>Consignee Site / Location:</span>
+                    </div>
+                    <select
+                      value={deliveryLocationId}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        setDeliveryLocationId(selId);
+                        if (selId === 'custom') return;
+                        const chosen = customerLocations.find(l => l.id === selId);
+                        if (chosen) {
+                          setDeliveryAddress1(chosen.address1 || '');
+                          setDeliveryAddress2(chosen.address2 || '');
+                          setDeliveryCity(chosen.city || '');
+                          setDeliveryState(chosen.state || '');
+                          setDeliveryPincode(chosen.pincode || '');
+                          const combined = formatAddressObj(chosen);
+                          setDeliveryAddress(combined);
+                          if (chosen.gst) {
+                            setVendorGst(chosen.gst);
+                          }
+                          if (sameAsDelivery) {
+                            setBillingAddress1(chosen.address1 || '');
+                            setBillingAddress2(chosen.address2 || '');
+                            setBillingCity(chosen.city || '');
+                            setBillingState(chosen.state || '');
+                            setBillingPincode(chosen.pincode || '');
+                            setBillingAddress(combined);
+                          }
+                        }
+                      }}
+                      style={{
+                        height: '28px',
+                        padding: '0 8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#F8FAFC',
+                        color: '#0E7490',
+                        cursor: 'pointer',
+                        maxWidth: '220px',
+                        outline: 'none'
+                      }}
+                    >
+                      {customerLocations.length > 0 ? (
+                        customerLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>{loc.label}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="registered_office">Registered / Head Office</option>
+                          <option value="factory_plant">Factory / Plant Site</option>
+                          <option value="warehouse_yard">Warehouse / Stockyard</option>
+                        </>
+                      )}
+                      <option value="custom">Custom / Other Site</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                      Address Line 1 <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryAddress1}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDeliveryAddress1(val);
+                        const combined = formatAddressObj({ address1: val, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: deliveryPincode });
+                        setDeliveryAddress(combined);
+                        if (sameAsDelivery) {
+                          setBillingAddress1(val);
+                          setBillingAddress(combined);
+                        }
+                      }}
+                      placeholder="Flat / Building / Door No, Street..."
+                      style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                      Address Line 2
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryAddress2}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDeliveryAddress2(val);
+                        const combined = formatAddressObj({ address1: deliveryAddress1, address2: val, city: deliveryCity, state: deliveryState, pincode: deliveryPincode });
+                        setDeliveryAddress(combined);
+                        if (sameAsDelivery) {
+                          setBillingAddress2(val);
+                          setBillingAddress(combined);
+                        }
+                      }}
+                      placeholder="Area, Landmark, Industrial Estate..."
+                      style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 0.9fr', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                        City <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={deliveryCity}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDeliveryCity(val);
+                          const combined = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: val, state: deliveryState, pincode: deliveryPincode });
+                          setDeliveryAddress(combined);
+                          if (sameAsDelivery) {
+                            setBillingCity(val);
+                            setBillingAddress(combined);
+                          }
+                        }}
+                        placeholder="e.g. Chennai"
+                        style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                        required
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                        State
+                      </label>
+                      <input
+                        type="text"
+                        value={deliveryState}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDeliveryState(val);
+                          const combined = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: val, pincode: deliveryPincode });
+                          setDeliveryAddress(combined);
+                          if (sameAsDelivery) {
+                            setBillingState(val);
+                            setBillingAddress(combined);
+                          }
+                        }}
+                        placeholder="e.g. Tamil Nadu"
+                        style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                        Pin Code
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={deliveryPincode}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          setDeliveryPincode(val);
+                          const combined = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: val });
+                          setDeliveryAddress(combined);
+                          if (sameAsDelivery) {
+                            setBillingPincode(val);
+                            setBillingAddress(combined);
+                          }
+                        }}
+                        placeholder="600028"
+                        style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label htmlFor="dc-billing-address" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                      Billing Address
-                    </label>
-                    <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px' }}>
-                      Auto-populated from Customer
+                {/* Billing Address Card */}
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#2563EB', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Building2 size={13} /> Billing Address
                     </span>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={sameAsDelivery}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSameAsDelivery(checked);
+                          if (checked) {
+                            setBillingAddress1(deliveryAddress1);
+                            setBillingAddress2(deliveryAddress2);
+                            setBillingCity(deliveryCity);
+                            setBillingState(deliveryState);
+                            setBillingPincode(deliveryPincode);
+                            setBillingAddress(deliveryAddress);
+                          }
+                        }}
+                        style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                      />
+                      Same as Delivery
+                    </label>
                   </div>
-                  <textarea
-                    id="dc-billing-address"
-                    value={billingAddress}
-                    onChange={(e) => setBillingAddress(e.target.value)}
-                    rows="3"
-                    placeholder="Customer registered billing address..."
-                    style={{ borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', backgroundColor: '#f8fafc', color: '#334155' }}
-                  />
+
+                  {/* Multi-Location / Branch Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', padding: '6px 10px', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+                      <Building2 size={13} color="#2563EB" />
+                      <span>Billing Location:</span>
+                    </div>
+                    <select
+                      value={billingLocationId}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        setBillingLocationId(selId);
+                        if (sameAsDelivery) setSameAsDelivery(false);
+                        if (selId === 'custom') return;
+                        const chosen = customerLocations.find(l => l.id === selId);
+                        if (chosen) {
+                          setBillingAddress1(chosen.address1 || '');
+                          setBillingAddress2(chosen.address2 || '');
+                          setBillingCity(chosen.city || '');
+                          setBillingState(chosen.state || '');
+                          setBillingPincode(chosen.pincode || '');
+                          setBillingAddress(formatAddressObj(chosen));
+                        }
+                      }}
+                      style={{
+                        height: '28px',
+                        padding: '0 8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#F8FAFC',
+                        color: '#2563EB',
+                        cursor: 'pointer',
+                        maxWidth: '220px',
+                        outline: 'none'
+                      }}
+                    >
+                      {customerLocations.length > 0 ? (
+                        customerLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>{loc.label}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="registered_office">Registered / Head Office</option>
+                          <option value="factory_plant">Factory / Plant Site</option>
+                          <option value="warehouse_yard">Warehouse / Stockyard</option>
+                        </>
+                      )}
+                      <option value="custom">Custom / Other Site</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                      Address Line 1
+                    </label>
+                    <input
+                      type="text"
+                      value={billingAddress1}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBillingAddress1(val);
+                        setBillingAddress(formatAddressObj({ address1: val, address2: billingAddress2, city: billingCity, state: billingState, pincode: billingPincode }));
+                        if (sameAsDelivery) setSameAsDelivery(false);
+                      }}
+                      placeholder="Customer billing street / building..."
+                      style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                      Address Line 2
+                    </label>
+                    <input
+                      type="text"
+                      value={billingAddress2}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBillingAddress2(val);
+                        setBillingAddress(formatAddressObj({ address1: billingAddress1, address2: val, city: billingCity, state: billingState, pincode: billingPincode }));
+                        if (sameAsDelivery) setSameAsDelivery(false);
+                      }}
+                      placeholder="Area, Landmark..."
+                      style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 0.9fr', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        value={billingCity}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setBillingCity(val);
+                          setBillingAddress(formatAddressObj({ address1: billingAddress1, address2: billingAddress2, city: val, state: billingState, pincode: billingPincode }));
+                          if (sameAsDelivery) setSameAsDelivery(false);
+                        }}
+                        placeholder="City"
+                        style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                        State
+                      </label>
+                      <input
+                        type="text"
+                        value={billingState}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setBillingState(val);
+                          setBillingAddress(formatAddressObj({ address1: billingAddress1, address2: billingAddress2, city: billingCity, state: val, pincode: billingPincode }));
+                          if (sameAsDelivery) setSameAsDelivery(false);
+                        }}
+                        placeholder="State"
+                        style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                        Pin Code
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={billingPincode}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          setBillingPincode(val);
+                          setBillingAddress(formatAddressObj({ address1: billingAddress1, address2: billingAddress2, city: billingCity, state: billingState, pincode: val }));
+                          if (sameAsDelivery) setSameAsDelivery(false);
+                        }}
+                        placeholder="Pincode"
+                        style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2635,7 +3118,12 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 <strong style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                   Consignee / Deliver To
                 </strong>
-                <span style={{ color: '#0F172A', fontWeight: '700', display: 'block' }}>{activeDc.customerName || 'Customer'}</span>
+                <span style={{ color: '#0F172A', fontWeight: '800', fontSize: '13px', display: 'block' }}>{activeDc.customerName || 'Customer'}</span>
+                {(activeDc.vendorGst || activeDc.gstNo || activeDc.gstin) && (
+                  <div style={{ color: '#0E7490', fontWeight: '800', fontSize: '11px', marginTop: '3px', marginBottom: '3px', display: 'inline-block', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '4px', padding: '1px 6px' }}>
+                    GSTIN: <span>{activeDc.vendorGst || activeDc.gstNo || activeDc.gstin}</span>
+                  </div>
+                )}
                 <span style={{ color: '#334155', lineHeight: '1.4', display: 'block', marginTop: '2px' }}>
                   {activeDc.deliveryAddress}
                 </span>

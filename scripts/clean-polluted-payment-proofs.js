@@ -182,6 +182,36 @@ async function main() {
     }
   }
 
+  // 3. Sanitize server media_cache.json to purge cached dataUrl for this slip
+  let mediaCachePath = '';
+  try {
+    mediaCachePath = getStoreFilePath('media_cache.json');
+  } catch (_) {
+    mediaCachePath = path.resolve(__dirname, '../server/media_cache.json');
+  }
+
+  if (fs.existsSync(mediaCachePath)) {
+    try {
+      const mcContent = fs.readFileSync(mediaCachePath, 'utf8');
+      if (mcContent.includes(TARGET_POLLUTED_NAME)) {
+        const mcObj = JSON.parse(mcContent);
+        let mcRemoved = 0;
+        for (const k of Object.keys(mcObj)) {
+          if (k === TARGET_POLLUTED_NAME || k.includes(TARGET_POLLUTED_NAME)) {
+            delete mcObj[k];
+            mcRemoved++;
+          }
+        }
+        if (mcRemoved > 0) {
+          fs.writeFileSync(mediaCachePath, JSON.stringify(mcObj, null, 2), 'utf8');
+          console.log(`✅ Cleaned server media cache (${mcRemoved} entry removed): ${mediaCachePath}`);
+        }
+      }
+    } catch (mcErr) {
+      console.warn('⚠️ Media cache clean warning:', mcErr.message);
+    }
+  }
+
   console.log(`\n===============================================================`);
   console.log(`🎉 SANITIZATION COMPLETE SUMMARY:`);
   console.log(`   - Total BOMs Cleaned: ${modifiedBomsCount}`);
@@ -196,3 +226,4 @@ main().catch(err => {
   console.error('Fatal execution error:', err);
   process.exit(1);
 });
+
