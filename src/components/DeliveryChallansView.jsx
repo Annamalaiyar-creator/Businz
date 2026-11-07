@@ -1139,19 +1139,27 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
 
   const handleSaveReturn = async (mode = 'partial') => {
     if (!returnDc) return;
-    if (!returnDate) { alert('Please enter a Return Date.'); return; }
-    if (!returnReceivedBy.trim()) { alert('Please enter who received the goods.'); return; }
+    const isFullClose = mode === 'full';
+
+    const effectiveReturnDate = returnDate || new Date().toISOString().split('T')[0];
+    const finalReceivedBy = returnReceivedBy.trim() || (isFullClose ? 'Store Incharge' : '');
+    if (!isFullClose && !finalReceivedBy) {
+      alert('Please enter who received the goods.');
+      return;
+    }
 
     const validRows = returnReceivedRows.filter(r => Number(r.receivedQty) > 0);
-    if (validRows.length === 0) {
+    if (!isFullClose && validRows.length === 0) {
       alert('Please enter at least one item with a received quantity greater than 0.');
       return;
     }
 
-    const missingName = validRows.some(r => !String(r.receivedItemName || '').trim());
-    if (missingName) {
-      alert('Please enter a Received Product / Finished Goods name for all items being received.');
-      return;
+    if (validRows.length > 0) {
+      const missingName = validRows.some(r => !String(r.receivedItemName || r.sentItemName || '').trim());
+      if (missingName) {
+        alert('Please enter a Received Product / Finished Goods name for all items being received.');
+        return;
+      }
     }
 
     setReturnSubmitting(true);
@@ -1160,30 +1168,30 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
         sentItemIdx: Number(r.sentItemIdx !== undefined ? r.sentItemIdx : 0),
         itemIdx: Number(r.sentItemIdx !== undefined ? r.sentItemIdx : 0),
         sentItemName: r.sentItemName || '',
-        itemName: r.receivedItemName.trim(),
-        receivedItemName: r.receivedItemName.trim(),
+        itemName: (r.receivedItemName || r.sentItemName || '').trim(),
+        receivedItemName: (r.receivedItemName || r.sentItemName || '').trim(),
         unit: r.unit || 'Nos',
         sentQty: Number(r.sentQty || 0),
         returnedQty: Number(r.receivedQty || 0)
       }));
 
-      const newReturn = {
-        returnId: `RET-${Date.now()}`,
-        returnDate,
-        returnRef: returnRef.trim(),
-        receivedBy: returnReceivedBy.trim(),
-        remarks: returnRemarks.trim(),
-        returnedItems,
-        createdAt: new Date().toISOString()
-      };
-
-      // Calculate updated status
-      const allItems = returnDc.items || [];
       const existingReturns = returnDc.returns || [];
-      const updatedReturns = [...existingReturns, newReturn];
+      const updatedReturns = [...existingReturns];
+
+      if (returnedItems.length > 0 || returnRef.trim() || returnRemarks.trim()) {
+        const newReturn = {
+          returnId: `RET-${Date.now()}`,
+          returnDate: effectiveReturnDate,
+          returnRef: returnRef.trim(),
+          receivedBy: finalReceivedBy,
+          remarks: returnRemarks.trim() || (isFullClose ? 'DC Closed Fully' : 'Consignment Received'),
+          returnedItems,
+          createdAt: new Date().toISOString()
+        };
+        updatedReturns.push(newReturn);
+      }
 
       // Explicit user decision: 'full' -> Closed, 'partial' -> Partially Received
-      const isFullClose = mode === 'full';
       const newStatus = isFullClose ? 'Closed' : 'Partially Received';
 
       // Update the DC record (1 targeted update)
@@ -1192,12 +1200,14 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
         returns: updatedReturns,
         status: newStatus,
         statusType: isFullClose ? 'closed' : 'partially_received',
-        receivedDate: returnDate,
-        lastReceivedDate: returnDate,
+        receivedDate: effectiveReturnDate,
+        lastReceivedDate: effectiveReturnDate,
+        closedAt: isFullClose ? new Date().toISOString() : returnDc.closedAt,
+        closedBy: isFullClose ? finalReceivedBy : returnDc.closedBy,
         updatedAt: new Date().toISOString()
       };
 
-      // Credit stock back for returned items (credited under received product name)
+      // Credit stock back for newly received items
       try {
         returnedItems.forEach(ri => {
           if (ri.returnedQty > 0) {
@@ -1205,7 +1215,7 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
             centralInventoryStore.addStock && centralInventoryStore.addStock(
               stockName,
               ri.returnedQty,
-              `Job Work Inward — DC: ${returnDc.dcNo || returnDc.id}, Ret: ${newReturn.returnId} (${ri.receivedItemName !== ri.sentItemName ? `Processed from ${ri.sentItemName}` : 'Returned'})`
+              `Job Work Inward — DC: ${returnDc.dcNo || returnDc.id} (${ri.receivedItemName !== ri.sentItemName ? `Processed from ${ri.sentItemName}` : 'Returned'})`
             );
           }
         });
@@ -1213,13 +1223,34 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
         console.warn('Stock credit notice:', err);
       }
 
+      const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+      const targetDcKey = normalize(returnDc.dcNo || returnDc.id || returnDc.code);
+      const isTargetDc = (d) => {
+        if (!d) return false;
+        return (
+          normalize(d.dcNo) === targetDcKey ||
+          normalize(d.id) === targetDcKey ||
+          normalize(d.code) === targetDcKey ||
+          d.dcNo === returnDc.dcNo ||
+          d.id === returnDc.id
+        );
+      };
+
       // Save to localStorage
       try {
         const raw = localStorage.getItem('controlroom_dc_store');
         const list = raw ? JSON.parse(raw) : [];
-        const updated = list.map(d =>
-          (d.dcNo === returnDc.dcNo || d.id === returnDc.id) ? updatedDc : d
-        );
+        let matched = false;
+        const updated = list.map(d => {
+          if (isTargetDc(d)) {
+            matched = true;
+            return updatedDc;
+          }
+          return d;
+        });
+        if (!matched) {
+          updated.push(updatedDc);
+        }
         localStorage.setItem('controlroom_dc_store', JSON.stringify(updated));
         window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_dc_store' } }));
         window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
@@ -1228,7 +1259,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
 
       // Sync to server
       try {
-        await fetch(`/api/deliverychallans/${returnDc.dcNo || returnDc.id}`, {
+        const encodedId = encodeURIComponent(returnDc.dcNo || returnDc.id || '');
+        await fetch(`/api/deliverychallans/${encodedId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedDc)
@@ -1236,9 +1268,17 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       } catch (_) {}
 
       // Update local state (1 row only)
-      setDcList(prev => prev.map(d =>
-        (d.dcNo === returnDc.dcNo || d.id === returnDc.id) ? updatedDc : d
-      ));
+      setDcList(prev => {
+        let matched = false;
+        const next = prev.map(d => {
+          if (isTargetDc(d)) {
+            matched = true;
+            return updatedDc;
+          }
+          return d;
+        });
+        return matched ? next : [updatedDc, ...prev];
+      });
       setActiveDc(updatedDc);
 
       setShowReturnModal(false);

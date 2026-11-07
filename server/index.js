@@ -8018,13 +8018,17 @@ app.post(['/api/deliverychallans/:id/cancel', '/api/delivery-challans/:id/cancel
 });
 
 // Endpoint to UPDATE a Delivery Challan
-app.put(['/api/deliverychallans/:id', '/api/delivery-challans/:id'], async (req, res) => {
-  const targetId = req.params.id;
+app.put(['/api/deliverychallans/:id(*)', '/api/delivery-challans/:id(*)', '/api/deliverychallans/:id', '/api/delivery-challans/:id'], async (req, res) => {
+  const targetId = decodeURIComponent(req.params.id || '');
   let localDCs = [];
   const p = getStoreFilePath('dc_store.json');
   try {
     if (fs.existsSync(p)) localDCs = JSON.parse(fs.readFileSync(p, 'utf8'));
   } catch (_) {}
+
+  if (localDCs.length === 0 && Array.isArray(supabaseMemoryStore['dc_store']) && supabaseMemoryStore['dc_store'].length > 0) {
+    localDCs = supabaseMemoryStore['dc_store'];
+  }
 
   const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
   const cleanTarget = normalize(targetId);
@@ -8043,6 +8047,14 @@ app.put(['/api/deliverychallans/:id', '/api/delivery-challans/:id'], async (req,
   });
 
   if (!updatedRecord) {
+    updatedRecord = {
+      ...req.body,
+      id: req.body.id || targetId,
+      dcNo: req.body.dcNo || targetId,
+      updatedAt: new Date().toISOString()
+    };
+    updated.unshift(updatedRecord);
+  }
     return res.status(404).json({ success: false, error: `Delivery Challan ${targetId} not found.` });
   }
 
