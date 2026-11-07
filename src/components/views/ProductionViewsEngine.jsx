@@ -743,12 +743,13 @@ export default function ProductionViewsEngine(props) {
     window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomRecord } }));
 
     // 5. Notify Sales Person who raised this BOM with canceller's name, role & team
-    const salesPerson = bomToCancel.salesPerson || bomToCancel.salesExecutive || bomToCancel.createdBy || 'Sales Executive';
+    const salesPerson = (bomToCancel.salesPerson || bomToCancel.salesExecutive || bomToCancel.createdBy || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim();
+    const authenticEmpCode = bomToCancel.salesPersonCode || bomToCancel.createdById || bomToCancel.sales_person_code || bomToCancel.created_by_id || bomToCancel.salesPersonId || bomToCancel.salesPersonEmpCode || bomToCancel.creatorEmpCode || null;
     notifyBomCancelledByDispatch({
       bomCode: bCode,
       customerName: bomToCancel.customerName,
       salesPerson: salesPerson,
-      salesPersonEmpCode: bomToCancel.salesPersonId || bomToCancel.salesPersonEmpCode || bomToCancel.creatorEmpCode || null,
+      salesPersonEmpCode: authenticEmpCode,
       reason: cleanReason,
       cancelledBy: fullAttribution,
       cancelledByRole: position,

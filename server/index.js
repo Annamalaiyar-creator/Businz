@@ -3051,12 +3051,13 @@ app.get('/api/realtime-events', (req, res) => {
 app.get('/api/notifications', async (req, res) => {
   const empCode = req.query.empCode || req.headers['x-employee-code'] || '';
   const role = req.query.role || req.headers['x-user-role'] || '';
+  const userName = req.query.userName || req.headers['x-user-name'] || '';
   const unreadOnly = req.query.unreadOnly === 'true';
   const limit = parseInt(req.query.limit, 10) || 50;
   const since = req.query.since || null;
 
   try {
-    const result = await getNotificationsForUser({ empCode, role, unreadOnly, limit, since });
+    const result = await getNotificationsForUser({ empCode, role, userName, unreadOnly, limit, since });
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -3066,9 +3067,10 @@ app.get('/api/notifications', async (req, res) => {
 app.get('/api/notifications/unread-count', async (req, res) => {
   const empCode = req.query.empCode || req.headers['x-employee-code'] || '';
   const role = req.query.role || req.headers['x-user-role'] || '';
+  const userName = req.query.userName || req.headers['x-user-name'] || '';
 
   try {
-    const { unreadCount } = await getNotificationsForUser({ empCode, role, unreadOnly: true, limit: 1 });
+    const { unreadCount } = await getNotificationsForUser({ empCode, role, userName, unreadOnly: true, limit: 1 });
     res.json({ success: true, unreadCount });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

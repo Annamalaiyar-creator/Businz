@@ -268,7 +268,8 @@ class RealtimeNotificationService {
     try {
       const emp = encodeURIComponent(this.getEmpCode());
       const role = encodeURIComponent(this.getUserRole());
-      const res = await fetch(`/api/notifications?empCode=${emp}&role=${role}&limit=50`);
+      const userName = encodeURIComponent(this.getUserName());
+      const res = await fetch(`/api/notifications?empCode=${emp}&role=${role}&userName=${userName}&limit=50`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.notifications)) {
@@ -291,7 +292,8 @@ class RealtimeNotificationService {
     try {
       const emp = encodeURIComponent(this.getEmpCode());
       const role = encodeURIComponent(this.getUserRole());
-      const res = await fetch(`/api/notifications?empCode=${emp}&role=${role}&since=${encodeURIComponent(since)}&limit=50`);
+      const userName = encodeURIComponent(this.getUserName());
+      const res = await fetch(`/api/notifications?empCode=${emp}&role=${role}&userName=${userName}&since=${encodeURIComponent(since)}&limit=50`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.notifications)) {

@@ -85,16 +85,19 @@ function isClientRecipient(client, notification) {
   const targetUser = String(notification.recipient_user_name || notification.metadata?.recipientUserName || notification.metadata?.salesPerson || '').toLowerCase().trim();
   const targetRole = String(notification.recipient_role || '').toLowerCase().trim();
 
-  // Specific user targeted by employee code: ONLY that specific employee receives it
-  if (targetEmp) {
-    return Boolean(clientEmp && targetEmp === clientEmp);
+  // Specific user targeted by employee code: ONLY that specific employee (or CEO/MD) receives it
+  if (targetEmp && targetEmp !== 'ALL') {
+    if (clientEmp && targetEmp === clientEmp) return true;
+    if (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director')) return true;
+    return false;
   }
 
   // Specific user targeted by name/salesperson: ONLY that specific user receives it (NOT all salespersons!)
   if (targetUser && targetUser !== 'all' && targetUser !== 'sales executive' && targetUser !== 'sales' && targetUser !== 'system') {
     const isMatch = Boolean(
       (clientName && (clientName === targetUser || clientName.includes(targetUser) || targetUser.includes(clientName))) ||
-      (clientEmp && clientEmp.toLowerCase() === targetUser)
+      (clientEmp && clientEmp.toLowerCase() === targetUser) ||
+      (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director'))
     );
     return isMatch;
   }
@@ -184,13 +187,35 @@ export async function createInternalNotification(params = {}) {
     return { success: false, error: 'Missing required notification fields' };
   }
 
+  let effectiveRecipientEmp = recipientEmpCode;
+  const targetUser = recipientUserName || metadata?.recipientUserName || metadata?.salesPerson || null;
+  if (!effectiveRecipientEmp && targetUser && targetUser !== 'all' && targetUser !== 'sales executive' && targetUser !== 'sales' && targetUser !== 'system') {
+    try {
+      const uRes = await executeSql(`
+        SELECT employee_code FROM (
+          SELECT split_part(department, ':::', 1) as employee_code, name FROM public.users
+        ) sub WHERE employee_code IS NOT NULL AND LOWER(name) = LOWER($1) LIMIT 1;
+      `, [targetUser.trim()]);
+      if (uRes && uRes.rows && uRes.rows[0]?.employee_code) {
+        effectiveRecipientEmp = uRes.rows[0].employee_code;
+      }
+    } catch (_) {}
+  }
+
+  const enrichedMetadata = {
+    ...metadata,
+    recipientUserName: targetUser,
+    salesPerson: targetUser,
+    recipientEmpCode: effectiveRecipientEmp || null
+  };
+
   // Generate deterministic deduplication ID if not explicitly provided
   const computedDedupId = dedupId || [
     eventType,
     documentType,
     documentId,
-    recipientEmpCode || recipientRole || 'queue',
-    metadata?.stage || metadata?.status || metadata?.version || 'v1'
+    effectiveRecipientEmp || recipientRole || 'queue',
+    enrichedMetadata?.stage || enrichedMetadata?.status || enrichedMetadata?.version || 'v1'
   ].join('_');
 
   const notifId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -210,7 +235,7 @@ export async function createInternalNotification(params = {}) {
       RETURNING *;
     `, [
       notifId,
-      recipientEmpCode,
+      effectiveRecipientEmp,
       recipientRole,
       eventType,
       documentType,
@@ -222,7 +247,7 @@ export async function createInternalNotification(params = {}) {
       actorRole,
       targetTab,
       targetRecordId || documentId,
-      JSON.stringify(metadata || {}),
+      JSON.stringify(enrichedMetadata),
       computedDedupId
     ]);
 
@@ -283,34 +308,50 @@ export async function createInternalNotification(params = {}) {
  * Retrieve notifications for a specific employee / role with unread count
  */
 export async function getNotificationsForUser(options = {}) {
-  const { empCode = '', role = '', unreadOnly = false, limit = 40, since = null } = options;
+  const { empCode = '', role = '', userName = '', unreadOnly = false, limit = 40, since = null } = options;
 
   const normalizedEmp = String(empCode || '').toUpperCase().trim();
   const normalizedRole = String(role || '').toLowerCase().trim();
+  const normalizedUser = String(userName || options.name || '').toLowerCase().trim();
 
   let notifications = [];
   let unreadCount = 0;
 
   try {
-    const values = [normalizedEmp, normalizedRole];
+    const values = [normalizedEmp, normalizedRole, normalizedUser];
     const isManagerRole = /ceo|director|admin|technical|support|sales head|sales manager/i.test(normalizedRole);
     const leadManagerClause = isManagerRole ? `OR recipient_role IN ('lead_managers', 'management', 'admin', 'ceo')` : '';
 
     let query = `
       SELECT * FROM public.internal_notifications
       WHERE (
-        recipient_emp_code = $1 
-        OR recipient_role = $2 
+        -- 1. Targeted to this specific employee code
+        (recipient_emp_code IS NOT NULL AND recipient_emp_code != '' AND recipient_emp_code != 'ALL' AND recipient_emp_code = $1)
+        -- 2. Targeted to this specific user by name
+        OR (
+          $3 != '' AND (
+            (metadata->>'recipientUserName' IS NOT NULL AND LOWER(metadata->>'recipientUserName') = $3)
+            OR (metadata->>'salesPerson' IS NOT NULL AND LOWER(metadata->>'salesPerson') = $3)
+          )
+        )
+        -- 3. Broadcast to all users
         OR recipient_emp_code = 'ALL'
+        -- 4. Executive Management Oversight (CEO, MD, Admin)
         ${leadManagerClause}
-        OR (recipient_role IS NOT NULL AND (
-          $2 ILIKE '%' || recipient_role || '%' 
-          OR recipient_role ILIKE '%' || $2 || '%'
-          OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
-          OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
-          OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
-          OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
-        ))
+        -- 5. Generic department queue (ONLY when NO specific individual is targeted!)
+        OR (
+          (recipient_emp_code IS NULL OR recipient_emp_code = '' OR recipient_emp_code = 'ALL')
+          AND (metadata->>'recipientUserName' IS NULL OR metadata->>'recipientUserName' = '' OR LOWER(metadata->>'recipientUserName') IN ('all', 'sales executive', 'sales', 'system'))
+          AND (metadata->>'salesPerson' IS NULL OR metadata->>'salesPerson' = '' OR LOWER(metadata->>'salesPerson') IN ('all', 'sales executive', 'sales', 'system'))
+          AND recipient_role IS NOT NULL AND (
+            $2 ILIKE '%' || recipient_role || '%' 
+            OR recipient_role ILIKE '%' || $2 || '%'
+            OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
+            OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
+            OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
+            OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+          )
+        )
       )
     `;
 
@@ -334,20 +375,30 @@ export async function getNotificationsForUser(options = {}) {
     const countRes = await executeSql(`
       SELECT COUNT(*)::int as count FROM public.internal_notifications
       WHERE is_read = false AND (
-        recipient_emp_code = $1 
-        OR recipient_role = $2 
+        (recipient_emp_code IS NOT NULL AND recipient_emp_code != '' AND recipient_emp_code != 'ALL' AND recipient_emp_code = $1)
+        OR (
+          $3 != '' AND (
+            (metadata->>'recipientUserName' IS NOT NULL AND LOWER(metadata->>'recipientUserName') = $3)
+            OR (metadata->>'salesPerson' IS NOT NULL AND LOWER(metadata->>'salesPerson') = $3)
+          )
+        )
         OR recipient_emp_code = 'ALL'
         ${leadManagerClause}
-        OR (recipient_role IS NOT NULL AND (
-          $2 ILIKE '%' || recipient_role || '%' 
-          OR recipient_role ILIKE '%' || $2 || '%'
-          OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
-          OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
-          OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
-          OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
-        ))
+        OR (
+          (recipient_emp_code IS NULL OR recipient_emp_code = '' OR recipient_emp_code = 'ALL')
+          AND (metadata->>'recipientUserName' IS NULL OR metadata->>'recipientUserName' = '' OR LOWER(metadata->>'recipientUserName') IN ('all', 'sales executive', 'sales', 'system'))
+          AND (metadata->>'salesPerson' IS NULL OR metadata->>'salesPerson' = '' OR LOWER(metadata->>'salesPerson') IN ('all', 'sales executive', 'sales', 'system'))
+          AND recipient_role IS NOT NULL AND (
+            $2 ILIKE '%' || recipient_role || '%' 
+            OR recipient_role ILIKE '%' || $2 || '%'
+            OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
+            OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
+            OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
+            OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+          )
+        )
       );
-    `, [normalizedEmp, normalizedRole]);
+    `, [normalizedEmp, normalizedRole, normalizedUser]);
 
     if (countRes && countRes.rows && countRes.rows[0]) {
       unreadCount = Number(countRes.rows[0].count) || 0;

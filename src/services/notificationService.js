@@ -333,10 +333,23 @@ export function notifyDispatchCompletedToSales({ bomCode, customerName, salesPer
 
 export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, salesPersonEmpCode, reason, cancelledBy }) {
   const targetRep = (salesPerson && salesPerson !== 'Sales Executive' && salesPerson !== 'Sales') ? salesPerson : null;
+
+  // Resolve employee code if not already provided
+  let resolvedEmpCode = salesPersonEmpCode;
+  if (!resolvedEmpCode && targetRep && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || localStorage.getItem('controlroom_employees_store') || '[]');
+      const match = emps.find(e => (e.name && e.name.toLowerCase() === targetRep.toLowerCase()) || (e.employee_name && e.employee_name.toLowerCase() === targetRep.toLowerCase()));
+      if (match) {
+        resolvedEmpCode = match.employee_code || match.code || match.empId || null;
+      }
+    } catch (_) {}
+  }
+
   return sendServerWorkflowNotification({
-    recipientEmpCode: salesPersonEmpCode || null,
+    recipientEmpCode: resolvedEmpCode || null,
     recipientUserName: targetRep,
-    recipientRole: targetRep ? null : 'Sales Executive',
+    recipientRole: (resolvedEmpCode || targetRep) ? null : 'Sales Executive',
     eventType: 'BOM_CANCELLED',
     documentType: 'BOM',
     documentId: bomCode,
@@ -346,7 +359,8 @@ export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerso
     targetRecordId: bomCode,
     metadata: {
       recipientUserName: targetRep,
-      salesPerson: targetRep
+      salesPerson: targetRep,
+      salesPersonEmpCode: resolvedEmpCode || null
     },
     dedupId: `bom_cancel_${bomCode}_${Date.now()}`
   });

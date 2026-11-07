@@ -1654,11 +1654,14 @@ export default function BomOrdersView(props) {
     // 7. Notify Sales Person immediately
     try {
       if (typeof notifyBomCancelledByDispatch === 'function') {
+        const authenticSalesPerson = (bomToCancel.salesPerson || bomToCancel.createdBy || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim();
+        const authenticEmpCode = bomToCancel.salesPersonCode || bomToCancel.createdById || bomToCancel.sales_person_code || bomToCancel.created_by_id || bomToCancel.salesPersonId || bomToCancel.salesPersonEmpCode || bomToCancel.creatorEmpCode || null;
+
         notifyBomCancelledByDispatch({
           bomCode: bCode,
           customerName: bomToCancel.customerName || bomToCancel.clientName || 'Customer',
-          salesPerson: bomToCancel.salesPerson || bomToCancel.createdBy || 'Sales Executive',
-          salesPersonEmpCode: bomToCancel.salesPersonId || bomToCancel.salesPersonEmpCode || bomToCancel.creatorEmpCode || null,
+          salesPerson: authenticSalesPerson,
+          salesPersonEmpCode: authenticEmpCode,
           reason: reasonText,
           cancelledBy: fullAttribution,
           cancelledByRole: position,
