@@ -2057,6 +2057,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             (tab.id === 'accounts' && (activeSubTab === 'accounts' || activeSubTab === 'finance')) ||
             (tab.id === 'bom' && (activeSubTab === 'bom' || activeSubTab === 'bom-workflow')) ||
             (tab.id === 'production' && activeSubTab === 'production') ||
+            (tab.id === 'inventory-dashboard' && (activeSubTab === 'inventory-dashboard' || activeSubTab === 'inventory')) ||
             activeSubTab === tab.id;
           const TabIcon = tab.icon;
           return (
@@ -5181,7 +5182,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {/* ======================================================== */}
       {/* CATEGORY 6: INVENTORY & WAREHOUSE DASHBOARD              */}
       {/* ======================================================== */}
-      {activeSubTab === 'inventory-dashboard' && (
+      {(activeSubTab === 'inventory-dashboard' || activeSubTab === 'inventory') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* Inventory Top Ribbon (BUSINZ DESIGN SYSTEM) */}
           <CeoKpiGrid kpis={[
@@ -5223,20 +5224,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               onClick: () => onNavigateTab && onNavigateTab('Stock Status')
             }
           ]} />
-
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>6. Inventory & Warehouse Command Center</div>
-              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Live stock levels, reserved BOM allocations, low-stock reorder alerts, and GRN inward history</div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button onClick={() => onNavigateTab && onNavigateTab('Inventory Stores')} style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Inventory Overview</button>
-              <button onClick={() => onNavigateTab && onNavigateTab('Items Directory')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Physical Stock</button>
-              <button onClick={() => onNavigateTab && onNavigateTab('Stock Status')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Reserved Stock</button>
-              <button onClick={() => onNavigateTab && onNavigateTab('Material Reorder')} style={{ border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2', color: '#DC2626', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>Low Stock Alerts</button>
-              <button onClick={() => onNavigateTab && onNavigateTab('Goods Receipt Note')} style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>GRN History</button>
-            </div>
-          </div>
 
           <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>Live Inventory Stock Directory Snapshot</span>
