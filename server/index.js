@@ -6875,6 +6875,10 @@ app.delete('/api/boms/:id', async (req, res) => {
     if (error) {
       console.warn('[DELETE BOM Supabase notice]:', error.message);
     }
+    // Also delete directly from PostgreSQL bom_orders table if database is connected
+    if (isDbConnected()) {
+      await query(`DELETE FROM bom_orders WHERE id = $1 OR bom_code = $1 OR code = $1`, [cleanId]).catch(() => null);
+    }
     // 2. Update memory store & disk
     let current = supabaseMemoryStore.bom_store || [];
     if (!Array.isArray(current) || current.length === 0) {
