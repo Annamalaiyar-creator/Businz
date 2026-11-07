@@ -8194,16 +8194,22 @@ export default function BomOrdersView(props) {
                           {/* Total Dispatch Quantity Column */}
                           <td style={{ padding: '12px 10px', textAlign: 'center', backgroundColor: isPartBundle ? theme.bg : '#F8FAFC' }}>
                             {(() => {
+                              const isSub = Boolean(item.isSubPreset || item.subPresetName || item.subPresetId);
+                              const effectivePresetName = isSub ? item.subPresetName : (pInfo?.presetName || item.presetName);
+                              const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (pInfo?.unit || item.unit || item.uom);
+                              const effectiveSetCount = isSub ? (item.subSetCount || 1) : (pInfo?.setCount || 1);
                               const calcTotalDisp = calculateTotalDispatchQty(
                                 item,
-                                pInfo?.setCount || 1,
-                                pInfo?.presetName || item.presetName,
-                                item.category
+                                effectiveSetCount,
+                                effectivePresetName,
+                                item.category,
+                                effectiveUnit
                               );
                               const totalDisp = item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== ''
                                 ? item.totalDispatchQty
                                 : calcTotalDisp;
-                              const isRail = isRailPreset(pInfo?.presetName || item.presetName, item.category) || isRailPreset(item.name, item.category);
+                              const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
+                              const isRail = isRailPreset(effectivePresetName, item.category, item.subPresetName, item.name);
                               return (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                   <div style={{
@@ -8211,7 +8217,7 @@ export default function BomOrdersView(props) {
                                     alignItems: 'center',
                                     gap: '4px',
                                     backgroundColor: '#FFFFFF',
-                                    border: `1.5px solid ${isPartBundle ? theme.border : '#CBD5E1'}`,
+                                    border: `1.5px solid ${isPartBundle ? (isSub ? '#0D9488' : theme.border) : '#CBD5E1'}`,
                                     borderRadius: '6px',
                                     padding: '2px 4px'
                                   }}>
@@ -8231,7 +8237,7 @@ export default function BomOrdersView(props) {
                                         borderRadius: '4px',
                                         border: 'none',
                                         fontSize: '13px',
-                                        color: isPartBundle ? theme.primary : '#0E7490',
+                                        color: isPartBundle ? (isSub ? '#0F766E' : theme.primary) : '#0E7490',
                                         fontWeight: '800',
                                         textAlign: 'center',
                                         outline: 'none',
@@ -8243,8 +8249,8 @@ export default function BomOrdersView(props) {
                                     </span>
                                   </div>
                                   {isPartBundle && (
-                                    <span style={{ fontSize: '9px', color: isRail ? '#059669' : '#64748B', fontWeight: '600' }}>
-                                      {isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${pInfo?.setCount || 1} Set${(pInfo?.setCount || 1) > 1 ? 's' : ''}`}
+                                    <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                      {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${effectiveSetCount}`)}
                                     </span>
                                   )}
                                 </div>
