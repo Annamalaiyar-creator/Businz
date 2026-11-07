@@ -434,6 +434,14 @@ function App() {
     if (targetPo) {
       if (typeof targetPo === 'object' && (targetPo.searchCustomer || targetPo.targetCustomer)) {
         setTargetCustomerCode(targetPo.searchCustomer || targetPo.targetCustomer);
+      } else if (typeof targetPo === 'object' && (targetPo.recordId || targetPo.document_id || targetPo.highlightId)) {
+        const poTargetCode = targetPo.recordId || targetPo.document_id || targetPo.highlightId;
+        setTargetPoNo(poTargetCode);
+        if (targetPo.filterTab || targetPo.targetPoTab) {
+          setTargetPoTab(targetPo.filterTab || targetPo.targetPoTab);
+        } else if (tab === 'Purchase Orders') {
+          setTargetPoTab('Draft');
+        }
       } else {
         setTargetPoNo(targetPo);
       }

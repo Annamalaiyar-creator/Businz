@@ -5185,6 +5185,47 @@ app.post('/api/purchaseorders', async (req, res) => {
     }
     saveLocalPOs(localPOs);
 
+    // ⚡ Real-Time Workflow Notification to CEO for Review & Approval
+    try {
+      const actEmp = req.headers['x-employee-code'] || req.body.actorEmpCode || req.body.purchaser || null;
+      const actName = req.headers['x-user-name'] || req.body.actorName || req.body.purchaser || 'Procurement';
+      const actRole = req.headers['x-user-role'] || req.body.actorRole || 'Procurement';
+      const vendorName = localPOObj.vendor || 'Vendor';
+
+      const needsApproval = isPendingApproval || localPOObj.status === 'Draft / Pending Approval' || localPOObj.statusType === 'pending' || String(localPOObj.approvalRequired).toUpperCase() === 'YES';
+
+      if (needsApproval && !isNoApproval) {
+        createInternalNotification({
+          recipientRole: 'CEO',
+          eventType: 'PO_SUBMITTED_FOR_APPROVAL',
+          documentType: 'PO',
+          documentId: localPOObj.poNo,
+          title: `📋 PO ${localPOObj.poNo} Awaiting CEO Approval`,
+          message: `Purchase Order ${localPOObj.poNo} for ${vendorName} (${localPOObj.amount}) has been raised by ${actName} and is awaiting your review & approval.`,
+          actorEmpCode: actEmp,
+          actorName: actName,
+          actorRole: actRole,
+          targetTab: 'Purchase Orders',
+          targetRecordId: localPOObj.poNo,
+          metadata: {
+            poNo: localPOObj.poNo,
+            vendor: vendorName,
+            amount: localPOObj.amount,
+            purchaser: localPOObj.purchaser || actName,
+            status: localPOObj.status,
+            filterTab: 'Pending MD Approval'
+          },
+          dedupId: `po_pending_approval_${localPOObj.poNo}_${Date.now()}`
+        });
+      }
+
+      // Broadcast real-time PO update event to all connected clients
+      broadcastRealtimeEvent('purchase_order_created', { po: localPOObj });
+      broadcastRealtimeEvent('controlroom_po_updated', { po: localPOObj });
+    } catch (notifErr) {
+      console.warn('[PO Notification Warning]:', notifErr.message);
+    }
+
     return res.json({
       success: true,
       message: isPendingApproval 
@@ -8587,6 +8628,35 @@ app.post('/api/purchaseorders/:id/approve', async (req, res) => {
     await saveDatabaseStore('po_store', localPOs);
   } catch (sbErr) {
     console.warn('[approve] Supabase sync notice:', sbErr.message);
+  }
+
+  // ⚡ Broadcast approval update and notify Procurement in real time
+  try {
+    createInternalNotification({
+      recipientRole: 'Procurement Head',
+      eventType: 'PO_APPROVED',
+      documentType: 'PO',
+      documentId: targetId,
+      title: `✅ PO ${targetId} Approved by MD`,
+      message: `Purchase Order ${targetId} has been approved by ${approver} (${remarks}). Moved to Payment Process.`,
+      actorEmpCode: req.headers['x-employee-code'] || null,
+      actorName: approver,
+      actorRole: 'CEO',
+      targetTab: 'Purchase Orders',
+      targetRecordId: targetId,
+      metadata: {
+        poNo: targetId,
+        approver,
+        remarks,
+        filterTab: 'MD_APPROVED'
+      },
+      dedupId: `po_approved_${targetId}_${Date.now()}`
+    });
+
+    broadcastRealtimeEvent('purchase_order_updated', { id: targetId, status: 'MD Approved' });
+    broadcastRealtimeEvent('controlroom_po_updated', { id: targetId, status: 'MD Approved' });
+  } catch (notifErr) {
+    console.warn('[PO Approve Notification Warning]:', notifErr.message);
   }
 
   res.json({ success: true, message: `PO ${targetId} approved by ${approver} and marked as MD Approved!` });

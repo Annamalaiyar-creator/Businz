@@ -39,7 +39,7 @@ function getNotificationIcon(docType, eventType) {
     }
     return { icon: <GitBranch size={16} />, bg: '#ECFEFF', fg: '#0E7490' };
   }
-  if (dt === 'po') {
+  if (dt === 'po' || dt === 'purchase_order') {
     return { icon: <ShoppingCart size={16} />, bg: '#FAF5FF', fg: '#9333EA' };
   }
   if (dt === 'invoice') {

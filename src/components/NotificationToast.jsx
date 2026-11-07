@@ -23,7 +23,7 @@ function getToastIcon(docType, eventType, rawType) {
     }
     return { icon: <GitBranch size={18} />, bg: '#ECFEFF', fg: '#0E7490', tag: 'BOM ORDER' };
   }
-  if (dt === 'po') {
+  if (dt === 'po' || dt === 'purchase_order') {
     return { icon: <ShoppingCart size={18} />, bg: '#FAF5FF', fg: '#9333EA', tag: 'PURCHASE ORDER' };
   }
   if (dt === 'pi' || dt === 'invoice') {

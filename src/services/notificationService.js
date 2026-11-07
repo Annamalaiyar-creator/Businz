@@ -100,7 +100,10 @@ export function getVoiceAnnouncementText(notif) {
     case 'BOM_CANCELLED':
       return actorName ? `BOM cancelled by ${actorName}` : 'BOM order cancelled';
     case 'PO_SUBMITTED_FOR_APPROVAL':
-      return 'Purchase Order submitted for approval';
+    case 'PO_PENDING_APPROVAL':
+      return notif.document_id
+        ? `Purchase Order ${notif.document_id} is awaiting your review and approval.`
+        : 'Purchase Order submitted for your review and approval.';
     case 'PO_APPROVED':
       return 'Purchase Order approved by MD';
     case 'PO_REJECTED':
@@ -383,6 +386,27 @@ export function notifyInvoiceCompleted() {
 
 export function notifyVehicleLoadedAndDispatched() {
   return { success: true, disabled: true };
+}
+
+export function notifyPoSentForApproval({ poNo, vendor, amount, purchaser }) {
+  return sendServerWorkflowNotification({
+    recipientRole: 'CEO',
+    eventType: 'PO_SUBMITTED_FOR_APPROVAL',
+    documentType: 'PO',
+    documentId: poNo,
+    title: `📋 PO ${poNo} Awaiting CEO Approval`,
+    message: `Purchase Order ${poNo} for ${vendor || 'Vendor'} (${amount || ''}) has been raised by ${purchaser || 'Procurement'} and is awaiting your review & approval.`,
+    targetTab: 'Purchase Orders',
+    targetRecordId: poNo,
+    metadata: {
+      poNo,
+      vendor,
+      amount,
+      purchaser,
+      filterTab: 'Pending MD Approval'
+    },
+    dedupId: `po_pending_approval_${poNo}`
+  });
 }
 
 export function notifyPurchaseOrderApproved() {

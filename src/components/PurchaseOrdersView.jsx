@@ -6,6 +6,7 @@ import StatusBadge from './StatusBadge';
 import NotificationToast from './NotificationToast';
 import ModernDateRangePicker from './ModernDateRangePicker';
 import { getNextSequence } from '../utils/sequenceGenerator';
+import { notifyPoSentForApproval } from '../services/notificationService';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -918,11 +919,35 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     const syncPOToServer = async (isEdit) => {
       try {
+        const actorEmp = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
+        const actorName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || loggedInUserName || 'Procurement';
+        const actorRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || 'Procurement';
+
         const res = await fetch('/api/purchaseorders', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newPO)
+          headers: {
+            'Content-Type': 'application/json',
+            'x-employee-code': actorEmp,
+            'x-user-name': actorName,
+            'x-user-role': actorRole
+          },
+          body: JSON.stringify({
+            ...newPO,
+            actorEmpCode: actorEmp,
+            actorName,
+            actorRole
+          })
         });
+
+        // Trigger real-time notification to CEO for review & approval
+        if (newPO.status === 'Draft / Pending Approval' || newPO.statusType === 'pending' || String(newPO.approvalRequired).toUpperCase() === 'YES') {
+          notifyPoSentForApproval({
+            poNo: newPO.poNo,
+            vendor: newPO.vendor,
+            amount: newPO.amount,
+            purchaser: newPO.purchaser || loggedInUserName
+          });
+        }
 
         const contentType = res.headers.get('content-type') || '';
         if (res.ok && contentType.includes('application/json')) {
