@@ -3858,44 +3858,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {/* Pipeline Scope Selector: All Orders vs Period */}
-                <div style={{ display: 'inline-flex', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  <button
-                    type="button"
-                    onClick={() => setOtcScope('ALL')}
-                    style={{
-                      border: 'none',
-                      backgroundColor: otcScope === 'ALL' ? '#0E7490' : 'transparent',
-                      color: otcScope === 'ALL' ? '#FFFFFF' : '#475569',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    ⚡ All Pipeline ({allBomList.length + allPiList.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOtcScope('PERIOD')}
-                    style={{
-                      border: 'none',
-                      backgroundColor: otcScope === 'PERIOD' ? '#0E7490' : 'transparent',
-                      color: otcScope === 'PERIOD' ? '#FFFFFF' : '#475569',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    📅 {selectedPeriod} ({bomList.length + piList.length})
-                  </button>
-                </div>
-
                 {selectedBomLifecycleStage !== 'ALL' && (
                   <button
                     type="button"
@@ -3934,7 +3896,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     {selectedBomLifecycleStage === 'STEP 01' ? 'PIs Showing:' : 'Orders Showing:'}
                   </span>
                   <span style={{ color: '#0E7490', fontWeight: '800' }}>
-                    {selectedBomLifecycleStage === 'STEP 01' ? `${displayPiList.length} PIs` : `${displayBomList.length} of ${otcScope === 'ALL' ? allBomList.length : bomList.length}`}
+                    {selectedBomLifecycleStage === 'STEP 01' ? `${displayPiList.length} PIs` : `${displayBomList.length} of ${allBomList.length}`}
                   </span>
                 </div>
               </div>
