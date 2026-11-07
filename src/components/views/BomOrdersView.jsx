@@ -1781,8 +1781,10 @@ export default function BomOrdersView(props) {
       setNewBomDeliveryDate(pendingPi.deliveryDate || '');
       if (pendingPi.creditDays) setNewBomCreditDays(pendingPi.creditDays);
       if (pendingPi.partialAmount) setNewBomPartialAmount(String(pendingPi.partialAmount));
-      if (pendingPi.paymentProofDoc || pendingPi.proofDoc) setNewBomPaymentProofDoc(pendingPi.paymentProofDoc || pendingPi.proofDoc);
-      if (pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc) setNewBomDeliveryProofDoc(pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc);
+      const piPayProof = pendingPi.paymentProofDocs || pendingPi.paymentProofDoc || pendingPi.proofDoc || null;
+      setNewBomPaymentProofDoc(piPayProof ? (Array.isArray(piPayProof) ? piPayProof : [piPayProof]) : null);
+      const piDelProof = pendingPi.deliveryProofDocs || pendingPi.deliveryAddressProofDoc || pendingPi.deliveryProofDoc || null;
+      setNewBomDeliveryProofDoc(piDelProof ? (Array.isArray(piDelProof) ? piDelProof : [piDelProof]) : null);
       setNewBomTransportMode(pendingPi.transportMode || 'Transport');
       setNewBomTransporterName(pendingPi.transporterName || pendingPi.transporter || '');
       setNewBomDestination(pendingPi.destination || pendingPi.deliveryCity || pendingPi.city || '');
@@ -5783,6 +5785,8 @@ export default function BomOrdersView(props) {
                       setNewBomEmail('');
                       setNewBomGstNo('');
                       setSameAsBilling(true);
+                      setNewBomPaymentProofDoc(null);
+                      setNewBomDeliveryProofDoc(null);
                     } else if (bomConfirmModal === 'draft' || bomConfirmModal === 'create') {
                       // MULTI-CLICK MUTEX GUARD: Drop any secondary clicks while submitting
                       if (isSubmittingBomRef.current) {
@@ -10174,24 +10178,27 @@ export default function BomOrdersView(props) {
                           {paymentType}
                         </strong>
                         {(() => {
-                          const pDocs = Array.isArray(quickPreviewRecord.paymentProofDocs) && quickPreviewRecord.paymentProofDocs.length > 0
+                          const pDocs = (Array.isArray(quickPreviewRecord.paymentProofDocs) && quickPreviewRecord.paymentProofDocs.length > 0)
                             ? quickPreviewRecord.paymentProofDocs
                             : (Array.isArray(quickPreviewRecord.payments?.proofDocObjs) && quickPreviewRecord.payments.proofDocObjs.length > 0)
                               ? quickPreviewRecord.payments.proofDocObjs
-                              : (quickPreviewRecord.paymentProofDoc || quickPreviewRecord.payments?.proofDoc || sourcePi?.paymentProofDoc)
-                                ? [quickPreviewRecord.paymentProofDoc || { name: quickPreviewRecord.payments?.proofDoc, dataUrl: quickPreviewRecord.payments?.proofDocData } || sourcePi?.paymentProofDoc]
-                                : [];
-                          if (pDocs.length === 0) return null;
+                              : (quickPreviewRecord.paymentProofDoc
+                                  ? (Array.isArray(quickPreviewRecord.paymentProofDoc) ? quickPreviewRecord.paymentProofDoc : [quickPreviewRecord.paymentProofDoc])
+                                  : (quickPreviewRecord.payments?.proofDoc
+                                      ? [{ name: quickPreviewRecord.payments.proofDoc, dataUrl: quickPreviewRecord.payments.proofDocData }]
+                                      : (sourcePi?.paymentProofDoc ? [sourcePi.paymentProofDoc] : [])));
+                          const validPDocs = (pDocs || []).filter(d => Boolean(d && (typeof d === 'string' ? d.trim() : (d.name || d.url || d.dataUrl))));
+                          if (validPDocs.length === 0) return null;
                           return (
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                              {pDocs.map((pDoc, pIdx) => (
+                              {validPDocs.map((pDoc, pIdx) => (
                                 <button
                                   key={pIdx}
                                   type="button"
                                   onClick={() => setPreviewDocModal({ title: `Payment Proof #${pIdx + 1}: ${pDoc.name || pDoc.originalName || 'Slip'}`, doc: pDoc })}
                                   style={{ border: '1px solid #BBF7D0', backgroundColor: '#F0FDF4', color: '#166534', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
                                 >
-                                  <Eye size={10} /> Proof {pDocs.length > 1 ? `#${pIdx + 1}` : ''}
+                                  <Eye size={10} /> Proof {validPDocs.length > 1 ? `#${pIdx + 1}` : ''}
                                 </button>
                               ))}
                             </div>

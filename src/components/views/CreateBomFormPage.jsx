@@ -106,6 +106,14 @@ export default function CreateBomFormPage(props) {
     }
   }, []);
 
+  // Cleanup proof documents on unmount to prevent state leakage across sessions
+  React.useEffect(() => {
+    return () => {
+      if (typeof setNewBomPaymentProofDoc === 'function') setNewBomPaymentProofDoc(null);
+      if (typeof setNewBomDeliveryProofDoc === 'function') setNewBomDeliveryProofDoc(null);
+    };
+  }, []);
+
   const filteredCustomerSuggestions = React.useMemo(() => {
     const list = Array.isArray(customersData) ? customersData : [];
     const q = (newBomProductName || '').toLowerCase().trim();
@@ -143,6 +151,7 @@ export default function CreateBomFormPage(props) {
 
     setSameAsBilling(isSame);
     setNewBomDeliveryProofDoc(null);
+    if (typeof setNewBomPaymentProofDoc === 'function') setNewBomPaymentProofDoc(null);
 
     // Auto-fill billing address
     setNewBomBillingStreet(bObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '');
@@ -2417,6 +2426,8 @@ export default function CreateBomFormPage(props) {
                     setNewBomDeliveryState('');
                     setNewBomDeliveryPincode('');
                     setSameAsBilling(false);
+                    if (typeof setNewBomPaymentProofDoc === 'function') setNewBomPaymentProofDoc(null);
+                    if (typeof setNewBomDeliveryProofDoc === 'function') setNewBomDeliveryProofDoc(null);
                   } else if (bomConfirmModal === 'draft' || bomConfirmModal === 'create') {
                     const isDraft = bomConfirmModal === 'draft';
                     const target = (newBomProductName || '').toLowerCase().trim();
@@ -2884,6 +2895,8 @@ export default function CreateBomFormPage(props) {
                     setNewBomDeliveryState('');
                     setNewBomDeliveryPincode('');
                     setSameAsBilling(false);
+                    if (typeof setNewBomPaymentProofDoc === 'function') setNewBomPaymentProofDoc(null);
+                    if (typeof setNewBomDeliveryProofDoc === 'function') setNewBomDeliveryProofDoc(null);
                     setShowBOMForm(false);
                     setBomConfirmModal(null);
                   }
