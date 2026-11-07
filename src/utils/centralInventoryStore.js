@@ -1011,6 +1011,147 @@ class CentralInventoryStore {
     } catch (_) {}
   }
 
+  // Credit / Inward Stock into Central Inventory (e.g. Job Work return, DC close, finished goods receipt)
+  addStock(itemNameOrCode, qty, reason = '', user = 'Store Incharge') {
+    const cleanQty = parseFloat(qty) || 0;
+    if (cleanQty <= 0) return;
+    const timestamp = new Date().toISOString();
+
+    const rawCode = String(itemNameOrCode || '').toUpperCase().trim();
+    const pCode = CANONICAL_PRODUCT_ALIASES[rawCode] || rawCode;
+    const pName = String(itemNameOrCode || '').trim();
+    const normPName = normalizeProductName(pName);
+
+    // 1. Locate existing inventory item or initialize new
+    let item = this.items.find(i => {
+      const iCode = String(i.code || i.sku || '').toUpperCase().trim();
+      const normIName = normalizeProductName(i.name);
+      if (pCode && iCode === pCode) return true;
+      if (normPName && normIName === normPName) return true;
+      if (normPName && (normIName.includes(normPName) || normPName.includes(normIName))) return true;
+      if (pName && i.name && i.name.toLowerCase() === pName.toLowerCase()) return true;
+      return false;
+    });
+
+    const targetCode = item ? item.code : (pCode || `ITEM-${Date.now().toString().slice(-4)}`);
+    const targetName = item ? item.name : pName;
+    const targetUnit = (item && (item.uom || item.unit)) || 'Nos';
+
+    if (item) {
+      const curPhysical = parseFloat(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock || 0))) || 0;
+      const nextStock = curPhysical + cleanQty;
+      item.stock = nextStock;
+      item.physicalStock = nextStock;
+      item.available = nextStock;
+      item.availableStock = nextStock;
+      item.onHand = nextStock;
+      item.status = nextStock <= 0 ? 'Out of Stock' : (nextStock <= (item.minLevel || 50) ? 'Low Stock' : 'In Stock');
+    } else {
+      const newItem = {
+        id: `ITEM-${Date.now()}`,
+        code: targetCode,
+        sku: targetCode,
+        name: targetName,
+        stock: cleanQty,
+        physicalStock: cleanQty,
+        available: cleanQty,
+        availableStock: cleanQty,
+        onHand: cleanQty,
+        openingStock: 0,
+        uom: targetUnit,
+        unit: targetUnit,
+        category: 'Finished Goods',
+        status: 'In Stock',
+        createdAt: timestamp
+      };
+      this.items.unshift(newItem);
+      item = newItem;
+    }
+
+    // 2. Record ledger transaction
+    this.transactions.unshift({
+      id: `TX-INW-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp,
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      type: TX_TYPES.PURCHASE_RECEIPT || 'INWARD_RETURN',
+      itemCode: targetCode,
+      itemName: targetName,
+      qty: cleanQty,
+      balanceAfter: item.stock,
+      unit: targetUnit,
+      refDoc: reason || 'DC Inward Return',
+      batchNo: `INW-${Date.now().toString().slice(-6)}`,
+      party: 'Job Work Processing Unit',
+      user: user || 'Store Incharge',
+      notes: reason || 'Goods received back from Delivery Challan / Job Work'
+    });
+
+    // 3. Keep raw materials store in sync if matched
+    let currentMats = [];
+    try {
+      const rawStr = localStorage.getItem('controlroom_raw_materials_store');
+      if (rawStr) currentMats = JSON.parse(rawStr);
+    } catch (_) {}
+    if (Array.isArray(currentMats)) {
+      let m = currentMats.find(mat => {
+        const mCode = String(mat.code || '').toUpperCase().trim();
+        const normMName = normalizeProductName(mat.name);
+        return (pCode && mCode === pCode) || (normPName && normMName === normPName);
+      });
+      if (m) {
+        const curM = parseFloat(m.stock !== undefined ? m.stock : (m.physicalStock || 0)) || 0;
+        const nextM = curM + cleanQty;
+        m.stock = nextM;
+        m.availableStock = nextM;
+        m.physicalStock = nextM;
+        m.lastUpdated = `DC Inward: +${cleanQty} ${targetUnit}`;
+        m.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (m.minLevel || 50) ? 'Low Stock' : 'In Stock');
+      }
+      try {
+        localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
+        saveCloudStore('raw_materials_store', currentMats);
+      } catch (_) {}
+    }
+
+    // 4. Keep items directory / item store list in sync
+    let currentItems = [];
+    try {
+      const itemsStr = localStorage.getItem('controlroom_items_list');
+      if (itemsStr) currentItems = JSON.parse(itemsStr);
+    } catch (_) {}
+    if (Array.isArray(currentItems)) {
+      let itMatch = currentItems.find(it => {
+        const itCode = String(it.code || it.sku || '').toUpperCase().trim();
+        const itNorm = normalizeProductName(it.name);
+        return (pCode && itCode === pCode) || (normPName && itNorm === normPName);
+      });
+      if (itMatch) {
+        const curIt = parseFloat(itMatch.stock !== undefined ? itMatch.stock : (itMatch.physicalStock || 0)) || 0;
+        const nextIt = curIt + cleanQty;
+        itMatch.stock = nextIt;
+        itMatch.availableStock = nextIt;
+        itMatch.physicalStock = nextIt;
+        itMatch.status = nextIt <= 0 ? 'Out of Stock' : (nextIt <= (itMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
+      }
+      try {
+        localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
+        saveCloudStore('item_store', currentItems);
+      } catch (_) {}
+    }
+
+    this.saveItems();
+    this.saveTransactions();
+    this.notifyChange();
+
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+      window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_raw_materials_store' } }));
+      window.dispatchEvent(new Event('central_inventory_updated'));
+      window.dispatchEvent(new Event('controlroom_items_update'));
+      window.dispatchEvent(new Event('storage'));
+    } catch (_) {}
+  }
+
   // Restore / Unblock Inventory when a BOM is Cancelled
   restoreStockForBOM(bomCode, itemsList = [], user = 'Production Admin') {
     if (!bomCode) return;

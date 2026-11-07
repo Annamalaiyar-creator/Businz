@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart, Building2, MapPin, Ban } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart, Building2, MapPin, Ban, Package } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
 import StatusBadge from './StatusBadge';
@@ -8,6 +8,7 @@ import ModernDateRangePicker from './ModernDateRangePicker';
 import { getNextSequence } from '../utils/sequenceGenerator';
 import { notifyPoSentForApproval } from '../services/notificationService';
 import { parseAddressString, formatAddressObj, getVendorLocations } from '../utils/otherViewsShared';
+import CreateProductModal from './views/CreateProductModal';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -614,44 +615,73 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   // Bulk Items Modal State (Zoho Books Style)
   const [showBulkItemModal, setShowBulkItemModal] = useState(false);
+  const [showCreateProductModal, setShowCreateProductModal] = useState(false);
   const [bulkItemSearch, setBulkItemSearch] = useState('');
   const [selectedBulkItems, setSelectedBulkItems] = useState({}); // { [itemKey]: { item, qty: 1 } }
   const [bulkCategoryFilter, setBulkCategoryFilter] = useState('All');
 
+  const handleProductCreatedFromModal = (newProduct) => {
+    if (!newProduct) return;
+    setZohoItems(prev => [newProduct, ...(prev || []).filter(i => (i.code || i.sku || i.name) !== (newProduct.code || newProduct.sku || newProduct.name))]);
+    setItems(prev => {
+      const row = {
+        name: newProduct.name,
+        description: newProduct.description || '',
+        account: newProduct.category === 'Raw Material' ? 'Raw Material' : 'Finished Goods',
+        qty: 1,
+        unit: (newProduct.unit || 'NOS').toUpperCase(),
+        rate: Number(newProduct.purchaseRate || newProduct.rate) || 0,
+        tax: Number(newProduct.tax !== undefined ? newProduct.tax : 18)
+      };
+      if (prev.length > 0 && !prev[prev.length - 1].name) {
+        const copy = [...prev];
+        copy[copy.length - 1] = row;
+        return copy;
+      }
+      return [...prev, row];
+    });
+  };
+
   const availableCatalogItems = useMemo(() => {
     const map = new Map();
-    // 1. Items from Zoho Books / Backend
-    (zohoItems || []).forEach(it => {
+    const addItem = (it) => {
+      if (!it || !it.name) return;
       const name = String(it.name || '').trim();
-      if (name && !map.has(name.toLowerCase())) {
-        map.set(name.toLowerCase(), {
+      if (!name || /^\d{10,}$/.test(name)) return;
+      const key = name.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, {
           id: it.id || it.itemId || name,
           name: it.name,
-          sku: it.sku || it.itemCode || '',
+          sku: it.sku || it.code || it.itemCode || '',
           description: it.description || '',
           account: it.account || 'Raw Material',
-          unit: (it.unit || 'MT').toUpperCase(),
-          rate: Number(it.rate) || 0,
+          unit: (it.unit || it.uom || 'NOS').toUpperCase(),
+          rate: Number(it.rate || it.purchaseRate || it.salesRate) || 0,
           tax: it.tax !== undefined && it.tax !== '' ? Number(it.tax) : 18
         });
       }
-    });
-    // 2. Preset / Standard Materials
-    PRESET_MATERIALS.forEach(it => {
-      if (!map.has(it.name.toLowerCase())) {
-        map.set(it.name.toLowerCase(), {
-          id: it.name,
-          name: it.name,
-          sku: '',
-          description: '',
-          account: it.account || 'Raw Material',
-          unit: it.unit || 'MT',
-          rate: Number(it.rate) || 0,
-          tax: it.tax || 18
-        });
+    };
+
+    // 1. Items from Zoho Books / Backend Items Directory (/api/items)
+    (zohoItems || []).forEach(addItem);
+
+    // 2. Fallback to localStorage controlroom_item_store
+    try {
+      const raw = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) parsed.forEach(addItem);
       }
-    });
-    return Array.from(map.values());
+    } catch (_) {}
+
+    // 3. Fallback to centralInventoryStore
+    try {
+      const centralItems = centralInventoryStore.getItems();
+      if (Array.isArray(centralItems)) centralItems.forEach(addItem);
+    } catch (_) {}
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [zohoItems]);
 
   const filteredBulkCatalog = useMemo(() => {
@@ -5023,31 +5053,54 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                               <td style={{ padding: '8px 12px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  <input id={`purchase-orders-or-item-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`orItemName_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Type or select Item Name"
-                                    type="text"
-                                    list={`po-item-datalist-${idx}`}
+                                  <select
+                                    id={`purchase-orders-item-select-${typeof idx !== 'undefined' ? idx : 0}`}
+                                    name={`poItemSelect_${typeof idx !== 'undefined' ? idx : 0}`}
+                                    aria-label="Select Item from Item Directory"
                                     value={item.name || ''}
                                     onChange={(e) => {
                                       const val = e.target.value;
-                                      const found = zohoItems.find(zi => zi.name.toLowerCase() === val.toLowerCase());
+                                      const found = availableCatalogItems.find(zi => zi.name.toLowerCase() === val.toLowerCase());
                                       handleItemChange(idx, 'name', val);
                                       if (found) {
                                         handleItemChange(idx, 'rate', found.rate || 0);
                                         handleItemChange(idx, 'unit', (found.unit || 'NOS').toUpperCase());
+                                        if (found.account) {
+                                          handleItemChange(idx, 'account', found.account);
+                                        }
+                                        if (found.tax !== undefined && found.tax !== null) {
+                                          handleItemChange(idx, 'tax', Number(found.tax));
+                                        }
                                         if (found.description && !item.description) {
                                           handleItemChange(idx, 'description', found.description);
                                         }
                                       }
                                     }}
-                                    placeholder="Type or select Item Name..."
                                     required
-                                    style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
-                                   />
-                                  <datalist id={`po-item-datalist-${idx}`}>
-                                    {zohoItems.map((zi, zidx) => (
-                                      <option key={zidx} value={zi.name}>{zi.sku ? `[${zi.sku}] ${zi.name}` : zi.name}</option>
+                                    style={{
+                                      width: '100%',
+                                      height: '34px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #CBD5E1',
+                                      padding: '0 8px',
+                                      fontSize: '12px',
+                                      backgroundColor: '#FFFFFF',
+                                      color: '#0F172A',
+                                      fontWeight: '600',
+                                      cursor: 'pointer',
+                                      outline: 'none'
+                                    }}
+                                  >
+                                    <option value="" disabled>-- Select Item from Item Directory --</option>
+                                    {item.name && !availableCatalogItems.some(zi => zi.name.toLowerCase() === item.name.toLowerCase()) && (
+                                      <option value={item.name}>{item.name}</option>
+                                    )}
+                                    {availableCatalogItems.map((zi, zidx) => (
+                                      <option key={zidx} value={zi.name}>
+                                        {zi.sku ? `[${zi.sku}] ${zi.name}` : zi.name}
+                                      </option>
                                     ))}
-                                  </datalist>
+                                  </select>
                                   <input id={`purchase-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter item description / specifications"
                                     type="text"
                                     value={item.description || ''}
@@ -5201,6 +5254,49 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       +
                     </span>
                     Add Items in Bulk
+                  </button>
+
+                  {/* Add New Product Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateProductModal(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      backgroundColor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '13.5px',
+                      fontWeight: '600',
+                      color: '#1E293B',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        backgroundColor: '#3B82F6',
+                        color: '#FFFFFF',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        lineHeight: 1,
+                        flexShrink: 0
+                      }}
+                    >
+                      +
+                    </span>
+                    Add New Product
                   </button>
                 </div>
 
@@ -5908,6 +6004,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           </div>
         );
       })()}
+
+      {/* ==================== CREATE NEW PRODUCT MODAL ==================== */}
+      <CreateProductModal
+        isOpen={showCreateProductModal}
+        onClose={() => setShowCreateProductModal(false)}
+        onProductCreated={handleProductCreatedFromModal}
+        defaultCategory="Raw Material"
+      />
 
       {/* ==================== SAVE CONFIRMATION POPUP ==================== */}
       {showSaveConfirm && (

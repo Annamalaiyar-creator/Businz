@@ -13,6 +13,8 @@ import { saveCloudStore, fetchCloudStore } from '../utils/supabaseDataSync';
 import { getNextSequence } from '../utils/sequenceGenerator';
 import { getHsnCode } from '../utils/hsnCodeService';
 import { parseAddressString, formatAddressObj, getVendorLocations } from '../utils/otherViewsShared';
+import { getItems } from '../services/businzDataService';
+import CreateProductModal from './views/CreateProductModal';
 
 // ==================== COMPANY PROFILES (OFFICIAL BUSINZ LOCATIONS) ====================
 export const COMPANY_LOCATIONS = {
@@ -143,8 +145,11 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   const [deliveryLocationId, setDeliveryLocationId] = useState('registered_office');
   const [billingLocationId, setBillingLocationId] = useState('registered_office');
 
+  // Dynamic suggestions: known customers
+  const [knownCustomers, setKnownCustomers] = useState([]);
+
   const currentCustomerObj = useMemo(() => {
-    return knownCustomers.find(c => c.name.toLowerCase() === (customerName || '').toLowerCase()) || null;
+    return (knownCustomers || []).find(c => (c.name || '').toLowerCase() === (customerName || '').toLowerCase()) || null;
   }, [knownCustomers, customerName]);
 
   const customerLocations = useMemo(() => {
@@ -207,8 +212,34 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
   const [bulkItemSearch, setBulkItemSearch] = useState('');
   const [selectedBulkItems, setSelectedBulkItems] = useState({});
 
-  // Dynamic suggestions: known customers
-  const [knownCustomers, setKnownCustomers] = useState([]);
+  // Dynamic suggestions: Items Directory
+  const [itemDirectoryList, setItemDirectoryList] = useState([]);
+  const [showCreateProductModal, setShowCreateProductModal] = useState(false);
+
+  const handleProductCreatedFromModal = (newProduct) => {
+    if (!newProduct) return;
+    setItemDirectoryList(prev => [newProduct, ...(prev || []).filter(i => (i.code || i.sku || i.name) !== (newProduct.code || newProduct.sku || newProduct.name))]);
+    setItems(prev => {
+      const row = {
+        id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        name: newProduct.name,
+        description: newProduct.description || '',
+        brand: 'VRM',
+        wp: '',
+        qty: 1,
+        unit: (newProduct.unit || 'NOS').toUpperCase(),
+        rate: Number(newProduct.purchaseRate || newProduct.rate) || 0,
+        tax: Number(newProduct.tax !== undefined ? newProduct.tax : 18)
+      };
+      if (prev.length > 0 && !prev[prev.length - 1].name) {
+        const copy = [...prev];
+        copy[copy.length - 1] = row;
+        return copy;
+      }
+      return [...prev, row];
+    });
+    showCustomAlert(`Product "${newProduct.name}" registered in Item Directory & Inventory!`, 'Product Added', 'success');
+  };
 
   // Toast / Alert notification
   const [toastAlert, setToastAlert] = useState(null);
@@ -302,6 +333,13 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
     } catch (_) {}
 
     setKnownCustomers(Array.from(custMap.values()));
+
+    // Load registered items strictly from Items Directory
+    getItems().then(safeItems => {
+      if (Array.isArray(safeItems) && safeItems.length > 0) {
+        setItemDirectoryList(safeItems);
+      }
+    }).catch(() => {});
   }, []);
 
   // Generate next sequential DC Number (VRMS/JW/26-27/001 format or customized preference)
@@ -821,20 +859,50 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
 
   // ==================== BULK ITEM MODAL HANDLER ====================
   const availableInventoryItems = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+
+    const addItem = (it) => {
+      if (!it || !it.name) return;
+      const rawName = String(it.name).trim();
+      if (!rawName || /^\d{10,}$/.test(rawName)) return;
+      const key = rawName.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      list.push({
+        id: it.id || it.itemId || rawName,
+        name: rawName,
+        code: it.code || it.sku || it.itemCode || '',
+        description: it.description || '',
+        category: it.category || 'Item Directory',
+        unit: (it.unit || it.uom || 'NOS').toUpperCase(),
+        rate: Number(it.rate || it.purchaseRate || it.salesRate) || 0,
+        tax: it.tax !== undefined && it.tax !== '' ? Number(it.tax) : 18
+      });
+    };
+
+    // 1. Items fetched from Items Directory
+    if (Array.isArray(itemDirectoryList) && itemDirectoryList.length > 0) {
+      itemDirectoryList.forEach(addItem);
+    }
+
+    // 2. Fallback to localStorage controlroom_item_store
     try {
-      const items = centralInventoryStore.getItems();
-      if (Array.isArray(items) && items.length > 0) return items;
+      const rawStore = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
+      if (rawStore) {
+        const parsed = JSON.parse(rawStore);
+        if (Array.isArray(parsed)) parsed.forEach(addItem);
+      }
     } catch (_) {}
-    return [
-      { name: 'GI Steel Coil 2mm', code: 'RM-COIL-01', category: 'Raw Material', rate: 45000, unit: 'MT', tax: 18 },
-      { name: 'GI Steel Coil 1.6mm', code: 'RM-COIL-02', category: 'Raw Material', rate: 43000, unit: 'MT', tax: 18 },
-      { name: 'CRC Sheet 1.2mm', code: 'RM-CRC-01', category: 'Raw Material', rate: 52000, unit: 'MT', tax: 18 },
-      { name: 'Self Drilling Screw', code: 'CON-SCR-01', category: 'Consumables', rate: 3.5, unit: 'NOS', tax: 18 },
-      { name: 'Hex Bolt M10', code: 'FAS-BLT-01', category: 'Fasteners', rate: 6.2, unit: 'NOS', tax: 18 },
-      { name: 'Structural Steel I-Beam', code: 'RM-BEAM-01', category: 'Raw Material', rate: 48000, unit: 'MT', tax: 18 },
-      { name: 'Electrical Copper Cable 4sqmm', code: 'CON-CAB-01', category: 'Consumables', rate: 120, unit: 'MTR', tax: 18 }
-    ];
-  }, []);
+
+    // 3. Fallback to centralInventoryStore
+    try {
+      const centralItems = centralInventoryStore.getItems();
+      if (Array.isArray(centralItems)) centralItems.forEach(addItem);
+    } catch (_) {}
+
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [itemDirectoryList]);
 
   const handleBulkToggle = (itemKey, item) => {
     setSelectedBulkItems(prev => {
@@ -2501,9 +2569,10 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                           <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ padding: '8px 12px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <input
-                                  type="text"
-                                  list={`dc-item-datalist-${idx}`}
+                                <select
+                                  id={`dc-item-select-${typeof idx !== 'undefined' ? idx : 0}`}
+                                  name={`dcItemSelect_${typeof idx !== 'undefined' ? idx : 0}`}
+                                  aria-label="Select Item from Item Directory"
                                   value={item.name || ''}
                                   onChange={(e) => {
                                     const val = e.target.value;
@@ -2512,20 +2581,39 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                                     if (found) {
                                       handleItemChange(idx, 'rate', found.rate || 0);
                                       handleItemChange(idx, 'unit', (found.unit || 'NOS').toUpperCase());
+                                      if (found.tax !== undefined && found.tax !== null) {
+                                        handleItemChange(idx, 'tax', Number(found.tax));
+                                      }
                                       if (found.description && !item.description) {
                                         handleItemChange(idx, 'description', found.description);
                                       }
                                     }
                                   }}
-                                  placeholder="Type or select Item Name..."
                                   required
-                                  style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
-                                />
-                                <datalist id={`dc-item-datalist-${idx}`}>
+                                  style={{
+                                    width: '100%',
+                                    height: '34px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #CBD5E1',
+                                    padding: '0 8px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#FFFFFF',
+                                    color: '#0F172A',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    outline: 'none'
+                                  }}
+                                >
+                                  <option value="" disabled>-- Select Item from Item Directory --</option>
+                                  {item.name && !availableInventoryItems.some(ai => ai.name.toLowerCase() === item.name.toLowerCase()) && (
+                                    <option value={item.name}>{item.name}</option>
+                                  )}
                                   {availableInventoryItems.map((ai, zidx) => (
-                                    <option key={zidx} value={ai.name}>{ai.code ? `[${ai.code}] ${ai.name}` : ai.name}</option>
+                                    <option key={zidx} value={ai.name}>
+                                      {ai.code ? `[${ai.code}] ` : ''}{ai.name}
+                                    </option>
                                   ))}
-                                </datalist>
+                                </select>
                                 <input
                                   type="text"
                                   value={item.description || ''}
@@ -2705,6 +2793,47 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                     +
                   </span>
                   Add Items in Bulk
+                </button>
+
+                {/* Add New Product Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowCreateProductModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    backgroundColor: '#F1F5F9',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '13.5px',
+                    fontWeight: '600',
+                    color: '#1E293B',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                >
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    backgroundColor: '#3B82F6',
+                    color: '#FFFFFF',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    lineHeight: 1,
+                    flexShrink: 0
+                  }}>
+                    +
+                  </span>
+                  Add New Product
                 </button>
               </div>
 
@@ -4729,6 +4858,14 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
           </div>
         </div>
       )}
+
+      {/* ==================== CREATE NEW PRODUCT MODAL ==================== */}
+      <CreateProductModal
+        isOpen={showCreateProductModal}
+        onClose={() => setShowCreateProductModal(false)}
+        onProductCreated={handleProductCreatedFromModal}
+        defaultCategory="Finished Goods"
+      />
 
     </div>
   );
