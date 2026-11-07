@@ -8055,8 +8055,6 @@ app.put(['/api/deliverychallans/:id(*)', '/api/delivery-challans/:id(*)', '/api/
     };
     updated.unshift(updatedRecord);
   }
-    return res.status(404).json({ success: false, error: `Delivery Challan ${targetId} not found.` });
-  }
 
   try {
     fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8');
