@@ -223,6 +223,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       const row = {
         id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         name: newProduct.name,
+        code: newProduct.code || newProduct.sku || '',
+        sku: newProduct.code || newProduct.sku || '',
         description: newProduct.description || '',
         brand: 'VRM',
         wp: '',
@@ -773,6 +775,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
     try {
       localStorage.setItem('controlroom_dc_store', JSON.stringify(updatedList));
       window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_dc_store' } }));
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+      window.dispatchEvent(new Event('central_inventory_updated'));
     } catch (_) {}
 
     try {
@@ -827,6 +831,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
     try {
       localStorage.setItem('controlroom_dc_store', JSON.stringify(updatedList));
       window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_dc_store' } }));
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+      window.dispatchEvent(new Event('central_inventory_updated'));
     } catch (_) {}
 
     try {
@@ -1236,6 +1242,9 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
           (d.dcNo === returnDc.dcNo || d.id === returnDc.id) ? updatedDc : d
         );
         localStorage.setItem('controlroom_dc_store', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_dc_store' } }));
+        window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+        window.dispatchEvent(new Event('central_inventory_updated'));
       } catch (_) {}
 
       // Sync to server
@@ -2579,6 +2588,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                                     const found = availableInventoryItems.find(ai => ai.name.toLowerCase() === val.toLowerCase());
                                     handleItemChange(idx, 'name', val);
                                     if (found) {
+                                      handleItemChange(idx, 'code', found.code || found.sku || '');
+                                      handleItemChange(idx, 'sku', found.code || found.sku || '');
                                       handleItemChange(idx, 'rate', found.rate || 0);
                                       handleItemChange(idx, 'unit', (found.unit || 'NOS').toUpperCase());
                                       if (found.tax !== undefined && found.tax !== null) {

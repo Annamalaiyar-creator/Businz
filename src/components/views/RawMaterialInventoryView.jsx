@@ -632,6 +632,76 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         });
       }
 
+      // 5. Authoritative Delivery Challan (DC) Goods Movement & Job Work Inward Returns
+      let dcsList = [];
+      try {
+        const dcRaw = localStorage.getItem('controlroom_dc_store');
+        if (dcRaw) dcsList = JSON.parse(dcRaw);
+      } catch (_) {}
+
+      const dcDispatchedDeductions = new Map();
+      const dcInwardCredits = new Map();
+      const seenDcIds = new Set();
+
+      if (Array.isArray(dcsList)) {
+        dcsList.forEach(dc => {
+          if (!dc) return;
+          const dcKey = String(dc.dcNo || dc.id || '').toUpperCase().trim();
+          if (dcKey && seenDcIds.has(dcKey)) return;
+          if (dcKey) seenDcIds.add(dcKey);
+
+          const dcStatus = String(dc.status || '').toLowerCase();
+          const isDraft = dcStatus.includes('draft');
+          const isCancelled = dcStatus.includes('cancel');
+          if (isDraft || isCancelled) return;
+
+          // Outward goods movement on issued Delivery Challan (permanently deducted from physical stock)
+          (dc.items || []).forEach(it => {
+            const q = parseFloat(it.qty || it.dcQty || 0) || 0;
+            if (q > 0) {
+              const resCode = resolveProductCode(it);
+              const rawCode = String(it.code || it.sku || '').toUpperCase().trim();
+              const resUpper = resCode ? String(resCode).toUpperCase().trim() : '';
+              let c = CANONICAL_PRODUCT_ALIASES[rawCode] || CANONICAL_PRODUCT_ALIASES[resUpper] || resUpper || rawCode;
+              const n = normalizeProductName(it.name || it.description || '');
+              const fp = wordFingerprint(it.name || it.description || '');
+
+              const isMr300 = c === 'MR-300MM' || c === 'MR300' ||
+                ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
+              if (isMr300) {
+                c = 'MR-300MM';
+              }
+
+              if (c) {
+                dcDispatchedDeductions.set(c, (dcDispatchedDeductions.get(c) || 0) + q);
+                if (c === 'MR-300MM') {
+                  dcDispatchedDeductions.set('MR300', dcDispatchedDeductions.get('MR-300MM'));
+                }
+              }
+              if (n) dcDispatchedDeductions.set(n, (dcDispatchedDeductions.get(n) || 0) + q);
+              if (fp) dcDispatchedDeductions.set(fp, (dcDispatchedDeductions.get(fp) || 0) + q);
+            }
+          });
+
+          // Inward returns received back on Job Work DC (credited to physical stock)
+          (dc.returns || []).forEach(ret => {
+            (ret.returnedItems || []).forEach(ri => {
+              const rq = parseFloat(ri.returnedQty || ri.qty || 0) || 0;
+              if (rq > 0) {
+                const retName = ri.receivedItemName || ri.itemName || ri.sentItemName || '';
+                const rawCode = String(ri.code || ri.sku || '').toUpperCase().trim();
+                const rn = normalizeProductName(retName);
+                const rfp = wordFingerprint(retName);
+
+                if (rawCode) dcInwardCredits.set(rawCode, (dcInwardCredits.get(rawCode) || 0) + rq);
+                if (rn) dcInwardCredits.set(rn, (dcInwardCredits.get(rn) || 0) + rq);
+                if (rfp) dcInwardCredits.set(rfp, (dcInwardCredits.get(rfp) || 0) + rq);
+              }
+            });
+          });
+        });
+      }
+
       // Reconcile remaining stock in matMap
       matMap.forEach((m, key) => {
         const mCode = String(m.code || key).toUpperCase().trim();
@@ -655,6 +725,22 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               (mFp && dispatchedDeductions.get(mFp)) || 0
             );
 
+        const dcDispatched = isMr300Only
+          ? (dcDispatchedDeductions.get('MR-300MM') || dcDispatchedDeductions.get('MR300') || dcDispatchedDeductions.get(mNorm) || dcDispatchedDeductions.get(mFp) || 0)
+          : Math.max(
+              (mCode && dcDispatchedDeductions.get(mCode)) || 0,
+              (mNorm && dcDispatchedDeductions.get(mNorm)) || 0,
+              (mFp && dcDispatchedDeductions.get(mFp)) || 0
+            );
+
+        const dcInward = isMr300Only
+          ? (dcInwardCredits.get('MR-300MM') || dcInwardCredits.get('MR300') || dcInwardCredits.get(mNorm) || dcInwardCredits.get(mFp) || 0)
+          : Math.max(
+              (mCode && dcInwardCredits.get(mCode)) || 0,
+              (mNorm && dcInwardCredits.get(mNorm)) || 0,
+              (mFp && dcInwardCredits.get(mFp)) || 0
+            );
+
         const grnQty = Number(m.goodsReceived || 0);
         const isRaw = RAW_MATERIAL_CODES.has(mCode) || m.cat === 'Raw Material' || m.category === 'Raw Material';
         let base = parseFloat(m.openingStock !== undefined ? m.openingStock : (m.stock !== undefined ? m.stock : 0));
@@ -662,8 +748,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           base = 0;
         }
 
-        // Authoritative physical stock = (Opening Baseline + Received GRNs) - Dispatched via Vehicle Loading
-        const totalPhysical = Math.max(0, (base + grnQty) - dispatched);
+        // Authoritative physical stock = (Opening Baseline + Received GRNs + DC Inward) - (Dispatched via Vehicle Loading + Dispatched via Delivery Challan)
+        const totalPhysical = Math.max(0, (base + grnQty + dcInward) - (dispatched + dcDispatched));
 
         // Reconcile available free stock and reserved allocations
         const finalReserved = allocated;
@@ -846,9 +932,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const unsubCloudRaw = subscribeToCloudStore('RAW_MATERIALS_STORE', debouncedBackgroundSync);
     const unsubscribe = prodModuleEngine.subscribe(debouncedBackgroundSync);
 
+    const handleStorageUpdate = (e) => {
+      if (!e.detail || e.detail.key === 'controlroom_dc_store' || e.detail.key === 'controlroom_raw_materials_store') {
+        debouncedBackgroundSync();
+      }
+    };
     window.addEventListener('controlroom_raw_materials_update', debouncedBackgroundSync);
     window.addEventListener('controlroom_grn_completed', debouncedBackgroundSync);
     window.addEventListener('central_inventory_updated', debouncedBackgroundSync);
+    window.addEventListener('controlroom_storage_update', handleStorageUpdate);
 
     return () => {
       clearInterval(pollDbInterval);
@@ -859,6 +951,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       window.removeEventListener('controlroom_raw_materials_update', debouncedBackgroundSync);
       window.removeEventListener('controlroom_grn_completed', debouncedBackgroundSync);
       window.removeEventListener('central_inventory_updated', debouncedBackgroundSync);
+      window.removeEventListener('controlroom_storage_update', handleStorageUpdate);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsList, initialMaterials]);
@@ -1121,6 +1214,119 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       });
     } catch (_) {}
 
+
+    // 4. Authoritative Delivery Challan Movement (DC Dispatches & Job Work Inward Returns)
+    try {
+      const dcRaw = localStorage.getItem('controlroom_dc_store');
+      let dcs = [];
+      if (dcRaw) dcs = JSON.parse(dcRaw);
+      if (Array.isArray(dcs)) {
+        dcs.forEach(dc => {
+          const dcStatus = String(dc?.status || '').toLowerCase();
+          if (dcStatus.includes('draft') || dcStatus.includes('cancel')) return;
+
+          // Outward DC Dispatch
+          (dc.items || []).forEach(it => {
+            const itCode = String(it.code || it.sku || '').toLowerCase().trim();
+            const itName = String(it.name || it.description || '').toLowerCase().trim();
+            const itNorm = normalizeProductName(it.name || '');
+            const isMatch = (sCode && itCode && (itCode === sCode || itCode.includes(sCode) || sCode.includes(itCode))) ||
+                            (sName && itName && (itName === sName || itName.includes(sName) || sName.includes(itName))) ||
+                            (sNorm && itNorm && sNorm === itNorm);
+            if (isMatch) {
+              const q = parseFloat(it.qty || it.dcQty || 0) || 0;
+              if (q > 0) {
+                const rawDate = dc.createdAt || dc.dcDate || dc.date;
+                let formattedDate = 'Recent DC';
+                let orderTime = 0;
+                try {
+                  if (rawDate) {
+                    const d = new Date(rawDate);
+                    if (!isNaN(d.getTime())) {
+                      orderTime = d.getTime();
+                      formattedDate = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                    }
+                  }
+                } catch (_) {}
+
+                transactionEvents.push({
+                  id: `DC-DISP-${dc.dcNo || dc.id}-${itCode || 'item'}`,
+                  timestamp: formattedDate,
+                  orderTime,
+                  seqNum: 0,
+                  type: 'DC_DISPATCH',
+                  typeName: 'Delivery Challan (Outward)',
+                  typeColor: '#E11D48',
+                  typeBg: '#FFF1F2',
+                  typeBorder: '#FFE4E6',
+                  referenceDoc: dc.dcNo || dc.id || 'DC',
+                  itemCode: selectedMat.code,
+                  itemName: selectedMat.name,
+                  qty: -q,
+                  unit: it.unit || selectedMat.unit || 'NOS',
+                  user: dc.createdBy || 'Logistics / Dispatch Team',
+                  role: 'Delivery Challan Issue',
+                  reason: `Dispatched ${q} ${it.unit || selectedMat.unit || 'NOS'} via DC ${dc.dcNo || 'DC'} to ${dc.customerName || 'Party'} for ${dc.challanType || 'Job Work'}.`,
+                  source: dc.customerName || 'Delivery Challan',
+                  location: selectedMat.store || 'Main Warehouse'
+                });
+              }
+            }
+          });
+
+          // Inward Returns on Job Work DC
+          (dc.returns || []).forEach(ret => {
+            (ret.returnedItems || []).forEach(ri => {
+              const retCode = String(ri.code || ri.sku || '').toLowerCase().trim();
+              const retName = String(ri.receivedItemName || ri.itemName || '').toLowerCase().trim();
+              const retNorm = normalizeProductName(ri.receivedItemName || ri.itemName || '');
+              const isMatch = (sCode && retCode && (retCode === sCode || retCode.includes(sCode) || sCode.includes(retCode))) ||
+                              (sName && retName && (retName === sName || retName.includes(sName) || sName.includes(retName))) ||
+                              (sNorm && retNorm && sNorm === retNorm);
+              if (isMatch) {
+                const rq = parseFloat(ri.returnedQty || ri.qty || 0) || 0;
+                if (rq > 0) {
+                  const rawDate = ret.returnedAt || ret.date || ret.createdAt;
+                  let formattedDate = 'Recent Return';
+                  let orderTime = 0;
+                  try {
+                    if (rawDate) {
+                      const d = new Date(rawDate);
+                      if (!isNaN(d.getTime())) {
+                        orderTime = d.getTime();
+                        formattedDate = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                      }
+                    }
+                  } catch (_) {}
+
+                  transactionEvents.push({
+                    id: `DC-RET-${ret.returnId || 'RET'}-${retCode || 'item'}`,
+                    timestamp: formattedDate,
+                    orderTime,
+                    seqNum: 0,
+                    type: 'DC_RETURN',
+                    typeName: 'Job Work Inward Return',
+                    typeColor: '#16A34A',
+                    typeBg: '#F0FDF4',
+                    typeBorder: '#DCFCE7',
+                    referenceDoc: dc.dcNo || dc.id || 'DC-Return',
+                    itemCode: selectedMat.code,
+                    itemName: selectedMat.name,
+                    qty: +rq,
+                    unit: ri.unit || selectedMat.unit || 'NOS',
+                    user: ret.receivedBy || 'Store In-Charge',
+                    role: 'Job Work Inwarding',
+                    reason: `Inwarded ${rq} ${ri.unit || selectedMat.unit || 'NOS'} back from Job Work on DC ${dc.dcNo || 'DC'}. Challan: ${ret.vendorChallanNo || ret.referenceNo || '—'}.`,
+                    source: dc.customerName || 'Job Work Unit',
+                    location: selectedMat.store || 'Main Warehouse'
+                  });
+                }
+              }
+            });
+          });
+        });
+      }
+    } catch (_) {}
 
     // Sort transactions chronologically (oldest first)
     transactionEvents.sort((a, b) => {
