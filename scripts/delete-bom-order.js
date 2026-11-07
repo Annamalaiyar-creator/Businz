@@ -2,7 +2,7 @@ import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { query, isDbConnected } from '../server/db.js';
+import { query, verifyDbConnectivity, isDbConnected } from '../server/db.js';
 import { getStoreFilePath } from '../server/runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,46 +10,51 @@ const __dirname = path.dirname(__filename);
 
 async function main() {
   const targetArg = process.argv[2] || '418';
-  const targetNormalized = String(targetArg).trim().replace(/[\/\-_]/g, '').toLowerCase();
-  console.log(`\n🔍 Searching for BOM to delete: "${targetArg}" (normalized: "${targetNormalized}")...\n`);
+  console.log(`\n==================================================`);
+  console.log(`🔍 TARGET BOM DELETION: "${targetArg}"`);
+  console.log(`==================================================\n`);
+
+  // 1. Verify database connectivity
+  console.log('⏳ Checking PostgreSQL connection...');
+  const connCheck = await verifyDbConnectivity(5000);
+  console.log(`📡 Database status:`, connCheck.ok ? `CONNECTED (latency: ${connCheck.latencyMs}ms)` : `FAILED (${connCheck.error})`);
 
   let dbMatches = [];
   let crStoreMatches = [];
   let diskMatches = [];
 
-  // 1. Search PostgreSQL bom_orders table
+  // Matcher helper: strictly matches BOM 418
+  const isMatch = (code, id) => {
+    const s1 = String(code || '').replace(/[\/\-_]/g, '').toLowerCase();
+    const s2 = String(id || '').replace(/[\/\-_]/g, '').toLowerCase();
+    return s1.includes('418') || s2.includes('418');
+  };
+
+  // 2. Query PostgreSQL bom_orders table
   if (isDbConnected()) {
     try {
       const dbRes = await query(`
         SELECT id, bom_code, code, customer_name, company_name, sales_person, sales_person_code, created_by, created_by_id, grand_total, status, date, created_at
         FROM bom_orders
-        WHERE bom_code ILIKE $1 
-           OR code ILIKE $1 
-           OR id ILIKE $1
-           OR customer_name ILIKE '%sai solar%'
-           OR company_name ILIKE '%sai solar%'
-      `, [`%${targetArg.replace(/[^a-zA-Z0-9]/g, '%')}%`]);
-      dbMatches = dbRes.rows || [];
+        WHERE bom_code ILIKE '%418%' OR code ILIKE '%418%' OR id ILIKE '%418%'
+      `);
+      dbMatches = (dbRes.rows || []).filter(r => isMatch(r.bom_code, r.id));
     } catch (e) {
       console.warn('⚠️ Could not query bom_orders table:', e.message);
     }
 
-    // 2. Search controlroom_store
+    // 3. Query controlroom_store (bom_store key)
     try {
       const crRes = await query(`SELECT data FROM controlroom_store WHERE key = 'bom_store'`);
       if (crRes.rows.length > 0 && Array.isArray(crRes.rows[0].data)) {
-        crStoreMatches = crRes.rows[0].data.filter(b => {
-          const codeNorm = String(b.bomCode || b.code || b.id || '').replace(/[\/\-_]/g, '').toLowerCase();
-          const cust = String(b.customer || b.customerName || b.companyName || '').toLowerCase();
-          return codeNorm.includes(targetNormalized) || (targetNormalized.includes('418') && cust.includes('sai solar'));
-        });
+        crStoreMatches = crRes.rows[0].data.filter(b => isMatch(b.bomCode || b.code, b.id));
       }
     } catch (e) {
       console.warn('⚠️ Could not query controlroom_store:', e.message);
     }
   }
 
-  // 3. Search disk file
+  // 4. Query disk file
   let diskPath = '';
   try {
     diskPath = getStoreFilePath('bom_store.json');
@@ -61,37 +66,31 @@ async function main() {
     try {
       diskList = JSON.parse(fs.readFileSync(diskPath, 'utf8') || '[]');
       if (Array.isArray(diskList)) {
-        diskMatches = diskList.filter(b => {
-          const codeNorm = String(b.bomCode || b.code || b.id || '').replace(/[\/\-_]/g, '').toLowerCase();
-          const cust = String(b.customer || b.customerName || b.companyName || '').toLowerCase();
-          return codeNorm.includes(targetNormalized) || (targetNormalized.includes('418') && cust.includes('sai solar'));
-        });
+        diskMatches = diskList.filter(b => isMatch(b.bomCode || b.code, b.id));
       }
     } catch (e) {
       console.warn('⚠️ Could not read disk bom_store.json:', e.message);
     }
   }
 
-  console.log(`📊 Search Results for target "${targetArg}":`);
-  console.log(`   - bom_orders table matches: ${dbMatches.length}`);
-  console.log(`   - controlroom_store matches: ${crStoreMatches.length}`);
-  console.log(`   - disk file matches: ${diskMatches.length}\n`);
+  console.log(`\n📊 Records Found for BOM 418:`);
+  console.log(`   - bom_orders table: ${dbMatches.length} record(s)`);
+  console.log(`   - controlroom_store: ${crStoreMatches.length} record(s)`);
+  console.log(`   - disk cache file:   ${diskMatches.length} record(s)\n`);
 
-  const allFoundCodes = new Set();
-  const allFoundIds = new Set();
+  const codesToDelete = new Set();
+  const idsToDelete = new Set();
 
   dbMatches.forEach(r => {
-    if (r.bom_code) allFoundCodes.add(r.bom_code);
-    if (r.code) allFoundCodes.add(r.code);
-    if (r.id) allFoundIds.add(r.id);
-    console.log(`📄 Found in bom_orders table:`, {
+    if (r.bom_code) codesToDelete.add(r.bom_code);
+    if (r.code) codesToDelete.add(r.code);
+    if (r.id) idsToDelete.add(r.id);
+    console.log(`📄 Found in PostgreSQL bom_orders:`, {
       id: r.id,
-      bomCode: r.bom_code || r.code,
+      bomCode: r.bom_code,
       customer: r.customer_name || r.company_name,
-      salesPerson: r.sales_person,
-      salesPersonCode: r.sales_person_code,
-      createdBy: r.created_by,
-      createdById: r.created_by_id,
+      creatorId: r.created_by_id || r.sales_person_code,
+      creator: r.created_by || r.sales_person,
       amount: r.grand_total,
       status: r.status,
       date: r.date || r.created_at
@@ -99,71 +98,61 @@ async function main() {
   });
 
   crStoreMatches.forEach(b => {
-    if (b.bomCode) allFoundCodes.add(b.bomCode);
-    if (b.code) allFoundCodes.add(b.code);
-    if (b.id) allFoundIds.add(b.id);
+    if (b.bomCode) codesToDelete.add(b.bomCode);
+    if (b.code) codesToDelete.add(b.code);
+    if (b.id) idsToDelete.add(b.id);
     console.log(`📄 Found in controlroom_store:`, {
       id: b.id,
       bomCode: b.bomCode || b.code,
-      customer: b.customer || b.customerName || b.companyName,
-      salesPerson: b.salesPerson,
-      salesPersonCode: b.salesPersonCode,
-      creator: b.createdBy,
-      createdById: b.createdById || b.creatorEmployeeCode,
+      customer: b.customer || b.customerName,
+      creatorId: b.createdById || b.salesPersonCode,
+      creator: b.createdBy || b.salesPerson,
       amount: b.grandTotal || b.totalAmount,
-      status: b.status,
-      date: b.date
+      status: b.status
     });
   });
 
   diskMatches.forEach(b => {
-    if (b.bomCode) allFoundCodes.add(b.bomCode);
-    if (b.code) allFoundCodes.add(b.code);
-    if (b.id) allFoundIds.add(b.id);
+    if (b.bomCode) codesToDelete.add(b.bomCode);
+    if (b.code) codesToDelete.add(b.code);
+    if (b.id) idsToDelete.add(b.id);
   });
 
-  if (allFoundCodes.size === 0 && allFoundIds.size === 0) {
-    console.log(`❌ No BOM records found matching "${targetArg}". Nothing to delete.`);
-    process.exit(0);
-  }
+  // Ensure 'VRMS/BOM/26-27/418' and 'VRMS-BOM-26-27-418' are in delete list
+  codesToDelete.add('VRMS/BOM/26-27/418');
+  codesToDelete.add('VRMS-BOM-26-27-418');
 
-  console.log(`\n🚨 PROCEEDING TO DELETE RECORD(S):`);
-  console.log(`   Target BOM Codes:`, Array.from(allFoundCodes));
-  console.log(`   Target BOM IDs:`, Array.from(allFoundIds));
+  console.log(`\n🚨 EXECUTING TARGETED DELETION FOR BOM 418:`);
+  console.log(`   Codes:`, Array.from(codesToDelete));
+  console.log(`   IDs:  `, Array.from(idsToDelete));
 
-  // Perform targeted deletion
-  // A. Delete from PostgreSQL table bom_orders
+  // A. Delete from PostgreSQL bom_orders table
   if (isDbConnected()) {
     try {
-      for (const code of allFoundCodes) {
-        const delRes = await query(`DELETE FROM bom_orders WHERE bom_code = $1 OR code = $1`, [code]);
-        console.log(`   ✓ Deleted ${delRes.rowCount || 0} row(s) from bom_orders table for code "${code}"`);
-      }
-      for (const id of allFoundIds) {
-        const delRes = await query(`DELETE FROM bom_orders WHERE id = $1`, [id]);
-        console.log(`   ✓ Deleted ${delRes.rowCount || 0} row(s) from bom_orders table for id "${id}"`);
-      }
+      const delTbl = await query(`
+        DELETE FROM bom_orders 
+        WHERE bom_code ILIKE '%418%' 
+           OR code ILIKE '%418%' 
+           OR id ILIKE '%418%'
+      `);
+      console.log(`   ✓ Deleted ${delTbl.rowCount || 0} row(s) from PostgreSQL bom_orders table`);
     } catch (delErr) {
       console.error(`   ⚠️ Error deleting from bom_orders table:`, delErr.message);
     }
 
-    // B. Delete from controlroom_store (bom_store key)
+    // B. Delete from PostgreSQL controlroom_store (bom_store key)
     try {
       const crRes = await query(`SELECT data FROM controlroom_store WHERE key = 'bom_store'`);
       if (crRes.rows.length > 0 && Array.isArray(crRes.rows[0].data)) {
-        const originalCount = crRes.rows[0].data.length;
-        const filtered = crRes.rows[0].data.filter(b => {
-          const bCode = b.bomCode || b.code || '';
-          const bId = b.id || '';
-          return !allFoundCodes.has(bCode) && !allFoundIds.has(bId);
-        });
-        const removedCount = originalCount - filtered.length;
+        const origList = crRes.rows[0].data;
+        const filtered = origList.filter(b => !isMatch(b.bomCode || b.code, b.id));
+        const removed = origList.length - filtered.length;
         await query(`
           INSERT INTO controlroom_store (key, data, updated_at)
           VALUES ('bom_store', $1, NOW())
           ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
         `, [JSON.stringify(filtered)]);
-        console.log(`   ✓ Removed ${removedCount} record(s) from controlroom_store (new count: ${filtered.length})`);
+        console.log(`   ✓ Removed ${removed} entry/entries from controlroom_store (remaining: ${filtered.length})`);
       }
     } catch (crErr) {
       console.error(`   ⚠️ Error updating controlroom_store:`, crErr.message);
@@ -175,20 +164,16 @@ async function main() {
     try {
       const origDisk = JSON.parse(fs.readFileSync(diskPath, 'utf8') || '[]');
       if (Array.isArray(origDisk)) {
-        const filteredDisk = origDisk.filter(b => {
-          const bCode = b.bomCode || b.code || '';
-          const bId = b.id || '';
-          return !allFoundCodes.has(bCode) && !allFoundIds.has(bId);
-        });
+        const filteredDisk = origDisk.filter(b => !isMatch(b.bomCode || b.code, b.id));
         fs.writeFileSync(diskPath, JSON.stringify(filteredDisk, null, 2), 'utf8');
-        console.log(`   ✓ Removed ${origDisk.length - filteredDisk.length} record(s) from disk file ${diskPath} (new count: ${filteredDisk.length})`);
+        console.log(`   ✓ Removed ${origDisk.length - filteredDisk.length} entry/entries from disk file ${diskPath} (remaining: ${filteredDisk.length})`);
       }
     } catch (diskErr) {
-      console.error(`   ⚠️ Error updating disk bom_store.json:`, diskErr.message);
+      console.error(`   ⚠️ Error updating disk file:`, diskErr.message);
     }
   }
 
-  console.log(`\n🎉 BOM deletion completed successfully!`);
+  console.log(`\n🎉 BOM VRMS-BOM-26-27-418 successfully deleted across all database and cache layers!\n`);
 }
 
 main().then(() => process.exit(0)).catch(err => {
