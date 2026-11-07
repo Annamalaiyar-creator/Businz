@@ -1137,7 +1137,7 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
     })));
   };
 
-  const handleSaveReturn = async () => {
+  const handleSaveReturn = async (mode = 'partial') => {
     if (!returnDc) return;
     if (!returnDate) { alert('Please enter a Return Date.'); return; }
     if (!returnReceivedBy.trim()) { alert('Please enter who received the goods.'); return; }
@@ -1182,39 +1182,16 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       const existingReturns = returnDc.returns || [];
       const updatedReturns = [...existingReturns, newReturn];
 
-      const totalSentByIdx = {};
-      const totalReturnedByIdx = {};
-      allItems.forEach((it, idx) => {
-        totalSentByIdx[idx] = Number(it.qty || it.dcQty || 1);
-        totalReturnedByIdx[idx] = 0;
-      });
-      updatedReturns.forEach(ret => {
-        (ret.returnedItems || []).forEach(ri => {
-          const idx = ri.sentItemIdx !== undefined ? ri.sentItemIdx : ri.itemIdx;
-          if (idx !== undefined && totalReturnedByIdx[idx] !== undefined) {
-            totalReturnedByIdx[idx] = (totalReturnedByIdx[idx] || 0) + Number(ri.returnedQty || 0);
-          }
-        });
-      });
-
-      const allFullyReturned = allItems.every((_, idx) =>
-        (totalReturnedByIdx[idx] || 0) >= (totalSentByIdx[idx] || 0)
-      );
-      const anyReturned = updatedReturns.some(ret => (ret.returnedItems || []).length > 0);
-
-      let newStatus = returnDc.status;
-      if (allFullyReturned) {
-        newStatus = 'Closed';
-      } else if (anyReturned) {
-        newStatus = 'Partially Returned';
-      }
+      // Explicit user decision: 'full' -> Closed, 'partial' -> Partially Received
+      const isFullClose = mode === 'full';
+      const newStatus = isFullClose ? 'Closed' : 'Partially Received';
 
       // Update the DC record (1 targeted update)
       const updatedDc = {
         ...returnDc,
         returns: updatedReturns,
         status: newStatus,
-        statusType: allFullyReturned ? 'closed' : 'partially_returned',
+        statusType: isFullClose ? 'closed' : 'partially_received',
         updatedAt: new Date().toISOString()
       };
 
@@ -1265,10 +1242,10 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
       setShowReturnModal(false);
       setReturnDc(null);
       showCustomAlert(
-        allFullyReturned
-          ? `All items received back. DC ${returnDc.dcNo} is now Closed ✅`
-          : `Partial return recorded for DC ${returnDc.dcNo}. Status: Partially Returned.`,
-        'Job Work Return Recorded',
+        isFullClose
+          ? `DC ${returnDc.dcNo} has been marked as Fully Closed ✅`
+          : `Consignment inwarded for DC ${returnDc.dcNo}. Status: Partially Received.`,
+        isFullClose ? 'Delivery Challan Closed' : 'Partially Received Saved',
         'success'
       );
     } catch (err) {
@@ -4813,14 +4790,16 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               </div>
             </div>
 
-            {/* Modal Footer */}
+            {/* Modal Footer with Explicit Action Buttons */}
             <div style={{
               padding: '14px 24px',
               borderTop: '1px solid #E2E8F0',
               display: 'flex',
-              justifyContent: 'flex-end',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               gap: '12px',
-              backgroundColor: '#FFFFFF'
+              backgroundColor: '#FFFFFF',
+              flexWrap: 'wrap'
             }}>
               <button
                 type="button"
@@ -4840,31 +4819,63 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 Cancel
               </button>
 
-              <button
-                type="button"
-                onClick={handleSaveReturn}
-                disabled={returnSubmitting}
-                style={{
-                  height: '38px',
-                  padding: '0 22px',
-                  borderRadius: '8px',
-                  backgroundColor: '#0E7490',
-                  color: '#FFFFFF',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  border: 'none',
-                  cursor: returnSubmitting ? 'not-allowed' : 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 4px rgba(14,116,144,0.3)'
-                }}
-                onMouseEnter={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#0891B2'; }}
-                onMouseLeave={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#0E7490'; }}
-              >
-                <CheckCircle size={15} />
-                {returnSubmitting ? 'Inwarding...' : 'Confirm Goods Receipt & Inward'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {/* Save as Partially Received Button */}
+                <button
+                  type="button"
+                  onClick={() => handleSaveReturn('partial')}
+                  disabled={returnSubmitting}
+                  style={{
+                    height: '38px',
+                    padding: '0 18px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF3C7',
+                    color: '#92400E',
+                    fontWeight: '700',
+                    fontSize: '13px',
+                    border: '1px solid #FDE68A',
+                    cursor: returnSubmitting ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(217, 119, 6, 0.1)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#FDE68A'; }}
+                  onMouseLeave={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#FEF3C7'; }}
+                >
+                  <Clock size={15} />
+                  {returnSubmitting ? 'Saving...' : 'Save as Partially Received'}
+                </button>
+
+                {/* Close DC Fully Button */}
+                <button
+                  type="button"
+                  onClick={() => handleSaveReturn('full')}
+                  disabled={returnSubmitting}
+                  style={{
+                    height: '38px',
+                    padding: '0 20px',
+                    borderRadius: '8px',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    fontWeight: '700',
+                    fontSize: '13px',
+                    border: 'none',
+                    cursor: returnSubmitting ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 4px rgba(14,116,144,0.3)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#0891B2'; }}
+                  onMouseLeave={(e) => { if (!returnSubmitting) e.currentTarget.style.backgroundColor = '#0E7490'; }}
+                >
+                  <CheckCircle size={15} />
+                  {returnSubmitting ? 'Closing...' : 'Close DC Fully'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
