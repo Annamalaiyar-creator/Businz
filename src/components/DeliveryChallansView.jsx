@@ -1192,6 +1192,8 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
         returns: updatedReturns,
         status: newStatus,
         statusType: isFullClose ? 'closed' : 'partially_received',
+        receivedDate: returnDate,
+        lastReceivedDate: returnDate,
         updatedAt: new Date().toISOString()
       };
 
@@ -1523,12 +1525,13 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                         style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
                       />
                     </th>
-                    <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>DC No.</th>
-                    <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Company Name</th>
-                    <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>DC Date</th>
-                    <th style={{ width: '16%', minWidth: '140px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Challan Type</th>
-                    <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                    <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                    <th style={{ width: '15%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>DC No.</th>
+                    <th style={{ width: '23%', minWidth: '180px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Company Name</th>
+                    <th style={{ width: '12%', minWidth: '110px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>DC Date</th>
+                    <th style={{ width: '13%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Received Date</th>
+                    <th style={{ width: '13%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Challan Type</th>
+                    <th style={{ width: '12%', minWidth: '110px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
+                    <th style={{ width: '12%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1542,13 +1545,14 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                         <td style={{ padding: '12px 14px' }}><div className="skeleton-shimmer skeleton-text" style={{ width: '70%', height: '14px' }} /></td>
                         <td style={{ padding: '12px 14px' }}><div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} /></td>
                         <td style={{ padding: '12px 14px' }}><div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} /></td>
+                        <td style={{ padding: '12px 14px' }}><div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} /></td>
                         <td style={{ padding: '12px 14px', textAlign: 'right' }}><div className="skeleton-shimmer skeleton-text" style={{ width: '85px', height: '14px', marginLeft: 'auto' }} /></td>
                         <td style={{ textAlign: 'center', padding: '12px 14px' }}><div className="skeleton-shimmer" style={{ width: '80px', height: '22px', borderRadius: '12px', margin: '0 auto' }} /></td>
                       </tr>
                     ))
                   ) : currentRows.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '48px 16px', color: '#64748B' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '48px 16px', color: '#64748B' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                           <Truck size={32} style={{ color: '#CBD5E1' }} />
                           <strong style={{ fontSize: '14px', color: '#1E293B' }}>No Delivery Challans Found</strong>
@@ -1596,6 +1600,46 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                           </td>
                           <td style={{ color: '#64748b', textAlign: 'left' }}>
                             {dc.dcDate || dc.date || '—'}
+                          </td>
+                          <td style={{ color: '#64748b', textAlign: 'left', padding: '12px 14px' }}>
+                            {(() => {
+                              const returnsList = Array.isArray(dc.returns) ? dc.returns : [];
+                              const latestReturn = returnsList.length > 0 ? returnsList[returnsList.length - 1] : null;
+                              const recDate = latestReturn?.returnDate || dc.receivedDate || dc.lastReceivedDate || null;
+                              if (!recDate) {
+                                return <span style={{ color: '#94a3b8' }}>—</span>;
+                              }
+                              return (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#ECFDF5',
+                                    color: '#065F46',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}>
+                                    {recDate}
+                                  </span>
+                                  {returnsList.length > 1 && (
+                                    <span
+                                      title={`${returnsList.length} inward consignments received`}
+                                      style={{
+                                        fontSize: '10px',
+                                        padding: '1px 5px',
+                                        borderRadius: '10px',
+                                        backgroundColor: '#E0F2FE',
+                                        color: '#0369A1',
+                                        fontWeight: '700'
+                                      }}
+                                    >
+                                      {returnsList.length}x
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td style={{ color: '#64748b', textAlign: 'left' }}>
                             <span style={{
