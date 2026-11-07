@@ -6761,66 +6761,349 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   </div>
                 </div>
 
-                {/* Items Table */}
+                {/* Items Table with Grouped Presets and Kit Value Header */}
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    Quoted Products & Preset Kits ({items.length})
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
+                      Quoted Products & Preset Kits ({items.length} components)
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                      Grouped by Preset Kit with distinct pricing & boundaries
+                    </div>
                   </div>
-                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
-                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                          <th style={{ padding: '8px 10px', width: '35px' }}>#</th>
-                          <th style={{ padding: '8px 10px' }}>Product / Component</th>
-                          <th style={{ padding: '8px 10px', width: '80px' }}>HSN / SAC</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>UOM</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>GST</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Total (₹)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.length > 0 ? (
-                          items.map((it, idx) => {
-                            const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
-                            const r = parseFloat(it.rate || it.price || 0) || 0;
-                            const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                            const taxRate = parseFloat(taxRateStr) || 18;
-                            const taxable = q * r;
-                            const itemTotal = taxable + (taxable * (taxRate / 100));
-                            return (
-                              <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                                <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
-                                <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
-                                  <div>{it.name || it.productName || 'Item'}</div>
-                                  {(it.presetName || it.subPresetName) && (
-                                    <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600', marginTop: '1px' }}>
-                                      {it.subPresetName ? `↳ Sub-Kit: ${it.subPresetName}` : `Preset: ${it.presetName}`}
-                                    </div>
-                                  )}
-                                </td>
-                                <td style={{ padding: '8px 10px', color: '#64748B' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#475569' }}>₹ {r.toLocaleString('en-IN')}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
-                                  ₹ {Math.round(itemTotal).toLocaleString('en-IN')}
+
+                  {(() => {
+                    const presetGroupsData = pi.presetGroups || {};
+                    const sections = [];
+                    const sectionMap = new Map();
+
+                    const allZeroRates = items.length > 0 && items.every(it => (parseFloat(it.rate || it.price || 0) || 0) === 0);
+
+                    items.forEach((it, idx) => {
+                      const isPreset = Boolean(it.isPresetItem || it.presetGroupId || it.presetName || (allZeroRates && pi.presetName));
+                      const secKey = isPreset
+                        ? (it.presetGroupId || it.presetName || pi.presetName || 'PRESET_1')
+                        : '__CUSTOM_ITEMS__';
+
+                      if (!sectionMap.has(secKey)) {
+                        const secObj = {
+                          key: secKey,
+                          isPreset,
+                          presetGroupId: it.presetGroupId,
+                          presetName: isPreset ? (it.presetName || (it.presetGroupId && presetGroupsData[it.presetGroupId]?.presetName) || pi.presetName || 'Preset Structure Kit') : 'Custom / Standalone Products',
+                          items: []
+                        };
+                        sectionMap.set(secKey, secObj);
+                        sections.push(secObj);
+                      }
+                      sectionMap.get(secKey).items.push({ item: it, originalIndex: idx });
+                    });
+
+                    // Pre-compute custom items taxable sum
+                    const customTaxableTotal = sections
+                      .filter(s => !s.isPreset)
+                      .flatMap(s => s.items)
+                      .reduce((sum, { item }) => {
+                        const q = parseFloat(item.qty !== undefined ? item.qty : (item.quantity || 0)) || 0;
+                        const r = parseFloat(item.rate || item.price || 0) || 0;
+                        return sum + (q * r);
+                      }, 0);
+
+                    const presetTaxablePool = Math.max(0, subtotal - customTaxableTotal);
+                    const presetSections = sections.filter(s => s.isPreset);
+
+                    return (
+                      <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                              <th style={{ padding: '8px 10px', width: '38px', textAlign: 'center' }}>#</th>
+                              <th style={{ padding: '8px 10px' }}>Product / Component</th>
+                              <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center' }}>HSN / SAC</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Qty</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>UOM</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Rate (₹)</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>GST</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'right', width: '110px' }}>Total (₹)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sections.length > 0 ? (
+                              sections.map((sec, secIdx) => {
+                                if (sec.isPreset) {
+                                  const presetIdx = presetSections.indexOf(sec);
+                                  const grpConfig = (sec.presetGroupId && presetGroupsData[sec.presetGroupId]) || (presetGroupsData[sec.key]) || null;
+                                  const setCount = parseFloat(grpConfig?.setCount || grpConfig?.quantity || pi.presetSetCount || 1) || 1;
+                                  const pUnit = grpConfig?.unit || grpConfig?.unitType || pi.presetUnit || 'Sets';
+
+                                  // Calculate kit taxable
+                                  let taxable = 0;
+                                  if (grpConfig?.kitPrice && parseFloat(grpConfig.kitPrice) > 0) {
+                                    taxable = (parseFloat(grpConfig.kitPrice) || 0) * setCount;
+                                  } else if (pi.presetKitPrice && parseFloat(pi.presetKitPrice) > 0) {
+                                    taxable = (parseFloat(pi.presetKitPrice) || 0) * setCount;
+                                  } else if (pi.unitValue && parseFloat(pi.unitValue) > 0) {
+                                    taxable = parseFloat(pi.unitValue) || 0;
+                                  } else if (pi.kitSubtotal && parseFloat(pi.kitSubtotal) > 0) {
+                                    taxable = parseFloat(pi.kitSubtotal) || 0;
+                                  } else if (presetSections.length === 1) {
+                                    taxable = presetTaxablePool || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0);
+                                  } else if (presetSections.length > 0) {
+                                    taxable = Math.round(presetTaxablePool / presetSections.length);
+                                  }
+
+                                  const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || pi.gstRate || '18%';
+                                  const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                                  const kitGst = Math.round(taxable * (gstPct / 100));
+                                  const kitTotal = Math.round(taxable + kitGst);
+
+                                  return (
+                                    <React.Fragment key={sec.key}>
+                                      {/* PRESET HEADER BANNER WITH KIT VALUE PROMINENTLY IN THE MIDDLE */}
+                                      <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2.5px solid #0E7490', borderBottom: '1.5px solid #A5F3FC' }}>
+                                        <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                                            {/* Left: Preset Badge & Name */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <span style={{
+                                                backgroundColor: '#0E7490',
+                                                color: '#FFFFFF',
+                                                fontSize: '10.5px',
+                                                fontWeight: '900',
+                                                padding: '2.5px 8px',
+                                                borderRadius: '6px',
+                                                letterSpacing: '0.5px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                              }}>
+                                                <Boxes size={12} />
+                                                PRESET {presetIdx + 1}
+                                              </span>
+                                              <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
+                                                {sec.presetName}
+                                              </strong>
+                                              <span style={{
+                                                fontSize: '11px',
+                                                color: '#0E7490',
+                                                fontWeight: '700',
+                                                backgroundColor: '#ECFEFF',
+                                                padding: '2px 8px',
+                                                borderRadius: '12px',
+                                                border: '1px solid #A5F3FC'
+                                              }}>
+                                                Total Qty: {setCount} {pUnit} ({sec.items.length} components)
+                                              </span>
+                                            </div>
+
+                                            {/* Center / Right: PROMINENT PRESET KIT VALUE BADGE */}
+                                            <div style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '10px',
+                                              backgroundColor: '#FFFFFF',
+                                              border: '1.5px solid #0E7490',
+                                              borderRadius: '8px',
+                                              padding: '4px 12px',
+                                              boxShadow: '0 1px 3px rgba(14, 116, 144, 0.08)'
+                                            }}>
+                                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                                <span style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>KIT VALUE:</span>
+                                                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '900' }}>
+                                                  ₹ {Math.round(taxable).toLocaleString('en-IN')}
+                                                </strong>
+                                              </div>
+                                              <span style={{ color: '#CBD5E1', fontWeight: '300' }}>|</span>
+                                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                                <span style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>GST ({gstPct}%):</span>
+                                                <strong style={{ fontSize: '11.5px', color: '#0F172A', fontWeight: '800' }}>
+                                                  ₹ {kitGst.toLocaleString('en-IN')}
+                                                </strong>
+                                              </div>
+                                              <span style={{ color: '#CBD5E1', fontWeight: '300' }}>|</span>
+                                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                                <span style={{ fontSize: '9.5px', color: '#0E7490', fontWeight: '800', textTransform: 'uppercase' }}>TOTAL:</span>
+                                                <strong style={{ fontSize: '13.5px', color: '#0E7490', fontWeight: '900' }}>
+                                                  ₹ {kitTotal.toLocaleString('en-IN')}
+                                                </strong>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      </tr>
+
+                                      {/* Individual Component Items */}
+                                      {sec.items.map(({ item: it, originalIndex }, cIdx) => {
+                                        const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
+                                        const r = parseFloat(it.rate || it.price || 0) || 0;
+                                        const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
+                                        const taxRate = parseFloat(taxRateStr) || gstPct;
+                                        const hasExplicitRate = r > 0;
+                                        const taxableItem = q * r;
+                                        const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
+
+                                        return (
+                                          <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#FAFDFD' : '#FFFFFF' }}>
+                                            <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
+                                              {presetIdx + 1}.{cIdx + 1}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                              <div>{it.name || it.productName || 'Item'}</div>
+                                              {it.subPresetName && (
+                                                <div style={{ fontSize: '10px', color: '#0D9488', fontWeight: '700', marginTop: '1px' }}>
+                                                  ↳ Sub-Kit: {it.subPresetName}
+                                                </div>
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                              {hasExplicitRate ? (
+                                                <span style={{ color: '#475569', fontWeight: '700' }}>₹ {r.toLocaleString('en-IN')}</span>
+                                              ) : (
+                                                <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '4px', border: '1px solid #CFFAFE' }}>
+                                                  Incl. in Kit
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right' }}>
+                                              {hasExplicitRate ? (
+                                                <strong style={{ color: '#0F172A' }}>₹ {Math.round(itemTotal).toLocaleString('en-IN')}</strong>
+                                              ) : (
+                                                <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '4px', border: '1px solid #CFFAFE' }}>
+                                                  Incl. in Kit
+                                                </span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+
+                                      {/* END OF PRESET DIVIDER */}
+                                      <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1px dashed #99F6E4', borderBottom: '2.5px solid #0E7490' }}>
+                                        <td colSpan={8} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                            <span style={{
+                                              fontSize: '11px',
+                                              fontWeight: '800',
+                                              color: '#0F766E',
+                                              letterSpacing: '0.4px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '5px'
+                                            }}>
+                                              ✓ END OF PRESET {presetIdx + 1}: {sec.presetName} ({sec.items.length} Components • Total Kit Value: ₹ {kitTotal.toLocaleString('en-IN')})
+                                            </span>
+                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    </React.Fragment>
+                                  );
+                                }
+
+                                // CUSTOM / STANDALONE PRODUCTS SECTION
+                                const customSecTaxable = sec.items.reduce((sum, { item }) => {
+                                  const q = parseFloat(item.qty !== undefined ? item.qty : (item.quantity || 0)) || 0;
+                                  const r = parseFloat(item.rate || item.price || 0) || 0;
+                                  return sum + (q * r);
+                                }, 0);
+
+                                return (
+                                  <React.Fragment key="custom_section">
+                                    {/* START OF CUSTOM PRODUCTS HEADER */}
+                                    <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2.5px solid #475569', borderBottom: '1.5px solid #CBD5E1' }}>
+                                      <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{
+                                              backgroundColor: '#475569',
+                                              color: '#FFFFFF',
+                                              fontSize: '10.5px',
+                                              fontWeight: '900',
+                                              padding: '2.5px 8px',
+                                              borderRadius: '6px',
+                                              letterSpacing: '0.5px'
+                                            }}>
+                                              CUSTOM PRODUCTS
+                                            </span>
+                                            <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
+                                              Additional Materials / Standalone Products ({sec.items.length} items)
+                                            </strong>
+                                          </div>
+                                          <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>
+                                            Individually Priced Components • Subtotal: ₹ {Math.round(customSecTaxable).toLocaleString('en-IN')}
+                                          </span>
+                                        </div>
+                                      </td>
+                                    </tr>
+
+                                    {/* Custom Line Items */}
+                                    {sec.items.map(({ item: it, originalIndex }, cIdx) => {
+                                      const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
+                                      const r = parseFloat(it.rate || it.price || 0) || 0;
+                                      const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
+                                      const taxRate = parseFloat(taxRateStr) || 18;
+                                      const taxableItem = q * r;
+                                      const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
+
+                                      return (
+                                        <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF' }}>
+                                          <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
+                                            C.{cIdx + 1}
+                                          </td>
+                                          <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                            <div>{it.name || it.productName || 'Item'}</div>
+                                            {it.category && (
+                                              <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
+                                                {it.category}
+                                              </div>
+                                            )}
+                                          </td>
+                                          <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', color: '#334155', fontWeight: '700' }}>
+                                            ₹ {r.toLocaleString('en-IN')}
+                                          </td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                                            ₹ {Math.round(itemTotal).toLocaleString('en-IN')}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+
+                                    {/* END OF CUSTOM PRODUCTS DIVIDER */}
+                                    <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px dashed #CBD5E1', borderBottom: '2.5px solid #475569' }}>
+                                      <td colSpan={8} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                          <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
+                                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', letterSpacing: '0.4px' }}>
+                                            ✓ END OF STANDALONE PRODUCTS ({sec.items.length} Items)
+                                          </span>
+                                          <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  </React.Fragment>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                                  No individual line items listed.
                                 </td>
                               </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
-                              No individual line items listed.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Financial Summary */}
@@ -7173,59 +7456,227 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   </div>
                 </div>
 
-                {/* Items Table */}
+                {/* Items Table with Grouped Presets */}
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    BOM Bill of Materials ({items.length})
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
+                      BOM Bill of Materials ({items.length} materials)
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                      Grouped by Structure Kit with clear component boundaries
+                    </div>
                   </div>
-                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
-                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                          <th style={{ padding: '8px 10px', width: '35px' }}>#</th>
-                          <th style={{ padding: '8px 10px' }}>Material / Component</th>
-                          <th style={{ padding: '8px 10px', width: '90px' }}>Category</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '80px' }}>Base Qty</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Dispatch Qty</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>UOM</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.length > 0 ? (
-                          items.map((it, idx) => {
-                            const dispQty = it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== ''
-                              ? it.totalDispatchQty
-                              : (it.qty || it.bomQty || it.quantity || '0');
-                            return (
-                              <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                                <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
-                                <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
-                                  <div>{it.name || it.material || 'Material Item'}</div>
-                                  {(it.presetName || it.subPresetName) && (
-                                    <div style={{ fontSize: '10px', color: '#0284C7', fontWeight: '600', marginTop: '1px' }}>
-                                      {it.subPresetName ? `↳ Sub-Kit: ${it.subPresetName}` : `Preset: ${it.presetName}`}
-                                    </div>
-                                  )}
+
+                  {(() => {
+                    const sections = [];
+                    const sectionMap = new Map();
+
+                    items.forEach((it, idx) => {
+                      const isPreset = Boolean(it.isPresetItem || it.presetGroupId || it.presetName);
+                      const secKey = isPreset
+                        ? (it.presetGroupId || it.presetName || 'PRESET_1')
+                        : '__CUSTOM_MATERIALS__';
+
+                      if (!sectionMap.has(secKey)) {
+                        const secObj = {
+                          key: secKey,
+                          isPreset,
+                          presetGroupId: it.presetGroupId,
+                          presetName: isPreset ? (it.presetName || 'Structure Kit') : 'Custom / Additional Materials',
+                          items: []
+                        };
+                        sectionMap.set(secKey, secObj);
+                        sections.push(secObj);
+                      }
+                      sectionMap.get(secKey).items.push({ item: it, originalIndex: idx });
+                    });
+
+                    const presetSections = sections.filter(s => s.isPreset);
+
+                    return (
+                      <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                              <th style={{ padding: '8px 10px', width: '38px', textAlign: 'center' }}>#</th>
+                              <th style={{ padding: '8px 10px' }}>Material / Component</th>
+                              <th style={{ padding: '8px 10px', width: '90px' }}>Category</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '80px' }}>Base Qty</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Dispatch Qty</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>UOM</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sections.length > 0 ? (
+                              sections.map((sec, secIdx) => {
+                                if (sec.isPreset) {
+                                  const presetIdx = presetSections.indexOf(sec);
+                                  return (
+                                    <React.Fragment key={sec.key}>
+                                      {/* PRESET HEADER */}
+                                      <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2.5px solid #0E7490', borderBottom: '1.5px solid #A5F3FC' }}>
+                                        <td colSpan={6} style={{ padding: '9px 12px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <span style={{
+                                                backgroundColor: '#0E7490',
+                                                color: '#FFFFFF',
+                                                fontSize: '10.5px',
+                                                fontWeight: '900',
+                                                padding: '2.5px 8px',
+                                                borderRadius: '6px',
+                                                letterSpacing: '0.5px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                              }}>
+                                                <Boxes size={12} />
+                                                PRESET {presetIdx + 1}
+                                              </span>
+                                              <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
+                                                {sec.presetName}
+                                              </strong>
+                                              <span style={{
+                                                fontSize: '11px',
+                                                color: '#0E7490',
+                                                fontWeight: '700',
+                                                backgroundColor: '#ECFEFF',
+                                                padding: '2px 8px',
+                                                borderRadius: '12px',
+                                                border: '1px solid #A5F3FC'
+                                              }}>
+                                                {sec.items.length} Materials Included
+                                              </span>
+                                            </div>
+                                            <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700' }}>
+                                              BOM Dispatch Allocation
+                                            </span>
+                                          </div>
+                                        </td>
+                                      </tr>
+
+                                      {/* Preset Items */}
+                                      {sec.items.map(({ item: it, originalIndex }, cIdx) => {
+                                        const dispQty = it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== ''
+                                          ? it.totalDispatchQty
+                                          : (it.qty || it.bomQty || it.quantity || '0');
+                                        return (
+                                          <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#FAFDFD' : '#FFFFFF' }}>
+                                            <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
+                                              {presetIdx + 1}.{cIdx + 1}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                              <div>{it.name || it.material || 'Material Item'}</div>
+                                              {it.subPresetName && (
+                                                <div style={{ fontSize: '10px', color: '#0D9488', fontWeight: '700', marginTop: '1px' }}>
+                                                  ↳ Sub-Kit: {it.subPresetName}
+                                                </div>
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', color: '#64748B' }}>{it.category || 'HDG'}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.qty || it.bomQty || 0}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
+                                              {dispQty}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                          </tr>
+                                        );
+                                      })}
+
+                                      {/* END OF PRESET DIVIDER */}
+                                      <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1px dashed #99F6E4', borderBottom: '2.5px solid #0E7490' }}>
+                                        <td colSpan={6} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                            <span style={{
+                                              fontSize: '11px',
+                                              fontWeight: '800',
+                                              color: '#0F766E',
+                                              letterSpacing: '0.4px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '5px'
+                                            }}>
+                                              ✓ END OF PRESET {presetIdx + 1}: {sec.presetName} ({sec.items.length} Materials Included)
+                                            </span>
+                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    </React.Fragment>
+                                  );
+                                }
+
+                                // CUSTOM MATERIALS SECTION
+                                return (
+                                  <React.Fragment key="custom_materials">
+                                    <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2.5px solid #475569', borderBottom: '1.5px solid #CBD5E1' }}>
+                                      <td colSpan={6} style={{ padding: '9px 12px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span style={{
+                                            backgroundColor: '#475569',
+                                            color: '#FFFFFF',
+                                            fontSize: '10.5px',
+                                            fontWeight: '900',
+                                            padding: '2.5px 8px',
+                                            borderRadius: '6px',
+                                            letterSpacing: '0.5px'
+                                          }}>
+                                            CUSTOM MATERIALS
+                                          </span>
+                                          <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
+                                            Additional / Standalone Materials ({sec.items.length} materials)
+                                          </strong>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                    {sec.items.map(({ item: it, originalIndex }, cIdx) => {
+                                      const dispQty = it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== ''
+                                        ? it.totalDispatchQty
+                                        : (it.qty || it.bomQty || it.quantity || '0');
+                                      return (
+                                        <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF' }}>
+                                          <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
+                                            C.{cIdx + 1}
+                                          </td>
+                                          <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                            <div>{it.name || it.material || 'Material Item'}</div>
+                                          </td>
+                                          <td style={{ padding: '7px 10px', color: '#64748B' }}>{it.category || 'HDG'}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.qty || it.bomQty || 0}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
+                                            {dispQty}
+                                          </td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                    <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px dashed #CBD5E1', borderBottom: '2.5px solid #475569' }}>
+                                      <td colSpan={6} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                          <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
+                                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', letterSpacing: '0.4px' }}>
+                                            ✓ END OF STANDALONE MATERIALS ({sec.items.length} Materials)
+                                          </span>
+                                          <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  </React.Fragment>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                                  No items in this BOM order.
                                 </td>
-                                <td style={{ padding: '8px 10px', color: '#64748B' }}>{it.category || 'HDG'}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{it.qty || it.bomQty || 0}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                                  {dispQty}
-                                </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
                               </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
-                              No items in this BOM order.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
