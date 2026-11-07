@@ -4644,6 +4644,66 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
                 </div>
               </div>
 
+              {/* PREVIOUSLY RECEIVED CONSIGNMENTS (INWARD HISTORY) */}
+              {Array.isArray(returnDc?.returns) && returnDc.returns.length > 0 && (
+                <div style={{ backgroundColor: '#F0FDF4', borderRadius: '10px', border: '1px solid #86EFAC', padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle size={15} style={{ color: '#16A34A' }} />
+                      <span>Previously Received Consignments ({returnDc.returns.length})</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#15803D', fontWeight: '600' }}>
+                      Recorded Inward History
+                    </span>
+                  </div>
+
+                  <div style={{ border: '1px solid #BBF7D0', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#DCFCE7', color: '#166534', borderBottom: '1px solid #86EFAC' }}>
+                          <th style={{ padding: '7px 10px', width: '45px' }}>S.No</th>
+                          <th style={{ padding: '7px 10px', width: '110px' }}>Received Date</th>
+                          <th style={{ padding: '7px 10px' }}>Product Name</th>
+                          <th style={{ padding: '7px 10px', textAlign: 'right', width: '130px' }}>Received Qty</th>
+                          <th style={{ padding: '7px 10px', width: '120px' }}>Received By</th>
+                          <th style={{ padding: '7px 10px', width: '120px' }}>Vendor Challan</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {returnDc.returns.flatMap((ret, rIdx) => {
+                          const items = ret.returnedItems && ret.returnedItems.length > 0 ? ret.returnedItems : [ret];
+                          return items.map((ri, iIdx) => (
+                            <tr key={`${rIdx}-${iIdx}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '7px 10px', color: '#64748B' }}>{rIdx + 1}.{iIdx + 1}</td>
+                              <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F766E', whiteSpace: 'nowrap' }}>
+                                {ret.returnDate || ret.date || '—'}
+                              </td>
+                              <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                {ri.receivedItemName || ri.itemName || ri.sentItemName || '—'}
+                                {ri.sentItemName && ri.receivedItemName && ri.sentItemName !== ri.receivedItemName && (
+                                  <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '400', display: 'block' }}>
+                                    (from {ri.sentItemName})
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#15803D' }}>
+                                +{ri.returnedQty !== undefined ? ri.returnedQty : (ri.qty || 0)} {ri.unit || ''}
+                              </td>
+                              <td style={{ padding: '7px 10px', color: '#475569' }}>
+                                {ret.receivedBy || '—'}
+                              </td>
+                              <td style={{ padding: '7px 10px', color: '#64748B', fontSize: '11px' }}>
+                                {ret.vendorChallan || ret.returnRef || ret.ref || '—'}
+                              </td>
+                            </tr>
+                          ));
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* SECTION 2: RECEIVED PRODUCTS (SEPARATE SECTION) */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1.5px solid #0E7490', padding: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
