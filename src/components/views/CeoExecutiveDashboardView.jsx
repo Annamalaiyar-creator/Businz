@@ -203,7 +203,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hoveredDonutIdx, setHoveredDonutIdx] = useState(null);
   const [hoveredBarIdx, setHoveredBarIdx] = useState(null);
-  const [selectedBomLifecycleStage, setSelectedBomLifecycleStage] = useState('ALL');
+  const [selectedBomLifecycleStage, setSelectedBomLifecycleStage] = useState('STEP 01'); // Default to Proforma Invoice (STEP 01)
 
   // Close KPI Popup on Escape key
   useEffect(() => {
