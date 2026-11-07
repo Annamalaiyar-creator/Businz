@@ -8018,7 +8018,7 @@ app.post(['/api/deliverychallans/:id/cancel', '/api/delivery-challans/:id/cancel
 });
 
 // Endpoint to UPDATE a Delivery Challan
-app.put(['/api/deliverychallans/:id(*)', '/api/delivery-challans/:id(*)', '/api/deliverychallans/:id', '/api/delivery-challans/:id'], async (req, res) => {
+app.put(['/api/deliverychallans/:id', '/api/delivery-challans/:id'], async (req, res) => {
   const targetId = decodeURIComponent(req.params.id || '');
   let localDCs = [];
   const p = getStoreFilePath('dc_store.json');
