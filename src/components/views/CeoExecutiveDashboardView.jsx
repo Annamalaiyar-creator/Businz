@@ -6764,7 +6764,14 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   </div>
 
                   {(() => {
-                    const presetGroupsData = pi.presetGroups || {};
+                    let presetGroupsData = pi.presetGroups || {};
+                    if (typeof presetGroupsData === 'string') {
+                      try {
+                        presetGroupsData = JSON.parse(presetGroupsData);
+                      } catch (e) {
+                        presetGroupsData = {};
+                      }
+                    }
                     const sections = [];
                     const sectionMap = new Map();
 
@@ -6802,6 +6809,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
                     const presetTaxablePool = Math.max(0, subtotal - customTaxableTotal);
                     const presetSections = sections.filter(s => s.isPreset);
+                    const presetGroupsList = Array.isArray(presetGroupsData)
+                      ? presetGroupsData
+                      : (presetGroupsData && typeof presetGroupsData === 'object' ? Object.values(presetGroupsData) : []);
 
                     return (
                       <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
@@ -6823,7 +6833,14 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                               sections.map((sec, secIdx) => {
                                 if (sec.isPreset) {
                                   const presetIdx = presetSections.indexOf(sec);
-                                  const grpConfig = (sec.presetGroupId && presetGroupsData[sec.presetGroupId]) || (presetGroupsData[sec.key]) || null;
+                                  let grpConfig = (sec.presetGroupId && presetGroupsData[sec.presetGroupId]) || (presetGroupsData[sec.key]) || null;
+                                  if (!grpConfig && presetGroupsList.length > 0) {
+                                    grpConfig = presetGroupsList.find(g =>
+                                      (sec.presetGroupId && (g.id === sec.presetGroupId || g.groupId === sec.presetGroupId)) ||
+                                      (sec.presetName && g.presetName && g.presetName.toLowerCase().trim() === sec.presetName.toLowerCase().trim()) ||
+                                      (g.name && sec.presetName && g.name.toLowerCase().trim() === sec.presetName.toLowerCase().trim())
+                                    ) || null;
+                                  }
                                   const setCount = parseFloat(grpConfig?.setCount || grpConfig?.quantity || pi.presetSetCount || 1) || 1;
                                   const pUnit = grpConfig?.unit || grpConfig?.unitType || pi.presetUnit || 'Sets';
 
@@ -6974,21 +6991,25 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
                                       {/* END OF PRESET DIVIDER */}
                                       <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1px dashed #99F6E4', borderBottom: '2.5px solid #0E7490' }}>
-                                        <td colSpan={8} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                        <td colSpan={8} style={{ padding: '8px 14px', textAlign: 'center' }}>
                                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                            <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
                                             <span style={{
                                               fontSize: '11px',
                                               fontWeight: '800',
                                               color: '#0F766E',
+                                              backgroundColor: '#CCFBF1',
+                                              padding: '3px 12px',
+                                              borderRadius: '999px',
+                                              border: '1px solid #99F6E4',
                                               letterSpacing: '0.4px',
                                               display: 'inline-flex',
                                               alignItems: 'center',
-                                              gap: '5px'
+                                              gap: '6px'
                                             }}>
                                               ✓ END OF PRESET {presetIdx + 1}: {sec.presetName} ({sec.items.length} Components • Total Kit Value: ₹ {kitTotal.toLocaleString('en-IN')})
                                             </span>
-                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                            <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
                                           </div>
                                         </td>
                                       </tr>
@@ -7019,7 +7040,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                               borderRadius: '6px',
                                               letterSpacing: '0.5px'
                                             }}>
-                                              CUSTOM PRODUCTS
+                                              📦 START OF NEW PRODUCTS (STANDALONE)
                                             </span>
                                             <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
                                               Additional Materials / Standalone Products ({sec.items.length} items)
