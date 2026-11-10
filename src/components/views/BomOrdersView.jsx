@@ -87,16 +87,16 @@ export const formatBomDateDot = (raw) => {
 };
 
 export const getBomActiveStage = (row) => {
-  if (!row) return { name: 'Unknown', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', icon: '❓' };
+  if (!row) return { name: 'Unknown', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', dot: '#94A3B8' };
   const statusStr = String(row.status || '').toLowerCase();
   const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || statusStr.includes('cancel'));
   if (isCancelled) {
-    return { name: 'Cancelled', bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', icon: '✕' };
+    return { name: 'Cancelled', bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', dot: '#DC2626' };
   }
 
   const isDispatched = row.status === 'Dispatched' || row.status === 'Closed' || row.status === 'CLOSED' || statusStr.includes('dispatched') || Boolean(row.dispatchedAt || row.vehicleLoading?.loadedAt || row.fullyCompleted);
   if (isDispatched) {
-    return { name: 'Dispatched', bg: '#F0FDF4', color: '#166534', border: '#BBF7D0', icon: '✅' };
+    return { name: 'Dispatched', bg: '#F0FDF4', color: '#166534', border: '#BBF7D0', dot: '#16A34A' };
   }
 
   const isInvoiceGenerated = Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo || row.invoiceConfirmed) ||
@@ -104,7 +104,7 @@ export const getBomActiveStage = (row) => {
     statusStr.includes('invoice') ||
     Boolean(row.invoiceConfirmedAt || row.invoicedAt || row.stockDeductionDate);
   if (isInvoiceGenerated) {
-    return { name: 'Vehicle Loading', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC', icon: '🚚' };
+    return { name: 'Vehicle Loading', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC', dot: '#0891B2' };
   }
 
   const isAccountsVerified = Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
@@ -113,7 +113,7 @@ export const getBomActiveStage = (row) => {
     statusStr.includes('passed to invoice') ||
     Boolean(row.accountsVerifiedAt || row.accountsVerification?.verifiedAt);
   if (isAccountsVerified) {
-    return { name: 'Invoice Management', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', icon: '🧾' };
+    return { name: 'Invoice Management', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', dot: '#2563EB' };
   }
 
   const isPackingVerified = Boolean(row.dispatchPackingVerified || row.packingVerified || row.dispatchPackingDone) ||
@@ -124,7 +124,7 @@ export const getBomActiveStage = (row) => {
     Boolean(row.awaitingSalesPaymentProof) ||
     Boolean(row.packingCompletedAt || row.packedAt || row.packingVerifiedAt || row.accountsVerification?.packedAt || row.packingStatus === 'PACKING_VERIFIED');
   if (isPackingVerified) {
-    return { name: 'Accounts Verification', bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF', icon: '💳' };
+    return { name: 'Accounts Verification', bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF', dot: '#9333EA' };
   }
 
   const isSalesConfirmed = Boolean(row.salesConfirmed || row.salesReconfirmed || row.creditSettled || row.paymentSettled) ||
@@ -134,10 +134,10 @@ export const getBomActiveStage = (row) => {
     statusStr.includes('credit settled') ||
     Boolean(row.salesConfirmedAt || row.confirmedAt || row.reconfirmedAt);
   if (isSalesConfirmed) {
-    return { name: 'Dispatch Packing', bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', icon: '📦' };
+    return { name: 'Dispatch Packing', bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', dot: '#D97706' };
   }
 
-  return { name: 'Sales Confirmation', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', icon: '📝' };
+  return { name: 'Sales Confirmation', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', dot: '#64748B' };
 };
 
 
@@ -10037,16 +10037,16 @@ export default function BomOrdersView(props) {
                             backgroundColor: currentStage.bg,
                             color: currentStage.color,
                             border: `1px solid ${currentStage.border}`,
-                            padding: '4px 10px',
+                            padding: '3px 10px',
                             borderRadius: '12px',
                             fontSize: '11px',
                             fontWeight: '700',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '5px',
+                            gap: '6px',
                             whiteSpace: 'nowrap'
                           }}>
-                            {currentStage.icon && <span>{currentStage.icon}</span>}
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: currentStage.dot || currentStage.color }} />
                             <span>{currentStage.name}</span>
                           </span>
                         </td>
@@ -10084,7 +10084,7 @@ export default function BomOrdersView(props) {
                                 }}
                               >
                                 <Clock size={10} />
-                                <span>⏱️ {timing.totalElapsedStr}</span>
+                                <span>{timing.totalElapsedStr}</span>
                               </span>
                             )}
                           </div>
