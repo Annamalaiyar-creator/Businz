@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Plus, Check, Trash2, Eye, FileText, Search, AlertCircle, AlertTriangle, X, XCircle,
-  CheckCircle, Clock, Calendar, Edit3, RotateCcw, UploadCloud, ChevronDown, ChevronUp,
+  CheckCircle, Clock, Calendar, Edit3, RotateCcw, UploadCloud, ChevronDown, ChevronUp, ChevronRight,
   Truck, ShoppingCart, Upload, Printer, Download, Layers, CreditCard, Bell, FileCheck, CheckSquare,
   Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save, Boxes, User,
   ArrowUpRight, ArrowDownRight, Receipt, TrendingUp, Factory
@@ -136,6 +136,123 @@ export default function BomOrdersView(props) {
         { id: 5, label: 'Invoice', isDone: isInvoiceGenerated, isActive: isAccountsVerified && !isInvoiceGenerated && !isCancelled, icon: Receipt },
         { id: 6, label: 'Final Dispatch', isDone: isDispatched, isActive: isInvoiceGenerated && !isDispatched && !isCancelled, icon: Truck }
       ]
+    };
+  };
+
+  // Stage Stopwatch & Timestamp Audit helper for CEO view
+  const getBomStageTiming = (b) => {
+    if (!b) return null;
+    const now = Date.now();
+
+    const formatTimeStr = (raw) => {
+      if (!raw) return null;
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    };
+
+    const formatDateStr = (raw) => {
+      if (!raw) return '';
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    };
+
+    const formatMins = (mins) => {
+      if (mins == null || isNaN(mins) || mins < 0) return '—';
+      if (mins < 60) return `${Math.round(mins)}m`;
+      const h = Math.floor(mins / 60);
+      const m = Math.round(mins % 60);
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    };
+
+    const rawPi = b.piDate || b.sourcePiDate || b.createdAt || b.date;
+    const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.reconfirmedAt || b.date || b.createdAt;
+    const rawPacking = b.packingCompletedAt || b.packedAt || b.packingVerifiedAt || b.accountsVerification?.packedAt || (b.packingStatus === 'PACKING_VERIFIED' ? (b.updatedAt || b.date) : null);
+    const rawAccounts = b.accountsVerifiedAt || b.accountsVerification?.verifiedAt || (b.isAccountsDone ? (b.updatedAt || b.date) : null);
+    const rawInvoice = b.invoiceConfirmedAt || b.invoicedAt || b.stockDeductionDate || (b.invoiceConfirmed ? (b.updatedAt || b.date) : null);
+    const rawDispatch = b.dispatchedAt || b.vehicleLoading?.loadedAt || (b.fullyCompleted ? (b.updatedAt || b.date) : null);
+
+    const tConfirmed = rawConfirmed ? new Date(rawConfirmed).getTime() : null;
+    const tPacking = rawPacking ? new Date(rawPacking).getTime() : null;
+    const tAccounts = rawAccounts ? new Date(rawAccounts).getTime() : null;
+    const tInvoice = rawInvoice ? new Date(rawInvoice).getTime() : null;
+    const tDispatch = rawDispatch ? new Date(rawDispatch).getTime() : null;
+
+    // Step 2 to 3 (Packing)
+    let step2To3Mins = null;
+    if (tConfirmed && tPacking && tPacking >= tConfirmed) {
+      step2To3Mins = (tPacking - tConfirmed) / 60000;
+    } else if (tConfirmed && !tPacking) {
+      step2To3Mins = Math.max(0, (now - tConfirmed) / 60000);
+    }
+
+    // Step 3 to 4 (Accounts)
+    let step3To4Mins = null;
+    const step3Start = tPacking || tConfirmed;
+    if (step3Start && tAccounts && tAccounts >= step3Start) {
+      step3To4Mins = (tAccounts - step3Start) / 60000;
+    } else if (tPacking && !tAccounts) {
+      step3To4Mins = Math.max(0, (now - tPacking) / 60000);
+    }
+
+    // Step 4 to 5 (Billing)
+    let step4To5Mins = null;
+    const step4Start = tAccounts || tPacking || tConfirmed;
+    if (step4Start && tInvoice && tInvoice >= step4Start) {
+      step4To5Mins = (tInvoice - step4Start) / 60000;
+    } else if (tAccounts && !tInvoice) {
+      step4To5Mins = Math.max(0, (now - tAccounts) / 60000);
+    }
+
+    // Step 5 to 6 (Loading & Dispatch)
+    let step5To6Mins = null;
+    const step5Start = tInvoice || tAccounts || tPacking || tConfirmed;
+    if (step5Start && tDispatch && tDispatch >= step5Start) {
+      step5To6Mins = (tDispatch - step5Start) / 60000;
+    } else if (tInvoice && !tDispatch) {
+      step5To6Mins = Math.max(0, (now - tInvoice) / 60000);
+    }
+
+    let totalElapsedMins = 0;
+    if (tConfirmed) {
+      if (tDispatch) {
+        totalElapsedMins = Math.max(0, (tDispatch - tConfirmed) / 60000);
+      } else {
+        totalElapsedMins = Math.max(0, (now - tConfirmed) / 60000);
+      }
+    }
+
+    const isCompleted = Boolean(tDispatch || b.fullyCompleted);
+    const isBreached = totalElapsedMins > 120;
+    const isApproaching = totalElapsedMins >= 90 && totalElapsedMins <= 120;
+
+    return {
+      piTime: formatTimeStr(rawPi),
+      piDate: formatDateStr(rawPi),
+      confirmedTime: formatTimeStr(rawConfirmed),
+      confirmedDate: formatDateStr(rawConfirmed),
+      packingTime: formatTimeStr(rawPacking),
+      packingMins: step2To3Mins,
+      packingDurationStr: formatMins(step2To3Mins),
+      hasPacking: Boolean(tPacking),
+      accountsTime: formatTimeStr(rawAccounts),
+      accountsMins: step3To4Mins,
+      accountsDurationStr: formatMins(step3To4Mins),
+      hasAccounts: Boolean(tAccounts),
+      invoiceTime: formatTimeStr(rawInvoice),
+      invoiceMins: step4To5Mins,
+      invoiceDurationStr: formatMins(step4To5Mins),
+      hasInvoice: Boolean(tInvoice),
+      dispatchTime: formatTimeStr(rawDispatch),
+      dispatchMins: step5To6Mins,
+      dispatchDurationStr: formatMins(step5To6Mins),
+      hasDispatch: Boolean(tDispatch),
+      totalElapsedMins,
+      totalElapsedStr: formatMins(totalElapsedMins),
+      isCompleted,
+      isBreached,
+      isApproaching
     };
   };
 
@@ -6448,6 +6565,440 @@ export default function BomOrdersView(props) {
       return parts.length > 0 ? parts.join(', ') : (fallbackStr || '—');
     };
 
+    const timing = getBomStageTiming(confirmingBomModal);
+
+    // ========================================================
+    // CEO LOGIN EXCLUSIVE VIEW:
+    // Stages Timeline & Actual Timestamps + Turnaround at TOP
+    // List of Products & Materials Below
+    // ========================================================
+    if (isCeo) {
+      const itemsList = Array.isArray(confirmingBomModal.items) ? confirmingBomModal.items : [];
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC', padding: '24px', borderRadius: '16px', boxSizing: 'border-box' }}>
+          {/* Top Bar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                  BOM Order Details · {confirmingBomModal.bomCode}
+                </h1>
+                <span style={{
+                  backgroundColor: '#ECFEFF', color: '#0E7490',
+                  fontSize: '11px', fontWeight: '800', padding: '3px 10px',
+                  borderRadius: '12px', border: '1px solid #A5F3FC',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  CEO EXECUTIVE VIEW
+                </span>
+                <span style={{
+                  backgroundColor: confirmingBomModal.status === 'Cancelled' ? '#FEE2E2' : '#F0FDF4',
+                  color: confirmingBomModal.status === 'Cancelled' ? '#DC2626' : '#166534',
+                  fontSize: '11px', fontWeight: '800', padding: '3px 10px',
+                  borderRadius: '12px', border: `1px solid ${confirmingBomModal.status === 'Cancelled' ? '#FECACA' : '#BBF7D0'}`
+                }}>
+                  {confirmingBomModal.status || 'Active'}
+                </span>
+              </div>
+              <span style={{ fontSize: '12.5px', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                Customer: <strong style={{ color: '#0F172A' }}>{confirmingBomModal.customerName || confirmingBomModal.companyName || 'Customer'}</strong> • Rep: <strong>{(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Order Value: <strong style={{ color: '#0E7490' }}>₹ {orderGrandTotal.toLocaleString('en-IN')}</strong>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                onClick={() => setExportFormatRecord(confirmingBomModal)}
+                title="Export BOM"
+                style={{
+                  border: '1px solid #0E7490',
+                  backgroundColor: '#ECFEFF',
+                  color: '#0E7490',
+                  height: '38px',
+                  padding: '0 16px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Download size={14} /> Export BOM
+              </button>
+              <button
+                onClick={() => setConfirmingBomModal(null)}
+                style={{
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  height: '38px',
+                  padding: '0 18px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Back to ALL BOMs
+              </button>
+            </div>
+          </div>
+
+          {/* 1. TOP SECTION: ALL STAGES WITH ACTUAL TIME & DURATION PUSHED TO NEXT STAGE */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '20px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            {/* Stopwatch Header & SLA Status Banner */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    2-Hour Order-to-Dispatch Stopwatch & Stage Turnaround
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
+                    Live timestamp audit tracking each handover from BOM confirmation to final loading.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  fontSize: '11.5px',
+                  fontWeight: '800',
+                  color: timing?.isBreached ? '#DC2626' : (timing?.isApproaching ? '#D97706' : '#16A34A'),
+                  backgroundColor: timing?.isBreached ? '#FEF2F2' : (timing?.isApproaching ? '#FFFBEB' : '#F0FDF4'),
+                  border: `1px solid ${timing?.isBreached ? '#FECACA' : (timing?.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                  padding: '5px 12px',
+                  borderRadius: '12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <Clock size={13} />
+                  <span>Total Elapsed: <strong>{timing?.totalElapsedStr || '0m'}</strong></span>
+                  <span>•</span>
+                  <span>{timing?.isBreached ? '🔴 SLA Breached (>2h)' : (timing?.isApproaching ? '🟡 Approaching 2h' : '🟢 Within 2-Hour SLA')}</span>
+                </span>
+                <span style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F1F5F9', padding: '5px 10px', borderRadius: '10px', fontWeight: '700' }}>
+                  Target: 2 Hours Max (30m / stage)
+                </span>
+              </div>
+            </div>
+
+            {/* Horizontal Stage Cards Flow */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+              gap: '12px',
+              alignItems: 'stretch'
+            }}>
+              {/* Stage 1: Sales PI */}
+              <div style={{
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
+                    Step 1 · Sales PI
+                  </span>
+                  <Receipt size={14} color="#64748B" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>
+                    {timing?.piTime || 'Done'}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
+                    {confirmingBomModal.sourcePiNo ? `Ref: ${confirmingBomModal.sourcePiNo}` : 'Proforma Invoice'}
+                  </div>
+                </div>
+                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid #E2E8F0', fontSize: '10.5px', fontWeight: '700', color: '#0284C7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>→ Converted to BOM</span>
+                </div>
+              </div>
+
+              {/* Stage 2: BOM Confirmed (Timer Start) */}
+              <div style={{
+                backgroundColor: '#F0F9FF',
+                border: '1.5px solid #BAE6FD',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#0284C7', textTransform: 'uppercase' }}>
+                    Step 2 · Confirmed ⏱️
+                  </span>
+                  <Factory size={14} color="#0284C7" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#0369A1' }}>
+                    {timing?.confirmedTime || 'Confirmed'}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#0284C7', marginTop: '1px' }}>
+                    {timing?.confirmedDate} • Timer 00:00 Started
+                  </div>
+                </div>
+                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid #BAE6FD', fontSize: '10.5px', fontWeight: '700', color: '#0284C7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>→ Pushed to Packing</span>
+                </div>
+              </div>
+
+              {/* Stage 3: Dispatch Packing */}
+              <div style={{
+                backgroundColor: timing?.hasPacking ? '#ECFDF5' : (timing?.confirmedTime ? '#FFFBEB' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasPacking ? '#A7F3D0' : (timing?.confirmedTime ? '#FDE68A' : '#E2E8F0')}`,
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasPacking ? '#059669' : (timing?.confirmedTime ? '#D97706' : '#64748B'), textTransform: 'uppercase' }}>
+                    Step 3 · Packing
+                  </span>
+                  <PackageCheck size={14} color={timing?.hasPacking ? '#059669' : '#D97706'} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasPacking ? '#047857' : (timing?.confirmedTime ? '#B45309' : '#475569') }}>
+                    {timing?.packingTime || (timing?.confirmedTime ? '⏳ In Progress' : 'Pending')}
+                  </div>
+                  <div style={{ fontSize: '10px', color: timing?.hasPacking ? '#047857' : '#B45309', marginTop: '1px', fontWeight: '700' }}>
+                    {timing?.hasPacking ? `⏱️ ${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in progress` : 'Awaiting packing')}
+                  </div>
+                </div>
+                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasPacking ? '#A7F3D0' : '#FDE68A'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasPacking ? '#059669' : '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>{timing?.hasPacking ? '→ Pushed to Accounts' : '⏳ In Packing Queue'}</span>
+                </div>
+              </div>
+
+              {/* Stage 4: Accounts Verification */}
+              <div style={{
+                backgroundColor: timing?.hasAccounts ? '#ECFDF5' : (timing?.hasPacking ? '#F5F3FF' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasAccounts ? '#A7F3D0' : (timing?.hasPacking ? '#DDD6FE' : '#E2E8F0')}`,
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasAccounts ? '#059669' : (timing?.hasPacking ? '#7C3AED' : '#64748B'), textTransform: 'uppercase' }}>
+                    Step 4 · Accounts
+                  </span>
+                  <CreditCard size={14} color={timing?.hasAccounts ? '#059669' : '#7C3AED'} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasAccounts ? '#047857' : (timing?.hasPacking ? '#6D28D9' : '#475569') }}>
+                    {timing?.accountsTime || (timing?.hasPacking ? '⏳ In Progress' : 'Pending')}
+                  </div>
+                  <div style={{ fontSize: '10px', color: timing?.hasAccounts ? '#047857' : '#6D28D9', marginTop: '1px', fontWeight: '700' }}>
+                    {timing?.hasAccounts ? `⏱️ ${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in progress` : 'Awaiting verification')}
+                  </div>
+                </div>
+                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasAccounts ? '#A7F3D0' : '#DDD6FE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasAccounts ? '#059669' : '#7C3AED', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>{timing?.hasAccounts ? '→ Pushed to Billing' : (timing?.hasPacking ? '⏳ In Verification' : 'Pending')}</span>
+                </div>
+              </div>
+
+              {/* Stage 5: GST Invoicing */}
+              <div style={{
+                backgroundColor: timing?.hasInvoice ? '#ECFDF5' : (timing?.hasAccounts ? '#EFF6FF' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasInvoice ? '#A7F3D0' : (timing?.hasAccounts ? '#BFDBFE' : '#E2E8F0')}`,
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasInvoice ? '#059669' : (timing?.hasAccounts ? '#2563EB' : '#64748B'), textTransform: 'uppercase' }}>
+                    Step 5 · Invoicing
+                  </span>
+                  <Receipt size={14} color={timing?.hasInvoice ? '#059669' : '#2563EB'} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasInvoice ? '#047857' : (timing?.hasAccounts ? '#1D4ED8' : '#475569') }}>
+                    {timing?.invoiceTime || (timing?.hasAccounts ? '⏳ In Progress' : 'Pending')}
+                  </div>
+                  <div style={{ fontSize: '10px', color: timing?.hasInvoice ? '#047857' : '#1D4ED8', marginTop: '1px', fontWeight: '700' }}>
+                    {timing?.hasInvoice ? `⏱️ ${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in progress` : 'Awaiting billing')}
+                  </div>
+                </div>
+                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasInvoice ? '#A7F3D0' : '#BFDBFE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasInvoice ? '#059669' : '#2563EB', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>{timing?.hasInvoice ? '→ Pushed to Loading' : (timing?.hasAccounts ? '⏳ Generating Invoice' : 'Pending')}</span>
+                </div>
+              </div>
+
+              {/* Stage 6: Final Loading & Dispatch */}
+              <div style={{
+                backgroundColor: timing?.hasDispatch ? '#F0FDF4' : (timing?.hasInvoice ? '#F0FDF4' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasDispatch ? '#86EFAC' : (timing?.hasInvoice ? '#BBF7D0' : '#E2E8F0')}`,
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasDispatch ? '#16A34A' : '#64748B', textTransform: 'uppercase' }}>
+                    Step 6 · Dispatched
+                  </span>
+                  <Truck size={14} color={timing?.hasDispatch ? '#16A34A' : '#64748B'} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasDispatch ? '#15803D' : (timing?.hasInvoice ? '#16A34A' : '#475569') }}>
+                    {timing?.dispatchTime || (timing?.hasInvoice ? '⏳ Loading' : 'Pending')}
+                  </div>
+                  <div style={{ fontSize: '10px', color: timing?.hasDispatch ? '#15803D' : '#64748B', marginTop: '1px', fontWeight: '700' }}>
+                    {timing?.hasDispatch ? `⏱️ ${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} loading` : 'Awaiting dispatch')}
+                  </div>
+                </div>
+                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasDispatch ? '#86EFAC' : '#E2E8F0'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasDispatch ? '#15803D' : '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>{timing?.hasDispatch ? '🚚 Dispatched & Cleared' : 'Final Loading Step'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. BELOW THAT: LIST OF PRODUCTS & MATERIALS TABLE */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '20px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Boxes size={18} color="#0E7490" />
+                  Itemized Products & Bill of Materials
+                </h3>
+                <span style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', display: 'block' }}>
+                  Full breakdown of components, dispatch quantities, rates, and item totals for this order.
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '4px 10px', borderRadius: '10px' }}>
+                {itemsList.length} Item{itemsList.length !== 1 ? 's' : ''} Listed
+              </span>
+            </div>
+
+            <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', fontWeight: '800' }}>
+                    <th style={{ padding: '10px 12px', width: '35px', textAlign: 'center' }}>#</th>
+                    <th style={{ padding: '10px 12px', width: '30%' }}>Product / Component Name</th>
+                    <th style={{ padding: '10px 12px', width: '22%' }}>Description / Specifications</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', width: '8%' }}>UOM</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', width: '10%' }}>Qty / Set</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', width: '12%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', width: '10%' }}>Rate (₹)</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', width: '12%' }}>Total (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemsList.length > 0 ? (
+                    itemsList.map((it, idx) => {
+                      const qty = cleanNum(it.totalDispatchQty || it.qty || it.quantity || 1);
+                      const rate = cleanNum(it.rate || it.price || 0);
+                      const total = cleanNum(it.total || it.amount || (qty * rate));
+
+                      return (
+                        <tr
+                          key={idx}
+                          style={{
+                            borderBottom: '1px solid #F1F5F9',
+                            backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFCFD'
+                          }}
+                        >
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>
+                            {idx + 1}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <div style={{ fontWeight: '800', color: '#0F172A' }}>
+                              {it.name || it.productName || it.c2 || 'Item'}
+                            </div>
+                            {it.category && (
+                              <span style={{ fontSize: '10px', color: '#64748B' }}>Category: {it.category}</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: '#475569' }}>
+                            {it.description || it.specs || '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569' }}>
+                            {it.uom || it.unit || 'Nos'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569' }}>
+                            {it.qty || it.quantity || 1}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA' }}>
+                            {it.totalDispatchQty || it.qty || 1}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                            ₹ {rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                            ₹ {total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                        No line items found for this BOM.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Financial Summary Totals */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+              <div style={{ width: '320px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                  <span>Taxable Subtotal:</span>
+                  <span style={{ fontWeight: '700' }}>₹ {orderSubTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                  <span>GST (18%):</span>
+                  <span style={{ fontWeight: '700' }}>₹ {orderGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: '900', color: '#0E7490', borderTop: '1.5px solid #CBD5E1', paddingTop: '8px', marginTop: '2px' }}>
+                  <span>Grand Total:</span>
+                  <span>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC', padding: '24px', borderRadius: '16px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -9128,8 +9679,35 @@ export default function BomOrdersView(props) {
                         </span>
                       </div>
 
-                      {/* Right Side: Applied Date */}
+                      {/* Right Side: Applied Date & CEO Timing Taken */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {isCeo && (() => {
+                          const timing = getBomStageTiming(row);
+                          if (!timing || !timing.confirmedTime) return null;
+                          return (
+                            <span
+                              title={`2-Hour Target SLA • Confirmed at ${timing.confirmedTime} • Elapsed: ${timing.totalElapsedStr}`}
+                              style={{
+                                backgroundColor: timing.isBreached ? '#FEF2F2' : (timing.isApproaching ? '#FFFBEB' : '#F0FDF4'),
+                                color: timing.isBreached ? '#DC2626' : (timing.isApproaching ? '#D97706' : '#16A34A'),
+                                border: `1px solid ${timing.isBreached ? '#FECACA' : (timing.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                                padding: '3px 9px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}
+                            >
+                              <Clock size={12} />
+                              <span>⏱️ {timing.totalElapsedStr} {timing.isCompleted ? 'Total TAT' : 'Elapsed'}</span>
+                              <span style={{ fontSize: '9.5px', fontWeight: '800', opacity: 0.85 }}>
+                                ({timing.isBreached ? 'Breached' : (timing.isApproaching ? 'Near 2h' : '≤ 2h SLA')})
+                              </span>
+                            </span>
+                          );
+                        })()}
                         <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
                           Applied at <strong style={{ color: '#334155', fontWeight: '600' }}>{formatAppliedAtDate(row)}</strong>
                         </span>
