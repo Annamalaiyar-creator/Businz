@@ -163,7 +163,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       return saved || 'kit-analytics';
     }
     const saved = localStorage.getItem('controlroom_ceo_sub_tab');
-    if (saved === 'kit-analytics' || saved === 'reports-dashboard' || saved === 'reports' || saved === 'sales' || saved === 'sales-targets') return 'overview';
+    if (saved === 'kit-analytics' || saved === 'reports-dashboard' || saved === 'reports' || saved === 'sales' || saved === 'sales-targets' || saved === 'dispatch') return 'overview';
     return saved || 'overview';
   });
 
@@ -2046,7 +2046,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           { id: 'crm-dashboard', label: 'CRM & Leads', icon: Users },
           { id: 'bom', label: 'BOM', icon: GitBranch },
           { id: 'production', label: 'Production', icon: Factory },
-          { id: 'dispatch', label: 'Dispatch', icon: Truck },
           { id: 'inventory-dashboard', label: 'Inventory', icon: Warehouse },
           { id: 'procurement', label: 'Procurement', icon: ShoppingCart },
           ...(userRole !== 'HR' ? [
@@ -2755,7 +2754,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
                 Department:
               </span>
-              {['all', 'Sales', 'Procurement', 'Accounts', 'Production', 'Dispatch', 'Billing', 'Design', 'Tech Support'].map(dept => (
+              {['all', 'Sales', 'Procurement', 'Accounts', 'Production', 'Billing', 'Design', 'Tech Support'].map(dept => (
                 <button
                   key={dept}
                   onClick={() => setPersonDeptFilter(dept)}
