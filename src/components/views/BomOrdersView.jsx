@@ -86,6 +86,61 @@ export const formatBomDateDot = (raw) => {
   return `${dd}.${mm}.${yyyy}`;
 };
 
+export const getBomActiveStage = (row) => {
+  if (!row) return { name: 'Unknown', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', icon: '❓' };
+  const statusStr = String(row.status || '').toLowerCase();
+  const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || statusStr.includes('cancel'));
+  if (isCancelled) {
+    return { name: 'Cancelled', bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', icon: '✕' };
+  }
+
+  const isDispatched = row.status === 'Dispatched' || row.status === 'Closed' || row.status === 'CLOSED' || statusStr.includes('dispatched') || Boolean(row.dispatchedAt || row.vehicleLoading?.loadedAt || row.fullyCompleted);
+  if (isDispatched) {
+    return { name: 'Dispatched', bg: '#F0FDF4', color: '#166534', border: '#BBF7D0', icon: '✅' };
+  }
+
+  const isInvoiceGenerated = Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo || row.invoiceConfirmed) ||
+    ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status) ||
+    statusStr.includes('invoice') ||
+    Boolean(row.invoiceConfirmedAt || row.invoicedAt || row.stockDeductionDate);
+  if (isInvoiceGenerated) {
+    return { name: 'Vehicle Loading', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC', icon: '🚚' };
+  }
+
+  const isAccountsVerified = Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
+    ['Accounts Verified - Proceed Billing', 'Accounts Verified & Passed to Invoice'].includes(row.status) ||
+    (statusStr.includes('accounts verified') && !statusStr.includes('sent to accounts')) ||
+    statusStr.includes('passed to invoice') ||
+    Boolean(row.accountsVerifiedAt || row.accountsVerification?.verifiedAt);
+  if (isAccountsVerified) {
+    return { name: 'Invoice Management', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', icon: '🧾' };
+  }
+
+  const isPackingVerified = Boolean(row.dispatchPackingVerified || row.packingVerified || row.dispatchPackingDone) ||
+    (Array.isArray(row.dispatchPacking) && row.dispatchPacking.length > 0 && row.dispatchPacking.some(p => p.packed)) ||
+    ['Packed & Ready for Dispatch', 'Partially Packed', 'Packed — Awaiting Sales Payment Proof', 'Packed - Awaiting Sales Payment Proof', 'Dispatch Packing Verified - Sent to Accounts'].includes(row.status) ||
+    statusStr.includes('sent to accounts') ||
+    statusStr.includes('packed') ||
+    Boolean(row.awaitingSalesPaymentProof) ||
+    Boolean(row.packingCompletedAt || row.packedAt || row.packingVerifiedAt || row.accountsVerification?.packedAt || row.packingStatus === 'PACKING_VERIFIED');
+  if (isPackingVerified) {
+    return { name: 'Accounts Verification', bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF', icon: '💳' };
+  }
+
+  const isSalesConfirmed = Boolean(row.salesConfirmed || row.salesReconfirmed || row.creditSettled || row.paymentSettled) ||
+    ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed'].includes(row.status) ||
+    statusStr.includes('sales confirmed') ||
+    statusStr.includes('sent to dispatch') ||
+    statusStr.includes('credit settled') ||
+    Boolean(row.salesConfirmedAt || row.confirmedAt || row.reconfirmedAt);
+  if (isSalesConfirmed) {
+    return { name: 'Dispatch Packing', bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', icon: '📦' };
+  }
+
+  return { name: 'Sales Confirmation', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', icon: '📝' };
+};
+
+
 export default function BomOrdersView(props) {
   const {
     activeTab = 'BOM Orders',
@@ -9844,7 +9899,7 @@ export default function BomOrdersView(props) {
                   <th style={{ width: '120px', minWidth: '110px', padding: '12px 14px', boxSizing: 'border-box' }}>BOM Date</th>
                   <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
                   <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
-                  <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
+                  <th style={{ width: '200px', minWidth: '180px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Stages</th>
                   <th style={{ width: '170px', minWidth: '150px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                 </tr>
               </thead>
@@ -9867,8 +9922,8 @@ export default function BomOrdersView(props) {
                       <td style={{ padding: '12px 14px' }}>
                         <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
                       </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                        <div className="skeleton-shimmer skeleton-text" style={{ width: '85px', height: '14px', marginLeft: 'auto' }} />
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <div className="skeleton-shimmer" style={{ width: '120px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
                       </td>
                       <td style={{ textAlign: 'center', padding: '12px 14px' }}>
                         <div className="skeleton-shimmer" style={{ width: '80px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
@@ -9894,6 +9949,7 @@ export default function BomOrdersView(props) {
                     const bDateRaw = row.appliedAt || row.bomDate || row.date || row.createdAt;
                     const dateFormatted = formatBomDateDot(bDateRaw);
                     const timing = getBomStageTiming(row);
+                    const currentStage = getBomActiveStage(row);
 
                     return (
                       <tr
@@ -9976,8 +10032,23 @@ export default function BomOrdersView(props) {
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right', width: '150px', minWidth: '130px' }}>
-                          {row.c5 || (cleanNum(row.grandTotal) > 0 ? `₹${cleanNum(row.grandTotal).toLocaleString('en-IN')}` : '—')}
+                        <td style={{ padding: '12px 14px', textAlign: 'center', width: '200px', minWidth: '180px' }}>
+                          <span style={{
+                            backgroundColor: currentStage.bg,
+                            color: currentStage.color,
+                            border: `1px solid ${currentStage.border}`,
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {currentStage.icon && <span>{currentStage.icon}</span>}
+                            <span>{currentStage.name}</span>
+                          </span>
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'center', width: '170px', minWidth: '150px' }}>
                           <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
