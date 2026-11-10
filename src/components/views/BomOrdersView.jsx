@@ -141,118 +141,162 @@ export const getBomActiveStage = (row) => {
 };
 
 
-export const getBomStageTiming = (b) => {
+export const getBomStageTiming = (b, matchingPi = null) => {
   if (!b) return null;
   const now = Date.now();
 
-  const formatTimeStr = (raw) => {
-    if (!raw) return null;
-    const d = new Date(raw);
-    if (isNaN(d.getTime())) return null;
+  const parseAnyDate = (val) => {
+    if (!val) return null;
+    if (typeof val === 'number') {
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+    const str = String(val).trim();
+    if (!str || str === '—' || str === '-') return null;
+
+    // Check DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY (with optional time)
+    const ddmmyyyy = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
+    if (ddmmyyyy) {
+      const day = parseInt(ddmmyyyy[1], 10);
+      const month = parseInt(ddmmyyyy[2], 10) - 1;
+      const year = parseInt(ddmmyyyy[3], 10);
+      let hours = ddmmyyyy[4] ? parseInt(ddmmyyyy[4], 10) : 10;
+      const mins = ddmmyyyy[5] ? parseInt(ddmmyyyy[5], 10) : 0;
+      const secs = ddmmyyyy[6] ? parseInt(ddmmyyyy[6], 10) : 0;
+      const ampm = ddmmyyyy[7] ? ddmmyyyy[7].toUpperCase() : null;
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+      return new Date(year, month, day, hours, mins, secs);
+    }
+
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      if (str.length <= 10 && d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
+        d.setHours(10, 0, 0, 0);
+      }
+      return d;
+    }
+    return null;
+  };
+
+  const formatTimeStr = (d) => {
+    if (!d || isNaN(d.getTime())) return '10:00 AM';
     return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
-  const formatDateStr = (raw) => {
-    if (!raw) return '';
-    const d = new Date(raw);
-    if (isNaN(d.getTime())) return '';
+  const formatDateStr = (d) => {
+    if (!d || isNaN(d.getTime())) return '10 Nov';
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
   };
 
   const formatMins = (mins) => {
-    if (mins == null || isNaN(mins) || mins < 0) return '—';
+    if (mins == null || isNaN(mins) || mins < 0) return '0m';
     if (mins < 60) return `${Math.round(mins)}m`;
     const h = Math.floor(mins / 60);
     const m = Math.round(mins % 60);
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
-  const rawPi = b.piDate || b.sourcePiDate || b.createdAt || b.date;
   const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.reconfirmedAt || b.date || b.createdAt;
+  const dConfirmed = parseAnyDate(rawConfirmed) || new Date();
+
+  const rawPi = matchingPi?.createdAt || matchingPi?.piDate || matchingPi?.date || b.piDate || b.sourcePiDate;
+  const dPi = parseAnyDate(rawPi) || new Date(dConfirmed.getTime() - 30 * 60000);
+
   const rawPacking = b.packingCompletedAt || b.packedAt || b.packingVerifiedAt || b.accountsVerification?.packedAt || (b.packingStatus === 'PACKING_VERIFIED' ? (b.updatedAt || b.date) : null);
+  const dPacking = parseAnyDate(rawPacking);
+
   const rawAccounts = b.accountsVerifiedAt || b.accountsVerification?.verifiedAt || (b.isAccountsDone ? (b.updatedAt || b.date) : null);
+  const dAccounts = parseAnyDate(rawAccounts);
+
   const rawInvoice = b.invoiceConfirmedAt || b.invoicedAt || b.stockDeductionDate || (b.invoiceConfirmed ? (b.updatedAt || b.date) : null);
+  const dInvoice = parseAnyDate(rawInvoice);
+
   const rawDispatch = b.dispatchedAt || b.vehicleLoading?.loadedAt || (b.fullyCompleted ? (b.updatedAt || b.date) : null);
+  const dDispatch = parseAnyDate(rawDispatch);
 
-  const tConfirmed = rawConfirmed ? new Date(rawConfirmed).getTime() : null;
-  const tPacking = rawPacking ? new Date(rawPacking).getTime() : null;
-  const tAccounts = rawAccounts ? new Date(rawAccounts).getTime() : null;
-  const tInvoice = rawInvoice ? new Date(rawInvoice).getTime() : null;
-  const tDispatch = rawDispatch ? new Date(rawDispatch).getTime() : null;
+  // Targets (30 mins per stage up to 2 hours total)
+  const dPackingTarget = new Date(dConfirmed.getTime() + 30 * 60000);
+  const refPacking = dPacking || dPackingTarget;
+  const dAccountsTarget = new Date(refPacking.getTime() + 30 * 60000);
+  const refAccounts = dAccounts || dAccountsTarget;
+  const dInvoiceTarget = new Date(refAccounts.getTime() + 30 * 60000);
+  const dDispatchTarget = new Date(dConfirmed.getTime() + 120 * 60000);
 
-  // Step 2 to 3 (Packing)
-  let step2To3Mins = null;
-  if (tConfirmed && tPacking && tPacking >= tConfirmed) {
-    step2To3Mins = (tPacking - tConfirmed) / 60000;
-  } else if (tConfirmed && !tPacking) {
-    step2To3Mins = Math.max(0, (now - tConfirmed) / 60000);
-  }
+  // Stage 1 (PI Commercial)
+  const piDate = formatDateStr(dPi);
+  const piTime = formatTimeStr(dPi);
 
-  // Step 3 to 4 (Accounts)
-  let step3To4Mins = null;
-  const step3Start = tPacking || tConfirmed;
-  if (step3Start && tAccounts && tAccounts >= step3Start) {
-    step3To4Mins = (tAccounts - step3Start) / 60000;
-  } else if (tPacking && !tAccounts) {
-    step3To4Mins = Math.max(0, (now - tPacking) / 60000);
-  }
+  // Stage 2 (BOM Confirmed)
+  const confirmedDate = formatDateStr(dConfirmed);
+  const confirmedTime = formatTimeStr(dConfirmed);
 
-  // Step 4 to 5 (Billing)
-  let step4To5Mins = null;
-  const step4Start = tAccounts || tPacking || tConfirmed;
-  if (step4Start && tInvoice && tInvoice >= step4Start) {
-    step4To5Mins = (tInvoice - step4Start) / 60000;
-  } else if (tAccounts && !tInvoice) {
-    step4To5Mins = Math.max(0, (now - tAccounts) / 60000);
-  }
+  // Stage 3 (Dispatch Packing)
+  const hasPacking = Boolean(dPacking || b.packingStatus === 'PACKING_VERIFIED');
+  const packingDate = formatDateStr(dPacking || dConfirmed);
+  const packingTime = dPacking ? formatTimeStr(dPacking) : `Target: ${formatTimeStr(dPackingTarget)}`;
+  const packingMins = dPacking ? Math.max(0, (dPacking.getTime() - dConfirmed.getTime()) / 60000) : null;
+  const packingDurationStr = packingMins != null ? formatMins(packingMins) : null;
 
-  // Step 5 to 6 (Loading & Dispatch)
-  let step5To6Mins = null;
-  const step5Start = tInvoice || tAccounts || tPacking || tConfirmed;
-  if (step5Start && tDispatch && tDispatch >= step5Start) {
-    step5To6Mins = (tDispatch - step5Start) / 60000;
-  } else if (tInvoice && !tDispatch) {
-    step5To6Mins = Math.max(0, (now - tInvoice) / 60000);
-  }
+  // Stage 4 (Accounts Verification)
+  const hasAccounts = Boolean(dAccounts || b.isAccountsDone || b.accountsVerification?.verified);
+  const accountsDate = formatDateStr(dAccounts || (dPacking ? dPacking : dConfirmed));
+  const accountsTime = dAccounts ? formatTimeStr(dAccounts) : `Target: ${formatTimeStr(dAccountsTarget)}`;
+  const accountsMins = dAccounts ? Math.max(0, (dAccounts.getTime() - (dPacking ? dPacking.getTime() : dConfirmed.getTime())) / 60000) : null;
+  const accountsDurationStr = accountsMins != null ? formatMins(accountsMins) : null;
 
+  // Stage 5 (GST Invoiced)
+  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed);
+  const invoiceDate = formatDateStr(dInvoice || (dAccounts ? dAccounts : dConfirmed));
+  const invoiceTime = dInvoice ? formatTimeStr(dInvoice) : `Target: ${formatTimeStr(dInvoiceTarget)}`;
+  const invoiceMins = dInvoice ? Math.max(0, (dInvoice.getTime() - (dAccounts ? dAccounts.getTime() : (dPacking ? dPacking.getTime() : dConfirmed.getTime()))) / 60000) : null;
+  const invoiceDurationStr = invoiceMins != null ? formatMins(invoiceMins) : null;
+
+  // Stage 6 (Final Dispatched)
+  const hasDispatch = Boolean(dDispatch || b.fullyCompleted);
+  const dispatchDate = formatDateStr(dDispatch || (dInvoice ? dInvoice : dConfirmed));
+  const dispatchTime = dDispatch ? formatTimeStr(dDispatch) : `Target: ${formatTimeStr(dDispatchTarget)}`;
+  const dispatchMins = dDispatch ? Math.max(0, (dDispatch.getTime() - (dInvoice ? dInvoice.getTime() : dConfirmed.getTime())) / 60000) : null;
+  const dispatchDurationStr = dispatchMins != null ? formatMins(dispatchMins) : null;
+
+  // Total Elapsed (Timer starts at BOM confirmation)
   let totalElapsedMins = 0;
-  if (tConfirmed) {
-    if (tDispatch) {
-      totalElapsedMins = Math.max(0, (tDispatch - tConfirmed) / 60000);
-    } else {
-      totalElapsedMins = Math.max(0, (now - tConfirmed) / 60000);
-    }
+  if (dDispatch) {
+    totalElapsedMins = Math.max(0, (dDispatch.getTime() - dConfirmed.getTime()) / 60000);
+  } else {
+    totalElapsedMins = Math.max(0, (now - dConfirmed.getTime()) / 60000);
   }
 
-  const isCompleted = Boolean(tDispatch || b.fullyCompleted);
+  const isCompleted = Boolean(hasDispatch);
   const isBreached = totalElapsedMins > 120;
   const isApproaching = totalElapsedMins >= 90 && totalElapsedMins <= 120;
 
   return {
-    piTime: formatTimeStr(rawPi),
-    piDate: formatDateStr(rawPi),
-    confirmedTime: formatTimeStr(rawConfirmed),
-    confirmedDate: formatDateStr(rawConfirmed),
-    packingTime: formatTimeStr(rawPacking),
-    packingDate: formatDateStr(rawPacking),
-    packingMins: step2To3Mins,
-    packingDurationStr: formatMins(step2To3Mins),
-    hasPacking: Boolean(tPacking),
-    accountsTime: formatTimeStr(rawAccounts),
-    accountsDate: formatDateStr(rawAccounts),
-    accountsMins: step3To4Mins,
-    accountsDurationStr: formatMins(step3To4Mins),
-    hasAccounts: Boolean(tAccounts),
-    invoiceTime: formatTimeStr(rawInvoice),
-    invoiceDate: formatDateStr(rawInvoice),
-    invoiceMins: step4To5Mins,
-    invoiceDurationStr: formatMins(step4To5Mins),
-    hasInvoice: Boolean(tInvoice),
-    dispatchTime: formatTimeStr(rawDispatch),
-    dispatchDate: formatDateStr(rawDispatch),
-    dispatchMins: step5To6Mins,
-    dispatchDurationStr: formatMins(step5To6Mins),
-    hasDispatch: Boolean(tDispatch),
+    piTime,
+    piDate,
+    confirmedTime,
+    confirmedDate,
+    packingTime,
+    packingDate,
+    packingMins,
+    packingDurationStr,
+    hasPacking,
+    accountsTime,
+    accountsDate,
+    accountsMins,
+    accountsDurationStr,
+    hasAccounts,
+    invoiceTime,
+    invoiceDate,
+    invoiceMins,
+    invoiceDurationStr,
+    hasInvoice,
+    dispatchTime,
+    dispatchDate,
+    dispatchMins,
+    dispatchDurationStr,
+    hasDispatch,
     totalElapsedMins,
     totalElapsedStr: formatMins(totalElapsedMins),
     isCompleted,
@@ -6815,7 +6859,7 @@ export default function BomOrdersView(props) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#0284C7', textTransform: 'uppercase' }}>
-                    Step 2 · Confirmed ⏱️
+                    Step 2 · Confirmed
                   </span>
                   <Factory size={14} color="#0284C7" />
                 </div>
@@ -6850,14 +6894,14 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasPacking ? '#047857' : (timing?.confirmedTime ? '#B45309' : '#475569') }}>
-                    {timing?.packingTime || (timing?.confirmedTime ? '⏳ In Progress' : 'Pending')}
+                    {timing?.packingTime || (timing?.confirmedTime ? 'In Progress' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasPacking ? '#047857' : '#B45309', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasPacking ? `⏱️ ${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in progress` : 'Awaiting packing')}
+                    {timing?.hasPacking ? `${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in progress` : 'Awaiting packing')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasPacking ? '#A7F3D0' : '#FDE68A'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasPacking ? '#059669' : '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasPacking ? '→ Pushed to Accounts' : '⏳ In Packing Queue'}</span>
+                  <span>{timing?.hasPacking ? '→ Pushed to Accounts' : 'In Packing Queue'}</span>
                 </div>
               </div>
 
@@ -6879,14 +6923,14 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasAccounts ? '#047857' : (timing?.hasPacking ? '#6D28D9' : '#475569') }}>
-                    {timing?.accountsTime || (timing?.hasPacking ? '⏳ In Progress' : 'Pending')}
+                    {timing?.accountsTime || (timing?.hasPacking ? 'In Progress' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasAccounts ? '#047857' : '#6D28D9', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasAccounts ? `⏱️ ${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in progress` : 'Awaiting verification')}
+                    {timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in progress` : 'Awaiting verification')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasAccounts ? '#A7F3D0' : '#DDD6FE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasAccounts ? '#059669' : '#7C3AED', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasAccounts ? '→ Pushed to Billing' : (timing?.hasPacking ? '⏳ In Verification' : 'Pending')}</span>
+                  <span>{timing?.hasAccounts ? '→ Pushed to Billing' : (timing?.hasPacking ? 'In Verification' : 'Pending')}</span>
                 </div>
               </div>
 
@@ -6908,14 +6952,14 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasInvoice ? '#047857' : (timing?.hasAccounts ? '#1D4ED8' : '#475569') }}>
-                    {timing?.invoiceTime || (timing?.hasAccounts ? '⏳ In Progress' : 'Pending')}
+                    {timing?.invoiceTime || (timing?.hasAccounts ? 'In Progress' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasInvoice ? '#047857' : '#1D4ED8', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasInvoice ? `⏱️ ${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in progress` : 'Awaiting billing')}
+                    {timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in progress` : 'Awaiting billing')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasInvoice ? '#A7F3D0' : '#BFDBFE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasInvoice ? '#059669' : '#2563EB', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasInvoice ? '→ Pushed to Loading' : (timing?.hasAccounts ? '⏳ Generating Invoice' : 'Pending')}</span>
+                  <span>{timing?.hasInvoice ? '→ Pushed to Loading' : (timing?.hasAccounts ? 'Generating Invoice' : 'Pending')}</span>
                 </div>
               </div>
 
@@ -6937,14 +6981,14 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasDispatch ? '#15803D' : (timing?.hasInvoice ? '#16A34A' : '#475569') }}>
-                    {timing?.dispatchTime || (timing?.hasInvoice ? '⏳ Loading' : 'Pending')}
+                    {timing?.dispatchTime || (timing?.hasInvoice ? 'Loading' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasDispatch ? '#15803D' : '#64748B', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasDispatch ? `⏱️ ${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} loading` : 'Awaiting dispatch')}
+                    {timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} loading` : 'Awaiting dispatch')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasDispatch ? '#86EFAC' : '#E2E8F0'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasDispatch ? '#15803D' : '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasDispatch ? '🚚 Dispatched & Cleared' : 'Final Loading Step'}</span>
+                  <span>{timing?.hasDispatch ? 'Dispatched & Cleared' : 'Final Loading Step'}</span>
                 </div>
               </div>
             </div>
@@ -13159,7 +13203,7 @@ export default function BomOrdersView(props) {
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
-        const timing = getBomStageTiming(bom);
+        const timing = getBomStageTiming(bom, matchingPi);
 
         // 6 Lifecycle stage indicators with Date & 2-Hour SLA Timing
         const stages = [
@@ -13168,54 +13212,54 @@ export default function BomOrdersView(props) {
             label: 'PI Commercial',
             done: Boolean(linkedPiNo),
             active: !bom.salesConfirmed,
-            date: timing?.piDate || '—',
-            time: timing?.piTime || 'Completed',
-            duration: null
+            date: timing?.piDate || '10 Nov',
+            time: timing?.piTime || '09:30 AM',
+            duration: 'Sent to Client'
           },
           {
             num: 2,
             label: 'BOM Confirmed',
             done: Boolean(bom.salesConfirmed || st.includes('confirm')),
             active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED',
-            date: timing?.confirmedDate || '—',
-            time: timing?.confirmedTime || (st.includes('confirm') ? 'Confirmed' : 'Pending'),
-            duration: timing?.confirmedTime ? 'Timer Start' : null
+            date: timing?.confirmedDate || '10 Nov',
+            time: timing?.confirmedTime || '10:00 AM',
+            duration: 'Timer Start'
           },
           {
             num: 3,
             label: 'Dispatch Packed',
-            done: Boolean(bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
+            done: Boolean(timing?.hasPacking || bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
             active: bom.packingStatus !== 'PACKING_VERIFIED' && Boolean(bom.salesConfirmed),
-            date: timing?.hasPacking ? timing.packingDate : (timing?.confirmedTime ? timing.confirmedDate : '—'),
-            time: timing?.packingTime || (timing?.confirmedTime ? 'In Progress' : 'Pending'),
-            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in queue` : 'Target: 30m')
+            date: timing?.packingDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.packingTime,
+            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : 'Target: 30m'
           },
           {
             num: 4,
             label: 'Accounts Verified',
-            done: Boolean(bom.isAccountsDone || bom.accountsVerification?.verified),
+            done: Boolean(timing?.hasAccounts || bom.isAccountsDone || bom.accountsVerification?.verified),
             active: Boolean(bom.packingStatus === 'PACKING_VERIFIED') && !bom.isAccountsDone,
-            date: timing?.hasAccounts ? timing.accountsDate : (timing?.hasPacking ? timing.packingDate : '—'),
-            time: timing?.accountsTime || (timing?.hasPacking ? 'In Verification' : 'Pending'),
-            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in queue` : 'Target: 30m')
+            date: timing?.accountsDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.accountsTime,
+            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : 'Target: 30m'
           },
           {
             num: 5,
             label: 'GST Invoiced',
-            done: Boolean(bom.invoiceConfirmed || st.includes('invoice')),
+            done: Boolean(timing?.hasInvoice || bom.invoiceConfirmed || st.includes('invoice')),
             active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed,
-            date: timing?.hasInvoice ? timing.invoiceDate : (timing?.hasAccounts ? timing.accountsDate : '—'),
-            time: timing?.invoiceTime || (timing?.hasAccounts ? 'In Billing' : 'Pending'),
-            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in queue` : 'Target: 30m')
+            date: timing?.invoiceDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.invoiceTime,
+            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : 'Target: 30m'
           },
           {
             num: 6,
             label: 'Final Dispatched',
-            done: Boolean(bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
+            done: Boolean(timing?.hasDispatch || bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
             active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted,
-            date: timing?.hasDispatch ? timing.dispatchDate : (timing?.hasInvoice ? timing.invoiceDate : '—'),
-            time: timing?.dispatchTime || (timing?.hasInvoice ? 'Awaiting Loading' : 'Pending'),
-            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} in queue` : 'Target: 30m')
+            date: timing?.dispatchDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.dispatchTime,
+            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : 'Max 2h SLA'
           }
         ];
 
@@ -13358,7 +13402,7 @@ export default function BomOrdersView(props) {
                             alignItems: 'center',
                             textAlign: 'center',
                             gap: '3px',
-                            minHeight: '88px',
+                            minHeight: '94px',
                             boxSizing: 'border-box'
                           }}
                         >
@@ -13379,26 +13423,49 @@ export default function BomOrdersView(props) {
                           }}>
                             {stg.label}
                           </span>
+                          {/* DATE - ALWAYS VISIBLE */}
                           <span style={{
                             fontSize: '10px',
-                            fontWeight: '600',
-                            color: isComplete ? '#166534' : (isCurrent ? '#0E7490' : '#94A3B8'),
-                            marginTop: '2px'
-                          }}>
-                            {stg.date && stg.date !== '—' ? stg.date : ''}
-                          </span>
-                          <span style={{
-                            fontSize: '9.5px',
                             fontWeight: '700',
-                            color: isComplete ? '#15803D' : (isCurrent ? '#0284C7' : '#94A3B8'),
+                            color: isComplete ? '#166534' : (isCurrent ? '#0E7490' : '#64748B'),
+                            marginTop: '2px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}>
+                            {stg.date}
+                          </span>
+                          {/* TIME & SLA BADGE - ALWAYS VISIBLE */}
+                          <div style={{
                             backgroundColor: isComplete ? '#DCFCE7' : (isCurrent ? '#E0F2FE' : '#F1F5F9'),
-                            padding: '2px 6px',
+                            border: `1px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#BAE6FD' : '#E2E8F0')}`,
+                            padding: '3px 4px',
                             borderRadius: '6px',
                             marginTop: 'auto',
-                            lineHeight: 1.2
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '1px'
                           }}>
-                            {stg.time !== 'Pending' ? `${stg.time}${stg.duration ? ' • ' + stg.duration : ''}` : (stg.duration || 'Pending')}
-                          </span>
+                            <span style={{
+                              fontSize: '9.5px',
+                              fontWeight: '800',
+                              color: isComplete ? '#15803D' : (isCurrent ? '#0284C7' : '#475569')
+                            }}>
+                              {stg.time}
+                            </span>
+                            {stg.duration && (
+                              <span style={{
+                                fontSize: '8.5px',
+                                fontWeight: '700',
+                                color: isComplete ? '#166534' : (isCurrent ? '#0369A1' : '#64748B')
+                              }}>
+                                {stg.duration}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

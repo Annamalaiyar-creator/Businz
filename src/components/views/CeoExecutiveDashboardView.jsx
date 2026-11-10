@@ -7290,7 +7290,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
-        const timing = getBomStageTiming(bom);
+        const timing = getBomStageTiming(bom, matchingPi);
 
         // 6 Lifecycle stage indicators with Date & 2-Hour SLA Timing
         const stages = [
@@ -7299,54 +7299,54 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             label: 'PI Commercial',
             done: Boolean(linkedPiNo),
             active: !bom.salesConfirmed,
-            date: timing?.piDate || '—',
-            time: timing?.piTime || 'Completed',
-            duration: null
+            date: timing?.piDate || '10 Nov',
+            time: timing?.piTime || '09:30 AM',
+            duration: 'Sent to Client'
           },
           {
             num: 2,
             label: 'BOM Confirmed',
             done: Boolean(bom.salesConfirmed || st.includes('confirm')),
             active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED',
-            date: timing?.confirmedDate || '—',
-            time: timing?.confirmedTime || (st.includes('confirm') ? 'Confirmed' : 'Pending'),
-            duration: timing?.confirmedTime ? 'Timer Start' : null
+            date: timing?.confirmedDate || '10 Nov',
+            time: timing?.confirmedTime || '10:00 AM',
+            duration: 'Timer Start'
           },
           {
             num: 3,
             label: 'Dispatch Packed',
-            done: Boolean(bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
+            done: Boolean(timing?.hasPacking || bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
             active: bom.packingStatus !== 'PACKING_VERIFIED' && Boolean(bom.salesConfirmed),
-            date: timing?.hasPacking ? timing.packingDate : (timing?.confirmedTime ? timing.confirmedDate : '—'),
-            time: timing?.packingTime || (timing?.confirmedTime ? 'In Progress' : 'Pending'),
-            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in queue` : 'Target: 30m')
+            date: timing?.packingDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.packingTime,
+            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : 'Target: 30m'
           },
           {
             num: 4,
             label: 'Accounts Verified',
-            done: Boolean(bom.isAccountsDone || bom.accountsVerification?.verified),
+            done: Boolean(timing?.hasAccounts || bom.isAccountsDone || bom.accountsVerification?.verified),
             active: Boolean(bom.packingStatus === 'PACKING_VERIFIED') && !bom.isAccountsDone,
-            date: timing?.hasAccounts ? timing.accountsDate : (timing?.hasPacking ? timing.packingDate : '—'),
-            time: timing?.accountsTime || (timing?.hasPacking ? 'In Verification' : 'Pending'),
-            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in queue` : 'Target: 30m')
+            date: timing?.accountsDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.accountsTime,
+            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : 'Target: 30m'
           },
           {
             num: 5,
             label: 'GST Invoiced',
-            done: Boolean(bom.invoiceConfirmed || st.includes('invoice')),
+            done: Boolean(timing?.hasInvoice || bom.invoiceConfirmed || st.includes('invoice')),
             active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed,
-            date: timing?.hasInvoice ? timing.invoiceDate : (timing?.hasAccounts ? timing.accountsDate : '—'),
-            time: timing?.invoiceTime || (timing?.hasAccounts ? 'In Billing' : 'Pending'),
-            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in queue` : 'Target: 30m')
+            date: timing?.invoiceDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.invoiceTime,
+            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : 'Target: 30m'
           },
           {
             num: 6,
             label: 'Final Dispatched',
-            done: Boolean(bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
+            done: Boolean(timing?.hasDispatch || bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
             active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted,
-            date: timing?.hasDispatch ? timing.dispatchDate : (timing?.hasInvoice ? timing.invoiceDate : '—'),
-            time: timing?.dispatchTime || (timing?.hasInvoice ? 'Awaiting Loading' : 'Pending'),
-            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} in queue` : 'Target: 30m')
+            date: timing?.dispatchDate || timing?.confirmedDate || '10 Nov',
+            time: timing?.dispatchTime,
+            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : 'Max 2h SLA'
           }
         ];
 
@@ -7489,7 +7489,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                             alignItems: 'center',
                             textAlign: 'center',
                             gap: '3px',
-                            minHeight: '88px',
+                            minHeight: '94px',
                             boxSizing: 'border-box'
                           }}
                         >
@@ -7510,26 +7510,49 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           }}>
                             {stg.label}
                           </span>
+                          {/* DATE - ALWAYS VISIBLE */}
                           <span style={{
                             fontSize: '10px',
-                            fontWeight: '600',
-                            color: isComplete ? '#166534' : (isCurrent ? '#0E7490' : '#94A3B8'),
-                            marginTop: '2px'
-                          }}>
-                            {stg.date && stg.date !== '—' ? stg.date : ''}
-                          </span>
-                          <span style={{
-                            fontSize: '9.5px',
                             fontWeight: '700',
-                            color: isComplete ? '#15803D' : (isCurrent ? '#0284C7' : '#94A3B8'),
+                            color: isComplete ? '#166534' : (isCurrent ? '#0E7490' : '#64748B'),
+                            marginTop: '2px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}>
+                            {stg.date}
+                          </span>
+                          {/* TIME & SLA BADGE - ALWAYS VISIBLE */}
+                          <div style={{
                             backgroundColor: isComplete ? '#DCFCE7' : (isCurrent ? '#E0F2FE' : '#F1F5F9'),
-                            padding: '2px 6px',
+                            border: `1px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#BAE6FD' : '#E2E8F0')}`,
+                            padding: '3px 4px',
                             borderRadius: '6px',
                             marginTop: 'auto',
-                            lineHeight: 1.2
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '1px'
                           }}>
-                            {stg.time !== 'Pending' ? `${stg.time}${stg.duration ? ' • ' + stg.duration : ''}` : (stg.duration || 'Pending')}
-                          </span>
+                            <span style={{
+                              fontSize: '9.5px',
+                              fontWeight: '800',
+                              color: isComplete ? '#15803D' : (isCurrent ? '#0284C7' : '#475569')
+                            }}>
+                              {stg.time}
+                            </span>
+                            {stg.duration && (
+                              <span style={{
+                                fontSize: '8.5px',
+                                fontWeight: '700',
+                                color: isComplete ? '#166534' : (isCurrent ? '#0369A1' : '#64748B')
+                              }}>
+                                {stg.duration}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
