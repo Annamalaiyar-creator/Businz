@@ -75,6 +75,17 @@ export const formatAppliedAtDate = (r) => {
   return '—';
 };
 
+export const formatBomDateDot = (raw) => {
+  if (!raw) return '—';
+  if (typeof raw === 'object' && raw.date) return formatBomDateDot(raw.date);
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return String(raw);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+};
+
 export default function BomOrdersView(props) {
   const {
     activeTab = 'BOM Orders',
@@ -9806,6 +9817,216 @@ export default function BomOrdersView(props) {
 
       {/* 4. MAIN DATA DISPLAY (PIPELINE CARDS / CLASSIC TABLE) WITH INTERACTIVE ROW SELECTION */}
       <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+        {/* CEO EXCLUSIVE: EXACT PI-STYLE MASTER REGISTER DATA TABLE */}
+        {isCeo ? (
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
+                  <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
+                    <input
+                      id="bom-orders-table-select-all"
+                      name="selectAll"
+                      aria-label="SelectAll"
+                      type="checkbox"
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRows(filteredRows.map(r => r.code));
+                        } else {
+                          setSelectedRows([]);
+                        }
+                      }}
+                      checked={filteredRows.length > 0 && filteredRows.every(r => selectedRows.includes(r.code))}
+                      style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
+                    />
+                  </th>
+                  <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>BOM NO.</th>
+                  <th style={{ width: '120px', minWidth: '110px', padding: '12px 14px', boxSizing: 'border-box' }}>BOM Date</th>
+                  <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
+                  <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
+                  <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
+                  <th style={{ width: '170px', minWidth: '150px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tableLoading ? (
+                  Array.from({ length: 6 }).map((_, idx) => (
+                    <tr key={`skel-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
+                        <input type="checkbox" disabled style={{ opacity: 0.3 }} />
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div className="skeleton-shimmer skeleton-text" style={{ width: '100px', height: '14px' }} />
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} />
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div className="skeleton-shimmer skeleton-text" style={{ width: '120px', height: '14px' }} />
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                        <div className="skeleton-shimmer skeleton-text" style={{ width: '85px', height: '14px', marginLeft: 'auto' }} />
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '12px 14px' }}>
+                        <div className="skeleton-shimmer" style={{ width: '80px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
+                      </td>
+                    </tr>
+                  ))
+                ) : currentRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <Boxes size={32} style={{ color: '#CBD5E1' }} />
+                        <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No BOM orders found</span>
+                        <span style={{ fontSize: '12px', color: '#94A3B8' }}>
+                          No records match your active search or filter criteria.
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  currentRows.map((row, idx) => {
+                    const isChecked = selectedRows.includes(row.code);
+                    const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || (row.status || '').toLowerCase().includes('cancel') || row.tabGroup === 'Cancelled');
+                    const bDateRaw = row.appliedAt || row.bomDate || row.date || row.createdAt;
+                    const dateFormatted = formatBomDateDot(bDateRaw);
+                    const timing = getBomStageTiming(row);
+
+                    return (
+                      <tr
+                        key={row.code || idx}
+                        onClick={() => setConfirmingBomModal({ ...row, isEditMode: false })}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          transition: 'all 0.15s ease',
+                          backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                          cursor: 'pointer'
+                        }}
+                        className="hover-row"
+                      >
+                        <td
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            width: '48px',
+                            minWidth: '48px',
+                            padding: '12px 14px',
+                            textAlign: 'center',
+                            verticalAlign: 'middle',
+                            boxSizing: 'border-box',
+                            borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleSelectRowGeneric(row.code)}
+                            style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
+                          />
+                        </td>
+                        <td style={{ padding: '12px 14px', width: '150px', minWidth: '130px' }}>
+                          <div style={{ fontWeight: 'bold', color: isCancelled ? '#DC2626' : '#2563EB', fontSize: '13px' }}>
+                            {row.code}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#64748B', width: '120px', minWidth: '110px', whiteSpace: 'nowrap' }}>
+                          {dateFormatted}
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '50%',
+                              backgroundColor: '#ECFEFF',
+                              color: '#0E7490',
+                              border: '1px solid #A5F3FC',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              flexShrink: 0
+                            }}>
+                              {((row.salesPerson || row.createdBy || 'S')[0] || 'S').toUpperCase()}
+                            </div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {row.salesPerson || row.createdBy || 'Sales Department'}
+                              </div>
+                              {row.salesPersonCode && (
+                                <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                  {row.salesPersonCode}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B', minWidth: '220px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: '700', color: '#0F172A' }}>
+                              {row.c3 || row.customerName || 'Customer'}
+                            </span>
+                            {(row.contactPerson || row.c2) && (
+                              <span style={{ fontSize: '11px', color: '#64748B' }}>
+                                Attn: {row.contactPerson || row.c2}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right', width: '150px', minWidth: '130px' }}>
+                          {row.c5 || (cleanNum(row.grandTotal) > 0 ? `₹${cleanNum(row.grandTotal).toLocaleString('en-IN')}` : '—')}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', width: '170px', minWidth: '150px' }}>
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span style={{
+                              backgroundColor: row.stBg || '#F0FDF4',
+                              color: row.stFg || '#166534',
+                              border: `1px solid ${row.stBorder || '#BBF7D0'}`,
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.stFg || '#166534' }} />
+                              {row.status || 'Active'}
+                            </span>
+                            {timing && timing.confirmedTime && (
+                              <span
+                                title={timing.statusDesc || ''}
+                                style={{
+                                  backgroundColor: timing.isBreached ? '#FEF2F2' : (timing.isApproaching ? '#FFFBEB' : '#F0FDF4'),
+                                  color: timing.isBreached ? '#DC2626' : (timing.isApproaching ? '#D97706' : '#16A34A'),
+                                  border: `1px solid ${timing.isBreached ? '#FECACA' : (timing.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                                  padding: '2px 7px',
+                                  borderRadius: '10px',
+                                  fontSize: '9.5px',
+                                  fontWeight: '800',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}
+                              >
+                                <Clock size={10} />
+                                <span>⏱️ {timing.totalElapsedStr}</span>
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <>
         {/* VIEW MODE & BULK SELECTION TOOLBAR */}
         <div style={{
           display: 'flex',
@@ -10272,7 +10493,8 @@ export default function BomOrdersView(props) {
               })
             )}
           </div>
-
+          </>
+        )}
         {/* PAGINATION FOOTER - STRICT RULES MATCH */}
         {!tableLoading && filteredRows.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
