@@ -25,6 +25,8 @@ import {
   getNextDatabasePiNumber,
   updatePiZohoSyncStatus,
   assignProformaInvoiceInDatabase,
+  cancelProformaInvoiceInDatabase,
+  deleteProformaInvoiceFromDatabase,
   toConsumerPi
 } from './piPersistence.js';
 import * as vrmDataModule from '../src/utils/vrmProductsData.js';
@@ -7870,7 +7872,7 @@ app.post(['/api/zoho/push-pi', '/api/estimates/push-to-zoho'], async (req, res) 
   }
 });
 
-// Cancel / Decline Proforma Invoice (Estimate / Quote) in BUSINZ local stores (Native BUSINZ Store)
+// Cancel / Decline Proforma Invoice (Estimate / Quote) in BUSINZ authoritative database and local stores
 app.post(['/api/estimates/cancel', '/api/proforma-invoices/cancel'], async (req, res) => {
   const { piNo, reason = 'Cancelled by user in Businz' } = req.body;
   const cleanPiNo = String(piNo || '').trim();
@@ -7879,46 +7881,36 @@ app.post(['/api/estimates/cancel', '/api/proforma-invoices/cancel'], async (req,
     return res.status(400).json({ success: false, error: 'piNo is required to cancel a Proforma Invoice' });
   }
 
-  // Persist cancellation in local stores (proforma_invoice_store and sales_pi_store)
-  const cancelledTimestamp = new Date().toISOString();
   try {
-    const pProforma = getStoreFilePath('proforma_invoice_store.json');
-    if (fs.existsSync(pProforma)) {
-      let localProforma = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
-      if (Array.isArray(localProforma)) {
-        localProforma = localProforma.map(p => {
-          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) {
-            return { ...p, status: 'Cancelled', statusType: 'cancelled', cancelledAt: cancelledTimestamp, cancelReason: reason };
-          }
-          return p;
-        });
-        fs.writeFileSync(pProforma, JSON.stringify(localProforma, null, 2), 'utf8');
-        pushStoreToSupabase('proforma_invoice_store', localProforma).catch(() => {});
-      }
-    }
-
-    const pSales = getStoreFilePath('sales_pi_store.json');
-    if (fs.existsSync(pSales)) {
-      let localSales = JSON.parse(fs.readFileSync(pSales, 'utf8'));
-      if (Array.isArray(localSales)) {
-        localSales = localSales.map(p => {
-          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) {
-            return { ...p, status: 'Cancelled', statusType: 'cancelled', cancelledAt: cancelledTimestamp, cancelReason: reason };
-          }
-          return p;
-        });
-        fs.writeFileSync(pSales, JSON.stringify(localSales, null, 2), 'utf8');
-        pushStoreToSupabase('sales_pi_store', localSales).catch(() => {});
-      }
-    }
+    await cancelProformaInvoiceInDatabase(cleanPiNo, reason);
   } catch (e) {
-    console.error('[CANCEL STORE PERSIST ERROR]', e);
+    console.error('[CANCEL DB PERSIST ERROR]', e);
   }
 
   res.json({
     success: true,
     message: `Proforma Invoice ${cleanPiNo} marked as Cancelled in BUSINZ!`
   });
+});
+
+// Delete Proforma Invoice permanently from database and stores (Admin/Cleanup)
+app.delete(['/api/estimates/:id', '/api/proforma-invoices/:id'], async (req, res) => {
+  const piId = decodeURIComponent(req.params.id || '').trim();
+  if (!piId) {
+    return res.status(400).json({ success: false, error: 'Proforma Invoice ID / number is required' });
+  }
+
+  try {
+    const deleted = await deleteProformaInvoiceFromDatabase(piId);
+    return res.json({
+      success: true,
+      message: `Proforma Invoice ${piId} deleted successfully!`,
+      deleted
+    });
+  } catch (err) {
+    console.error('[DELETE PI ERROR]', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Delivery Challans endpoints - served strictly from BUSINZ local stores

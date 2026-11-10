@@ -937,7 +937,12 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const totalPoSpendFormatted = formatRealCurrency(totalPoSpendNum);
 
   const totalPiPipelineNum = useMemo(() => {
-    return piList.reduce((acc, pi) => acc + parseAmt(pi.grandTotal || pi.amount || pi.total), 0);
+    return piList
+      .filter(pi => !pi.cancelled && String(pi.status || '').toLowerCase() !== 'cancelled')
+      .reduce((acc, pi) => {
+        const amt = parseAmt(pi.grandTotal || pi.amount || pi.total);
+        return amt < 1000000000 ? acc + amt : acc;
+      }, 0);
   }, [piList]);
 
   const totalPiPipelineCr = (totalPiPipelineNum / 10000000).toFixed(2);
@@ -1310,8 +1315,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
       const piRevForMonth = piList.reduce((acc, pi) => {
         const d = parseRecordDate(pi);
-        if (d && d.getMonth() === mIdx) {
-          return acc + parseAmt(pi.grandTotal || pi.amount || pi.total);
+        if (d && d.getMonth() === mIdx && !pi.cancelled && String(pi.status || '').toLowerCase() !== 'cancelled') {
+          const amt = parseAmt(pi.grandTotal || pi.amount || pi.total);
+          return amt < 1000000000 ? acc + amt : acc;
         }
         return acc;
       }, 0);
@@ -1409,11 +1415,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     const activeBoms = targetBoms.filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'));
     const totalBomVal = activeBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
-    const confirmedPis = targetPis.filter(p => {
+    const activePis = targetPis.filter(p => !p.cancelled && String(p.status || '').toLowerCase() !== 'cancelled');
+    const confirmedPis = activePis.filter(p => {
       const st = String(p.status || '').toLowerCase();
       return st.includes('confirm') || st.includes('bom') || st.includes('convert') || p.bomConverted;
     });
-    const totalPiVal = targetPis.reduce((acc, p) => acc + parseAmt(p.grandTotal || p.totalAmount || p.amount || 0), 0) * multiplier;
+    const totalPiVal = activePis.reduce((acc, p) => {
+      const amt = parseAmt(p.grandTotal || p.totalAmount || p.amount || 0);
+      return amt < 1000000000 ? acc + amt : acc;
+    }, 0) * multiplier;
 
     // STEP 03: Dispatch Packing
     const packedBoms = activeBoms.filter(b => {
@@ -1447,18 +1457,18 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     const awaitingLoadBoms = Math.max(0, invoicedBoms.length - completedDispatchBoms.length);
     const dispatchedVal = completedDispatchBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
-    const baseTotal = Math.max(1, targetPis.length, activeBoms.length);
+    const baseTotal = Math.max(1, activePis.length, activeBoms.length);
 
     return [
       {
         step: 'STEP 01',
         stage: 'Proforma Invoice',
         subtitle: 'Sales Commercial PI',
-        primaryMetric: `${targetPis.length} PIs`,
+        primaryMetric: `${activePis.length} PIs`,
         value: fmtCompact(totalPiVal),
         valueLabel: 'Pipeline Value',
         statusBadge: `${confirmedPis.length} Confirmed`,
-        progressPct: targetPis.length > 0 ? Math.min(100, Math.max(18, Math.round((confirmedPis.length / Math.max(1, targetPis.length)) * 100))) : 0,
+        progressPct: activePis.length > 0 ? Math.min(100, Math.max(18, Math.round((confirmedPis.length / Math.max(1, activePis.length)) * 100))) : 0,
         icon: Receipt,
         color: '#0E7490',
         bg: '#ECFEFF',

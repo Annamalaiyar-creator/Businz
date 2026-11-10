@@ -764,7 +764,12 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   }, [filteredQuotations]);
 
   const totalPiValue = useMemo(() => {
-    return filteredPis.reduce((sum, p) => sum + parseAmt(p.total || p.grandTotal || p.invAmt || p.amount), 0);
+    return filteredPis
+      .filter(p => !p.cancelled && String(p.status || '').toLowerCase() !== 'cancelled')
+      .reduce((sum, p) => {
+        const amt = parseAmt(p.total || p.grandTotal || p.invAmt || p.amount);
+        return amt < 1000000000 ? sum + amt : sum;
+      }, 0);
   }, [filteredPis]);
 
   const totalBomOrderValue = useMemo(() => {

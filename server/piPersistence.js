@@ -679,3 +679,105 @@ export async function assignProformaInvoiceInDatabase(piNo, assigneeData, pool =
     return null;
   }
 }
+
+/**
+ * Cancels a Proforma Invoice in PostgreSQL public.proforma_invoices, controlroom_store, and disk files.
+ */
+export async function cancelProformaInvoiceInDatabase(piNo, reason = 'Cancelled by user', pool = defaultPool) {
+  if (!piNo) return null;
+  const cleanPiNo = String(piNo).trim();
+  const cleanKey = cleanPiNo.toLowerCase();
+  const cancelledTimestamp = new Date().toISOString();
+
+  try {
+    const res = await pool.query(`
+      UPDATE public.proforma_invoices
+      SET status = 'Cancelled',
+          status_type = 'cancelled',
+          remarks = COALESCE(remarks, '') || ' [Cancelled: ' || $1 || ']',
+          updated_at = NOW()
+      WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($2)) OR LOWER(TRIM(id)) = LOWER(TRIM($2))
+      RETURNING *;
+    `, [reason, cleanPiNo]);
+
+    let updatedPi = null;
+    if (res.rows.length > 0) {
+      updatedPi = toConsumerPi(res.rows[0]);
+    }
+
+    const cancelMeta = {
+      status: 'Cancelled',
+      statusType: 'cancelled',
+      cancelled: true,
+      cancelledAt: cancelledTimestamp,
+      cancelReason: reason
+    };
+
+    if (updatedPi) {
+      updatedPi = { ...updatedPi, ...cancelMeta };
+    }
+
+    await syncSinglePiToControlroomStore(updatedPi || { piNo: cleanPiNo, id: cleanPiNo, ...cancelMeta }, pool);
+    return updatedPi;
+  } catch (err) {
+    console.error(`[cancelProformaInvoiceInDatabase Error for ${piNo}]:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Deletes a Proforma Invoice permanently from PostgreSQL public.proforma_invoices, controlroom_store, and disk files.
+ */
+export async function deleteProformaInvoiceFromDatabase(piNo, pool = defaultPool) {
+  if (!piNo) return false;
+  const cleanPiNo = String(piNo).trim();
+  const cleanKey = cleanPiNo.toLowerCase();
+
+  // 1. Delete from PostgreSQL public.proforma_invoices
+  try {
+    await pool.query(`
+      DELETE FROM public.proforma_invoices
+      WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($1)) OR LOWER(TRIM(id)) = LOWER(TRIM($1));
+    `, [cleanPiNo]);
+  } catch (err) {
+    console.error(`[deleteProformaInvoiceFromDatabase DB error]:`, err.message);
+  }
+
+  // 2. Remove from controlroom_store in PostgreSQL
+  try {
+    for (const key of ['sales_pi_store', 'proforma_invoice_store']) {
+      await pool.query(`
+        UPDATE public.controlroom_store
+        SET data = (
+          SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+          FROM jsonb_array_elements(data) elem
+          WHERE LOWER(TRIM(elem->>'piNo')) != $1 AND LOWER(TRIM(elem->>'id')) != $1
+        ),
+        updated_at = NOW()
+        WHERE key = $2
+      `, [cleanKey, key]);
+    }
+  } catch (err) {
+    console.warn('[PI Delete Store Sync Warning]:', err.message);
+  }
+
+  // 3. Remove from disk files
+  const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json'];
+  for (const sf of storeFiles) {
+    try {
+      const p = getStoreFilePath(sf);
+      if (fs.existsSync(p)) {
+        let list = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (Array.isArray(list)) {
+          const filtered = list.filter(x => {
+            const k = String(x.piNo || x.id || '').trim().toLowerCase();
+            return k !== cleanKey;
+          });
+          fs.writeFileSync(p, JSON.stringify(filtered, null, 2), 'utf8');
+        }
+      }
+    } catch (_) {}
+  }
+
+  return true;
+}
