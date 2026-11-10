@@ -1838,6 +1838,254 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return Array.from(customerMap.values()).sort((a, b) => b.totalValue - a.totalValue);
   }, [bomList]);
 
+  // 2-Hour Order-to-Dispatch Stopwatch & Bottleneck Audit (CEO Exclusively)
+  const confirmedBomsStopwatchAudit = useMemo(() => {
+    const activeBoms = (bomList || []).filter(b => {
+      if (!b || b.cancelled) return false;
+      const st = String(b.status || '').toLowerCase();
+      if (st.includes('cancel') || st === 'draft') return false;
+      return true;
+    });
+
+    const now = Date.now();
+    const TARGET_MINUTES = 120; // 2 Hours Target SLA
+
+    let withinSlaCount = 0;
+    let approachingSlaCount = 0;
+    let breachedSlaCount = 0;
+
+    let totalTatMinutes = 0;
+    let tatRecordedCount = 0;
+
+    const stageDurations = {
+      step2_to_3: { name: 'Dispatch Packing', totalMins: 0, count: 0 },
+      step3_to_4: { name: 'Accounts Verification', totalMins: 0, count: 0 },
+      step4_to_5: { name: 'GST Billing / Invoice', totalMins: 0, count: 0 },
+      step5_to_6: { name: 'Vehicle Loading & Dispatch', totalMins: 0, count: 0 }
+    };
+
+    const formatTimeOnly = (dt) => {
+      if (!dt || isNaN(dt.getTime())) return null;
+      return dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    };
+
+    const formatDateShort = (dt) => {
+      if (!dt || isNaN(dt.getTime())) return '';
+      return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    };
+
+    const formatDiff = (mins) => {
+      if (mins === null || mins === undefined || isNaN(mins) || mins < 0) return '—';
+      if (mins < 60) return `${Math.round(mins)}m`;
+      const h = Math.floor(mins / 60);
+      const m = Math.round(mins % 60);
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    };
+
+    const processedOrders = activeBoms.map(b => {
+      const st = String(b.status || '').toLowerCase();
+
+      const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.date || b.createdAt;
+      const confirmedDate = rawConfirmed ? new Date(rawConfirmed) : null;
+
+      const rawPacking = b.packingCompletedAt || b.packedAt || b.packingVerifiedAt || b.accountsVerification?.packedAt || (b.packingStatus === 'PACKING_VERIFIED' ? b.updatedAt : null);
+      const packingDate = rawPacking ? new Date(rawPacking) : null;
+
+      const rawAccounts = b.accountsVerifiedAt || b.accountsVerification?.verifiedAt || (b.isAccountsDone ? b.updatedAt : null);
+      let accountsDate = null;
+      if (rawAccounts) {
+        accountsDate = new Date(rawAccounts);
+        if (isNaN(accountsDate.getTime()) && typeof rawAccounts === 'string') {
+          const p = Date.parse(rawAccounts);
+          if (!isNaN(p)) accountsDate = new Date(p);
+        }
+      }
+
+      const rawInvoice = b.invoiceConfirmedAt || b.invoicedAt || b.stockDeductionDate || (b.invoiceConfirmed ? b.updatedAt : null);
+      const invoiceDate = rawInvoice ? new Date(rawInvoice) : null;
+
+      const rawDispatch = b.dispatchedAt || b.vehicleLoading?.loadedAt || (b.fullyCompleted || st.includes('completed') || st.includes('dispatched') ? b.updatedAt : null);
+      const dispatchDate = rawDispatch ? new Date(rawDispatch) : null;
+
+      let currentStageNum = 2;
+      let currentStageName = 'Step 2 · Confirmed';
+      if (dispatchDate || b.fullyCompleted || st.includes('dispatched') || st.includes('completed')) {
+        currentStageNum = 6;
+        currentStageName = 'Step 6 · Dispatched';
+      } else if (invoiceDate || b.invoiceConfirmed || st.includes('invoice')) {
+        currentStageNum = 5;
+        currentStageName = 'Step 5 · Invoiced';
+      } else if (accountsDate || b.isAccountsDone || b.accountsVerification?.verified) {
+        currentStageNum = 4;
+        currentStageName = 'Step 4 · Accounts Done';
+      } else if (packingDate || b.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')) {
+        currentStageNum = 3;
+        currentStageName = 'Step 3 · Packed';
+      }
+
+      const confirmedMs = confirmedDate ? confirmedDate.getTime() : null;
+      const packingMs = packingDate ? packingDate.getTime() : null;
+      const accountsMs = accountsDate ? accountsDate.getTime() : null;
+      const invoiceMs = invoiceDate ? invoiceDate.getTime() : null;
+      const dispatchMs = dispatchDate ? dispatchDate.getTime() : null;
+
+      let step2To3Mins = null;
+      if (confirmedMs && packingMs && packingMs >= confirmedMs) {
+        step2To3Mins = (packingMs - confirmedMs) / 60000;
+        stageDurations.step2_to_3.totalMins += step2To3Mins;
+        stageDurations.step2_to_3.count++;
+      } else if (confirmedMs && currentStageNum === 2) {
+        step2To3Mins = Math.max(0, (now - confirmedMs) / 60000);
+      }
+
+      let step3To4Mins = null;
+      const step3StartMs = packingMs || confirmedMs;
+      if (step3StartMs && accountsMs && accountsMs >= step3StartMs) {
+        step3To4Mins = (accountsMs - step3StartMs) / 60000;
+        stageDurations.step3_to_4.totalMins += step3To4Mins;
+        stageDurations.step3_to_4.count++;
+      } else if (step3StartMs && currentStageNum === 3) {
+        step3To4Mins = Math.max(0, (now - step3StartMs) / 60000);
+      }
+
+      let step4To5Mins = null;
+      const step4StartMs = accountsMs || packingMs || confirmedMs;
+      if (step4StartMs && invoiceMs && invoiceMs >= step4StartMs) {
+        step4To5Mins = (invoiceMs - step4StartMs) / 60000;
+        stageDurations.step4_to_5.totalMins += step4To5Mins;
+        stageDurations.step4_to_5.count++;
+      } else if (step4StartMs && currentStageNum === 4) {
+        step4To5Mins = Math.max(0, (now - step4StartMs) / 60000);
+      }
+
+      let step5To6Mins = null;
+      const step5StartMs = invoiceMs || accountsMs || packingMs || confirmedMs;
+      if (step5StartMs && dispatchMs && dispatchMs >= step5StartMs) {
+        step5To6Mins = (dispatchMs - step5StartMs) / 60000;
+        stageDurations.step5_to_6.totalMins += step5To6Mins;
+        stageDurations.step5_to_6.count++;
+      } else if (step5StartMs && currentStageNum === 5) {
+        step5To6Mins = Math.max(0, (now - step5StartMs) / 60000);
+      }
+
+      let totalElapsedMins = 0;
+      if (confirmedMs) {
+        if (currentStageNum === 6 && dispatchMs) {
+          totalElapsedMins = Math.max(0, (dispatchMs - confirmedMs) / 60000);
+        } else {
+          totalElapsedMins = Math.max(0, (now - confirmedMs) / 60000);
+        }
+        totalTatMinutes += totalElapsedMins;
+        tatRecordedCount++;
+      }
+
+      let slaStatus = 'on_track';
+      if (totalElapsedMins <= TARGET_MINUTES) {
+        withinSlaCount++;
+        slaStatus = 'on_track';
+      } else if (totalElapsedMins <= TARGET_MINUTES + 30) {
+        approachingSlaCount++;
+        slaStatus = 'approaching';
+      } else {
+        breachedSlaCount++;
+        slaStatus = 'breached';
+      }
+
+      const stageMinsList = [
+        { name: 'Step 3 Packing', mins: step2To3Mins || 0 },
+        { name: 'Step 4 Accounts', mins: step3To4Mins || 0 },
+        { name: 'Step 5 Invoicing', mins: step4To5Mins || 0 },
+        { name: 'Step 6 Loading', mins: step5To6Mins || 0 }
+      ];
+      stageMinsList.sort((x, y) => y.mins - x.mins);
+      const biggestBottleneck = stageMinsList[0]?.mins > 20 ? stageMinsList[0] : null;
+
+      return {
+        bom: b,
+        bomCode: b.bomCode || b.id,
+        linkedPi: b.sourcePiNo || b.piNo || b.piNumber || null,
+        customerName: b.customerName || b.customer || 'Customer',
+        orderValue: parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0),
+        currentStageNum,
+        currentStageName,
+        confirmedAtStr: formatTimeOnly(confirmedDate),
+        confirmedDateStr: formatDateShort(confirmedDate),
+        packingAtStr: formatTimeOnly(packingDate),
+        packingDurationStr: formatDiff(step2To3Mins),
+        accountsAtStr: formatTimeOnly(accountsDate),
+        accountsDurationStr: formatDiff(step3To4Mins),
+        invoiceAtStr: formatTimeOnly(invoiceDate),
+        invoiceDurationStr: formatDiff(step4To5Mins),
+        dispatchAtStr: formatTimeOnly(dispatchDate),
+        dispatchDurationStr: formatDiff(step5To6Mins),
+        totalElapsedMins,
+        totalElapsedStr: formatDiff(totalElapsedMins),
+        slaStatus,
+        biggestBottleneck,
+        isCompleted: currentStageNum === 6
+      };
+    });
+
+    const avgTatPerDept = [
+      {
+        dept: 'Packing & Checklist',
+        step: 'Step 2 → 3',
+        avgMins: stageDurations.step2_to_3.count > 0 ? Math.round(stageDurations.step2_to_3.totalMins / stageDurations.step2_to_3.count) : 0,
+        targetMins: 30,
+        color: '#D97706',
+        bg: '#FFFBEB',
+        border: '#FDE68A'
+      },
+      {
+        dept: 'Accounts Verification',
+        step: 'Step 3 → 4',
+        avgMins: stageDurations.step3_to_4.count > 0 ? Math.round(stageDurations.step3_to_4.totalMins / stageDurations.step3_to_4.count) : 0,
+        targetMins: 30,
+        color: '#7C3AED',
+        bg: '#F5F3FF',
+        border: '#DDD6FE'
+      },
+      {
+        dept: 'Tax Invoicing',
+        step: 'Step 4 → 5',
+        avgMins: stageDurations.step4_to_5.count > 0 ? Math.round(stageDurations.step4_to_5.totalMins / stageDurations.step4_to_5.count) : 0,
+        targetMins: 30,
+        color: '#2563EB',
+        bg: '#EFF6FF',
+        border: '#BFDBFE'
+      },
+      {
+        dept: 'Vehicle Loading',
+        step: 'Step 5 → 6',
+        avgMins: stageDurations.step5_to_6.count > 0 ? Math.round(stageDurations.step5_to_6.totalMins / stageDurations.step5_to_6.count) : 0,
+        targetMins: 30,
+        color: '#16A34A',
+        bg: '#F0FDF4',
+        border: '#BBF7D0'
+      }
+    ];
+
+    const sortedDepts = [...avgTatPerDept].sort((a, b) => b.avgMins - a.avgMins);
+    const primaryBottleneckDept = sortedDepts[0]?.avgMins > 0 ? sortedDepts[0] : null;
+
+    const totalOrdersCount = processedOrders.length;
+    const overallCompliancePct = totalOrdersCount > 0 ? Math.round((withinSlaCount / totalOrdersCount) * 100) : 100;
+    const avgTotalTatMins = tatRecordedCount > 0 ? Math.round(totalTatMinutes / tatRecordedCount) : 0;
+
+    return {
+      totalOrdersCount,
+      withinSlaCount,
+      approachingSlaCount,
+      breachedSlaCount,
+      overallCompliancePct,
+      avgTotalTatMins,
+      avgTotalTatStr: formatDiff(avgTotalTatMins),
+      avgTatPerDept,
+      primaryBottleneckDept,
+      processedOrders
+    };
+  }, [bomList]);
+
   // Configuration for 6 CEO KPI Popup Modals
   const kpiModalConfig = useMemo(() => {
     switch (activeKpiPopup) {
@@ -4064,7 +4312,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               </div>
             </div>
 
-            {/* Card 2: Dispatch SLA & On-Time Performance */}
+            {/* Card 2: 2-Hour Dispatch SLA Stopwatch */}
             <div style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '16px',
@@ -4078,47 +4326,47 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
-                    <Calendar size={15} />
+                    <Clock size={15} />
                   </div>
                   <div>
                     <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                      SLA & Dispatch Schedule
+                      2-Hour Dispatch SLA Stopwatch
                     </div>
-                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>Fulfillment deadline compliance</div>
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>BOM confirmation to dispatch loading</div>
                   </div>
                 </div>
                 <span style={{
                   fontSize: '11px',
                   fontWeight: '800',
-                  color: '#16A34A',
-                  backgroundColor: '#F0FDF4',
-                  border: '1px solid #BBF7D0',
+                  color: confirmedBomsStopwatchAudit.overallCompliancePct >= 80 ? '#16A34A' : (confirmedBomsStopwatchAudit.overallCompliancePct >= 50 ? '#D97706' : '#DC2626'),
+                  backgroundColor: confirmedBomsStopwatchAudit.overallCompliancePct >= 80 ? '#F0FDF4' : (confirmedBomsStopwatchAudit.overallCompliancePct >= 50 ? '#FFFBEB' : '#FEF2F2'),
+                  border: `1px solid ${confirmedBomsStopwatchAudit.overallCompliancePct >= 80 ? '#BBF7D0' : (confirmedBomsStopwatchAudit.overallCompliancePct >= 50 ? '#FDE68A' : '#FECACA')}`,
                   padding: '3px 8px',
                   borderRadius: '12px'
                 }}>
-                  {dispatchBottleneckStats.onTimePct}% On-Track
+                  {confirmedBomsStopwatchAudit.overallCompliancePct}% Within 2h
                 </span>
               </div>
 
               {/* Progress Bar */}
               <div style={{ width: '100%', height: '8px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden', display: 'flex' }}>
-                <div style={{ width: `${dispatchBottleneckStats.onTimePct}%`, backgroundColor: '#16A34A', height: '100%' }} />
-                <div style={{ width: `${100 - dispatchBottleneckStats.onTimePct}%`, backgroundColor: '#F59E0B', height: '100%' }} />
+                <div style={{ width: `${confirmedBomsStopwatchAudit.overallCompliancePct}%`, backgroundColor: '#16A34A', height: '100%' }} />
+                <div style={{ width: `${100 - confirmedBomsStopwatchAudit.overallCompliancePct}%`, backgroundColor: confirmedBomsStopwatchAudit.breachedSlaCount > 0 ? '#EF4444' : '#F59E0B', height: '100%' }} />
               </div>
 
               {/* Status Buckets */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '4px' }}>
                 <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', textAlign: 'center' }}>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#16A34A' }}>{dispatchBottleneckStats.onTimeCount}</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#15803D', marginTop: '2px' }}>On Schedule</div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#16A34A' }}>{confirmedBomsStopwatchAudit.withinSlaCount}</div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#15803D', marginTop: '2px' }}>≤ 2 Hours</div>
                 </div>
                 <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#D97706' }}>{dispatchBottleneckStats.dueSoonCount}</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', marginTop: '2px' }}>Due &lt; 48h</div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#D97706' }}>{confirmedBomsStopwatchAudit.approachingSlaCount}</div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', marginTop: '2px' }}>Near SLA (2-2.5h)</div>
                 </div>
                 <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', textAlign: 'center' }}>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#DC2626' }}>{dispatchBottleneckStats.overdueCount}</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B91C1C', marginTop: '2px' }}>Overdue</div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#DC2626' }}>{confirmedBomsStopwatchAudit.breachedSlaCount}</div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B91C1C', marginTop: '2px' }}>Breached (&gt; 2h)</div>
                 </div>
               </div>
 
@@ -4128,9 +4376,19 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 borderTop: '1px solid #F1F5F9',
                 fontSize: '10.5px',
                 color: '#64748B',
-                lineHeight: '1.4'
+                lineHeight: '1.4',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
-                Standard fulfillment lead time is <strong>3–5 working days</strong> from sales confirmation.
+                <span>Avg Fulfillment: <strong style={{ color: '#0F172A' }}>{confirmedBomsStopwatchAudit.avgTotalTatStr}</strong></span>
+                {confirmedBomsStopwatchAudit.primaryBottleneckDept ? (
+                  <span style={{ color: '#D97706', fontWeight: '700', fontSize: '10px' }}>
+                    Slowest: {confirmedBomsStopwatchAudit.primaryBottleneckDept.dept} ({confirmedBomsStopwatchAudit.primaryBottleneckDept.avgMins}m)
+                  </span>
+                ) : (
+                  <span style={{ color: '#16A34A', fontWeight: '700', fontSize: '10px' }}>All stages on pace</span>
+                )}
               </div>
             </div>
 
@@ -4226,6 +4484,486 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               }}>
                 <span>Click any order to view full lifecycle verification</span>
               </div>
+            </div>
+          </div>
+
+          {/* ======================================================== */}
+          {/* 2-HOUR ORDER-TO-DISPATCH STOPWATCH & BOTTLENECK AUDIT     */}
+          {/* (STRICTLY FOR CEO & MD LEADERSHIP)                        */}
+          {/* ======================================================== */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #EAEFEF',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid #EAEFEF',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+              backgroundColor: '#FAFCFD'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '8px',
+                    backgroundColor: '#ECFEFF',
+                    color: '#0E7490',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      Confirmed BOMs · 2-Hour Stage Stopwatch & Timestamp Audit
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        color: '#0E7490',
+                        backgroundColor: '#ECFEFF',
+                        border: '1px solid #A5F3FC',
+                        padding: '2px 8px',
+                        borderRadius: '10px'
+                      }}>
+                        CEO EXCLUSIVE
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                      2-Hour target timer starts upon BOM Sales Confirmation. Live timestamp logging & bottleneck detection per stage.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI Badges */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  color: '#0E7490',
+                  backgroundColor: '#ECFEFF',
+                  border: '1px solid #A5F3FC',
+                  padding: '5px 10px',
+                  borderRadius: '10px'
+                }}>
+                  ⏱️ Target SLA: <strong>2 Hours</strong>
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  color: '#16A34A',
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  padding: '5px 10px',
+                  borderRadius: '10px'
+                }}>
+                  ✓ Within SLA: <strong>{confirmedBomsStopwatchAudit.withinSlaCount} / {confirmedBomsStopwatchAudit.totalOrdersCount}</strong>
+                </span>
+                {confirmedBomsStopwatchAudit.primaryBottleneckDept && (
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: '#D97706',
+                    backgroundColor: '#FFFBEB',
+                    border: '1px solid #FDE68A',
+                    padding: '5px 10px',
+                    borderRadius: '10px'
+                  }}>
+                    ⚠️ Delay Point: <strong>{confirmedBomsStopwatchAudit.primaryBottleneckDept.dept}</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Stage Legend Banner */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '8px',
+              padding: '10px 20px',
+              backgroundColor: '#F8FAFC',
+              borderBottom: '1px solid #F1F5F9',
+              fontSize: '11px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#0284C7' }} />
+                <span style={{ color: '#475569' }}><strong>Step 2:</strong> Confirmed (00:00)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#D97706' }} />
+                <span style={{ color: '#475569' }}><strong>Step 3:</strong> Packing (Target 30m)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#7C3AED' }} />
+                <span style={{ color: '#475569' }}><strong>Step 4:</strong> Accounts (Target 30m)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
+                <span style={{ color: '#475569' }}><strong>Step 5:</strong> Invoicing (Target 30m)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
+                <span style={{ color: '#475569' }}><strong>Step 6:</strong> Loading (Target 30m)</span>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1050px' }}>
+                <thead>
+                  <tr style={{
+                    backgroundColor: '#F8FAFC',
+                    borderBottom: '1px solid #E2E8F0',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    color: '#475569',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.4px'
+                  }}>
+                    <th style={{ padding: '12px 14px' }}>BOM & Client</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Order Value</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Step 2 · Confirmed ⏱️</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Step 3 · Packing</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Step 4 · Accounts</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Step 5 · Invoicing</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Step 6 · Dispatched</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Total Elapsed / SLA</th>
+                    <th style={{ padding: '12px 14px' }}>Bottleneck / Delay</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {confirmedBomsStopwatchAudit.processedOrders.length > 0 ? (
+                    confirmedBomsStopwatchAudit.processedOrders.map((ord, oIdx) => {
+                      const isBreached = ord.slaStatus === 'breached';
+                      const isApproaching = ord.slaStatus === 'approaching';
+
+                      return (
+                        <tr
+                          key={oIdx}
+                          style={{
+                            borderBottom: '1px solid #F1F5F9',
+                            backgroundColor: oIdx % 2 === 0 ? '#FFFFFF' : '#FAFCFD',
+                            transition: 'background-color 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = oIdx % 2 === 0 ? '#FFFFFF' : '#FAFCFD'}
+                        >
+                          {/* BOM Code & Client */}
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490' }}>
+                                {ord.bomCode}
+                              </span>
+                              <span style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>
+                                {ord.customerName}
+                              </span>
+                              {ord.linkedPi && (
+                                <span style={{ fontSize: '10px', color: '#64748B' }}>
+                                  PI: {ord.linkedPi}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Order Value */}
+                          <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>
+                              ₹ {ord.orderValue.toLocaleString('en-IN')}
+                            </span>
+                          </td>
+
+                          {/* Step 2: Confirmed Start */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <span style={{
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                color: '#0284C7',
+                                backgroundColor: '#F0F9FF',
+                                border: '1px solid #BAE6FD',
+                                padding: '3px 8px',
+                                borderRadius: '6px'
+                              }}>
+                                ⏱️ {ord.confirmedAtStr || 'Confirmed'}
+                              </span>
+                              <span style={{ fontSize: '9.5px', color: '#64748B', marginTop: '2px' }}>
+                                {ord.confirmedDateStr} (Timer Start)
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Step 3: Packing */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            {ord.packingAtStr ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  color: '#059669',
+                                  backgroundColor: '#ECFDF5',
+                                  border: '1px solid #A7F3D0',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px'
+                                }}>
+                                  ✓ {ord.packingAtStr}
+                                </span>
+                                <span style={{ fontSize: '9.5px', color: '#047857', fontWeight: '700', marginTop: '2px' }}>
+                                  +{ord.packingDurationStr}
+                                </span>
+                              </div>
+                            ) : ord.currentStageNum === 2 ? (
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: '#D97706',
+                                backgroundColor: '#FFFBEB',
+                                border: '1px solid #FDE68A',
+                                padding: '3px 8px',
+                                borderRadius: '6px'
+                              }}>
+                                ⏳ In Packing (+{ord.packingDurationStr})
+                              </span>
+                            ) : (
+                              <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Step 4: Accounts */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            {ord.accountsAtStr ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  color: '#059669',
+                                  backgroundColor: '#ECFDF5',
+                                  border: '1px solid #A7F3D0',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px'
+                                }}>
+                                  ✓ {ord.accountsAtStr}
+                                </span>
+                                <span style={{ fontSize: '9.5px', color: '#047857', fontWeight: '700', marginTop: '2px' }}>
+                                  +{ord.accountsDurationStr}
+                                </span>
+                              </div>
+                            ) : ord.currentStageNum === 3 ? (
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: '#7C3AED',
+                                backgroundColor: '#F5F3FF',
+                                border: '1px solid #DDD6FE',
+                                padding: '3px 8px',
+                                borderRadius: '6px'
+                              }}>
+                                ⏳ In Accounts (+{ord.accountsDurationStr})
+                              </span>
+                            ) : (
+                              <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Step 5: Invoicing */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            {ord.invoiceAtStr ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  color: '#059669',
+                                  backgroundColor: '#ECFDF5',
+                                  border: '1px solid #A7F3D0',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px'
+                                }}>
+                                  ✓ {ord.invoiceAtStr}
+                                </span>
+                                <span style={{ fontSize: '9.5px', color: '#047857', fontWeight: '700', marginTop: '2px' }}>
+                                  +{ord.invoiceDurationStr}
+                                </span>
+                              </div>
+                            ) : ord.currentStageNum === 4 ? (
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: '#2563EB',
+                                backgroundColor: '#EFF6FF',
+                                border: '1px solid #BFDBFE',
+                                padding: '3px 8px',
+                                borderRadius: '6px'
+                              }}>
+                                ⏳ In Billing (+{ord.invoiceDurationStr})
+                              </span>
+                            ) : (
+                              <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Step 6: Final Dispatched */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            {ord.dispatchAtStr ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  color: '#16A34A',
+                                  backgroundColor: '#F0FDF4',
+                                  border: '1px solid #BBF7D0',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px'
+                                }}>
+                                  🚚 {ord.dispatchAtStr}
+                                </span>
+                                <span style={{ fontSize: '9.5px', color: '#15803D', fontWeight: '700', marginTop: '2px' }}>
+                                  +{ord.dispatchDurationStr}
+                                </span>
+                              </div>
+                            ) : ord.currentStageNum === 5 ? (
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: '#16A34A',
+                                backgroundColor: '#F0FDF4',
+                                border: '1px solid #BBF7D0',
+                                padding: '3px 8px',
+                                borderRadius: '6px'
+                              }}>
+                                ⏳ Loading (+{ord.dispatchDurationStr})
+                              </span>
+                            ) : (
+                              <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Total Elapsed & SLA Badge */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <span style={{
+                                fontSize: '11px',
+                                fontWeight: '900',
+                                color: isBreached ? '#DC2626' : (isApproaching ? '#D97706' : '#16A34A'),
+                                backgroundColor: isBreached ? '#FEF2F2' : (isApproaching ? '#FFFBEB' : '#F0FDF4'),
+                                border: `1px solid ${isBreached ? '#FECACA' : (isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                                padding: '3px 9px',
+                                borderRadius: '12px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                ⏱️ {ord.totalElapsedStr}
+                              </span>
+                              <span style={{
+                                fontSize: '9px',
+                                fontWeight: '800',
+                                textTransform: 'uppercase',
+                                color: isBreached ? '#B91C1C' : (isApproaching ? '#B45309' : '#15803D'),
+                                marginTop: '3px'
+                              }}>
+                                {isBreached ? '🔴 SLA Breached (>2h)' : (isApproaching ? '🟡 Approaching 2h' : '🟢 Within 2h SLA')}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Bottleneck / Slowest Stage */}
+                          <td style={{ padding: '12px 14px' }}>
+                            {ord.isCompleted ? (
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: '700',
+                                color: '#15803D',
+                                backgroundColor: '#F0FDF4',
+                                border: '1px solid #BBF7D0',
+                                padding: '3px 7px',
+                                borderRadius: '6px'
+                              }}>
+                                ✓ Fulfilled & Loaded
+                              </span>
+                            ) : ord.biggestBottleneck ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <AlertTriangle size={12} color="#D97706" />
+                                <span style={{ fontSize: '11px', fontWeight: '700', color: '#B45309' }}>
+                                  {ord.biggestBottleneck.name} ({Math.round(ord.biggestBottleneck.mins)}m)
+                                </span>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: '#64748B' }}>
+                                Moving on pace
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Action Button */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => setViewingBomModal(ord.bom)}
+                              style={{
+                                padding: '5px 10px',
+                                borderRadius: '8px',
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid #CBD5E1',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                color: '#0F172A',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#0E7490';
+                                e.currentTarget.style.borderColor = '#0E7490';
+                                e.currentTarget.style.color = '#FFFFFF';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '#FFFFFF';
+                                e.currentTarget.style.borderColor = '#CBD5E1';
+                                e.currentTarget.style.color = '#0F172A';
+                              }}
+                            >
+                              <Eye size={12} />
+                              View BOM
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={10} style={{ padding: '32px 16px', textAlign: 'center', color: '#64748B', fontSize: '12px' }}>
+                        No confirmed BOM orders found in current period.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Table Footer */}
+            <div style={{
+              padding: '10px 20px',
+              borderTop: '1px solid #EAEFEF',
+              backgroundColor: '#FAFCFD',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '11px',
+              color: '#64748B'
+            }}>
+              <span>Showing <strong>{confirmedBomsStopwatchAudit.processedOrders.length}</strong> confirmed BOM orders</span>
+              <span>2-Hour Order-to-Dispatch Benchmark: 30m Packing · 30m Accounts · 30m Invoicing · 30m Loading</span>
             </div>
           </div>
 
