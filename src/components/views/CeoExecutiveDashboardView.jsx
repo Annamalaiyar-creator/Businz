@@ -7081,7 +7081,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                               borderRadius: '6px',
                                               letterSpacing: '0.5px'
                                             }}>
-                                              📦 START OF NEW PRODUCTS (STANDALONE)
+                                              START OF NEW PRODUCTS (STANDALONE)
                                             </span>
                                             <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
                                               Additional Materials / Standalone Products ({sec.items.length} items)
@@ -7496,7 +7496,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     </div>
                     {bom.dispatchDetails?.transporterName && (
                       <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                        🚚 {bom.dispatchDetails.transporterName} {bom.dispatchDetails.vehicleNo ? `(${bom.dispatchDetails.vehicleNo})` : ''}
+                        {bom.dispatchDetails.transporterName} {bom.dispatchDetails.vehicleNo ? `(${bom.dispatchDetails.vehicleNo})` : ''}
                       </div>
                     )}
                   </div>
@@ -7817,7 +7817,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                               borderRadius: '6px',
                                               letterSpacing: '0.5px'
                                             }}>
-                                              📦 START OF NEW PRODUCTS (STANDALONE)
+                                              START OF NEW PRODUCTS (STANDALONE)
                                             </span>
                                             <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
                                               Additional Materials / Standalone Products ({sec.items.length} items)
