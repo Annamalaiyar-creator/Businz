@@ -4235,7 +4235,9 @@ function TemplateCustomizerDrawer({
 /**
  * Full Interactive Modal Dialog for Previewing, Printing, Customizing, and Exporting PDF
  */
-export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSavePi }) {
+export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSavePi, userRole, readOnly, isCeo: isCeoProp }) {
+  const isCeo = Boolean(isCeoProp || userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || (typeof window !== 'undefined' && localStorage.getItem('controlroom_user_role') === 'CEO'));
+  const isReadOnly = Boolean(readOnly || isCeo);
   const [isExporting, setIsExporting] = useState(false);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [currentPiData, setCurrentPiData] = useState(piData);
@@ -4734,156 +4736,165 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
 
         {/* RIGHT: ACTION CONTROLS */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-          {/* CUSTOMIZE TOGGLE BUTTON */}
-          <button
-            onClick={() => setShowCustomizer(!showCustomizer)}
-            style={{
-              background: showCustomizer ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-              color: showCustomizer ? '#38BDF8' : '#CBD5E1',
-              border: showCustomizer ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '8px',
-              height: '32px',
-              padding: '0 12px',
-              fontSize: '12px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Sliders size={13} style={{ color: showCustomizer ? '#38BDF8' : '#94A3B8' }} />
-            {showCustomizer ? 'Hide Customizer' : 'Customize Template'}
-          </button>
+          {!isReadOnly && (
+            <>
+              {/* CUSTOMIZE TOGGLE BUTTON */}
+              <button
+                onClick={() => setShowCustomizer(!showCustomizer)}
+                style={{
+                  background: showCustomizer ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                  color: showCustomizer ? '#38BDF8' : '#CBD5E1',
+                  border: showCustomizer ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  height: '32px',
+                  padding: '0 12px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Sliders size={13} style={{ color: showCustomizer ? '#38BDF8' : '#94A3B8' }} />
+                {showCustomizer ? 'Hide Customizer' : 'Customize Template'}
+              </button>
 
-          {/* SAVE EDITS TO PI */}
-          <button
-            onClick={() => handleSavePiChanges()}
-            disabled={isSavingPi}
-            title={hasUnsavedChanges ? 'Click to save your edits to the database' : 'All changes are permanently saved'}
-            style={{
-              background: hasUnsavedChanges
-                ? 'linear-gradient(135deg, #0284C7 0%, #0E7490 100%)'
-                : 'rgba(255, 255, 255, 0.04)',
-              color: hasUnsavedChanges ? '#FFFFFF' : '#94A3B8',
-              border: hasUnsavedChanges ? '1px solid #38BDF8' : '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '8px',
-              height: '32px',
-              padding: '0 12px',
-              fontSize: '12px',
-              fontWeight: '600',
-              cursor: isSavingPi ? 'wait' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: hasUnsavedChanges ? '0 0 14px rgba(56, 189, 248, 0.45)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {hasUnsavedChanges ? (
-              <Save size={13} style={{ color: '#FFFFFF' }} />
-            ) : (
-              <CheckCircle size={13} style={{ color: '#10B981' }} />
-            )}
-            {isSavingPi ? 'Saving...' : (hasUnsavedChanges ? 'Save Changes' : (lastSavedNotice || 'Saved ✓'))}
-          </button>
+              {/* SAVE EDITS TO PI */}
+              <button
+                onClick={() => handleSavePiChanges()}
+                disabled={isSavingPi}
+                title={hasUnsavedChanges ? 'Click to save your edits to the database' : 'All changes are permanently saved'}
+                style={{
+                  background: hasUnsavedChanges
+                    ? 'linear-gradient(135deg, #0284C7 0%, #0E7490 100%)'
+                    : 'rgba(255, 255, 255, 0.04)',
+                  color: hasUnsavedChanges ? '#FFFFFF' : '#94A3B8',
+                  border: hasUnsavedChanges ? '1px solid #38BDF8' : '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '8px',
+                  height: '32px',
+                  padding: '0 12px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: isSavingPi ? 'wait' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: hasUnsavedChanges ? '0 0 14px rgba(56, 189, 248, 0.45)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {hasUnsavedChanges ? (
+                  <Save size={13} style={{ color: '#FFFFFF' }} />
+                ) : (
+                  <CheckCircle size={13} style={{ color: '#10B981' }} />
+                )}
+                {isSavingPi ? 'Saving...' : (hasUnsavedChanges ? 'Save Changes' : (lastSavedNotice || 'Saved ✓'))}
+              </button>
 
-          {/* DIVIDER */}
-          <div style={{ width: '1px', height: '18px', backgroundColor: 'rgba(255, 255, 255, 0.12)', margin: '0 2px' }} />
+              {/* DIVIDER */}
+              <div style={{ width: '1px', height: '18px', backgroundColor: 'rgba(255, 255, 255, 0.12)', margin: '0 2px' }} />
 
-          {/* DOWNLOAD PDF */}
-          <button
-            onClick={handleDownloadPdf}
-            disabled={isExporting}
-            style={{
-              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-              color: '#FFFFFF',
-              border: '1px solid rgba(52, 211, 153, 0.35)',
-              borderRadius: '8px',
-              height: '32px',
-              padding: '0 13px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: isExporting ? 'wait' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.28)',
-              opacity: isExporting ? 0.7 : 1,
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Download size={13} /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
-          </button>
+              {/* DOWNLOAD PDF */}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isExporting}
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(52, 211, 153, 0.35)',
+                  borderRadius: '8px',
+                  height: '32px',
+                  padding: '0 13px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: isExporting ? 'wait' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.28)',
+                  opacity: isExporting ? 0.7 : 1,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Download size={13} /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
+              </button>
 
-          {/* SEND VIA WHATSAPP (1-CLICK) */}
-          <button
-            onClick={handleOpenWhatsAppModal}
-            disabled={isSendingWhatsApp}
-            style={{
-              background: 'linear-gradient(135deg, #22C55E 0%, #15803D 100%)',
-              color: '#FFFFFF',
-              border: '1px solid rgba(134, 239, 172, 0.4)',
-              borderRadius: '8px',
-              height: '32px',
-              padding: '0 13px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: isSendingWhatsApp ? 'wait' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 8px rgba(34, 197, 94, 0.28)',
-              opacity: isSendingWhatsApp ? 0.7 : 1,
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <MessageSquare size={13} /> {isSendingWhatsApp ? 'Sending...' : 'Send PI via WhatsApp'}
-          </button>
+              {/* SEND VIA WHATSAPP (1-CLICK) */}
+              <button
+                onClick={handleOpenWhatsAppModal}
+                disabled={isSendingWhatsApp}
+                style={{
+                  background: 'linear-gradient(135deg, #22C55E 0%, #15803D 100%)',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(134, 239, 172, 0.4)',
+                  borderRadius: '8px',
+                  height: '32px',
+                  padding: '0 13px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: isSendingWhatsApp ? 'wait' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(34, 197, 94, 0.28)',
+                  opacity: isSendingWhatsApp ? 0.7 : 1,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <MessageSquare size={13} /> {isSendingWhatsApp ? 'Sending...' : 'Send PI via WhatsApp'}
+              </button>
 
-          {/* NATIVE PRINT */}
-          <button
-            onClick={handlePrint}
-            style={{
-              background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)',
-              color: '#FFFFFF',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              borderRadius: '8px',
-              height: '32px',
-              padding: '0 13px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 8px rgba(14, 116, 144, 0.28)',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Printer size={13} /> Print
-          </button>
+              {/* NATIVE PRINT */}
+              <button
+                onClick={handlePrint}
+                style={{
+                  background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  borderRadius: '8px',
+                  height: '32px',
+                  padding: '0 13px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(14, 116, 144, 0.28)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Printer size={13} /> Print
+              </button>
+            </>
+          )}
 
           {/* CLOSE */}
           <button
             onClick={handleClose}
             title="Close Preview"
             style={{
-              background: 'rgba(255, 255, 255, 0.06)',
+              background: isReadOnly ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.06)',
               color: '#CBD5E1',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              border: '1px solid rgba(255, 255, 255, 0.18)',
               borderRadius: '8px',
-              width: '32px',
               height: '32px',
+              padding: isReadOnly ? '0 14px' : '0 8px',
+              minWidth: isReadOnly ? 'auto' : '32px',
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: '700',
               transition: 'all 0.15s ease'
             }}
           >
             <X size={16} />
+            {isReadOnly && <span>Close</span>}
           </button>
         </div>
       </div>
@@ -4897,7 +4908,7 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
           alignItems: 'flex-start',
           gap: '24px',
           width: '100%',
-          maxWidth: showCustomizer ? '1260px' : '850px',
+          maxWidth: (!isReadOnly && showCustomizer) ? '1260px' : '850px',
           transition: 'max-width 0.2s ease-in-out'
         }}
       >
@@ -4907,7 +4918,7 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
             piData={currentPiData}
             settings={templateSettings}
             id="printable-proforma-invoice"
-            isEditable={showCustomizer}
+            isEditable={!isReadOnly && showCustomizer}
             onUpdateSetting={handleUpdateSettings}
             onUpdatePiData={(patch) => {
               setCurrentPiData(prev => ({ ...prev, ...patch }));
@@ -4918,7 +4929,7 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         </div>
 
         {/* CUSTOMIZATION DRAWER */}
-        {showCustomizer && (
+        {!isReadOnly && showCustomizer && (
           <TemplateCustomizerDrawer
             settings={templateSettings}
             onUpdateSettings={handleUpdateSettings}

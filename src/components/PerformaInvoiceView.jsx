@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, UserCheck, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock, GitBranch } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, UserCheck, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock, GitBranch, Receipt } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
@@ -106,7 +106,10 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
 };
 
 export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procurement Head', onNavigateTab, targetPiNo, clearTargetPi }) {
-  const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || (typeof window !== 'undefined' && localStorage.getItem('controlroom_user_role') === 'CEO');
+  const isCeo = Boolean(
+    (userRole && ['CEO', 'MD', 'Managing Director'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())) ||
+    (typeof window !== 'undefined' && ['CEO', 'MD', 'Managing Director'].some(r => r.toLowerCase() === (localStorage.getItem('controlroom_user_role') || '').toLowerCase().trim()))
+  );
   const isSalesRole = userRole === 'Sales' || userRole === 'Sales Head' || userRole === 'Sales Executive';
   const storageKey = isSalesRole ? 'controlroom_sales_pi_store' : 'controlroom_procurement_pi_store';
 
@@ -422,7 +425,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     !['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Admin', 'Super Admin'].some(r => (userRole || '').toLowerCase().trim() === r.toLowerCase())
   );
   const isSalesHead = Boolean(userRole && userRole.toLowerCase().includes('sales head'));
-  const canAssignPi = isTechSupport || isCeo || isSalesHead;
+  // Assign privileges strictly restricted to Tech Support login alone (hidden for CEO & other roles)
+  const canAssignPi = Boolean(
+    !isCeo &&
+    userRole &&
+    (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().trim() === 'tech support')
+  );
 
   // PI Assignment Modal State
   const [showAssignPiModal, setShowAssignPiModal] = useState(false);
@@ -4207,19 +4215,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 {pi.salesPerson || 'Sales Team'}
                               </span>
                             </div>
-
-                            {pi.paymentTerms && (
-                              <span style={{
-                                backgroundColor: '#F1F5F9',
-                                color: '#475569',
-                                padding: '2px 8px',
-                                borderRadius: '6px',
-                                fontSize: '11px',
-                                fontWeight: '600'
-                              }}>
-                                {pi.paymentTerms}
-                              </span>
-                            )}
                           </div>
 
                           {/* Footer row: Date & Total Amount */}
@@ -4536,22 +4531,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         return (
                           <tr
                             key={idx}
+                            onClick={() => setSelectedPi(pi)}
                             style={{
                               borderBottom: '1px solid #F1F5F9',
                               transition: 'all 0.15s ease',
-                              backgroundColor: isChecked ? '#ECFEFF' : 'transparent'
+                              backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                              cursor: 'pointer'
                             }}
                             className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}
                           >
-                            <td style={{
-                              width: '48px',
-                              minWidth: '48px',
-                              padding: '12px 14px',
-                              textAlign: 'center',
-                              verticalAlign: 'middle',
-                              boxSizing: 'border-box',
-                              borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
-                            }}>
+                            <td 
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                width: '48px',
+                                minWidth: '48px',
+                                padding: '12px 14px',
+                                textAlign: 'center',
+                                verticalAlign: 'middle',
+                                boxSizing: 'border-box',
+                                borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                              }}
+                            >
                               <input id="performa-invoice-checkbox" name="checkbox" aria-label="Checkbox"
                                 type="checkbox"
                                 checked={isChecked}
@@ -4560,8 +4560,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                />
                             </td>
                             <td
-                              onClick={() => setSelectedPi(pi)}
-                              style={{ padding: '12px 14px', cursor: 'pointer', width: '150px', minWidth: '130px' }}
+                              style={{ padding: '12px 14px', width: '150px', minWidth: '130px' }}
                             >
                               <div style={{ fontWeight: 'bold', color: '#2563EB', fontSize: '13px' }}>
                                 {pi.piNo}
@@ -4765,11 +4764,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.vendor || pi.customerName || 'Direct Customer'}</span>
                                 {pi.contactPerson && <span style={{ fontSize: '11px', color: '#64748B' }}>Attn: {pi.contactPerson}</span>}
                               </div>
-                              <div style={{ marginTop: '3px' }}>
-                                <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-block' }}>
-                                  {normalizePaymentTerm(pi.paymentTerms || pi.paymentType)}
-                                </span>
-                              </div>
                             </td>
                             <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right', width: '150px', minWidth: '130px' }}>
                               {pi.amount}
@@ -4782,7 +4776,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusFg }}></span>
                                   {displayStatus}
                                 </span>
-                                {!isTechSupportLogin && isConverted && (
+                                {!isTechSupportLogin && !isCeo && isConverted && (
                                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                     {matchedBoms.map((b, bIdx) => {
                                       const bCode = b.bomCode || b.code || b.id;
@@ -5055,7 +5049,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 {/* Convert to BOM / View BOM button */}
                 {(() => {
                   const target = selectedPIs.length === 1 ? piList.find(p => p.piNo === selectedPIs[0]) : null;
-                  if (!target || target.status === 'Cancelled') return null;
+                  if (isCeo || !target || target.status === 'Cancelled') return null;
 
                   if (target.status === 'Draft' || target.statusType === 'draft') {
                     return (
@@ -5208,7 +5202,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   const targetPiNo = selectedPIs[0];
                   const targetPi = targetPiNo ? piList.find(p => p.piNo === targetPiNo) : null;
                   const isConverted = Boolean(targetPi && (targetPi.status === 'Converted to BOM' || targetPi.convertedToBom || targetPi.convertedBomCode));
-                  if (isConverted) return null;
+                  if (isConverted || isCeo) return null;
 
                   return (
                     <button
@@ -5247,7 +5241,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 })()}
 
                 {/* Clone PI */}
-                {selectedPIs.length === 1 && (
+                {selectedPIs.length === 1 && !isCeo && (
                   <button
                     onClick={() => {
                       const targetPiNo = selectedPIs[0];
@@ -5326,40 +5320,42 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 )}
 
                 {/* Export / Print PDF */}
-                <button
-                  onClick={() => {
-                    const target = (selectedPIs && selectedPIs.length > 0)
-                      ? (piList.find(p => p.piNo === selectedPIs[0]) || { piNo: selectedPIs[0], vendor: 'Customer Reference' })
-                      : null;
-                    setSelectedPIs([]);
-                    if (target) {
-                      setPrintModalPi(target);
-                    } else {
-                      window.print();
-                    }
-                  }}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    color: '#1E293B',
-                    borderRadius: '10px',
-                    padding: '6px 14px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                >
-                  <Printer size={14} style={{ color: '#0E7490' }} /> Export / Print PDF
-                </button>
+                {!isCeo && (
+                  <button
+                    onClick={() => {
+                      const target = (selectedPIs && selectedPIs.length > 0)
+                        ? (piList.find(p => p.piNo === selectedPIs[0]) || { piNo: selectedPIs[0], vendor: 'Customer Reference' })
+                        : null;
+                      setSelectedPIs([]);
+                      if (target) {
+                        setPrintModalPi(target);
+                      } else {
+                        window.print();
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      color: '#1E293B',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                  >
+                    <Printer size={14} style={{ color: '#0E7490' }} /> Export / Print PDF
+                  </button>
+                )}
 
 
 
@@ -7503,136 +7499,109 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         );
       })()}
 
-      {/* ==================== VIEW PI DETAILS DIALOG (FULL FORM MODAL OVERLAY) ==================== */}
+      {/* ==================== VIEW PI DETAILS DIALOG (EXACT DASHBOARD MODAL 1:1) ==================== */}
       {selectedPi && (() => {
-        const bAddr = selectedPi.billingAddress || selectedPi.billingAddressObj || {};
-        const bStreet = typeof bAddr === 'object' ? (bAddr.street || bAddr.address || '') : (typeof bAddr === 'string' ? bAddr : '');
-        const bCity = typeof bAddr === 'object' ? (bAddr.city || '') : '';
-        const bState = typeof bAddr === 'object' ? (bAddr.state || '') : '';
-        const bPin = typeof bAddr === 'object' ? (bAddr.pincode || bAddr.pin || '') : '';
+        const pi = selectedPi;
+        const piNo = pi.piNo || pi.id || 'PI';
+        const piDate = pi.date || pi.piDate || pi.createdDate || '—';
+        const customer = pi.customerName || pi.customer || pi.companyName || '—';
+        const salesPerson = pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Sales Team';
+        const items = Array.isArray(pi.items) ? pi.items : [];
 
-        const dAddr = selectedPi.deliveryAddress || selectedPi.deliveryAddressObj || {};
-        const dStreet = typeof dAddr === 'object' ? (dAddr.street || dAddr.address || '') : (typeof dAddr === 'string' ? dAddr : '');
-        const dCity = typeof dAddr === 'object' ? (dAddr.city || '') : '';
-        const dState = typeof dAddr === 'object' ? (dAddr.state || '') : '';
-        const dPin = typeof dAddr === 'object' ? (dAddr.pincode || dAddr.pin || '') : '';
+        const parseAmt = (val) => {
+          if (!val && val !== 0) return 0;
+          if (typeof val === 'number') return isNaN(val) ? 0 : val;
+          const cleaned = String(val).replace(/[^0-9.-]/g, '');
+          const parsed = parseFloat(cleaned);
+          return isNaN(parsed) ? 0 : parsed;
+        };
 
-        const isSame = selectedPi.sameAsBilling || (!dStreet && !dCity);
-        const piItemsList = Array.isArray(selectedPi.items) ? selectedPi.items : [];
-        const presetGroupsMap = (selectedPi.presetGroups && typeof selectedPi.presetGroups === 'object') ? selectedPi.presetGroups : {};
-        const hasPresets = Object.keys(presetGroupsMap).length > 0 || piItemsList.some(it => it.isPresetItem || it.presetGroupId);
+        const grandTotal = parseAmt(pi.grandTotal || pi.totalAmount || pi.amount || pi.orderValue || pi.c5 || 0);
+        const subtotal = parseAmt(pi.subtotal || pi.unitValue || pi.taxableAmount || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0));
+        const taxTotal = parseAmt(pi.taxTotal || Math.max(0, grandTotal - subtotal));
+        const paymentTerms = pi.paymentTerms || pi.paymentType || pi.terms || '100% Paid';
 
-        // Accurate Subtotal Calculation (Preset Groups + Custom Standalone Items)
-        let presetKitsSubtotal = 0;
-        Object.values(presetGroupsMap).forEach(grp => {
-          if (!grp) return;
-          const uPrice = parseFloat(grp.kitPrice) || 0;
-          const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 0;
-          presetKitsSubtotal += (uPrice * sCount);
-        });
-        if (presetKitsSubtotal === 0 && selectedPi.kitSubtotal) {
-          presetKitsSubtotal = parseFloat(selectedPi.kitSubtotal) || 0;
-        }
-
-        const customItemsSubtotal = piItemsList.reduce((acc, it) => {
-          if (it.isPresetItem || it.presetGroupId) return acc;
-          const q = parseFloat(it.qty) || 0;
-          const r = parseFloat(it.rate) || 0;
-          return acc + (q * r);
-        }, 0);
-
-        const calculatedSubtotal = presetKitsSubtotal + customItemsSubtotal;
-        const subtotalVal = (selectedPi.unitValue !== undefined && selectedPi.unitValue !== null && !isNaN(parseFloat(selectedPi.unitValue)) && parseFloat(selectedPi.unitValue) > 0)
-          ? parseFloat(selectedPi.unitValue)
-          : ((selectedPi.subtotal !== undefined && selectedPi.subtotal !== null && !isNaN(parseFloat(selectedPi.subtotal)) && parseFloat(selectedPi.subtotal) > 0)
-            ? parseFloat(selectedPi.subtotal)
-            : (calculatedSubtotal > 0 ? calculatedSubtotal : (piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0))));
-
-        const rawGrandTotal = (selectedPi.grandTotal !== undefined && selectedPi.grandTotal !== null && !isNaN(parseFloat(selectedPi.grandTotal)) && parseFloat(selectedPi.grandTotal) > 0)
-          ? parseFloat(selectedPi.grandTotal)
-          : (parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || 0);
-
-        const grandTotalVal = rawGrandTotal > 0 ? rawGrandTotal : (subtotalVal * 1.18);
-        const authoritativeTax = (selectedPi.taxTotal !== undefined && selectedPi.taxTotal !== null && !isNaN(parseFloat(selectedPi.taxTotal)))
-          ? parseFloat(selectedPi.taxTotal)
-          : Math.max(0, grandTotalVal - subtotalVal);
-        const totalGstVal = authoritativeTax;
-
-        const isDraft = (selectedPi.status === 'Draft' || selectedPi.statusType === 'draft');
-        const matchedBoms = getConvertedBomsForPi(selectedPi);
-        const hasSavedBom = matchedBoms.length > 0;
-        const isExplicitConverted = Boolean(
-          selectedPi.status === 'Converted to BOM' || 
-          selectedPi.statusType === 'converted' || 
-          selectedPi.convertedToBom === true || 
-          selectedPi.convertedBomCode || 
-          selectedPi.convertedBomNo
+        const matchedBoms = getConvertedBomsForPi(pi);
+        const isBOMConverted = matchedBoms.length > 0 || Boolean(
+          pi.status === 'Converted to BOM' ||
+          pi.statusType === 'converted' ||
+          pi.convertedToBom === true ||
+          pi.convertedBomCode ||
+          pi.convertedBomNo
         );
-        const isConverted = !isDraft && hasSavedBom && (isExplicitConverted || selectedPi.status === 'Converted to BOM');
+        const linkedBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id || pi.convertedBomCode || pi.convertedBomNo;
 
-        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
-        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
-        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
+        let presetGroupsData = pi.presetGroups || {};
+        if (typeof presetGroupsData === 'string') {
+          try {
+            presetGroupsData = JSON.parse(presetGroupsData);
+          } catch (e) {
+            presetGroupsData = {};
+          }
+        }
+        const sections = [];
+        const sectionMap = new Map();
 
-        // Group GST by Rate Tier with Strict Conservation
-        const modalGstTiersMap = {};
+        const allZeroRates = items.length > 0 && items.every(it => (parseFloat(it.rate || it.price || 0) || 0) === 0);
 
-        // 1. Preset Kits (Kit Lump-Sum Prices)
-        if (Object.keys(presetGroupsMap).length > 0) {
-          Object.values(presetGroupsMap).forEach(grp => {
-            if (!grp) return;
-            const unitPrice = parseFloat(grp.kitPrice) || 0;
-            const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
-            const groupTotal = unitPrice * multiplier;
-            if (groupTotal <= 0) return;
-            const rawRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18';
-            const cleaned = String(rawRate).replace('%', '').trim();
-            const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
-            const amt = groupTotal * (rate / 100);
-            if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
-            modalGstTiersMap[rate].taxable += groupTotal;
-            modalGstTiersMap[rate].gstAmt += amt;
+        items.forEach((it, idx) => {
+          const isPreset = Boolean(it.isPresetItem || it.presetGroupId || it.presetName || (allZeroRates && pi.presetName));
+          const secKey = isPreset
+            ? (it.presetGroupId || it.presetName || pi.presetName || 'PRESET_1')
+            : '__CUSTOM_ITEMS__';
+
+          if (!sectionMap.has(secKey)) {
+            const secObj = {
+              key: secKey,
+              isPreset,
+              presetGroupId: it.presetGroupId,
+              presetName: isPreset ? (it.presetName || (it.presetGroupId && presetGroupsData[it.presetGroupId]?.presetName) || pi.presetName || 'Preset Structure Kit') : 'Custom / Standalone Products',
+              items: []
+            };
+            sectionMap.set(secKey, secObj);
+            sections.push(secObj);
+          }
+          sectionMap.get(secKey).items.push({ item: it, originalIndex: idx });
+        });
+
+        // Fallback single section if items is empty
+        if (sections.length === 0 && (pi.presetName || pi.productScope || grandTotal > 0)) {
+          sections.push({
+            key: 'PRESET_1',
+            isPreset: true,
+            presetGroupId: 'group_1',
+            presetName: pi.presetName || pi.productScope || 'Solar Mounting Structure Kit',
+            items: [{
+              item: {
+                name: pi.presetName || pi.productScope || 'Solar Mounting Structure Kit',
+                hsn: '73089090',
+                qty: pi.presetSetCount || 1,
+                uom: pi.presetUnit || 'SET',
+                rate: subtotal,
+                gstRate: '18%'
+              },
+              originalIndex: 0
+            }]
           });
         }
 
-        // 2. Custom Items ONLY (strictly exclude preset component items)
-        piItemsList.forEach(it => {
-          if (it.isPresetItem || it.presetGroupId) return; // Component of preset package - cost is inside presetGroups
-          const q = parseFloat(it.qty) || 0;
-          const r = parseFloat(it.rate) || 0;
-          if (r <= 0) return;
-          const taxable = q * r;
-          const rawRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18';
-          const cleaned = String(rawRate).replace('%', '').trim();
-          const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
-          const amt = taxable * (rate / 100);
-          if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
-          modalGstTiersMap[rate].taxable += taxable;
-          modalGstTiersMap[rate].gstAmt += amt;
-        });
+        // Pre-compute custom items taxable sum
+        const customTaxableTotal = sections
+          .filter(s => !s.isPreset)
+          .flatMap(s => s.items)
+          .reduce((sum, { item }) => {
+            const q = parseFloat(item.qty !== undefined ? item.qty : (item.quantity || 0)) || 0;
+            const r = parseFloat(item.rate || item.price || 0) || 0;
+            return sum + (q * r);
+          }, 0);
 
-        // 3. Fallback tier if empty but subtotal and tax exist
-        if (Object.keys(modalGstTiersMap).length === 0 && subtotalVal > 0) {
-          modalGstTiersMap[18] = { rate: 18, taxable: subtotalVal, gstAmt: totalGstVal };
-        }
+        const presetTaxablePool = Math.max(0, subtotal - customTaxableTotal);
+        const presetSections = sections.filter(s => s.isPreset);
+        const presetGroupsList = Array.isArray(presetGroupsData)
+          ? presetGroupsData
+          : (presetGroupsData && typeof presetGroupsData === 'object' ? Object.values(presetGroupsData) : []);
 
-        // 4. Strict Conservation Reconciliation:
-        // Force the sum of all tax tiers to exactly match totalGstVal
-        // Guarantees: subtotalVal + sum(tier.gstAmt) === grandTotalVal (Zero Price Mismatch)
-        let modalGstTiers = Object.values(modalGstTiersMap)
-          .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
-          .sort((a, b) => a.rate - b.rate);
-
-        const sumCalculatedGst = modalGstTiers.reduce((s, t) => s + t.gstAmt, 0);
-        if (modalGstTiers.length === 1 && totalGstVal > 0) {
-          modalGstTiers[0].gstAmt = totalGstVal;
-        } else if (modalGstTiers.length > 1 && totalGstVal > 0 && Math.abs(sumCalculatedGst - totalGstVal) > 0.05) {
-          const scale = totalGstVal / (sumCalculatedGst || 1);
-          modalGstTiers = modalGstTiers.map(t => ({
-            ...t,
-            gstAmt: Math.round(t.gstAmt * scale * 100) / 100
-          }));
-        }
+        const totalComponentCount = sections.reduce((acc, s) => acc + s.items.length, 0);
 
         return (
           <div
@@ -7640,15 +7609,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               position: 'fixed',
               top: 0,
               left: 0,
-              width: '100%',
-              height: '100%',
-              backgroundColor: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(5px)',
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.65)',
+              backdropFilter: 'blur(3px)',
+              zIndex: 99999,
               display: 'flex',
-              justifyContent: 'center',
               alignItems: 'center',
-              zIndex: 9999,
-              padding: '20px'
+              justifyContent: 'center',
+              padding: '16px'
             }}
             onClick={() => setSelectedPi(null)}
           >
@@ -7656,966 +7625,542 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '20px',
-                border: '1px solid #E2E8F0',
-                maxWidth: '900px',
-                width: '100%',
-                maxHeight: '92vh',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                width: '920px',
+                maxWidth: '100%',
+                maxHeight: '90vh',
                 display: 'flex',
                 flexDirection: 'column',
+                boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+                border: '1px solid #E2E8F0',
                 overflow: 'hidden'
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header */}
-              <div style={{ padding: '20px 24px', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {/* Header */}
+              <div style={{
+                padding: '16px 22px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#F8FAFC'
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <FileText size={20} />
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>
-                        Proforma Invoice {selectedPi.piNo}
-                      </h3>
-                      {renderStatusBadge(
-                        isDraft ? 'draft' : (isConverted ? 'converted' : selectedPi.status === 'Cancelled' ? 'cancelled' : 'issued'),
-                        isDraft ? 'Draft' : (isConverted ? 'Converted to BOM' : selectedPi.status || 'Issued')
-                      )}
-                      {Boolean(selectedPi.zohoSynced) && (
-                        <span style={{
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          color: '#047857',
-                          backgroundColor: '#ECFDF5',
-                          border: '1px solid #A7F3D0',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <CheckCircle size={12} style={{ color: '#10B981' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
-                        </span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: '12px', color: '#64748B' }}>
-                      Created: <strong>{selectedPi.piDate || selectedPi.date || '—'}</strong>
-                      {!isConverted && selectedPi.status !== 'Converted to BOM' && selectedPi.status !== 'Cancelled' && (
-                        <> | Valid Until: <strong>{selectedPi.validUntilDate || selectedPi.validUntil || '15 Days'}</strong></>
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {(() => {
-                    const matchedBoms = getConvertedBomsForPi(selectedPi);
-                    const isConverted = matchedBoms && matchedBoms.length > 0;
-                    if (isConverted) return null;
-
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
-                          handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
-                          setSelectedPi(null);
-                        }}
-                        title="Edit full Proforma Invoice details"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 14px',
-                          backgroundColor: '#0E7490',
-                          color: '#FFFFFF',
-                          border: 'none',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: '800',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Edit3 size={14} /> Edit Info
-                      </button>
-                    );
-                  })()}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = selectedPi;
-                      setSelectedPi(null);
-                      handleClonePi(target);
-                    }}
-                    title="Clone / Duplicate this Proforma Invoice"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 14px',
-                      backgroundColor: '#FFFFFF',
-                      color: '#0F172A',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Copy size={14} style={{ color: '#0E7490' }} /> Clone PI
-                  </button>
-                  <button
-                    onClick={() => setPrintModalPi(selectedPi)}
-                    title="Open Print & PDF Template"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 14px',
-                      backgroundColor: '#FFFFFF',
-                      color: '#0F172A',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Printer size={14} style={{ color: '#0E7490' }} /> Export / Print
-                  </button>
-                  <button
-                    onClick={() => setSelectedPi(null)}
-                    style={{ border: 'none', background: '#F1F5F9', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Scrollable Modal Content */}
-              <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-                {/* 0. PROMINENT CONVERTED BOM STATUS BANNER */}
-                {isConverted && (
                   <div style={{
-                    backgroundColor: '#ECFDF5',
-                    border: '1.5px solid #6EE7B7',
-                    borderRadius: '14px',
-                    padding: '16px 20px',
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: '#ECFEFF',
+                    color: '#0E7490',
+                    border: '1px solid #A5F3FC',
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '12px'
+                    justifyContent: 'center',
+                    flexShrink: 0
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#059669', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Boxes size={22} color="#FFFFFF" />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#065F46' }}>
-                          Converted to Bill of Materials (BOM)
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#047857', marginTop: '2px' }}>
-                          Assigned BOM Code(s): <strong>{matchedBoms.map(b => b.bomCode || b.code || b.id).join(', ')}</strong>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      {matchedBoms.map((b, idx) => {
-                        const bCode = b.bomCode || b.code || b.id;
-                        return (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              setSelectedPi(null);
-                              window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
-                                detail: { tab: 'Sales BOM', targetBom: bCode } 
-                              }));
-                              if (typeof onNavigateTab === 'function') {
-                                onNavigateTab('Sales BOM');
-                              }
-                            }}
-                            style={{
-                              padding: '8px 16px',
-                              backgroundColor: '#059669',
-                              color: '#FFFFFF',
-                              border: 'none',
-                              borderRadius: '8px',
-                              fontSize: '12px',
-                              fontWeight: '800',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 6px rgba(5,150,105,0.25)'
-                            }}
-                          >
-                            <Layers size={14} /> Open {bCode} in Sales BOM ↗
-                          </button>
-                        );
-                      })}
-                      {!isTechSupportLogin && (
-                        <button
-                          type="button"
-                          onClick={() => syncPiToZoho(selectedPi)}
-                          disabled={syncingPiNo === selectedPi.piNo}
-                          title={selectedPi.zohoSynced ? `Synced to Zoho Books as Quote #${selectedPi.zohoEstimateNo || selectedPi.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
-                          style={{
-                            padding: '8px 16px',
-                            backgroundColor: selectedPi.zohoSynced ? '#F0FDF4' : '#0E7490',
-                            color: selectedPi.zohoSynced ? '#15803D' : '#FFFFFF',
-                            border: selectedPi.zohoSynced ? '1px solid #86EFAC' : 'none',
-                            borderRadius: '8px',
-                            fontSize: '12px',
-                            fontWeight: '800',
-                            cursor: syncingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            boxShadow: selectedPi.zohoSynced ? 'none' : '0 2px 6px rgba(14,116,144,0.25)',
-                            opacity: syncingPiNo === selectedPi.piNo ? 0.7 : 1
-                          }}
-                        >
-                          {syncingPiNo === selectedPi.piNo ? (
-                            <>
-                              <RotateCcw size={14} className="animate-spin" /> Pushing to Zoho...
-                            </>
-                          ) : selectedPi.zohoSynced ? (
-                            <>
-                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
-                            </>
-                          ) : (
-                            <>
-                              <UploadCloud size={14} /> Push to Zoho
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* 1. Customer & Contact Details Card */}
-                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>
-                    <Building2 size={16} color="#0E7490" />
-                    <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                      Customer & Contact Details
-                    </h4>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-                    <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Company Name</span>
-                      <strong style={{ fontSize: '14px', color: '#0F172A' }}>{selectedPi.vendor || selectedPi.customerName || '—'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Customer Name</span>
-                      <strong style={{ fontSize: '13px', color: '#334155' }}>{selectedPi.contactPerson || '—'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Phone / Mobile</span>
-                      <strong style={{ fontSize: '13px', color: '#334155' }}>{selectedPi.phone || '—'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Email Address</span>
-                      <span style={{ fontSize: '13px', color: '#334155' }}>{selectedPi.email || '—'}</span>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>GSTIN</span>
-                      <strong style={{ fontSize: '13px', color: '#0E7490', fontFamily: 'monospace' }}>{selectedPi.gstNo || 'Unregistered'}</strong>
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Sales Executive / Code</span>
-                        {canAssignPi && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAssignModal(selectedPi)}
-                            style={{
-                              border: 'none',
-                              background: '#ECFEFF',
-                              color: '#0E7490',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            <UserCheck size={12} /> Assign / Reassign
-                          </button>
-                        )}
-                      </div>
-                      <strong style={{ fontSize: '13px', color: '#334155' }}>
-                        {selectedPi.salesPerson || '—'} {selectedPi.salesPersonCode ? `(${canonicalizeSalespersonCode(selectedPi.salesPersonCode, selectedPi.salesPerson)})` : ''}
-                      </strong>
-                      {selectedPi.salesPersonEmail && (
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{selectedPi.salesPersonEmail}</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Addresses (Billing & Delivery) */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  {/* Billing Address */}
-                  <div style={{ backgroundColor: '#FAFBFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
-                      <Building2 size={14} color="#2563EB" />
-                      <strong style={{ fontSize: '12px', color: '#0F172A', textTransform: 'uppercase' }}>Billing Address</strong>
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#334155', lineHeight: '1.5' }}>
-                      <div>{bStreet || selectedPi.billingStreet || '—'}</div>
-                      <div>{[bCity || selectedPi.billingCity, bState || selectedPi.billingState].filter(Boolean).join(', ')}</div>
-                      {(bPin || selectedPi.billingPincode) && <div>PIN: <strong>{bPin || selectedPi.billingPincode}</strong></div>}
-                    </div>
-                  </div>
-
-                  {/* Delivery Address */}
-                  <div style={{ backgroundColor: '#FAFBFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Truck size={14} color="#0E7490" />
-                        <strong style={{ fontSize: '12px', color: '#0F172A', textTransform: 'uppercase' }}>Delivery / Site Address</strong>
-                      </div>
-                      {isSame && (
-                        <span style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '2px 6px', borderRadius: '4px' }}>
-                          Same as Billing
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#334155', lineHeight: '1.5' }}>
-                      {isSame ? (
-                        <>
-                          <div>{bStreet || selectedPi.billingStreet || '—'}</div>
-                          <div>{[bCity || selectedPi.billingCity, bState || selectedPi.billingState].filter(Boolean).join(', ')}</div>
-                          {(bPin || selectedPi.billingPincode) && <div>PIN: <strong>{bPin || selectedPi.billingPincode}</strong></div>}
-                        </>
-                      ) : (
-                        <>
-                          <div>{dStreet || selectedPi.deliveryStreet || '—'}</div>
-                          <div>{[dCity || selectedPi.deliveryCity, dState || selectedPi.deliveryState].filter(Boolean).join(', ')}</div>
-                          {(dPin || selectedPi.deliveryPincode) && <div>PIN: <strong>{dPin || selectedPi.deliveryPincode}</strong></div>}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Commercial & Transport Terms */}
-                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Payment Terms</span>
-                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{normalizePaymentTerm(selectedPi.paymentTerms || selectedPi.paymentType)}</strong>
+                    <Receipt size={20} />
                   </div>
                   <div>
-                    <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Credit Days</span>
-                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{selectedPi.creditDays ? `${selectedPi.creditDays} Days` : 'Immediate'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Transport Mode</span>
-                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{selectedPi.transportMode || 'Road Transport'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Transporter / Vehicle</span>
-                    <span style={{ fontSize: '12.5px', color: '#334155' }}>{[selectedPi.transporterName, selectedPi.vehicleNo].filter(Boolean).join(' - ') || 'To be arranged'}</span>
-                  </div>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Destination</span>
-                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{selectedPi.destination || selectedPi.deliveryCity || '—'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Transport Scope</span>
-                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{selectedPi.transportScope || 'VRM Structures'}</strong>
-                  </div>
-                  {selectedPi.remarks && (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Remarks / Notes</span>
-                      <span style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic' }}>{selectedPi.remarks}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 4. Complete Invoice Line Items & Presets (Kit Price in Middle with GST Value) */}
-                <div style={{ border: '1px solid #E2E8F0', borderRadius: '14px', overflow: 'hidden' }}>
-                  <div style={{ padding: '12px 18px', backgroundColor: '#F1F5F9', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Layers size={16} color="#0E7490" />
-                      <strong style={{ fontSize: '13px', color: '#0F172A', textTransform: 'uppercase' }}>
-                        Invoice Line Items ({piItemsList.length > 0 ? piItemsList.length : selectedPi.quantity || 1})
-                      </strong>
-                    </div>
-                    {selectedPi.productName && (
-                      <span style={{ fontSize: '11px', color: '#475569', fontWeight: '600' }}>
-                        Scope: {selectedPi.productName}
+                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+                        Proforma Invoice • {piNo}
                       </span>
-                    )}
-                  </div>
-
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', textAlign: 'left' }}>
-                        <th style={{ padding: '10px 12px' }}>#</th>
-                        <th style={{ padding: '10px 12px' }}>Item Description</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>HSN / SAC</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>Live Stock</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>Qty</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>Unit Rate (₹)</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>Taxable Value (₹)</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>GST Rate</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>Total (₹)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {piItemsList.length > 0 ? (() => {
-                        const distinctDetailsGroupIds = [];
-                        piItemsList.forEach(it => {
-                          if (it.presetGroupId && !distinctDetailsGroupIds.includes(it.presetGroupId)) {
-                            distinctDetailsGroupIds.push(it.presetGroupId);
-                          }
-                        });
-
-                        return piItemsList.map((it, idx) => {
-                          const isPreset = Boolean(it.isPresetItem || it.presetGroupId || (!it.rate && subtotalVal > 0));
-                          const groupId = it.presetGroupId;
-                          const groupIndex = groupId ? distinctDetailsGroupIds.indexOf(groupId) : -1;
-                          const presetNumber = groupIndex >= 0 ? groupIndex + 1 : 1;
-                          const theme = groupIndex >= 0 ? getPresetTheme(groupIndex) : PRESET_THEMES[0];
-                          const pGroups = selectedPi.presetGroups || {};
-                          const currentGroup = groupId ? (pGroups[groupId] || { kitPrice: '', setCount: 1, presetName: it.presetName }) : null;
-
-                          let isFirstInGroup = false;
-                          let groupCount = 0;
-                          let itemIndexInGroup = 0;
-                          if (isPreset && groupId) {
-                            const itemsInGroup = piItemsList.filter(x => x.presetGroupId === groupId);
-                            groupCount = itemsInGroup.length;
-                            isFirstInGroup = piItemsList.findIndex(x => x.presetGroupId === groupId) === idx;
-                            itemIndexInGroup = itemsInGroup.findIndex(x => x === it) + 1;
-                          }
-
-                          const customItems = piItemsList.filter(x => !(x.isPresetItem || x.presetGroupId || (!x.rate && subtotalVal > 0)));
-                          const isFirstCustomItem = !isPreset && piItemsList.findIndex(x => !(x.isPresetItem || x.presetGroupId || (!x.rate && subtotalVal > 0))) === idx;
-                          const customIndex = !isPreset ? customItems.findIndex(x => x === it) + 1 : null;
-
-                          const displaySNo = isPreset && distinctDetailsGroupIds.length > 0
-                            ? `${presetNumber}.${itemIndexInGroup}`
-                            : (customIndex !== null ? (distinctDetailsGroupIds.length > 0 ? `C.${customIndex}` : `${idx + 1}`) : `${idx + 1}`);
-
-                          const itQty = parseFloat(it.qty) || 1;
-                          const itRate = parseFloat(it.rate) || 0;
-                          const itTaxable = isPreset ? 0 : (itQty * itRate);
-                          const itGstPct = parseFloat(String(it.gstRate || '18').replace('%', '')) || 18;
-                          const itAmt = isPreset ? null : (itTaxable + (itTaxable * (itGstPct / 100)));
-
-                          // Center-aligned kit pricing and GST calculation
-                          const kUnitPrice = parseFloat(currentGroup?.kitPrice) || 0;
-                          const kSetCount = parseFloat(currentGroup?.setCount || 1) || 1;
-                          const kTaxable = kUnitPrice * kSetCount;
-                          const kGstPct = parseFloat(String(currentGroup?.gstRate || '18').replace('%', '')) || 18;
-                          const kGstAmt = kTaxable * (kGstPct / 100);
-                          const kTotalWithGst = kTaxable + kGstAmt;
-
-                          return (
-                            <React.Fragment key={idx}>
-                              {isFirstInGroup && (
-                                <tr key={`modal-preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1px solid ${theme.border}` }}>
-                                  <td colSpan={9} style={{ padding: '8px 12px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{
-                                          padding: '2px 8px',
-                                          borderRadius: '6px',
-                                          backgroundColor: theme.primary,
-                                          color: '#FFFFFF',
-                                          fontSize: '11px',
-                                          fontWeight: '800',
-                                          letterSpacing: '0.5px'
-                                        }}>
-                                          {theme.badge}
-                                        </span>
-                                        <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '800' }}>
-                                          {currentGroup?.presetName || it.presetName || 'Structure Kit'}
-                                        </strong>
-                                        <span style={{
-                                          fontSize: '10px',
-                                          fontWeight: '700',
-                                          padding: '1px 6px',
-                                          borderRadius: '8px',
-                                          backgroundColor: theme.tagBg,
-                                          color: theme.tagText,
-                                          border: `1px solid ${theme.border}`
-                                        }}>
-                                          {currentGroup?.unit === 'kW' ? `Total Capacity: ${currentGroup?.setCount || 1} kW (${groupCount} components)` : `Total Quantity: ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) !== 1 ? 's' : ''} (${groupCount} components)`}
-                                        </span>
-                                      </div>
-                                      <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                                        <span style={{ color: '#0E7490', fontWeight: '800' }}>Kit Pricing Center-Aligned Below</span>
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                              {isFirstCustomItem && distinctDetailsGroupIds.length > 0 && (
-                                <tr key="modal-custom-hdr" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                  <td colSpan={9} style={{ padding: '6px 12px' }}>
-                                    <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', marginRight: '8px' }}>
-                                      CUSTOM ITEMS
-                                    </span>
-                                    <strong style={{ fontSize: '11px', color: '#334155' }}>
-                                      Additional Materials ({customItems.length} items)
-                                    </strong>
-                                  </td>
-                                </tr>
-                              )}
-                              <tr key={idx} style={{
-                                borderBottom: '1px solid #F1F5F9',
-                                backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'
-                              }}>
-                                <td style={{
-                                  padding: '10px 12px',
-                                  color: isPreset ? theme.primary : '#64748B',
-                                  fontWeight: '800',
-                                  borderLeft: isPreset ? `4px solid ${theme.primary}` : '4px solid #CBD5E1'
-                                }}>
-                                  #{displaySNo}
-                                </td>
-                                <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: '700' }}>
-                                  <div>{it.name || 'Component Item'}</div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                                    {isPreset && (
-                                      <span style={{
-                                        fontSize: '9.5px',
-                                        fontWeight: '800',
-                                        padding: '1px 5px',
-                                        borderRadius: '4px',
-                                        backgroundColor: theme.tagBg,
-                                        color: theme.tagText,
-                                        border: `1px solid ${theme.border}`
-                                      }}>
-                                        {theme.badge} • Component {itemIndexInGroup} of {groupCount}
-                                      </span>
-                                    )}
-                                    {it.category && <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 'normal' }}>{it.category}</span>}
-                                  </div>
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569', fontSize: '11px', fontFamily: 'monospace', fontWeight: '600' }}>
-                                  {it.hsn || it.hsn_or_sac || getHsnCode(it) || selectedPi.hsn}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                  {(() => {
-                                    const avail = getItemStock(it.name, it.code);
-                                    if (avail === null) return <span style={{ color: '#94A3B8' }}>—</span>;
-                                    const isOut = avail <= 0;
-                                    return (
-                                      <span style={{
-                                        fontSize: '10px',
-                                        fontWeight: '800',
-                                        padding: '1px 6px',
-                                        borderRadius: '8px',
-                                        backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
-                                        color: isOut ? '#DC2626' : '#059669',
-                                        border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0'
-                                      }}>
-                                        {avail.toLocaleString()}
-                                      </span>
-                                    );
-                                  })()}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#334155', fontWeight: '600' }}>
-                                  {itQty} {it.uom || it.unit || 'NOS'}
-                                </td>
-                                {isPreset ? (
-                                  isFirstInGroup ? (
-                                    <>
-                                      <td
-                                        rowSpan={groupCount}
-                                        style={{
-                                          padding: '10px 12px',
-                                          textAlign: 'center',
-                                          verticalAlign: 'middle',
-                                          backgroundColor: '#FFFFFF',
-                                          borderLeft: '1px solid #E2E8F0',
-                                          borderRight: '1px solid #E2E8F0'
-                                        }}
-                                      >
-                                        <div style={{ fontWeight: '800', color: theme.primary, fontSize: '12px' }}>
-                                          ₹ {kUnitPrice.toLocaleString('en-IN')}
-                                        </div>
-                                        <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '600' }}>
-                                          per {currentGroup?.unit || 'Set'}
-                                        </div>
-                                      </td>
-                                      <td
-                                        rowSpan={groupCount}
-                                        style={{
-                                          padding: '10px 12px',
-                                          textAlign: 'center',
-                                          verticalAlign: 'middle',
-                                          backgroundColor: '#FFFFFF',
-                                          borderRight: '1px solid #E2E8F0'
-                                        }}
-                                      >
-                                        <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px' }}>
-                                          ₹ {kTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                        </div>
-                                        {kSetCount > 1 && (
-                                          <div style={{ fontSize: '9.5px', color: '#64748B' }}>
-                                            ({kSetCount} × ₹{kUnitPrice.toLocaleString('en-IN')})
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td
-                                        rowSpan={groupCount}
-                                        style={{
-                                          padding: '10px 12px',
-                                          textAlign: 'center',
-                                          verticalAlign: 'middle',
-                                          backgroundColor: '#FFFFFF',
-                                          borderRight: '1px solid #E2E8F0'
-                                        }}
-                                      >
-                                        <div style={{ fontWeight: '800', color: '#4338CA', fontSize: '11.5px' }}>
-                                          {kGstPct}%
-                                        </div>
-                                        <div style={{ fontSize: '10px', fontWeight: '700', color: '#166534', marginTop: '2px' }}>
-                                          ₹ {kGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                        </div>
-                                      </td>
-                                      <td
-                                        rowSpan={groupCount}
-                                        style={{
-                                          padding: '10px 12px',
-                                          textAlign: 'center',
-                                          verticalAlign: 'middle',
-                                          backgroundColor: '#FFFFFF'
-                                        }}
-                                      >
-                                        <div style={{ fontWeight: '900', color: '#0E7490', fontSize: '13px' }}>
-                                          ₹ {kTotalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                        </div>
-                                        <div style={{ fontSize: '9px', fontWeight: '700', color: '#64748B' }}>
-                                          Total (with GST)
-                                        </div>
-                                      </td>
-                                    </>
-                                  ) : null
-                                ) : (
-                                  <>
-                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
-                                      ₹ {itRate.toLocaleString('en-IN')}
-                                    </td>
-                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontWeight: '600' }}>
-                                      ₹ {itTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </td>
-                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4338CA', fontWeight: '700' }}>
-                                      {it.gstRate || '18%'}
-                                    </td>
-                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
-                                      ₹ {(itAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </td>
-                                  </>
-                                )}
-                              </tr>
-                            </React.Fragment>
-                          );
-                        });
-                      })() : (
-                        <tr>
-                          <td style={{ padding: '12px 14px', color: '#64748B' }}>1</td>
-                          <td style={{ padding: '12px 14px', color: '#0F172A', fontWeight: '700' }}>{selectedPi.productName || 'Solar Structure MMS Kit'}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#64748B' }}>—</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#334155' }}>{selectedPi.quantity || 1} Set</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'right', color: '#475569' }}>₹ {subtotalVal.toLocaleString('en-IN')}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'right', color: '#334155' }}>₹ {subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#4338CA' }}>18%</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>₹ {subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* 4b. Attached Document / Signed PI Doc (if present) */}
-                {Boolean(selectedPi.signedPiDoc?.dataUrl || (selectedPi.pdfName && selectedPi.pdfName !== 'pi_document.pdf' && selectedPi.signedPiDoc)) && (
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '14px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <FileCheck size={20} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                          {selectedPi.signedPiDoc?.name || selectedPi.pdfName}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>
-                          {selectedPi.signedPiDoc?.size ? `${Math.round(selectedPi.signedPiDoc.size / 1024)} KB • ` : ''}
-                          Official Verified Attachment
-                        </div>
-                      </div>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        backgroundColor: isBOMConverted ? '#F0FDF4' : '#ECFEFF',
+                        color: isBOMConverted ? '#16A34A' : '#0E7490',
+                        border: isBOMConverted ? '1px solid #BBF7D0' : '1px solid #A5F3FC'
+                      }}>
+                        {isBOMConverted ? 'Converted to BOM' : (pi.status || 'Issued')}
+                      </span>
                     </div>
-                    {selectedPi.signedPiDoc?.dataUrl && (
-                      <a
-                        href={selectedPi.signedPiDoc.dataUrl}
-                        download={selectedPi.signedPiDoc.name || 'signed_pi.pdf'}
-                        style={{
-                          padding: '7px 14px',
-                          backgroundColor: '#0E7490',
-                          color: '#FFFFFF',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          textDecoration: 'none',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        <Download size={14} /> Download Document
-                      </a>
-                    )}
-                  </div>
-                )}
-
-                {/* 5. Financial Summary Grid */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
-                  <div style={{ width: '380px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                      <span>Taxable Product Value:</span>
-                      <strong style={{ color: '#0F172A' }}>₹ {subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                    </div>
-                    {(presetKitsSubtotal > 0 || selectedPi.kitSubtotal > 0) && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                        <span>Preset Kits Subtotal:</span>
-                        <strong style={{ color: '#0F172A' }}>₹ {(presetKitsSubtotal > 0 ? presetKitsSubtotal : Number(selectedPi.kitSubtotal)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                      </div>
-                    )}
-                    {modalGstTiers.length > 0 ? (
-                      isModalIntra ? (
-                        modalGstTiers.map(tier => (
-                          <React.Fragment key={tier.rate}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
-                              <span>CGST ({(tier.rate / 2)}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
-                              <strong style={{ color: '#0F172A' }}>₹ {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
-                              <span>SGST ({(tier.rate / 2)}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
-                              <strong style={{ color: '#0F172A' }}>₹ {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                            </div>
-                          </React.Fragment>
-                        ))
-                      ) : (
-                        modalGstTiers.map(tier => (
-                          <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
-                            <span>IGST ({tier.rate}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
-                            <strong style={{ color: '#0F172A' }}>₹ {tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                          </div>
-                        ))
-                      )
-                    ) : (
-                      totalGstVal > 0 ? (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                          <span>Applicable GST (Taxes):</span>
-                          <strong style={{ color: '#0F172A' }}>₹ {totalGstVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                        </div>
-                      ) : null
-                    )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #0E7490', marginTop: '4px' }}>
-                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>Total Invoice Amount:</span>
-                      <strong style={{ fontSize: '18px', fontWeight: '900', color: '#0E7490' }}>
-                        ₹ {grandTotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </strong>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                      Commercial Sales PI • Generated on {piDate} • Executive: <strong>{salesPerson}</strong>
                     </div>
                   </div>
                 </div>
 
-              </div>
-
-              {/* Modal Footer Controls */}
-              <div style={{ padding: '16px 24px', backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <button
                   type="button"
                   onClick={() => setSelectedPi(null)}
                   style={{
-                    padding: '10px 20px',
-                    borderRadius: '10px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: '#FFFFFF',
-                    color: '#475569',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    cursor: 'pointer'
+                    border: 'none',
+                    background: 'none',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748B',
+                    backgroundColor: '#F1F5F9'
                   }}
                 >
-                  Close Details
+                  <X size={18} />
                 </button>
+              </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {(selectedPi.status === 'Draft' || selectedPi.statusType === 'draft') && (
+              {/* Body */}
+              <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Info Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Customer / Client</div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginTop: '3px' }}>{customer}</div>
+                    {pi.customerPhone && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>📞 {pi.customerPhone}</div>}
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Payment Terms</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', marginTop: '3px' }}>{paymentTerms}</div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Date: {piDate}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Total Line Items</div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginTop: '3px' }}>{totalComponentCount || items.length} Products / Kits</div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Sales Rep: {salesPerson}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#ECFEFF', padding: '10px 12px', borderRadius: '10px', border: '1px solid #A5F3FC' }}>
+                    <div style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '800', textTransform: 'uppercase' }}>PI Grand Total</div>
+                    <div style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', marginTop: '3px' }}>
+                      ₹ {Math.round(grandTotal).toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#0E7490', marginTop: '2px' }}>Incl. GST (18%)</div>
+                  </div>
+                </div>
+
+                {/* Items Table with Grouped Presets and Kit Value Header */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
+                      Quoted Products & Preset Kits ({totalComponentCount || items.length} components)
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                      Grouped by Preset Kit with distinct pricing & boundaries
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                          <th style={{ padding: '8px 10px', width: '38px', textAlign: 'center' }}>#</th>
+                          <th style={{ padding: '8px 10px' }}>Product / Component</th>
+                          <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center' }}>HSN / SAC</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Qty</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>UOM</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Rate (₹)</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>GST</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', width: '110px' }}>Total (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sections.length > 0 ? (
+                          sections.map((sec, secIdx) => {
+                            if (sec.isPreset) {
+                              const presetIdx = presetSections.indexOf(sec);
+                              let grpConfig = (sec.presetGroupId && presetGroupsData[sec.presetGroupId]) || (presetGroupsData[sec.key]) || null;
+                              if (!grpConfig && presetGroupsList.length > 0) {
+                                grpConfig = presetGroupsList.find(g =>
+                                  (sec.presetGroupId && (g.id === sec.presetGroupId || g.groupId === sec.presetGroupId)) ||
+                                  (sec.presetName && g.presetName && g.presetName.toLowerCase().trim() === sec.presetName.toLowerCase().trim()) ||
+                                  (g.name && sec.presetName && g.name.toLowerCase().trim() === sec.presetName.toLowerCase().trim())
+                                ) || null;
+                              }
+                              const setCount = parseFloat(grpConfig?.setCount || grpConfig?.quantity || pi.presetSetCount || 1) || 1;
+                              const pUnit = grpConfig?.unit || grpConfig?.unitType || pi.presetUnit || 'Sets';
+
+                              // Calculate kit taxable
+                              let taxable = 0;
+                              if (grpConfig?.kitPrice && parseFloat(grpConfig.kitPrice) > 0) {
+                                taxable = (parseFloat(grpConfig.kitPrice) || 0) * setCount;
+                              } else if (pi.presetKitPrice && parseFloat(pi.presetKitPrice) > 0) {
+                                taxable = (parseFloat(pi.presetKitPrice) || 0) * setCount;
+                              } else if (pi.unitValue && parseFloat(pi.unitValue) > 0) {
+                                taxable = parseFloat(pi.unitValue) || 0;
+                              } else if (pi.kitSubtotal && parseFloat(pi.kitSubtotal) > 0) {
+                                taxable = parseFloat(pi.kitSubtotal) || 0;
+                              } else if (presetSections.length === 1) {
+                                taxable = presetTaxablePool || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0);
+                              } else if (presetSections.length > 0) {
+                                taxable = Math.round(presetTaxablePool / presetSections.length);
+                              }
+
+                              const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || pi.gstRate || '18%';
+                              const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                              const kitGst = Math.round(taxable * (gstPct / 100));
+                              const kitTotal = Math.round(taxable + kitGst);
+
+                              return (
+                                <React.Fragment key={sec.key}>
+                                  {/* PRESET HEADER BANNER WITH KIT VALUE */}
+                                  <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2.5px solid #0E7490', borderBottom: '1.5px solid #A5F3FC' }}>
+                                    <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                                        {/* Left: Preset Badge & Name */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span style={{
+                                            backgroundColor: '#0E7490',
+                                            color: '#FFFFFF',
+                                            fontSize: '10.5px',
+                                            fontWeight: '900',
+                                            padding: '2.5px 8px',
+                                            borderRadius: '6px',
+                                            letterSpacing: '0.5px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                          }}>
+                                            <Boxes size={12} />
+                                            PRESET {presetIdx + 1}
+                                          </span>
+                                          <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
+                                            {sec.presetName}
+                                          </strong>
+                                          <span style={{
+                                            fontSize: '11px',
+                                            color: '#0E7490',
+                                            fontWeight: '700',
+                                            backgroundColor: '#ECFEFF',
+                                            padding: '2px 8px',
+                                            borderRadius: '12px',
+                                            border: '1px solid #A5F3FC'
+                                          }}>
+                                            Total Qty: {setCount} {pUnit} ({sec.items.length} components)
+                                          </span>
+                                        </div>
+
+                                        {/* Center / Right: PROMINENT PRESET KIT VALUE BADGE */}
+                                        <div style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '10px',
+                                          backgroundColor: '#FFFFFF',
+                                          border: '1.5px solid #0E7490',
+                                          borderRadius: '8px',
+                                          padding: '4px 12px',
+                                          boxShadow: '0 1px 3px rgba(14, 116, 144, 0.08)'
+                                        }}>
+                                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <span style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>KIT VALUE:</span>
+                                            <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '900' }}>
+                                              ₹ {Math.round(taxable).toLocaleString('en-IN')}
+                                            </strong>
+                                          </div>
+                                          <span style={{ color: '#CBD5E1', fontWeight: '300' }}>|</span>
+                                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <span style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>GST ({gstPct}%):</span>
+                                            <strong style={{ fontSize: '11.5px', color: '#0F172A', fontWeight: '800' }}>
+                                              ₹ {kitGst.toLocaleString('en-IN')}
+                                            </strong>
+                                          </div>
+                                          <span style={{ color: '#CBD5E1', fontWeight: '300' }}>|</span>
+                                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <span style={{ fontSize: '9.5px', color: '#0E7490', fontWeight: '800', textTransform: 'uppercase' }}>TOTAL:</span>
+                                            <strong style={{ fontSize: '13.5px', color: '#0E7490', fontWeight: '900' }}>
+                                              ₹ {kitTotal.toLocaleString('en-IN')}
+                                            </strong>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+
+                                  {/* Individual Component Items */}
+                                  {sec.items.map(({ item: it, originalIndex }, cIdx) => {
+                                    const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
+                                    const r = parseFloat(it.rate || it.price || 0) || 0;
+                                    const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
+                                    const taxRate = parseFloat(taxRateStr) || gstPct;
+                                    const hasExplicitRate = r > 0;
+                                    const taxableItem = q * r;
+                                    const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
+
+                                    return (
+                                      <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#FAFDFD' : '#FFFFFF' }}>
+                                        <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
+                                          {presetIdx + 1}.{cIdx + 1}
+                                        </td>
+                                        <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                          <div>{it.name || it.productName || 'Item'}</div>
+                                          {it.subPresetName && (
+                                            <div style={{ fontSize: '10px', color: '#0D9488', fontWeight: '700', marginTop: '1px' }}>
+                                              ↳ Sub-Kit: {it.subPresetName}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
+                                        <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
+                                        <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                        <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                          {hasExplicitRate ? (
+                                            <span style={{ color: '#475569', fontWeight: '700' }}>₹ {r.toLocaleString('en-IN')}</span>
+                                          ) : (
+                                            <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '4px', border: '1px solid #CFFAFE' }}>
+                                              Incl. in Kit
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
+                                        <td style={{ padding: '7px 10px', textAlign: 'right' }}>
+                                          {hasExplicitRate ? (
+                                            <strong style={{ color: '#0F172A' }}>₹ {Math.round(itemTotal).toLocaleString('en-IN')}</strong>
+                                          ) : (
+                                            <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '4px', border: '1px solid #CFFAFE' }}>
+                                              Incl. in Kit
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+
+                                  {/* END OF PRESET DIVIDER */}
+                                  <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1px dashed #99F6E4', borderBottom: '2.5px solid #0E7490' }}>
+                                    <td colSpan={8} style={{ padding: '8px 14px', textAlign: 'center' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                        <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
+                                        <span style={{
+                                          fontSize: '11px',
+                                          fontWeight: '800',
+                                          color: '#0F766E',
+                                          backgroundColor: '#CCFBF1',
+                                          padding: '3px 12px',
+                                          borderRadius: '999px',
+                                          border: '1px solid #99F6E4',
+                                          letterSpacing: '0.4px',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '6px'
+                                        }}>
+                                          ✓ END OF PRESET {presetIdx + 1}: {sec.presetName} ({sec.items.length} Components • Total Kit Value: ₹ {kitTotal.toLocaleString('en-IN')})
+                                        </span>
+                                        <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </React.Fragment>
+                              );
+                            }
+
+                            // CUSTOM / STANDALONE PRODUCTS SECTION
+                            const customSecTaxable = sec.items.reduce((sum, { item }) => {
+                              const q = parseFloat(item.qty !== undefined ? item.qty : (item.quantity || 0)) || 0;
+                              const r = parseFloat(item.rate || item.price || 0) || 0;
+                              return sum + (q * r);
+                            }, 0);
+
+                            return (
+                              <React.Fragment key="custom_section">
+                                {/* START OF CUSTOM PRODUCTS HEADER */}
+                                <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2.5px solid #475569', borderBottom: '1.5px solid #CBD5E1' }}>
+                                  <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{
+                                          backgroundColor: '#475569',
+                                          color: '#FFFFFF',
+                                          fontSize: '10.5px',
+                                          fontWeight: '900',
+                                          padding: '2.5px 8px',
+                                          borderRadius: '6px',
+                                          letterSpacing: '0.5px'
+                                        }}>
+                                          📦 START OF NEW PRODUCTS (STANDALONE)
+                                        </span>
+                                        <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
+                                          Additional Materials / Standalone Products ({sec.items.length} items)
+                                        </strong>
+                                      </div>
+                                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>
+                                        Individually Priced Components • Subtotal: ₹ {Math.round(customSecTaxable).toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {/* Custom Line Items */}
+                                {sec.items.map(({ item: it, originalIndex }, cIdx) => {
+                                  const q = parseFloat(it.qty !== undefined ? item.qty : (it.quantity || 0)) || 0;
+                                  const r = parseFloat(it.rate || it.price || 0) || 0;
+                                  const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
+                                  const taxRate = parseFloat(taxRateStr) || 18;
+                                  const taxableItem = q * r;
+                                  const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
+
+                                  return (
+                                    <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF' }}>
+                                      <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
+                                        C.{cIdx + 1}
+                                      </td>
+                                      <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                        <div>{it.name || it.productName || 'Item'}</div>
+                                        {it.category && (
+                                          <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
+                                            {it.category}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'right', color: '#334155', fontWeight: '700' }}>
+                                        ₹ {r.toLocaleString('en-IN')}
+                                      </td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                                        ₹ {Math.round(itemTotal).toLocaleString('en-IN')}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+
+                                {/* END OF CUSTOM PRODUCTS DIVIDER */}
+                                <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px dashed #CBD5E1', borderBottom: '2.5px solid #475569' }}>
+                                  <td colSpan={8} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                      <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
+                                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', letterSpacing: '0.4px' }}>
+                                        ✓ END OF STANDALONE PRODUCTS ({sec.items.length} Items)
+                                      </span>
+                                      <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
+                                    </div>
+                                  </td>
+                                </tr>
+                              </React.Fragment>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                              No individual line items listed.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Financial Summary */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: '4px'
+                }}>
+                  <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                      <span>Subtotal (Taxable):</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {Math.round(subtotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                      <span>Estimated GST (18%):</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {Math.round(taxTotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      borderTop: '2px solid #0E7490',
+                      paddingTop: '6px',
+                      fontSize: '14px',
+                      color: '#0E7490'
+                    }}>
+                      <span><strong>Total Quoted:</strong></span>
+                      <strong style={{ fontSize: '15px' }}>₹ {Math.round(grandTotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '12px 22px',
+                backgroundColor: '#F8FAFC',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {isBOMConverted && linkedBomCode && (
                     <button
                       type="button"
-                      onClick={() => handleReleaseDraftPi(selectedPi)}
+                      onClick={() => {
+                        setSelectedPi(null);
+                        window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
+                          detail: { tab: 'Sales BOM', targetBom: linkedBomCode } 
+                        }));
+                        if (typeof onNavigateTab === 'function') {
+                          onNavigateTab('Sales BOM');
+                        }
+                      }}
                       style={{
-                        padding: '10px 20px',
-                        borderRadius: '10px',
+                        padding: '7px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #BBF7D0',
+                        backgroundColor: '#F0FDF4',
+                        color: '#16A34A',
+                        fontSize: '11.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Layers size={13} /> View Linked BOM ({linkedBomCode}) →
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPi(null)}
+                    style={{
+                      padding: '8px 20px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#475569',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Close
+                  </button>
+
+                  {!isCeo && !isConverted && !isTechSupportLogin && pi.status !== 'Cancelled' && pi.status !== 'Draft' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = pi;
+                        setSelectedPi(null);
+                        handleConvertToBom(target);
+                      }}
+                      style={{
+                        padding: '8px 18px',
+                        borderRadius: '8px',
                         border: 'none',
-                        backgroundColor: '#10B981',
+                        backgroundColor: '#4F46E5',
                         color: '#FFFFFF',
-                        fontSize: '13px',
+                        fontSize: '12px',
                         fontWeight: '800',
                         cursor: 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
-                        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#059669'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#10B981'}
-                    >
-                      <CheckCircle size={15} /> Complete & Release PI →
-                    </button>
-                  )}
-
-                  {!isConverted && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
-                        handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
-                        setSelectedPi(null);
-                      }}
-                      style={{
-                        padding: '10px 18px',
-                        borderRadius: '10px',
-                        border: 'none',
-                        backgroundColor: '#0E7490',
-                        color: '#FFFFFF',
-                        fontSize: '13px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
+                        boxShadow: '0 2px 6px rgba(79,70,229,0.3)'
                       }}
                     >
-                      <Edit3 size={15} /> Edit Info
+                      <Layers size={14} /> Convert to BOM →
                     </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = selectedPi;
-                      setSelectedPi(null);
-                      handleClonePi(target);
-                    }}
-                    title="Clone / Duplicate this Proforma Invoice"
-                    style={{
-                      padding: '10px 18px',
-                      borderRadius: '10px',
-                      border: '1px solid #CBD5E1',
-                      backgroundColor: '#FFFFFF',
-                      color: '#0F172A',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Copy size={15} style={{ color: '#0E7490' }} /> Clone PI
-                  </button>
-
-                  {selectedPi.status !== 'Cancelled' && !isConverted && (
-                    <button
-                      type="button"
-                      disabled={cancellingPiNo === selectedPi.piNo}
-                      onClick={() => handleCancelPi(selectedPi)}
-                      style={{
-                        padding: '10px 16px',
-                        borderRadius: '10px',
-                        border: '1px solid #FCA5A5',
-                        backgroundColor: '#FEF2F2',
-                        color: '#DC2626',
-                        fontSize: '13px',
-                        fontWeight: '700',
-                        cursor: cancellingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
-                        opacity: cancellingPiNo === selectedPi.piNo ? 0.7 : 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      {cancellingPiNo === selectedPi.piNo ? 'Cancelling...' : 'Cancel PI'}
-                    </button>
-                  )}
-
-                  {isConverted ? (
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const firstBom = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id;
-                          setSelectedPi(null);
-                          window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
-                            detail: { tab: 'Sales BOM', targetBom: firstBom } 
-                          }));
-                          if (typeof onNavigateTab === 'function') {
-                            onNavigateTab('Sales BOM');
-                          }
-                        }}
-                        style={{
-                          padding: '10px 22px',
-                          borderRadius: '10px',
-                          border: 'none',
-                          backgroundColor: '#059669',
-                          color: '#FFFFFF',
-                          fontSize: '13px',
-                          fontWeight: '800',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          boxShadow: '0 4px 12px rgba(5,150,105,0.3)'
-                        }}
-                      >
-                        <Layers size={16} /> View {matchedBoms[0]?.bomCode || 'BOM'} Order ↗
-                      </button>
-                    </div>
-                  ) : (
-                    !isTechSupportLogin && selectedPi.status !== 'Cancelled' && selectedPi.status !== 'Draft' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const pi = selectedPi;
-                          setSelectedPi(null);
-                          handleConvertToBom(pi);
-                        }}
-                        style={{
-                          padding: '10px 22px',
-                          borderRadius: '10px',
-                          border: 'none',
-                          backgroundColor: '#4F46E5',
-                          color: '#FFFFFF',
-                          fontSize: '13px',
-                          fontWeight: '800',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          boxShadow: '0 4px 12px rgba(79,70,229,0.3)'
-                        }}
-                      >
-                        <Layers size={16} /> Convert to BOM →
-                      </button>
-                    )
                   )}
                 </div>
               </div>
@@ -9732,6 +9277,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           piData={printModalPi}
           onClose={() => setPrintModalPi(null)}
           onSavePi={handlePrintTemplatePiUpdate}
+          userRole={userRole}
+          isCeo={isCeo}
+          readOnly={isCeo}
         />
       )}
 

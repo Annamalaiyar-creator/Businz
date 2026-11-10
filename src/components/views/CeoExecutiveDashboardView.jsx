@@ -44,14 +44,14 @@ export function CeoKpiGrid({ kpis }) {
             key={kIdx}
             onClick={kpi.onClick}
             style={{
-              backgroundColor: '#FFFFFF',
+              backgroundColor: kpi.isSelected ? '#F0FDFA' : '#FFFFFF',
               borderRadius: '16px',
-              border: kpi.highlightCard ? '1.5px solid #FCA5A5' : '1px solid #EAEFEF',
+              border: kpi.isSelected ? '2px solid #0E7490' : (kpi.highlightCard ? '1.5px solid #FCA5A5' : '1px solid #EAEFEF'),
               padding: '12px 14px',
               display: 'flex',
               flexDirection: 'column',
               gap: '8px',
-              boxShadow: kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)',
+              boxShadow: kpi.isSelected ? '0 6px 20px rgba(14, 116, 144, 0.18)' : (kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)'),
               cursor: kpi.onClick ? 'pointer' : 'default',
               transition: 'all 0.2s ease',
               minWidth: 0,
@@ -65,7 +65,7 @@ export function CeoKpiGrid({ kpis }) {
                   style={{ 
                     fontSize: '11px', 
                     fontWeight: '800', 
-                    color: '#64748B', 
+                    color: kpi.isSelected ? '#0E7490' : '#64748B', 
                     letterSpacing: '0.04em', 
                     textTransform: 'uppercase', 
                     whiteSpace: 'nowrap', 
@@ -163,7 +163,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       return saved || 'kit-analytics';
     }
     const saved = localStorage.getItem('controlroom_ceo_sub_tab');
-    if (saved === 'kit-analytics' || saved === 'reports-dashboard' || saved === 'reports' || saved === 'sales' || saved === 'sales-targets' || saved === 'dispatch') return 'overview';
+    if (saved === 'kit-analytics' || saved === 'reports-dashboard' || saved === 'reports' || saved === 'sales' || saved === 'sales-targets') return 'overview';
     return saved || 'overview';
   });
 
@@ -203,7 +203,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hoveredDonutIdx, setHoveredDonutIdx] = useState(null);
   const [hoveredBarIdx, setHoveredBarIdx] = useState(null);
-  const [selectedBomLifecycleStage, setSelectedBomLifecycleStage] = useState('STEP 01'); // Default to Proforma Invoice (STEP 01)
+  const [selectedBomLifecycleStage, setSelectedBomLifecycleStage] = useState('ALL'); // Default to ALL factory BOM orders
 
   // Close KPI Popup on Escape key
   useEffect(() => {
@@ -1468,7 +1468,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       },
       {
         step: 'STEP 02',
-        stage: 'BOM & Sales Order',
+        stage: 'BOM',
         subtitle: 'Engineering & Proofs',
         primaryMetric: `${activeBoms.length} BOMs`,
         value: fmtCompact(totalBomVal),
@@ -1495,12 +1495,12 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         color: '#D97706',
         bg: '#FFFBEB',
         border: '#FDE68A',
-        targetTab: 'Dispatch Orders',
+        targetTab: null,
         action: 'Packing Queue'
       },
       {
         step: 'STEP 04',
-        stage: 'Accounts Verify',
+        stage: 'Accounts Verification',
         subtitle: 'Payment & Hard Copy',
         primaryMetric: `${accountsVerifiedBoms.length} Verified`,
         value: fmtCompact(accountsVerifiedVal),
@@ -1543,7 +1543,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         color: '#16A34A',
         bg: '#F0FDF4',
         border: '#BBF7D0',
-        targetTab: 'Dispatch Orders',
+        targetTab: null,
         action: 'Dispatch Log'
       }
     ];
@@ -2043,8 +2043,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           ] : [
             { id: 'overview', label: 'Company Overview', icon: LayoutDashboard }
           ]),
-          { id: 'crm-dashboard', label: 'CRM & Leads', icon: Users },
-          { id: 'bom', label: 'BOM', icon: GitBranch },
+          { id: 'crm-dashboard', label: 'Sales & Leads', icon: Users },
+          { id: 'bom', label: 'Dispatch', icon: Truck },
           { id: 'production', label: 'Production', icon: Factory },
           { id: 'inventory-dashboard', label: 'Inventory', icon: Warehouse },
           { id: 'procurement', label: 'Procurement', icon: ShoppingCart },
@@ -2055,6 +2055,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           const isActive = (tab.id === 'overview' && (activeSubTab === 'overview' || activeSubTab === 'performance' || activeSubTab === 'action-center' || activeSubTab === 'alerts')) ||
             (tab.id === 'accounts' && (activeSubTab === 'accounts' || activeSubTab === 'finance')) ||
             (tab.id === 'bom' && (activeSubTab === 'bom' || activeSubTab === 'bom-workflow')) ||
+            (tab.id === 'dispatch' && activeSubTab === 'dispatch') ||
             (tab.id === 'production' && activeSubTab === 'production') ||
             (tab.id === 'inventory-dashboard' && (activeSubTab === 'inventory-dashboard' || activeSubTab === 'inventory')) ||
             activeSubTab === tab.id;
@@ -2133,17 +2134,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               highlightCard: pendingMdPOs.length > 0
             },
             {
-              title: 'DISPATCH & LOGISTICS',
-              value: `${completedDispatchesCount} Dispatched`,
-              trend: `${pendingDispatchQueueCount} In Queue`,
-              trendUp: completedDispatchesCount > 0 || pendingDispatchQueueCount > 0,
-              icon: Truck,
-              iconColor: '#059669',
-              iconBg: '#ECFDF5',
-              bottomPrefix: 'Packing queue ',
-              bottomHighlight: `${pendingDispatchQueueCount} Orders`
-            },
-            {
               title: 'BILLING & TAX INVOICES',
               value: `${invList.length} Invoices Billed`,
               trend: invList.length > 0 ? '100% Tax Sync' : '0 Invoices',
@@ -2166,19 +2156,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 bottomPrefix: 'Kit order book ',
                 bottomHighlight: hrKitsOrderValueFormatted
               }
-            ] : [
-              {
-                title: 'ACCOUNTS & COLLECTIONS',
-                value: `${totalCollectedFormatted} Done`,
-                trend: totalInvoicedNum > 0 ? `${((totalCollectedNum / totalInvoicedNum) * 100).toFixed(1)}% Rate` : '0% Rate',
-                trendUp: totalCollectedNum > 0,
-                icon: Wallet,
-                iconColor: '#16A34A',
-                iconBg: '#F0FDF4',
-                bottomPrefix: 'Outstanding pending ',
-                bottomHighlight: outstandingOverdueFormatted
-              }
-            ])
+            ] : [])
           ]} />
 
           {/* ROW A: APPROVAL QUEUE + REVENUE VS SPEND + CRITICAL ALERTS */}
@@ -2754,7 +2732,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
                 Department:
               </span>
-              {['all', 'Sales', 'Procurement', 'Accounts', 'Production', 'Billing', 'Design', 'Tech Support'].map(dept => (
+              {['all', 'Sales', 'Procurement', 'Accounts', 'Production', 'Dispatch', 'Billing', 'Design', 'Tech Support'].map(dept => (
                 <button
                   key={dept}
                   onClick={() => setPersonDeptFilter(dept)}
@@ -3775,291 +3753,24 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {(activeSubTab === 'bom' || activeSubTab === 'bom-workflow') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* ROW: ORDER-TO-CASH LIFECYCLE SUMMARY & BOM STAGE FILTER */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            padding: '18px 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 4px 20px rgba(15, 23, 42, 0.04)'
-          }}>
-            <style>{`
-              .businz-otc-grid {
-                display: grid;
-                grid-template-columns: repeat(6, minmax(0, 1fr));
-                gap: 12px;
-                width: 100%;
-                box-sizing: border-box;
-              }
-              @media (max-width: 1360px) {
-                .businz-otc-grid {
-                  grid-template-columns: repeat(3, minmax(0, 1fr));
-                }
-              }
-              @media (max-width: 768px) {
-                .businz-otc-grid {
-                  grid-template-columns: repeat(2, minmax(0, 1fr));
-                }
-              }
-              .businz-otc-card {
-                transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-              }
-              .businz-otc-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.08);
-              }
-            `}</style>
-
-            {/* Header Row */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px',
-              borderBottom: '1px solid #F1F5F9',
-              paddingBottom: '12px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #0E7490 0%, #0284C7 100%)',
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 10px rgba(14, 116, 144, 0.25)',
-                  flexShrink: 0
-                }}>
-                  <Activity size={18} />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.01em' }}>
-                      Order-to-Cash Lifecycle Summary
-                    </span>
-                    <span style={{
-                      fontSize: '10px',
-                      fontWeight: '800',
-                      color: '#0E7490',
-                      backgroundColor: '#ECFEFF',
-                      border: '1px solid #A5F3FC',
-                      padding: '2px 8px',
-                      borderRadius: '999px'
-                    }}>
-                      6-STAGE BOM PIPELINE FILTER
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: '500' }}>
-                    Click any lifecycle stage to filter factory BOM orders below, or click again to view all.
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {selectedBomLifecycleStage !== 'ALL' && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBomLifecycleStage('ALL')}
-                    style={{
-                      border: '1px solid #0E7490',
-                      backgroundColor: '#ECFEFF',
-                      color: '#0E7490',
-                      padding: '5px 12px',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      boxShadow: '0 1px 3px rgba(14, 116, 144, 0.15)'
-                    }}
-                  >
-                    ✕ Clear Filter (Show All)
-                  </button>
-                )}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  padding: '5px 10px',
-                  borderRadius: '8px',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  color: '#334155'
-                }}>
-                  <span style={{ color: '#64748B', fontWeight: '600' }}>
-                    {selectedBomLifecycleStage === 'STEP 01' ? 'PIs Showing:' : 'Orders Showing:'}
-                  </span>
-                  <span style={{ color: '#0E7490', fontWeight: '800' }}>
-                    {selectedBomLifecycleStage === 'STEP 01' ? `${displayPiList.length} PIs (${selectedPeriod})` : `${displayBomList.length} of ${bomList.length} (${selectedPeriod})`}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 6-Stage Pipeline Stepper Cards */}
-            <div className="businz-otc-grid">
-              {funnelStages.map((stage, idx) => {
-                const IconComponent = stage.icon;
-                const isSelected = selectedBomLifecycleStage === stage.step;
-                return (
-                  <div
-                    key={idx}
-                    className="businz-otc-card"
-                    onClick={() => setSelectedBomLifecycleStage(prev => prev === stage.step ? 'ALL' : stage.step)}
-                    style={{
-                      backgroundColor: isSelected ? '#F0FDFA' : '#FFFFFF',
-                      borderRadius: '14px',
-                      border: isSelected ? '2px solid #0E7490' : '1px solid #E2E8F0',
-                      padding: '14px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: '12px',
-                      cursor: 'pointer',
-                      position: 'relative',
-                      minWidth: 0,
-                      boxSizing: 'border-box',
-                      boxShadow: isSelected ? '0 6px 20px rgba(14, 116, 144, 0.22)' : '0 1px 3px rgba(0,0,0,0.02)'
-                    }}
-                  >
-                    {/* Top Row: Step Number + Icon */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
-                      <span style={{
-                        fontSize: '10px',
-                        fontWeight: '800',
-                        color: stage.color,
-                        backgroundColor: stage.bg,
-                        border: `1px solid ${stage.border}`,
-                        padding: '2px 7px',
-                        borderRadius: '6px',
-                        letterSpacing: '0.04em'
-                      }}>
-                        {stage.step}
-                      </span>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '9px',
-                        backgroundColor: stage.bg,
-                        color: stage.color,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
-                        {IconComponent && <IconComponent size={16} />}
-                      </div>
-                    </div>
-
-                    {/* Stage Name & Subtitle */}
-                    <div>
-                      <div style={{
-                        fontSize: '13px',
-                        fontWeight: '800',
-                        color: '#0F172A',
-                        letterSpacing: '-0.01em',
-                        lineHeight: 1.2
-                      }}>
-                        {stage.stage}
-                      </div>
-                      <div style={{
-                        fontSize: '11px',
-                        color: '#64748B',
-                        marginTop: '2px',
-                        fontWeight: '500'
-                      }}>
-                        {stage.subtitle}
-                      </div>
-                    </div>
-
-                    {/* Primary Metric Badge & Value */}
-                    <div style={{
-                      backgroundColor: isSelected ? '#FFFFFF' : '#F8FAFC',
-                      borderRadius: '10px',
-                      padding: '8px 10px',
-                      border: isSelected ? '1px solid #CCFBF1' : '1px solid #F1F5F9'
-                    }}>
-                      <div style={{
-                        fontSize: '18px',
-                        fontWeight: '900',
-                        color: '#0F172A',
-                        lineHeight: 1
-                      }}>
-                        {stage.primaryMetric}
-                      </div>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'baseline',
-                        marginTop: '5px',
-                        fontSize: '11px'
-                      }}>
-                        <span style={{ color: '#64748B', fontWeight: '500' }}>{stage.valueLabel}:</span>
-                        <span style={{ fontWeight: '800', color: stage.color }}>{stage.value}</span>
-                      </div>
-                    </div>
-
-                    {/* Progress Bar & Status Pill */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{
-                        width: '100%',
-                        height: '5px',
-                        backgroundColor: '#F1F5F9',
-                        borderRadius: '999px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          width: `${Math.min(100, Math.max(0, stage.progressPct))}%`,
-                          height: '100%',
-                          backgroundColor: stage.color,
-                          borderRadius: '999px',
-                          transition: 'width 0.4s ease'
-                        }} />
-                      </div>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}>
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: '700',
-                          color: '#475569',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}>
-                          {stage.statusBadge}
-                        </span>
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '2px',
-                          fontSize: '10px',
-                          fontWeight: '800',
-                          color: isSelected ? '#0E7490' : stage.color,
-                          flexShrink: 0
-                        }}>
-                          {isSelected ? '✓ Filter Active' : (stage.step === 'STEP 01' ? 'View PIs' : 'Filter BOMs')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Order-to-Cash Lifecycle KPIs (BUSINZ DESIGN SYSTEM) */}
+          <CeoKpiGrid kpis={funnelStages.map(stage => {
+            const isClickable = Boolean(stage.targetTab);
+            return {
+              title: stage.stage.toUpperCase(),
+              value: stage.primaryMetric,
+              trend: stage.statusBadge,
+              trendUp: isClickable || !stage.statusBadge.toLowerCase().includes('pending'),
+              trendNeutral: stage.statusBadge.toLowerCase().includes('pending') && !isClickable,
+              hideTrendIcon: true,
+              icon: stage.icon,
+              iconColor: stage.color,
+              iconBg: stage.bg,
+              bottomPrefix: `${stage.valueLabel} `,
+              bottomHighlight: stage.value,
+              onClick: isClickable ? () => onNavigateTab && onNavigateTab(stage.targetTab) : undefined
+            };
+          })} />
 
           {/* Active Ledger (Adaptive: Shows PIs when STEP 01 is selected, BOMs for STEP 02-06 or ALL) */}
           <div style={{
