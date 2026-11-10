@@ -141,6 +141,126 @@ export const getBomActiveStage = (row) => {
 };
 
 
+export const getBomStageTiming = (b) => {
+  if (!b) return null;
+  const now = Date.now();
+
+  const formatTimeStr = (raw) => {
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  const formatDateStr = (raw) => {
+    if (!raw) return '';
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  };
+
+  const formatMins = (mins) => {
+    if (mins == null || isNaN(mins) || mins < 0) return '—';
+    if (mins < 60) return `${Math.round(mins)}m`;
+    const h = Math.floor(mins / 60);
+    const m = Math.round(mins % 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  };
+
+  const rawPi = b.piDate || b.sourcePiDate || b.createdAt || b.date;
+  const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.reconfirmedAt || b.date || b.createdAt;
+  const rawPacking = b.packingCompletedAt || b.packedAt || b.packingVerifiedAt || b.accountsVerification?.packedAt || (b.packingStatus === 'PACKING_VERIFIED' ? (b.updatedAt || b.date) : null);
+  const rawAccounts = b.accountsVerifiedAt || b.accountsVerification?.verifiedAt || (b.isAccountsDone ? (b.updatedAt || b.date) : null);
+  const rawInvoice = b.invoiceConfirmedAt || b.invoicedAt || b.stockDeductionDate || (b.invoiceConfirmed ? (b.updatedAt || b.date) : null);
+  const rawDispatch = b.dispatchedAt || b.vehicleLoading?.loadedAt || (b.fullyCompleted ? (b.updatedAt || b.date) : null);
+
+  const tConfirmed = rawConfirmed ? new Date(rawConfirmed).getTime() : null;
+  const tPacking = rawPacking ? new Date(rawPacking).getTime() : null;
+  const tAccounts = rawAccounts ? new Date(rawAccounts).getTime() : null;
+  const tInvoice = rawInvoice ? new Date(rawInvoice).getTime() : null;
+  const tDispatch = rawDispatch ? new Date(rawDispatch).getTime() : null;
+
+  // Step 2 to 3 (Packing)
+  let step2To3Mins = null;
+  if (tConfirmed && tPacking && tPacking >= tConfirmed) {
+    step2To3Mins = (tPacking - tConfirmed) / 60000;
+  } else if (tConfirmed && !tPacking) {
+    step2To3Mins = Math.max(0, (now - tConfirmed) / 60000);
+  }
+
+  // Step 3 to 4 (Accounts)
+  let step3To4Mins = null;
+  const step3Start = tPacking || tConfirmed;
+  if (step3Start && tAccounts && tAccounts >= step3Start) {
+    step3To4Mins = (tAccounts - step3Start) / 60000;
+  } else if (tPacking && !tAccounts) {
+    step3To4Mins = Math.max(0, (now - tPacking) / 60000);
+  }
+
+  // Step 4 to 5 (Billing)
+  let step4To5Mins = null;
+  const step4Start = tAccounts || tPacking || tConfirmed;
+  if (step4Start && tInvoice && tInvoice >= step4Start) {
+    step4To5Mins = (tInvoice - step4Start) / 60000;
+  } else if (tAccounts && !tInvoice) {
+    step4To5Mins = Math.max(0, (now - tAccounts) / 60000);
+  }
+
+  // Step 5 to 6 (Loading & Dispatch)
+  let step5To6Mins = null;
+  const step5Start = tInvoice || tAccounts || tPacking || tConfirmed;
+  if (step5Start && tDispatch && tDispatch >= step5Start) {
+    step5To6Mins = (tDispatch - step5Start) / 60000;
+  } else if (tInvoice && !tDispatch) {
+    step5To6Mins = Math.max(0, (now - tInvoice) / 60000);
+  }
+
+  let totalElapsedMins = 0;
+  if (tConfirmed) {
+    if (tDispatch) {
+      totalElapsedMins = Math.max(0, (tDispatch - tConfirmed) / 60000);
+    } else {
+      totalElapsedMins = Math.max(0, (now - tConfirmed) / 60000);
+    }
+  }
+
+  const isCompleted = Boolean(tDispatch || b.fullyCompleted);
+  const isBreached = totalElapsedMins > 120;
+  const isApproaching = totalElapsedMins >= 90 && totalElapsedMins <= 120;
+
+  return {
+    piTime: formatTimeStr(rawPi),
+    piDate: formatDateStr(rawPi),
+    confirmedTime: formatTimeStr(rawConfirmed),
+    confirmedDate: formatDateStr(rawConfirmed),
+    packingTime: formatTimeStr(rawPacking),
+    packingDate: formatDateStr(rawPacking),
+    packingMins: step2To3Mins,
+    packingDurationStr: formatMins(step2To3Mins),
+    hasPacking: Boolean(tPacking),
+    accountsTime: formatTimeStr(rawAccounts),
+    accountsDate: formatDateStr(rawAccounts),
+    accountsMins: step3To4Mins,
+    accountsDurationStr: formatMins(step3To4Mins),
+    hasAccounts: Boolean(tAccounts),
+    invoiceTime: formatTimeStr(rawInvoice),
+    invoiceDate: formatDateStr(rawInvoice),
+    invoiceMins: step4To5Mins,
+    invoiceDurationStr: formatMins(step4To5Mins),
+    hasInvoice: Boolean(tInvoice),
+    dispatchTime: formatTimeStr(rawDispatch),
+    dispatchDate: formatDateStr(rawDispatch),
+    dispatchMins: step5To6Mins,
+    dispatchDurationStr: formatMins(step5To6Mins),
+    hasDispatch: Boolean(tDispatch),
+    totalElapsedMins,
+    totalElapsedStr: formatMins(totalElapsedMins),
+    isCompleted,
+    isBreached,
+    isApproaching
+  };
+};
+
 export default function BomOrdersView(props) {
   const {
     activeTab = 'BOM Orders',
@@ -207,123 +327,7 @@ export default function BomOrdersView(props) {
   };
 
   // Stage Stopwatch & Timestamp Audit helper for CEO view
-  const getBomStageTiming = (b) => {
-    if (!b) return null;
-    const now = Date.now();
-
-    const formatTimeStr = (raw) => {
-      if (!raw) return null;
-      const d = new Date(raw);
-      if (isNaN(d.getTime())) return null;
-      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-    };
-
-    const formatDateStr = (raw) => {
-      if (!raw) return '';
-      const d = new Date(raw);
-      if (isNaN(d.getTime())) return '';
-      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-    };
-
-    const formatMins = (mins) => {
-      if (mins == null || isNaN(mins) || mins < 0) return '—';
-      if (mins < 60) return `${Math.round(mins)}m`;
-      const h = Math.floor(mins / 60);
-      const m = Math.round(mins % 60);
-      return m > 0 ? `${h}h ${m}m` : `${h}h`;
-    };
-
-    const rawPi = b.piDate || b.sourcePiDate || b.createdAt || b.date;
-    const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.reconfirmedAt || b.date || b.createdAt;
-    const rawPacking = b.packingCompletedAt || b.packedAt || b.packingVerifiedAt || b.accountsVerification?.packedAt || (b.packingStatus === 'PACKING_VERIFIED' ? (b.updatedAt || b.date) : null);
-    const rawAccounts = b.accountsVerifiedAt || b.accountsVerification?.verifiedAt || (b.isAccountsDone ? (b.updatedAt || b.date) : null);
-    const rawInvoice = b.invoiceConfirmedAt || b.invoicedAt || b.stockDeductionDate || (b.invoiceConfirmed ? (b.updatedAt || b.date) : null);
-    const rawDispatch = b.dispatchedAt || b.vehicleLoading?.loadedAt || (b.fullyCompleted ? (b.updatedAt || b.date) : null);
-
-    const tConfirmed = rawConfirmed ? new Date(rawConfirmed).getTime() : null;
-    const tPacking = rawPacking ? new Date(rawPacking).getTime() : null;
-    const tAccounts = rawAccounts ? new Date(rawAccounts).getTime() : null;
-    const tInvoice = rawInvoice ? new Date(rawInvoice).getTime() : null;
-    const tDispatch = rawDispatch ? new Date(rawDispatch).getTime() : null;
-
-    // Step 2 to 3 (Packing)
-    let step2To3Mins = null;
-    if (tConfirmed && tPacking && tPacking >= tConfirmed) {
-      step2To3Mins = (tPacking - tConfirmed) / 60000;
-    } else if (tConfirmed && !tPacking) {
-      step2To3Mins = Math.max(0, (now - tConfirmed) / 60000);
-    }
-
-    // Step 3 to 4 (Accounts)
-    let step3To4Mins = null;
-    const step3Start = tPacking || tConfirmed;
-    if (step3Start && tAccounts && tAccounts >= step3Start) {
-      step3To4Mins = (tAccounts - step3Start) / 60000;
-    } else if (tPacking && !tAccounts) {
-      step3To4Mins = Math.max(0, (now - tPacking) / 60000);
-    }
-
-    // Step 4 to 5 (Billing)
-    let step4To5Mins = null;
-    const step4Start = tAccounts || tPacking || tConfirmed;
-    if (step4Start && tInvoice && tInvoice >= step4Start) {
-      step4To5Mins = (tInvoice - step4Start) / 60000;
-    } else if (tAccounts && !tInvoice) {
-      step4To5Mins = Math.max(0, (now - tAccounts) / 60000);
-    }
-
-    // Step 5 to 6 (Loading & Dispatch)
-    let step5To6Mins = null;
-    const step5Start = tInvoice || tAccounts || tPacking || tConfirmed;
-    if (step5Start && tDispatch && tDispatch >= step5Start) {
-      step5To6Mins = (tDispatch - step5Start) / 60000;
-    } else if (tInvoice && !tDispatch) {
-      step5To6Mins = Math.max(0, (now - tInvoice) / 60000);
-    }
-
-    let totalElapsedMins = 0;
-    if (tConfirmed) {
-      if (tDispatch) {
-        totalElapsedMins = Math.max(0, (tDispatch - tConfirmed) / 60000);
-      } else {
-        totalElapsedMins = Math.max(0, (now - tConfirmed) / 60000);
-      }
-    }
-
-    const isCompleted = Boolean(tDispatch || b.fullyCompleted);
-    const isBreached = totalElapsedMins > 120;
-    const isApproaching = totalElapsedMins >= 90 && totalElapsedMins <= 120;
-
-    return {
-      piTime: formatTimeStr(rawPi),
-      piDate: formatDateStr(rawPi),
-      confirmedTime: formatTimeStr(rawConfirmed),
-      confirmedDate: formatDateStr(rawConfirmed),
-      packingTime: formatTimeStr(rawPacking),
-      packingMins: step2To3Mins,
-      packingDurationStr: formatMins(step2To3Mins),
-      hasPacking: Boolean(tPacking),
-      accountsTime: formatTimeStr(rawAccounts),
-      accountsMins: step3To4Mins,
-      accountsDurationStr: formatMins(step3To4Mins),
-      hasAccounts: Boolean(tAccounts),
-      invoiceTime: formatTimeStr(rawInvoice),
-      invoiceMins: step4To5Mins,
-      invoiceDurationStr: formatMins(step4To5Mins),
-      hasInvoice: Boolean(tInvoice),
-      dispatchTime: formatTimeStr(rawDispatch),
-      dispatchMins: step5To6Mins,
-      dispatchDurationStr: formatMins(step5To6Mins),
-      hasDispatch: Boolean(tDispatch),
-      totalElapsedMins,
-      totalElapsedStr: formatMins(totalElapsedMins),
-      isCompleted,
-      isBreached,
-      isApproaching
-    };
-  };
-
-  // Canonical Salesperson Code Normalizer
+  // Canonical Salesperson Code Normalizer  // Canonical Salesperson Code Normalizer
   const canonicalizeSalespersonCode = (rawCode, name) => {
     const c = String(rawCode || '').trim().toUpperCase();
     if (c.startsWith('TS-')) return c;
@@ -13155,14 +13159,64 @@ export default function BomOrdersView(props) {
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
-        // 6 Lifecycle stage indicators
+        const timing = getBomStageTiming(bom);
+
+        // 6 Lifecycle stage indicators with Date & 2-Hour SLA Timing
         const stages = [
-          { num: 1, label: 'PI Commercial', done: Boolean(linkedPiNo), active: !bom.salesConfirmed },
-          { num: 2, label: 'BOM Confirmed', done: Boolean(bom.salesConfirmed || st.includes('confirm')), active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED' },
-          { num: 3, label: 'Dispatch Packed', done: Boolean(bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')), active: bom.packingStatus === 'PACKING_VERIFIED' && !bom.isAccountsDone },
-          { num: 4, label: 'Accounts Verified', done: Boolean(bom.isAccountsDone || bom.accountsVerification?.verified), active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed },
-          { num: 5, label: 'GST Invoiced', done: Boolean(bom.invoiceConfirmed || st.includes('invoice')), active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted },
-          { num: 6, label: 'Final Dispatched', done: Boolean(bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')), active: Boolean(bom.fullyCompleted) }
+          {
+            num: 1,
+            label: 'PI Commercial',
+            done: Boolean(linkedPiNo),
+            active: !bom.salesConfirmed,
+            date: timing?.piDate || '—',
+            time: timing?.piTime || 'Completed',
+            duration: null
+          },
+          {
+            num: 2,
+            label: 'BOM Confirmed',
+            done: Boolean(bom.salesConfirmed || st.includes('confirm')),
+            active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED',
+            date: timing?.confirmedDate || '—',
+            time: timing?.confirmedTime || (st.includes('confirm') ? 'Confirmed' : 'Pending'),
+            duration: timing?.confirmedTime ? 'Timer Start' : null
+          },
+          {
+            num: 3,
+            label: 'Dispatch Packed',
+            done: Boolean(bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
+            active: bom.packingStatus !== 'PACKING_VERIFIED' && Boolean(bom.salesConfirmed),
+            date: timing?.hasPacking ? timing.packingDate : (timing?.confirmedTime ? timing.confirmedDate : '—'),
+            time: timing?.packingTime || (timing?.confirmedTime ? 'In Progress' : 'Pending'),
+            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in queue` : 'Target: 30m')
+          },
+          {
+            num: 4,
+            label: 'Accounts Verified',
+            done: Boolean(bom.isAccountsDone || bom.accountsVerification?.verified),
+            active: Boolean(bom.packingStatus === 'PACKING_VERIFIED') && !bom.isAccountsDone,
+            date: timing?.hasAccounts ? timing.accountsDate : (timing?.hasPacking ? timing.packingDate : '—'),
+            time: timing?.accountsTime || (timing?.hasPacking ? 'In Verification' : 'Pending'),
+            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in queue` : 'Target: 30m')
+          },
+          {
+            num: 5,
+            label: 'GST Invoiced',
+            done: Boolean(bom.invoiceConfirmed || st.includes('invoice')),
+            active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed,
+            date: timing?.hasInvoice ? timing.invoiceDate : (timing?.hasAccounts ? timing.accountsDate : '—'),
+            time: timing?.invoiceTime || (timing?.hasAccounts ? 'In Billing' : 'Pending'),
+            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in queue` : 'Target: 30m')
+          },
+          {
+            num: 6,
+            label: 'Final Dispatched',
+            done: Boolean(bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
+            active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted,
+            date: timing?.hasDispatch ? timing.dispatchDate : (timing?.hasInvoice ? timing.invoiceDate : '—'),
+            time: timing?.dispatchTime || (timing?.hasInvoice ? 'Awaiting Loading' : 'Pending'),
+            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} in queue` : 'Target: 30m')
+          }
         ];
 
         return (
@@ -13259,15 +13313,33 @@ export default function BomOrdersView(props) {
 
               {/* Body */}
               <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* 6-Stage Progress Stepper Bar */}
+                {/* 6-Stage Progress Stepper Bar with Date & 2-Hour SLA Stopwatch */}
                 <div style={{
                   backgroundColor: '#F8FAFC',
                   borderRadius: '12px',
                   padding: '12px 14px',
                   border: '1px solid #E2E8F0'
                 }}>
-                  <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    Order-to-Cash Lifecycle Progress
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                      Order-to-Cash Lifecycle Progress • Target: 2 Hours Max (30m / stage)
+                    </div>
+                    {timing && timing.confirmedTime && (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        color: timing.isBreached ? '#DC2626' : (timing.isApproaching ? '#D97706' : '#16A34A'),
+                        backgroundColor: timing.isBreached ? '#FEF2F2' : (timing.isApproaching ? '#FFFBEB' : '#F0FDF4'),
+                        border: `1px solid ${timing.isBreached ? '#FECACA' : (timing.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <Clock size={11} /> Total Elapsed: {timing.totalElapsedStr} / 2h Max
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px' }}>
                     {stages.map((stg) => {
@@ -13279,29 +13351,53 @@ export default function BomOrdersView(props) {
                           style={{
                             backgroundColor: isComplete ? '#F0FDF4' : (isCurrent ? '#ECFEFF' : '#FFFFFF'),
                             border: `1.5px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#0E7490' : '#E2E8F0')}`,
-                            borderRadius: '8px',
-                            padding: '6px 8px',
+                            borderRadius: '10px',
+                            padding: '8px 6px',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
                             textAlign: 'center',
-                            gap: '2px'
+                            gap: '3px',
+                            minHeight: '88px',
+                            boxSizing: 'border-box'
                           }}
                         >
                           <span style={{
                             fontSize: '9.5px',
                             fontWeight: '800',
-                            color: isComplete ? '#16A34A' : (isCurrent ? '#0E7490' : '#94A3B8')
+                            color: isComplete ? '#16A34A' : (isCurrent ? '#0E7490' : '#94A3B8'),
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.4px'
                           }}>
                             {isComplete ? '✓ STEP ' + stg.num : 'STEP ' + stg.num}
                           </span>
                           <span style={{
-                            fontSize: '10.5px',
-                            fontWeight: '700',
-                            color: isComplete ? '#15803D' : (isCurrent ? '#0E7490' : '#64748B'),
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            color: isComplete ? '#15803D' : (isCurrent ? '#0E7490' : '#475569'),
                             lineHeight: 1.15
                           }}>
                             {stg.label}
+                          </span>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            color: isComplete ? '#166534' : (isCurrent ? '#0E7490' : '#94A3B8'),
+                            marginTop: '2px'
+                          }}>
+                            {stg.date && stg.date !== '—' ? stg.date : ''}
+                          </span>
+                          <span style={{
+                            fontSize: '9.5px',
+                            fontWeight: '700',
+                            color: isComplete ? '#15803D' : (isCurrent ? '#0284C7' : '#94A3B8'),
+                            backgroundColor: isComplete ? '#DCFCE7' : (isCurrent ? '#E0F2FE' : '#F1F5F9'),
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            marginTop: 'auto',
+                            lineHeight: 1.2
+                          }}>
+                            {stg.time !== 'Pending' ? `${stg.time}${stg.duration ? ' • ' + stg.duration : ''}` : (stg.duration || 'Pending')}
                           </span>
                         </div>
                       );

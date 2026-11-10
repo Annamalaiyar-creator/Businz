@@ -13,6 +13,7 @@ import {
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
+import { getBomStageTiming } from './BomOrdersView';
 
 // Canonical BUSINZ KPI Grid Component for all CEO Dashboards
 export function CeoKpiGrid({ kpis }) {
@@ -7289,14 +7290,64 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
-        // 6 Lifecycle stage indicators
+        const timing = getBomStageTiming(bom);
+
+        // 6 Lifecycle stage indicators with Date & 2-Hour SLA Timing
         const stages = [
-          { num: 1, label: 'PI Commercial', done: Boolean(linkedPiNo), active: !bom.salesConfirmed },
-          { num: 2, label: 'BOM Confirmed', done: Boolean(bom.salesConfirmed || st.includes('confirm')), active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED' },
-          { num: 3, label: 'Dispatch Packed', done: Boolean(bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')), active: bom.packingStatus === 'PACKING_VERIFIED' && !bom.isAccountsDone },
-          { num: 4, label: 'Accounts Verified', done: Boolean(bom.isAccountsDone || bom.accountsVerification?.verified), active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed },
-          { num: 5, label: 'GST Invoiced', done: Boolean(bom.invoiceConfirmed || st.includes('invoice')), active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted },
-          { num: 6, label: 'Final Dispatched', done: Boolean(bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')), active: Boolean(bom.fullyCompleted) }
+          {
+            num: 1,
+            label: 'PI Commercial',
+            done: Boolean(linkedPiNo),
+            active: !bom.salesConfirmed,
+            date: timing?.piDate || '—',
+            time: timing?.piTime || 'Completed',
+            duration: null
+          },
+          {
+            num: 2,
+            label: 'BOM Confirmed',
+            done: Boolean(bom.salesConfirmed || st.includes('confirm')),
+            active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED',
+            date: timing?.confirmedDate || '—',
+            time: timing?.confirmedTime || (st.includes('confirm') ? 'Confirmed' : 'Pending'),
+            duration: timing?.confirmedTime ? 'Timer Start' : null
+          },
+          {
+            num: 3,
+            label: 'Dispatch Packed',
+            done: Boolean(bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
+            active: bom.packingStatus !== 'PACKING_VERIFIED' && Boolean(bom.salesConfirmed),
+            date: timing?.hasPacking ? timing.packingDate : (timing?.confirmedTime ? timing.confirmedDate : '—'),
+            time: timing?.packingTime || (timing?.confirmedTime ? 'In Progress' : 'Pending'),
+            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in queue` : 'Target: 30m')
+          },
+          {
+            num: 4,
+            label: 'Accounts Verified',
+            done: Boolean(bom.isAccountsDone || bom.accountsVerification?.verified),
+            active: Boolean(bom.packingStatus === 'PACKING_VERIFIED') && !bom.isAccountsDone,
+            date: timing?.hasAccounts ? timing.accountsDate : (timing?.hasPacking ? timing.packingDate : '—'),
+            time: timing?.accountsTime || (timing?.hasPacking ? 'In Verification' : 'Pending'),
+            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in queue` : 'Target: 30m')
+          },
+          {
+            num: 5,
+            label: 'GST Invoiced',
+            done: Boolean(bom.invoiceConfirmed || st.includes('invoice')),
+            active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed,
+            date: timing?.hasInvoice ? timing.invoiceDate : (timing?.hasAccounts ? timing.accountsDate : '—'),
+            time: timing?.invoiceTime || (timing?.hasAccounts ? 'In Billing' : 'Pending'),
+            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in queue` : 'Target: 30m')
+          },
+          {
+            num: 6,
+            label: 'Final Dispatched',
+            done: Boolean(bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
+            active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted,
+            date: timing?.hasDispatch ? timing.dispatchDate : (timing?.hasInvoice ? timing.invoiceDate : '—'),
+            time: timing?.dispatchTime || (timing?.hasInvoice ? 'Awaiting Loading' : 'Pending'),
+            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} in queue` : 'Target: 30m')
+          }
         ];
 
         return (
@@ -7393,15 +7444,33 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
               {/* Body */}
               <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* 6-Stage Progress Stepper Bar */}
+                {/* 6-Stage Progress Stepper Bar with Date & 2-Hour SLA Stopwatch */}
                 <div style={{
                   backgroundColor: '#F8FAFC',
                   borderRadius: '12px',
                   padding: '12px 14px',
                   border: '1px solid #E2E8F0'
                 }}>
-                  <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    Order-to-Cash Lifecycle Progress
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                      Order-to-Cash Lifecycle Progress • Target: 2 Hours Max (30m / stage)
+                    </div>
+                    {timing && timing.confirmedTime && (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        color: timing.isBreached ? '#DC2626' : (timing.isApproaching ? '#D97706' : '#16A34A'),
+                        backgroundColor: timing.isBreached ? '#FEF2F2' : (timing.isApproaching ? '#FFFBEB' : '#F0FDF4'),
+                        border: `1px solid ${timing.isBreached ? '#FECACA' : (timing.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <Clock size={11} /> Total Elapsed: {timing.totalElapsedStr} / 2h Max
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px' }}>
                     {stages.map((stg) => {
@@ -7413,29 +7482,53 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           style={{
                             backgroundColor: isComplete ? '#F0FDF4' : (isCurrent ? '#ECFEFF' : '#FFFFFF'),
                             border: `1.5px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#0E7490' : '#E2E8F0')}`,
-                            borderRadius: '8px',
-                            padding: '6px 8px',
+                            borderRadius: '10px',
+                            padding: '8px 6px',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
                             textAlign: 'center',
-                            gap: '2px'
+                            gap: '3px',
+                            minHeight: '88px',
+                            boxSizing: 'border-box'
                           }}
                         >
                           <span style={{
                             fontSize: '9.5px',
                             fontWeight: '800',
-                            color: isComplete ? '#16A34A' : (isCurrent ? '#0E7490' : '#94A3B8')
+                            color: isComplete ? '#16A34A' : (isCurrent ? '#0E7490' : '#94A3B8'),
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.4px'
                           }}>
                             {isComplete ? '✓ STEP ' + stg.num : 'STEP ' + stg.num}
                           </span>
                           <span style={{
-                            fontSize: '10.5px',
-                            fontWeight: '700',
-                            color: isComplete ? '#15803D' : (isCurrent ? '#0E7490' : '#64748B'),
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            color: isComplete ? '#15803D' : (isCurrent ? '#0E7490' : '#475569'),
                             lineHeight: 1.15
                           }}>
                             {stg.label}
+                          </span>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            color: isComplete ? '#166534' : (isCurrent ? '#0E7490' : '#94A3B8'),
+                            marginTop: '2px'
+                          }}>
+                            {stg.date && stg.date !== '—' ? stg.date : ''}
+                          </span>
+                          <span style={{
+                            fontSize: '9.5px',
+                            fontWeight: '700',
+                            color: isComplete ? '#15803D' : (isCurrent ? '#0284C7' : '#94A3B8'),
+                            backgroundColor: isComplete ? '#DCFCE7' : (isCurrent ? '#E0F2FE' : '#F1F5F9'),
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            marginTop: 'auto',
+                            lineHeight: 1.2
+                          }}>
+                            {stg.time !== 'Pending' ? `${stg.time}${stg.duration ? ' • ' + stg.duration : ''}` : (stg.duration || 'Pending')}
                           </span>
                         </div>
                       );
