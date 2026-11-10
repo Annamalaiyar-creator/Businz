@@ -7984,7 +7984,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                                 {/* Custom Line Items */}
                                 {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                  const q = parseFloat(it.qty !== undefined ? item.qty : (it.quantity || 0)) || 0;
+                                  const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
                                   const r = parseFloat(it.rate || it.price || 0) || 0;
                                   const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                   const taxRate = parseFloat(taxRateStr) || 18;
