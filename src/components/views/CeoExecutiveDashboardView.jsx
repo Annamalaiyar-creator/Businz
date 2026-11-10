@@ -1645,6 +1645,199 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return { hrKitsSoldCount: totalSets, hrKitsOrderValueFormatted: fmt };
   }, [bomList]);
 
+  // Operational Dispatch & Fulfillment Bottleneck Statistics (CEO View)
+  const dispatchBottleneckStats = useMemo(() => {
+    const activeBoms = (bomList || []).filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'));
+    const now = new Date().getTime();
+
+    let totalAgingDays = 0;
+    const stageCounts = {
+      step2_confirmed: 0,
+      step3_packed: 0,
+      step4_accounts: 0,
+      step5_invoiced: 0,
+      step6_dispatched: 0
+    };
+
+    let onTimeCount = 0;
+    let dueSoonCount = 0;
+    let overdueCount = 0;
+
+    const actionableBlockers = [];
+
+    activeBoms.forEach(b => {
+      const st = String(b.status || '').toLowerCase();
+      const bDate = parseRecordDate(b) || new Date();
+      const days = Math.max(0, Math.floor((now - bDate.getTime()) / (1000 * 60 * 60 * 24)));
+      totalAgingDays += days;
+
+      let stageNum = 2;
+      if (b.fullyCompleted || st.includes('completed') || st.includes('dispatched')) {
+        stageNum = 6;
+        stageCounts.step6_dispatched++;
+      } else if (b.invoiceConfirmed || st.includes('invoice') || st.includes('billing')) {
+        stageNum = 5;
+        stageCounts.step5_invoiced++;
+      } else if (b.isAccountsDone || b.accountsVerification?.verified || st.includes('accounts')) {
+        stageNum = 4;
+        stageCounts.step4_accounts++;
+      } else if (b.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')) {
+        stageNum = 3;
+        stageCounts.step3_packed++;
+      } else {
+        stageNum = 2;
+        stageCounts.step2_confirmed++;
+      }
+
+      let targetDateMs = b.deliveryDate ? new Date(b.deliveryDate).getTime() : (bDate.getTime() + (5 * 24 * 60 * 60 * 1000));
+      if (isNaN(targetDateMs)) targetDateMs = bDate.getTime() + (5 * 24 * 60 * 60 * 1000);
+      const diffDays = Math.floor((targetDateMs - now) / (1000 * 60 * 60 * 24));
+
+      if (stageNum === 6) {
+        onTimeCount++;
+      } else if (diffDays < 0) {
+        overdueCount++;
+      } else if (diffDays <= 2) {
+        dueSoonCount++;
+      } else {
+        onTimeCount++;
+      }
+
+      if (stageNum === 2) {
+        actionableBlockers.push({
+          bom: b,
+          code: b.bomCode || b.id,
+          customer: b.customerName || b.customer || 'Customer',
+          stage: 'Step 2 · Confirmed',
+          blocker: 'Awaiting Packing Checklist & Photo Verification',
+          days,
+          severity: days > 2 ? 'high' : 'medium',
+          targetTab: 'Dispatch'
+        });
+      } else if (stageNum === 3) {
+        actionableBlockers.push({
+          bom: b,
+          code: b.bomCode || b.id,
+          customer: b.customerName || b.customer || 'Customer',
+          stage: 'Step 3 · Packed',
+          blocker: 'Awaiting Accounts Receipt & Verification',
+          days,
+          severity: days > 1 ? 'high' : 'medium',
+          targetTab: 'Finance & Accounts'
+        });
+      } else if (stageNum === 4) {
+        actionableBlockers.push({
+          bom: b,
+          code: b.bomCode || b.id,
+          customer: b.customerName || b.customer || 'Customer',
+          stage: 'Step 4 · Accounts Done',
+          blocker: 'Awaiting Tax Invoice Generation & Stock Lock',
+          days,
+          severity: days > 1 ? 'high' : 'low',
+          targetTab: 'Invoice Management'
+        });
+      } else if (stageNum === 5) {
+        actionableBlockers.push({
+          bom: b,
+          code: b.bomCode || b.id,
+          customer: b.customerName || b.customer || 'Customer',
+          stage: 'Step 5 · Invoiced',
+          blocker: 'Awaiting Vehicle Loading, Transporter & LR Copy',
+          days,
+          severity: days > 1 ? 'high' : 'medium',
+          targetTab: 'Dispatch'
+        });
+      }
+    });
+
+    const avgAgingDays = activeBoms.length > 0 ? (totalAgingDays / activeBoms.length).toFixed(1) : '0';
+    const totalCount = activeBoms.length;
+    const onTimePct = totalCount > 0 ? Math.round((onTimeCount / totalCount) * 100) : 100;
+
+    return {
+      activeCount: totalCount,
+      avgAgingDays,
+      stageCounts,
+      onTimeCount,
+      dueSoonCount,
+      overdueCount,
+      onTimePct,
+      actionableBlockers: actionableBlockers.slice(0, 5)
+    };
+  }, [bomList]);
+
+  // Customer-Wise Order Fulfillment Matrix (CEO View)
+  const customerFulfillmentMatrix = useMemo(() => {
+    const activeBoms = (bomList || []).filter(b => b && !b.cancelled && !String(b.status || '').toLowerCase().includes('cancel'));
+    const customerMap = new Map();
+
+    activeBoms.forEach(b => {
+      const custName = String(b.customerName || b.customer || 'Unknown Customer').trim();
+      const amt = parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0);
+      const st = String(b.status || '').toLowerCase();
+
+      let stageStep = 2;
+      let stageLabel = 'Step 2 · Confirmed';
+      let stageColor = '#0284C7';
+      let stageBg = '#F0F9FF';
+      let stageBorder = '#BAE6FD';
+
+      if (b.fullyCompleted || st.includes('completed') || st.includes('dispatched')) {
+        stageStep = 6;
+        stageLabel = 'Step 6 · Dispatched';
+        stageColor = '#16A34A';
+        stageBg = '#F0FDF4';
+        stageBorder = '#BBF7D0';
+      } else if (b.invoiceConfirmed || st.includes('invoice') || st.includes('billing')) {
+        stageStep = 5;
+        stageLabel = 'Step 5 · Invoiced';
+        stageColor = '#2563EB';
+        stageBg = '#EFF6FF';
+        stageBorder = '#BFDBFE';
+      } else if (b.isAccountsDone || b.accountsVerification?.verified || st.includes('accounts')) {
+        stageStep = 4;
+        stageLabel = 'Step 4 · Accounts Done';
+        stageColor = '#7C3AED';
+        stageBg = '#F5F3FF';
+        stageBorder = '#DDD6FE';
+      } else if (b.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')) {
+        stageStep = 3;
+        stageLabel = 'Step 3 · Packed';
+        stageColor = '#D97706';
+        stageBg = '#FFFBEB';
+        stageBorder = '#FDE68A';
+      }
+
+      if (!customerMap.has(custName)) {
+        customerMap.set(custName, {
+          customerName: custName,
+          totalValue: 0,
+          ordersCount: 0,
+          boms: [],
+          maxStageStep: stageStep,
+          latestStageLabel: stageLabel,
+          stageColor,
+          stageBg,
+          stageBorder
+        });
+      }
+
+      const entry = customerMap.get(custName);
+      entry.totalValue += amt;
+      entry.ordersCount += 1;
+      entry.boms.push(b);
+      if (stageStep > entry.maxStageStep) {
+        entry.maxStageStep = stageStep;
+        entry.latestStageLabel = stageLabel;
+        entry.stageColor = stageColor;
+        entry.stageBg = stageBg;
+        entry.stageBorder = stageBorder;
+      }
+    });
+
+    return Array.from(customerMap.values()).sort((a, b) => b.totalValue - a.totalValue);
+  }, [bomList]);
+
   // Configuration for 6 CEO KPI Popup Modals
   const kpiModalConfig = useMemo(() => {
     switch (activeKpiPopup) {
@@ -4163,6 +4356,442 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+
+          {/* ======================================================== */}
+          {/* OPTION 1: DISPATCH & FULFILLMENT BOTTLENECK ANALYTICS   */}
+          {/* ======================================================== */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: '12px'
+          }}>
+            {/* Card 1: Stage Aging & Operational Velocity */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #EAEFEF',
+              padding: '16px',
+              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#ECFEFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0E7490' }}>
+                    <Clock size={15} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      Stage Aging & Velocity
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>Fulfillment cycle duration</div>
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#0E7490',
+                  backgroundColor: '#ECFEFF',
+                  border: '1px solid #A5F3FC',
+                  padding: '3px 8px',
+                  borderRadius: '12px'
+                }}>
+                  Avg {dispatchBottleneckStats.avgAgingDays} Days
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginTop: '4px' }}>
+                {[
+                  { label: 'Step 2 · Confirmed BOM', count: dispatchBottleneckStats.stageCounts.step2_confirmed, color: '#0284C7', bg: '#F0F9FF' },
+                  { label: 'Step 3 · Dispatch Packing', count: dispatchBottleneckStats.stageCounts.step3_packed, color: '#D97706', bg: '#FFFBEB' },
+                  { label: 'Step 4 · Accounts Verified', count: dispatchBottleneckStats.stageCounts.step4_accounts, color: '#7C3AED', bg: '#F5F3FF' },
+                  { label: 'Step 5 · Tax Invoiced', count: dispatchBottleneckStats.stageCounts.step5_invoiced, color: '#2563EB', bg: '#EFF6FF' },
+                  { label: 'Step 6 · Final Dispatched', count: dispatchBottleneckStats.stageCounts.step6_dispatched, color: '#16A34A', bg: '#F0FDF4' }
+                ].map((stg, sIdx) => {
+                  const pct = dispatchBottleneckStats.activeCount > 0
+                    ? Math.round((stg.count / dispatchBottleneckStats.activeCount) * 100)
+                    : 0;
+                  return (
+                    <div key={sIdx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '150px' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: stg.color }} />
+                        <span style={{ color: '#334155', fontWeight: '600' }}>{stg.label}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'flex-end' }}>
+                        <div style={{ width: '80px', height: '6px', borderRadius: '3px', backgroundColor: '#F1F5F9', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', backgroundColor: stg.color, borderRadius: '3px' }} />
+                        </div>
+                        <span style={{ fontWeight: '800', color: '#0F172A', minWidth: '45px', textAlign: 'right' }}>
+                          {stg.count} ({pct}%)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{
+                marginTop: 'auto',
+                paddingTop: '8px',
+                borderTop: '1px solid #F1F5F9',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: '10.5px',
+                color: '#64748B'
+              }}>
+                <span>Total Active Pipeline:</span>
+                <span style={{ fontWeight: '800', color: '#0F172A' }}>{dispatchBottleneckStats.activeCount} Orders in motion</span>
+              </div>
+            </div>
+
+            {/* Card 2: Dispatch SLA & On-Time Performance */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #EAEFEF',
+              padding: '16px',
+              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+                    <Calendar size={15} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      SLA & Dispatch Schedule
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>Fulfillment deadline compliance</div>
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#16A34A',
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  padding: '3px 8px',
+                  borderRadius: '12px'
+                }}>
+                  {dispatchBottleneckStats.onTimePct}% On-Track
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div style={{ width: '100%', height: '8px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${dispatchBottleneckStats.onTimePct}%`, backgroundColor: '#16A34A', height: '100%' }} />
+                <div style={{ width: `${100 - dispatchBottleneckStats.onTimePct}%`, backgroundColor: '#F59E0B', height: '100%' }} />
+              </div>
+
+              {/* Status Buckets */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '4px' }}>
+                <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', textAlign: 'center' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#16A34A' }}>{dispatchBottleneckStats.onTimeCount}</div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#15803D', marginTop: '2px' }}>On Schedule</div>
+                </div>
+                <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', textAlign: 'center' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#D97706' }}>{dispatchBottleneckStats.dueSoonCount}</div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', marginTop: '2px' }}>Due &lt; 48h</div>
+                </div>
+                <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', textAlign: 'center' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#DC2626' }}>{dispatchBottleneckStats.overdueCount}</div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B91C1C', marginTop: '2px' }}>Overdue</div>
+                </div>
+              </div>
+
+              <div style={{
+                marginTop: 'auto',
+                paddingTop: '8px',
+                borderTop: '1px solid #F1F5F9',
+                fontSize: '10.5px',
+                color: '#64748B',
+                lineHeight: '1.4'
+              }}>
+                Standard fulfillment lead time is <strong>3–5 working days</strong> from sales confirmation.
+              </div>
+            </div>
+
+            {/* Card 3: Actionable Fast-Track Blockers */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #EAEFEF',
+              padding: '16px',
+              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
+                    <AlertTriangle size={15} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      Actionable Fast-Track Queue
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>Fulfillment stage transitions</div>
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#D97706',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  padding: '3px 8px',
+                  borderRadius: '12px'
+                }}>
+                  {dispatchBottleneckStats.actionableBlockers.length} In Queue
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '165px' }}>
+                {dispatchBottleneckStats.actionableBlockers.length > 0 ? (
+                  dispatchBottleneckStats.actionableBlockers.map((blk, bIdx) => (
+                    <div
+                      key={bIdx}
+                      onClick={() => setViewingBomModal(blk.bom)}
+                      style={{
+                        padding: '7px 10px',
+                        borderRadius: '8px',
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490' }}>{blk.code}</span>
+                          <span style={{ fontSize: '10.5px', color: '#64748B' }}>· {blk.customer}</span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {blk.blocker}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px' }}>
+                        <span style={{ fontSize: '9.5px', fontWeight: '700', padding: '2px 5px', borderRadius: '4px', backgroundColor: blk.severity === 'high' ? '#FEE2E2' : '#FEF3C7', color: blk.severity === 'high' ? '#DC2626' : '#D97706' }}>
+                          {blk.days}d ago
+                        </span>
+                        <ChevronRight size={13} color="#94A3B8" />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748B', fontSize: '11px' }}>
+                    ✓ All orders are flowing smoothly through the dispatch lifecycle.
+                  </div>
+                )}
+              </div>
+
+              <div style={{
+                marginTop: 'auto',
+                paddingTop: '8px',
+                borderTop: '1px solid #F1F5F9',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: '10.5px',
+                color: '#64748B'
+              }}>
+                <span>Click any order to view full lifecycle verification</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ======================================================== */}
+          {/* OPTION 3: CUSTOMER-WISE ORDER FULFILLMENT MATRIX        */}
+          {/* ======================================================== */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #EAEFEF',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Boxes size={16} color="#0E7490" />
+                  Customer Order Fulfillment Matrix
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                  Active order book distribution, lifecycle progression & delivery readiness by client
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#0E7490',
+                  backgroundColor: '#ECFEFF',
+                  border: '1px solid #A5F3FC',
+                  padding: '4px 10px',
+                  borderRadius: '12px'
+                }}>
+                  {customerFulfillmentMatrix.length} Active Clients
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#16A34A',
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  padding: '4px 10px',
+                  borderRadius: '12px'
+                }}>
+                  Pipeline: ₹ {customerFulfillmentMatrix.reduce((acc, c) => acc + c.totalValue, 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: '850px', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                    <th style={{ padding: '8px 12px' }}>Customer / Project</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center' }}>Active Orders</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total Order Value</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', minWidth: '280px' }}>6-Stage Lifecycle Track</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center' }}>Current Stage</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerFulfillmentMatrix.length > 0 ? (
+                    customerFulfillmentMatrix.map((cust, cIdx) => {
+                      const stages = [
+                        { label: 'PI', step: 1 },
+                        { label: 'BOM', step: 2 },
+                        { label: 'Pack', step: 3 },
+                        { label: 'Accounts', step: 4 },
+                        { label: 'Invoice', step: 5 },
+                        { label: 'Dispatch', step: 6 }
+                      ];
+                      return (
+                        <tr key={cIdx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '10px 12px' }}>
+                            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12px' }}>
+                              {cust.customerName}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
+                              {cust.boms.length > 0 ? (cust.boms[0].bomCode || cust.boms[0].id) : '—'}
+                            </div>
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <span style={{
+                              fontSize: '10.5px',
+                              fontWeight: '700',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: '#F1F5F9',
+                              color: '#334155'
+                            }}>
+                              {cust.ordersCount} {cust.ordersCount === 1 ? 'Order' : 'Orders'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '800', color: '#0F172A', fontSize: '12px' }}>
+                            ₹ {Math.round(cust.totalValue).toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                              {stages.map((stg, sIdx) => {
+                                const isPassedOrCurrent = stg.step <= cust.maxStageStep;
+                                const isCurrent = stg.step === cust.maxStageStep;
+                                const stepColor = isCurrent ? cust.stageColor : (isPassedOrCurrent ? '#0E7490' : '#CBD5E1');
+                                const stepBg = isCurrent ? cust.stageBg : (isPassedOrCurrent ? '#ECFEFF' : '#F8FAFC');
+                                const stepBorder = isCurrent ? cust.stageBorder : (isPassedOrCurrent ? '#A5F3FC' : '#E2E8F0');
+                                return (
+                                  <React.Fragment key={sIdx}>
+                                    <div
+                                      title={`Step ${stg.step}: ${stg.label}`}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        padding: '2px 6px',
+                                        borderRadius: '5px',
+                                        fontSize: '9.5px',
+                                        fontWeight: isCurrent ? '800' : '600',
+                                        color: stepColor,
+                                        backgroundColor: stepBg,
+                                        border: `1px solid ${stepBorder}`
+                                      }}
+                                    >
+                                      {isPassedOrCurrent && !isCurrent ? '✓' : stg.step} {stg.label}
+                                    </div>
+                                    {sIdx < stages.length - 1 && (
+                                      <span style={{ color: isPassedOrCurrent && stg.step < cust.maxStageStep ? '#0E7490' : '#CBD5E1', fontSize: '9px', fontWeight: '900' }}>›</span>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: cust.stageBg,
+                              color: cust.stageColor,
+                              border: `1px solid ${cust.stageBorder}`,
+                              display: 'inline-block'
+                            }}>
+                              {cust.latestStageLabel}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => cust.boms.length > 0 && setViewingBomModal(cust.boms[0])}
+                              style={{
+                                border: '1px solid #0E7490',
+                                backgroundColor: '#ECFEFF',
+                                color: '#0E7490',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Eye size={12} /> View Order
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                        No active customer orders currently in the factory fulfillment pipeline.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
