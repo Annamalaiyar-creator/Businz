@@ -7529,6 +7529,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           pi.convertedBomCode ||
           pi.convertedBomNo
         );
+        const isConverted = isBOMConverted;
         const linkedBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id || pi.convertedBomCode || pi.convertedBomNo;
 
         let presetGroupsData = pi.presetGroups || {};
