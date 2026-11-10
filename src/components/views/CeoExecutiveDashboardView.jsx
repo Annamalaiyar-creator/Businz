@@ -3975,8 +3975,45 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             };
           })} />
 
-
-
+          {/* ======================================================== */}
+          {/* OPTION 1: DISPATCH & FULFILLMENT BOTTLENECK ANALYTICS   */}
+          {/* ======================================================== */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: '12px'
+          }}>
+            {/* Card 1: Stage Aging & Operational Velocity */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #EAEFEF',
+              padding: '16px',
+              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#ECFEFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0E7490' }}>
+                    <Clock size={15} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      Stage Aging & Velocity
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>Fulfillment cycle duration</div>
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#0E7490',
+                  backgroundColor: '#ECFEFF',
+                  border: '1px solid #A5F3FC',
+                  padding: '3px 8px',
+                  borderRadius: '12px'
                 }}>
                   Avg {dispatchBottleneckStats.avgAgingDays} Days
                 </span>
