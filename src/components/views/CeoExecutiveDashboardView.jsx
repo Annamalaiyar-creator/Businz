@@ -7282,8 +7282,10 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         const salesPerson = bom.salesPerson || bom.createdBy || 'Sales / Engineering';
         const linkedPiNo = bom.sourcePiNo || bom.piNo || bom.piNumber || bom.source_pi_no;
         const matchingPi = linkedPiNo ? allPiList.find(p => (p.piNo === linkedPiNo || p.id === linkedPiNo)) : null;
-        const items = Array.isArray(bom.items) ? bom.items : (Array.isArray(bom.materials) ? bom.materials : []);
-        const grandTotal = parseAmt(bom.grandTotal || bom.totalAmount || bom.amount || bom.value || 0);
+        const items = Array.isArray(bom.items) && bom.items.length > 0 ? bom.items : (Array.isArray(bom.materials) && bom.materials.length > 0 ? bom.materials : (Array.isArray(matchingPi?.items) ? matchingPi.items : []));
+        const grandTotal = parseAmt(bom.grandTotal || bom.totalAmount || bom.amount || bom.value || matchingPi?.grandTotal || 0);
+        const subtotal = parseAmt(bom.subtotal || bom.taxableAmount || bom.unitValue || matchingPi?.subtotal || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0));
+        const taxTotal = parseAmt(bom.taxTotal || matchingPi?.taxTotal || Math.max(0, grandTotal - subtotal));
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
@@ -7509,33 +7511,43 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   </div>
                 </div>
 
-                {/* Items Table with Grouped Presets */}
+                {/* Items Table with Grouped Presets and Kit Value Header (PI Formatted for CEO) */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                     <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                      BOM Bill of Materials ({items.length} materials)
+                      BOM Materials & Preset Structure Kits ({items.length} components)
                     </div>
                     <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
-                      Grouped by Structure Kit with clear component boundaries
+                      Grouped by Structure Kit with commercial rates, GST & boundaries
                     </div>
                   </div>
 
                   {(() => {
+                    let presetGroupsData = bom.presetGroups || matchingPi?.presetGroups || {};
+                    if (typeof presetGroupsData === 'string') {
+                      try {
+                        presetGroupsData = JSON.parse(presetGroupsData);
+                      } catch (e) {
+                        presetGroupsData = {};
+                      }
+                    }
                     const sections = [];
                     const sectionMap = new Map();
 
+                    const allZeroRates = items.length > 0 && items.every(it => (parseFloat(it.rate || it.price || 0) || 0) === 0);
+
                     items.forEach((it, idx) => {
-                      const isPreset = Boolean(it.isPresetItem || it.presetGroupId || it.presetName);
+                      const isPreset = Boolean(it.isPresetItem || it.presetGroupId || it.presetName || (allZeroRates && (bom.presetName || matchingPi?.presetName)));
                       const secKey = isPreset
-                        ? (it.presetGroupId || it.presetName || 'PRESET_1')
-                        : '__CUSTOM_MATERIALS__';
+                        ? (it.presetGroupId || it.presetName || bom.presetName || matchingPi?.presetName || 'PRESET_1')
+                        : '__CUSTOM_ITEMS__';
 
                       if (!sectionMap.has(secKey)) {
                         const secObj = {
                           key: secKey,
                           isPreset,
                           presetGroupId: it.presetGroupId,
-                          presetName: isPreset ? (it.presetName || 'Structure Kit') : 'Custom / Additional Materials',
+                          presetName: isPreset ? (it.presetName || (it.presetGroupId && presetGroupsData[it.presetGroupId]?.presetName) || bom.presetName || matchingPi?.presetName || 'Preset Structure Kit') : 'Custom / Standalone Products',
                           items: []
                         };
                         sectionMap.set(secKey, secObj);
@@ -7544,7 +7556,42 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       sectionMap.get(secKey).items.push({ item: it, originalIndex: idx });
                     });
 
+                    // Fallback single section if items is empty
+                    if (sections.length === 0 && (bom.presetName || matchingPi?.presetName || grandTotal > 0)) {
+                      sections.push({
+                        key: 'PRESET_1',
+                        isPreset: true,
+                        presetGroupId: 'group_1',
+                        presetName: bom.presetName || matchingPi?.presetName || 'Solar Mounting Structure Kit',
+                        items: [{
+                          item: {
+                            name: bom.presetName || matchingPi?.presetName || 'Solar Mounting Structure Kit',
+                            hsn: '73089090',
+                            qty: bom.presetSetCount || matchingPi?.presetSetCount || 1,
+                            uom: bom.presetUnit || matchingPi?.presetUnit || 'SET',
+                            rate: subtotal,
+                            gstRate: '18%'
+                          },
+                          originalIndex: 0
+                        }]
+                      });
+                    }
+
+                    // Pre-compute custom items taxable sum
+                    const customTaxableTotal = sections
+                      .filter(s => !s.isPreset)
+                      .flatMap(s => s.items)
+                      .reduce((sum, { item }) => {
+                        const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.bomQty || item.quantity || 0)) || 0;
+                        const r = parseFloat(item.rate || item.price || 0) || 0;
+                        return sum + (q * r);
+                      }, 0);
+
+                    const presetTaxablePool = Math.max(0, subtotal - customTaxableTotal);
                     const presetSections = sections.filter(s => s.isPreset);
+                    const presetGroupsList = Array.isArray(presetGroupsData)
+                      ? presetGroupsData
+                      : (presetGroupsData && typeof presetGroupsData === 'object' ? Object.values(presetGroupsData) : []);
 
                     return (
                       <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflowX: 'auto' }}>
@@ -7552,11 +7599,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           <thead>
                             <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
                               <th style={{ padding: '8px 10px', width: '38px', textAlign: 'center' }}>#</th>
-                              <th style={{ padding: '8px 10px' }}>Material / Component</th>
-                              <th style={{ padding: '8px 10px', width: '90px' }}>Category</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '80px' }}>Base Qty</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Dispatch Qty</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '60px' }}>UOM</th>
+                              <th style={{ padding: '8px 10px' }}>Product / Component</th>
+                              <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center' }}>HSN / SAC</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Qty</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>UOM</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Rate (₹)</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>GST</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'right', width: '110px' }}>Total (₹)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -7564,12 +7613,44 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                               sections.map((sec, secIdx) => {
                                 if (sec.isPreset) {
                                   const presetIdx = presetSections.indexOf(sec);
+                                  let grpConfig = (sec.presetGroupId && presetGroupsData[sec.presetGroupId]) || (presetGroupsData[sec.key]) || null;
+                                  if (!grpConfig && presetGroupsList.length > 0) {
+                                    grpConfig = presetGroupsList.find(g =>
+                                      (sec.presetGroupId && (g.id === sec.presetGroupId || g.groupId === sec.presetGroupId)) ||
+                                      (sec.presetName && g.presetName && g.presetName.toLowerCase().trim() === sec.presetName.toLowerCase().trim()) ||
+                                      (g.name && sec.presetName && g.name.toLowerCase().trim() === sec.presetName.toLowerCase().trim())
+                                    ) || null;
+                                  }
+                                  const setCount = parseFloat(grpConfig?.setCount || grpConfig?.quantity || bom.presetSetCount || matchingPi?.presetSetCount || 1) || 1;
+                                  const pUnit = grpConfig?.unit || grpConfig?.unitType || bom.presetUnit || matchingPi?.presetUnit || 'Sets';
+
+                                  // Calculate kit taxable
+                                  let taxable = 0;
+                                  if (grpConfig?.kitPrice && parseFloat(grpConfig.kitPrice) > 0) {
+                                    taxable = (parseFloat(grpConfig.kitPrice) || 0) * setCount;
+                                  } else if (bom.presetKitPrice && parseFloat(bom.presetKitPrice) > 0) {
+                                    taxable = (parseFloat(bom.presetKitPrice) || 0) * setCount;
+                                  } else if (matchingPi?.presetKitPrice && parseFloat(matchingPi.presetKitPrice) > 0) {
+                                    taxable = (parseFloat(matchingPi.presetKitPrice) || 0) * setCount;
+                                  } else if (bom.unitValue && parseFloat(bom.unitValue) > 0) {
+                                    taxable = parseFloat(bom.unitValue) || 0;
+                                  } else if (presetSections.length === 1) {
+                                    taxable = presetTaxablePool || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0);
+                                  } else if (presetSections.length > 0) {
+                                    taxable = Math.round(presetTaxablePool / presetSections.length);
+                                  }
+
+                                  const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || bom.gstRate || matchingPi?.gstRate || '18%';
+                                  const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                                  const kitGst = Math.round(taxable * (gstPct / 100));
+                                  const kitTotal = Math.round(taxable + kitGst);
+
                                   return (
                                     <React.Fragment key={sec.key}>
-                                      {/* PRESET HEADER */}
+                                      {/* PRESET HEADER BANNER WITH KIT VALUE */}
                                       <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2.5px solid #0E7490', borderBottom: '1.5px solid #A5F3FC' }}>
-                                        <td colSpan={6} style={{ padding: '9px 12px' }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                        <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                               <span style={{
                                                 backgroundColor: '#0E7490',
@@ -7598,61 +7679,115 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                                 borderRadius: '12px',
                                                 border: '1px solid #A5F3FC'
                                               }}>
-                                                {sec.items.length} Materials Included
+                                                Total Qty: {setCount} {pUnit} ({sec.items.length} components)
                                               </span>
                                             </div>
-                                            <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700' }}>
-                                              BOM Dispatch Allocation
-                                            </span>
+
+                                            <div style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '10px',
+                                              backgroundColor: '#FFFFFF',
+                                              border: '1.5px solid #0E7490',
+                                              borderRadius: '8px',
+                                              padding: '4px 12px',
+                                              boxShadow: '0 1px 3px rgba(14, 116, 144, 0.08)'
+                                            }}>
+                                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                                <span style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>KIT VALUE:</span>
+                                                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '900' }}>
+                                                  ₹ {Math.round(taxable).toLocaleString('en-IN')}
+                                                </strong>
+                                              </div>
+                                              <span style={{ color: '#CBD5E1', fontWeight: '300' }}>|</span>
+                                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                                <span style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>GST ({gstPct}%):</span>
+                                                <strong style={{ fontSize: '11.5px', color: '#0F172A', fontWeight: '800' }}>
+                                                  ₹ {kitGst.toLocaleString('en-IN')}
+                                                </strong>
+                                              </div>
+                                              <span style={{ color: '#CBD5E1', fontWeight: '300' }}>|</span>
+                                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                                <span style={{ fontSize: '9.5px', color: '#0E7490', fontWeight: '800', textTransform: 'uppercase' }}>TOTAL:</span>
+                                                <strong style={{ fontSize: '13.5px', color: '#0E7490', fontWeight: '900' }}>
+                                                  ₹ {kitTotal.toLocaleString('en-IN')}
+                                                </strong>
+                                              </div>
+                                            </div>
                                           </div>
                                         </td>
                                       </tr>
 
-                                      {/* Preset Items */}
+                                      {/* Individual Component Items */}
                                       {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                        const dispQty = it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== ''
-                                          ? it.totalDispatchQty
-                                          : (it.qty || it.bomQty || it.quantity || '0');
+                                        const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.bomQty || it.quantity || 0)) || 0;
+                                        const r = parseFloat(it.rate || it.price || 0) || 0;
+                                        const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
+                                        const taxRate = parseFloat(taxRateStr) || gstPct;
+                                        const hasExplicitRate = r > 0;
+                                        const taxableItem = q * r;
+                                        const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
+
                                         return (
                                           <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#FAFDFD' : '#FFFFFF' }}>
                                             <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
                                               {presetIdx + 1}.{cIdx + 1}
                                             </td>
                                             <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
-                                              <div>{it.name || it.material || 'Material Item'}</div>
+                                              <div>{it.name || it.material || it.productName || 'Material Item'}</div>
                                               {it.subPresetName && (
                                                 <div style={{ fontSize: '10px', color: '#0D9488', fontWeight: '700', marginTop: '1px' }}>
                                                   ↳ Sub-Kit: {it.subPresetName}
                                                 </div>
                                               )}
                                             </td>
-                                            <td style={{ padding: '7px 10px', color: '#64748B' }}>{it.category || 'HDG'}</td>
-                                            <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.qty || it.bomQty || 0}</td>
-                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                                              {dispQty}
-                                            </td>
+                                            <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '73089090'}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                             <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                              {hasExplicitRate ? (
+                                                <span style={{ color: '#475569', fontWeight: '700' }}>₹ {r.toLocaleString('en-IN')}</span>
+                                              ) : (
+                                                <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '4px', border: '1px solid #CFFAFE' }}>
+                                                  Incl. in Kit
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right' }}>
+                                              {hasExplicitRate ? (
+                                                <strong style={{ color: '#0F172A' }}>₹ {Math.round(itemTotal).toLocaleString('en-IN')}</strong>
+                                              ) : (
+                                                <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 7px', borderRadius: '4px', border: '1px solid #CFFAFE' }}>
+                                                  Incl. in Kit
+                                                </span>
+                                              )}
+                                            </td>
                                           </tr>
                                         );
                                       })}
 
                                       {/* END OF PRESET DIVIDER */}
                                       <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1px dashed #99F6E4', borderBottom: '2.5px solid #0E7490' }}>
-                                        <td colSpan={6} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                        <td colSpan={8} style={{ padding: '8px 14px', textAlign: 'center' }}>
                                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                            <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
                                             <span style={{
                                               fontSize: '11px',
                                               fontWeight: '800',
                                               color: '#0F766E',
+                                              backgroundColor: '#CCFBF1',
+                                              padding: '3px 12px',
+                                              borderRadius: '999px',
+                                              border: '1px solid #99F6E4',
                                               letterSpacing: '0.4px',
                                               display: 'inline-flex',
                                               alignItems: 'center',
-                                              gap: '5px'
+                                              gap: '6px'
                                             }}>
-                                              ✓ END OF PRESET {presetIdx + 1}: {sec.presetName} ({sec.items.length} Materials Included)
+                                              ✓ END OF PRESET {presetIdx + 1}: {sec.presetName} ({sec.items.length} Components • Total Kit Value: ₹ {kitTotal.toLocaleString('en-IN')})
                                             </span>
-                                            <div style={{ height: '1px', flex: 1, backgroundColor: '#99F6E4' }} />
+                                            <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
                                           </div>
                                         </td>
                                       </tr>
@@ -7660,56 +7795,82 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                   );
                                 }
 
-                                // CUSTOM MATERIALS SECTION
+                                // CUSTOM / STANDALONE PRODUCTS SECTION
+                                const customSecTaxable = sec.items.reduce((sum, { item }) => {
+                                  const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.bomQty || item.quantity || 0)) || 0;
+                                  const r = parseFloat(item.rate || item.price || 0) || 0;
+                                  return sum + (q * r);
+                                }, 0);
+
                                 return (
-                                  <React.Fragment key="custom_materials">
+                                  <React.Fragment key="custom_section">
                                     <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2.5px solid #475569', borderBottom: '1.5px solid #CBD5E1' }}>
-                                      <td colSpan={6} style={{ padding: '9px 12px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <span style={{
-                                            backgroundColor: '#475569',
-                                            color: '#FFFFFF',
-                                            fontSize: '10.5px',
-                                            fontWeight: '900',
-                                            padding: '2.5px 8px',
-                                            borderRadius: '6px',
-                                            letterSpacing: '0.5px'
-                                          }}>
-                                            CUSTOM MATERIALS
+                                      <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{
+                                              backgroundColor: '#475569',
+                                              color: '#FFFFFF',
+                                              fontSize: '10.5px',
+                                              fontWeight: '900',
+                                              padding: '2.5px 8px',
+                                              borderRadius: '6px',
+                                              letterSpacing: '0.5px'
+                                            }}>
+                                              📦 START OF NEW PRODUCTS (STANDALONE)
+                                            </span>
+                                            <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
+                                              Additional Materials / Standalone Products ({sec.items.length} items)
+                                            </strong>
+                                          </div>
+                                          <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>
+                                            Individually Priced Components • Subtotal: ₹ {Math.round(customSecTaxable).toLocaleString('en-IN')}
                                           </span>
-                                          <strong style={{ fontSize: '13px', color: '#1E293B', fontWeight: '800' }}>
-                                            Additional / Standalone Materials ({sec.items.length} materials)
-                                          </strong>
                                         </div>
                                       </td>
                                     </tr>
+
                                     {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                      const dispQty = it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== ''
-                                        ? it.totalDispatchQty
-                                        : (it.qty || it.bomQty || it.quantity || '0');
+                                      const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.bomQty || it.quantity || 0)) || 0;
+                                      const r = parseFloat(it.rate || it.price || 0) || 0;
+                                      const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
+                                      const taxRate = parseFloat(taxRateStr) || 18;
+                                      const taxableItem = q * r;
+                                      const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
+
                                       return (
                                         <tr key={originalIndex} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: cIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF' }}>
                                           <td style={{ padding: '7px 10px', color: '#64748B', fontWeight: '700', textAlign: 'center' }}>
                                             C.{cIdx + 1}
                                           </td>
                                           <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
-                                            <div>{it.name || it.material || 'Material Item'}</div>
+                                            <div>{it.name || it.material || it.productName || 'Item'}</div>
+                                            {it.category && (
+                                              <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
+                                                {it.category}
+                                              </div>
+                                            )}
                                           </td>
-                                          <td style={{ padding: '7px 10px', color: '#64748B' }}>{it.category || 'HDG'}</td>
-                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.qty || it.bomQty || 0}</td>
-                                          <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                                            {dispQty}
-                                          </td>
+                                          <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '73089090'}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                           <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', color: '#334155', fontWeight: '700' }}>
+                                            ₹ {r.toLocaleString('en-IN')}
+                                          </td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{taxRate}%</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                                            ₹ {Math.round(itemTotal).toLocaleString('en-IN')}
+                                          </td>
                                         </tr>
                                       );
                                     })}
+
                                     <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px dashed #CBD5E1', borderBottom: '2.5px solid #475569' }}>
-                                      <td colSpan={6} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                      <td colSpan={8} style={{ padding: '7px 14px', textAlign: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                                           <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
                                           <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', letterSpacing: '0.4px' }}>
-                                            ✓ END OF STANDALONE MATERIALS ({sec.items.length} Materials)
+                                            ✓ END OF STANDALONE PRODUCTS ({sec.items.length} Items)
                                           </span>
                                           <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
                                         </div>
@@ -7720,7 +7881,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                               })
                             ) : (
                               <tr>
-                                <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                                <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
                                   No items in this BOM order.
                                 </td>
                               </tr>
@@ -7730,6 +7891,35 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       </div>
                     );
                   })()}
+                </div>
+
+                {/* Financial Summary */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: '4px'
+                }}>
+                  <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                      <span>Subtotal (Taxable):</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {Math.round(subtotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                      <span>Estimated GST (18%):</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {Math.round(taxTotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      borderTop: '2px solid #0E7490',
+                      paddingTop: '6px',
+                      fontSize: '14px',
+                      color: '#0E7490'
+                    }}>
+                      <span><strong>Total Order Value:</strong></span>
+                      <strong style={{ fontSize: '15px' }}>₹ {Math.round(grandTotal).toLocaleString('en-IN')}</strong>
+                    </div>
+                  </div>
                 </div>
               </div>
 
