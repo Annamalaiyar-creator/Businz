@@ -17,6 +17,7 @@ import { getBomStageTiming } from './BomOrdersView';
 
 // Canonical BUSINZ KPI Grid Component for all CEO Dashboards
 export function CeoKpiGrid({ kpis }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
   if (!kpis || !kpis.length) return null;
   return (
     <div 
@@ -39,22 +40,28 @@ export function CeoKpiGrid({ kpis }) {
         const trendBorder = isUp ? '1px solid #A7F3D0' : (isNeutral ? '1px solid #E2E8F0' : '1px solid #FECACA');
         const trendText = isUp ? '#059669' : (isNeutral ? '#475569' : '#DC2626');
         const highlightColor = kpi.bottomHighlightColor || (isUp ? '#059669' : (isNeutral ? '#0F172A' : '#DC2626'));
+        const isHovered = hoveredIdx === kIdx && Boolean(kpi.onClick);
         
         return (
           <div 
             key={kIdx}
             onClick={kpi.onClick}
+            onMouseEnter={() => setHoveredIdx(kIdx)}
+            onMouseLeave={() => setHoveredIdx(null)}
+            role={kpi.onClick ? 'button' : undefined}
+            tabIndex={kpi.onClick ? 0 : undefined}
             style={{
-              backgroundColor: kpi.isSelected ? '#F0FDFA' : '#FFFFFF',
+              backgroundColor: kpi.isSelected ? '#F0FDFA' : (isHovered ? '#F8FAFC' : '#FFFFFF'),
               borderRadius: '16px',
-              border: kpi.isSelected ? '2px solid #0E7490' : (kpi.highlightCard ? '1.5px solid #FCA5A5' : '1px solid #EAEFEF'),
+              border: kpi.isSelected ? '2px solid #0E7490' : (isHovered ? '1.5px solid #0E7490' : (kpi.highlightCard ? '1.5px solid #FCA5A5' : '1px solid #EAEFEF')),
               padding: '12px 14px',
               display: 'flex',
               flexDirection: 'column',
               gap: '8px',
-              boxShadow: kpi.isSelected ? '0 6px 20px rgba(14, 116, 144, 0.18)' : (kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)'),
+              boxShadow: isHovered ? '0 8px 24px rgba(14, 116, 144, 0.12)' : (kpi.isSelected ? '0 6px 20px rgba(14, 116, 144, 0.18)' : (kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)')),
+              transform: isHovered ? 'translateY(-2px)' : 'none',
               cursor: kpi.onClick ? 'pointer' : 'default',
-              transition: 'all 0.2s ease',
+              transition: 'all 0.18s ease',
               minWidth: 0,
               boxSizing: 'border-box'
             }}
@@ -140,13 +147,23 @@ export function CeoKpiGrid({ kpis }) {
                 lineHeight: '1.3', 
                 whiteSpace: 'nowrap', 
                 overflow: 'hidden', 
-                textOverflow: 'ellipsis' 
+                textOverflow: 'ellipsis',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
               }}
             >
-              <span>{kpi.bottomPrefix}</span>
-              <span style={{ color: highlightColor, fontWeight: '800' }}>
-                {kpi.bottomHighlight}
-              </span>
+              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span>{kpi.bottomPrefix}</span>
+                <span style={{ color: highlightColor, fontWeight: '800' }}>
+                  {kpi.bottomHighlight}
+                </span>
+              </div>
+              {kpi.onClick && (
+                <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '10.5px', marginLeft: '6px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                  View →
+                </span>
+              )}
             </div>
           </div>
         );
@@ -2560,7 +2577,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconColor: '#0E7490',
               iconBg: '#ECFEFF',
               bottomPrefix: 'Pipeline value ',
-              bottomHighlight: totalPiPipelineFormatted
+              bottomHighlight: totalPiPipelineFormatted,
+              onClick: () => onNavigateTab && onNavigateTab('Proforma Invoice')
             },
             {
               title: 'BOM & PRODUCTION',
@@ -2571,7 +2589,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconColor: '#0284C7',
               iconBg: '#F0F9FF',
               bottomPrefix: 'Order book value ',
-              bottomHighlight: totalBomOrderValueFormatted
+              bottomHighlight: totalBomOrderValueFormatted,
+              onClick: () => onNavigateTab && onNavigateTab('BOM Orders')
             },
             {
               title: 'PURCHASE ORDERS (PO)',
@@ -2583,7 +2602,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#EFF6FF',
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: totalPoSpendFormatted,
-              highlightCard: pendingMdPOs.length > 0
+              highlightCard: pendingMdPOs.length > 0,
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, pendingMdPOs.length > 0 ? 'WAITING FOR APPROVAL' : undefined)
             },
             {
               title: 'BILLING & TAX INVOICES',
@@ -2594,7 +2614,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconColor: '#9333EA',
               iconBg: '#FAF5FF',
               bottomPrefix: 'Total GST billed ',
-              bottomHighlight: totalRevenueFormatted
+              bottomHighlight: totalRevenueFormatted,
+              onClick: () => onNavigateTab && onNavigateTab('Invoice Management')
             },
             ...(userRole === 'HR' ? [
               {
@@ -2606,7 +2627,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 iconColor: '#0E7490',
                 iconBg: '#ECFEFF',
                 bottomPrefix: 'Kit order book ',
-                bottomHighlight: hrKitsOrderValueFormatted
+                bottomHighlight: hrKitsOrderValueFormatted,
+                onClick: () => onNavigateTab && onNavigateTab('BOM Orders')
               }
             ] : [])
           ]} />

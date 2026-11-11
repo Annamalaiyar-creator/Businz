@@ -1668,7 +1668,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               iconColor: '#0E7490',
               iconBg: '#ECFEFF',
               bottomPrefix: 'Pipeline value ',
-              bottomHighlight: formatLakhsCr(totalPiValue)
+              bottomHighlight: formatLakhsCr(totalPiValue),
+              onClick: () => onNavigateTab && onNavigateTab('Proforma Invoice')
             },
             {
               title: 'BOM & PRODUCTION',
@@ -1679,7 +1680,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               iconColor: '#0284C7',
               iconBg: '#F0F9FF',
               bottomPrefix: 'Order book value ',
-              bottomHighlight: formatLakhsCr(totalBomOrderValue)
+              bottomHighlight: formatLakhsCr(totalBomOrderValue),
+              onClick: () => onNavigateTab && onNavigateTab('BOM Orders')
             },
             {
               title: 'PURCHASE ORDERS (PO)',
@@ -1691,7 +1693,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               iconBg: '#EFF6FF',
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: formatLakhsCr(totalPoSpend),
-              highlightCard: pendingMdPOs.length > 0
+              highlightCard: pendingMdPOs.length > 0,
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, pendingMdPOs.length > 0 ? 'WAITING FOR APPROVAL' : undefined)
             },
             {
               title: 'DISPATCH & LOGISTICS',
@@ -1702,7 +1705,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               iconColor: '#059669',
               iconBg: '#ECFDF5',
               bottomPrefix: 'Packing queue ',
-              bottomHighlight: `${pendingDispatchQueueCount} Orders`
+              bottomHighlight: `${pendingDispatchQueueCount} Orders`,
+              onClick: () => onNavigateTab && onNavigateTab('Delivery Challans')
             },
             {
               title: 'BILLING & TAX INVOICES',
@@ -1713,7 +1717,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               iconColor: '#9333EA',
               iconBg: '#FAF5FF',
               bottomPrefix: 'Total GST billed ',
-              bottomHighlight: formatLakhsCr(totalInvoicedValue)
+              bottomHighlight: formatLakhsCr(totalInvoicedValue),
+              onClick: () => onNavigateTab && onNavigateTab('Invoice Management')
             },
             {
               title: 'ACCOUNTS & COLLECTIONS',
@@ -1724,7 +1729,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               iconColor: '#16A34A',
               iconBg: '#F0FDF4',
               bottomPrefix: 'Outstanding pending ',
-              bottomHighlight: formatLakhsCr(Math.max(0, totalInvoicedValue - totalCollections))
+              bottomHighlight: formatLakhsCr(Math.max(0, totalInvoicedValue - totalCollections)),
+              onClick: () => onNavigateTab && onNavigateTab('Payments')
             }
           ]} />
         </div>
