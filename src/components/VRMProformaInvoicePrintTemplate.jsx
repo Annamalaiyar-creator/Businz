@@ -1056,8 +1056,16 @@ export function VRMProformaInvoicePrintSheet({
       isLastInGroup,
       groupCount,
       presetName: grpMeta?.presetName || grpMeta?.name || '',
-      setCount: grpMeta?.setCount || 1,
-      groupUnit: grpMeta?.unit || (String(it.uom || it.unit || '').toUpperCase() === 'KW' ? 'kW' : (isAnyKw ? 'kW' : 'Sets')),
+      setCount: isPreset ? (grpMeta?.setCount || it.setCount || pi.presetSetCount || 1) : null,
+      groupUnit: isPreset ? (grpMeta?.unit || (String(it.uom || it.unit || '').toUpperCase() === 'KW' ? 'kW' : (isAnyKw ? 'kW' : 'Sets'))) : null,
+      setKwDisplay: (() => {
+        if (!isPreset) return '—';
+        const effectiveCount = grpMeta?.setCount !== undefined && grpMeta?.setCount !== null ? grpMeta.setCount : (it.setCount || pi.presetSetCount || 1);
+        const numCount = parseFloat(effectiveCount) || 1;
+        const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
+        const unit = (grpMeta?.unit === 'kW' || String(it.uom || it.unit || '').toUpperCase() === 'KW' || String(it.presetName || grpMeta?.name || '').toLowerCase().includes('kw')) ? 'kW' : 'Set';
+        return `${cleanCountStr} ${unit}`;
+      })(),
       groupPrice: grpMeta?.kitPrice || grpMeta?.groupSubtotal || 0,
       groupTaxable: grpMeta?.groupSubtotal || grpMeta?.taxable || 0,
       groupGst: grpMeta?.groupGst || 0,
@@ -1387,17 +1395,21 @@ export function VRMProformaInvoicePrintSheet({
                       backgroundColor: it.isPresetItem ? '#FCFDFE' : 'transparent',
                       borderBottom: (it.isPresetItem && it.isLastInGroup) ? '1px solid #CBD5E1' : '1px solid #E2E8F0'
                     }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '1px 6px',
-                        borderRadius: '4px',
-                        fontSize: '8.5px',
-                        fontWeight: '800',
-                        backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : (it.isPresetItem || it.groupUnit ? '#F1F5F9' : 'transparent'),
-                        color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : (it.isPresetItem || it.groupUnit ? '#475569' : '#94A3B8')
-                      }}>
-                        {(it.groupUnit === 'kW' || it.uom === 'KW') ? 'kW' : ((it.isPresetItem || it.groupUnit || it.uom === 'SET') ? 'Set' : '—')}
-                      </span>
+                      {it.isPresetItem && it.setKwDisplay && it.setKwDisplay !== '—' ? (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          fontSize: '8.5px',
+                          fontWeight: '800',
+                          backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
+                          color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : '#0E7490'
+                        }}>
+                          {it.setKwDisplay}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '9px' }}>—</span>
+                      )}
                     </td>
                     <td style={{
                       padding: '7px 6px',
@@ -2798,17 +2810,21 @@ export function VRMProformaInvoicePrintSheet({
                             textAlign: 'center',
                             verticalAlign: it.isPresetItem ? 'middle' : 'top'
                           }}>
-                            <span style={{
-                              display: 'inline-block',
-                              padding: '1px 5px',
-                              borderRadius: '3px',
-                              fontSize: '8px',
-                              fontWeight: '800',
-                              backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : (it.isPresetItem || it.groupUnit ? '#F1F5F9' : 'transparent'),
-                              color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : (it.isPresetItem || it.groupUnit ? '#475569' : '#94A3B8')
-                            }}>
-                              {(it.groupUnit === 'kW' || it.uom === 'KW') ? 'kW' : ((it.isPresetItem || it.groupUnit || it.uom === 'SET') ? 'Set' : '—')}
-                            </span>
+                            {it.isPresetItem && it.setKwDisplay && it.setKwDisplay !== '—' ? (
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                fontSize: '8px',
+                                fontWeight: '800',
+                                backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
+                                color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : '#0E7490'
+                              }}>
+                                {it.setKwDisplay}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '8.5px' }}>—</span>
+                            )}
                           </td>
                         )}
                         {hasQty && (

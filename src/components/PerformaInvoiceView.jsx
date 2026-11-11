@@ -6786,9 +6786,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               {/* Set / kW Column */}
                               <td style={{ padding: '12px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 {(() => {
+                                  if (!isPresetItem) {
+                                    return <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }}>—</span>;
+                                  }
                                   const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
                                   const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
-                                  const rowIsKw = isKwPreset(effectivePresetName, effectiveUnit, item) || String(item.uom || item.unit || '').toUpperCase() === 'KW';
+                                  const nestedSub = isSub && currentGroup?.nestedSubPresets?.find(n => (n.id === item.subPresetId || n.name === item.subPresetName));
+                                  const effectiveSetCount = isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1);
+                                  const rowIsKw = isKwPreset(effectivePresetName, effectiveUnit, item) || String(effectiveUnit).toUpperCase() === 'KW';
+                                  const numCount = parseFloat(effectiveSetCount) || 1;
+                                  const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
+                                  const unitLabel = rowIsKw ? 'kW' : 'Set';
                                   return (
                                     <span style={{
                                       display: 'inline-block',
@@ -6796,11 +6804,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       borderRadius: '6px',
                                       fontSize: '11px',
                                       fontWeight: '800',
-                                      backgroundColor: rowIsKw ? '#E0F2FE' : (isPresetItem ? '#ECFEFF' : '#F1F5F9'),
-                                      color: rowIsKw ? '#0284C7' : (isPresetItem ? '#0E7490' : '#64748B'),
-                                      border: `1px solid ${rowIsKw ? '#BAE6FD' : (isPresetItem ? '#A5F3FC' : '#E2E8F0')}`
+                                      backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
+                                      color: rowIsKw ? '#0284C7' : '#0E7490',
+                                      border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
                                     }}>
-                                      {rowIsKw ? 'kW' : (isPresetItem ? 'Set' : (item.uom === 'SET' ? 'Set' : '—'))}
+                                      {cleanCountStr} {unitLabel}
                                     </span>
                                   );
                                 })()}
@@ -7921,18 +7929,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         </td>
                                         <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center' }}>
-                                          <span style={{
-                                            display: 'inline-block',
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            fontSize: '9.5px',
-                                            fontWeight: '800',
-                                            backgroundColor: (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
-                                            color: (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? '#0284C7' : '#0E7490',
-                                            border: `1px solid ${(pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? '#BAE6FD' : '#A5F3FC'}`
-                                          }}>
-                                            {(pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? 'kW' : 'Set'}
-                                          </span>
+                                          {(() => {
+                                            const rowIsKw = (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW' || String(sec.presetName || '').toLowerCase().includes('kw'));
+                                            const numCount = parseFloat(setCount) || 1;
+                                            const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
+                                            const unitLabel = rowIsKw ? 'kW' : 'Set';
+                                            return (
+                                              <span style={{
+                                                display: 'inline-block',
+                                                padding: '1px 6px',
+                                                borderRadius: '4px',
+                                                fontSize: '9.5px',
+                                                fontWeight: '800',
+                                                backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
+                                                color: rowIsKw ? '#0284C7' : '#0E7490',
+                                                border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
+                                              }}>
+                                                {cleanCountStr} {unitLabel}
+                                              </span>
+                                            );
+                                          })()}
                                         </td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>

@@ -1695,6 +1695,7 @@ export default function AccountsVerificationModal({
 
         // Pre-fetch source PI items if available for maximum rate resolution accuracy
         let sourcePiItems = [];
+        let matchedPi = null;
         if (accountsVerificationModal.sourcePiNo || accountsVerificationModal.piNo) {
           try {
             const rawPiStore = typeof window !== 'undefined' ? (localStorage.getItem('controlroom_pi_store') || localStorage.getItem('businz_pi_store')) : null;
@@ -1702,7 +1703,7 @@ export default function AccountsVerificationModal({
               const parsedPis = JSON.parse(rawPiStore);
               const piList = Array.isArray(parsedPis) ? parsedPis : (parsedPis.pis || []);
               const targetPiNo = accountsVerificationModal.sourcePiNo || accountsVerificationModal.piNo;
-              const matchedPi = piList.find(p => p.piNo === targetPiNo || p.id === targetPiNo);
+              matchedPi = piList.find(p => p.piNo === targetPiNo || p.id === targetPiNo);
               if (matchedPi && Array.isArray(matchedPi.items)) {
                 sourcePiItems = matchedPi.items;
               }
@@ -1799,7 +1800,7 @@ export default function AccountsVerificationModal({
           };
         });
 
-        const rawPresetGroups = accountsVerificationModal.presetGroups || {};
+        const rawPresetGroups = accountsVerificationModal.presetGroups || matchedPi?.presetGroups || {};
         let pGroups = (Array.isArray(rawPresetGroups) && rawPresetGroups.length > 0)
           ? rawPresetGroups
           : (typeof rawPresetGroups === 'object' && Object.keys(rawPresetGroups).length > 0)
@@ -1807,8 +1808,8 @@ export default function AccountsVerificationModal({
             : [];
 
         // Order Subtotal and Grand Total
-        const gTotal = cleanNum(accountsVerificationModal?.grandTotal) || orderValue || 0;
-        const sTotal = cleanNum(accountsVerificationModal?.subTotal) || cleanNum(accountsVerificationModal?.subtotal) || (gTotal > 0 ? Math.round((gTotal / 1.18) * 100) / 100 : 0);
+        const gTotal = cleanNum(accountsVerificationModal?.grandTotal) || cleanNum(matchedPi?.grandTotal) || orderValue || 0;
+        const sTotal = cleanNum(accountsVerificationModal?.subTotal) || cleanNum(accountsVerificationModal?.subtotal) || cleanNum(matchedPi?.subTotal) || cleanNum(matchedPi?.subtotal) || (gTotal > 0 ? Math.round((gTotal / 1.18) * 100) / 100 : 0);
 
         // Comprehensive Detection of Preset Structure Packages
         const hasPresetMetadata = Boolean(
@@ -1818,9 +1819,15 @@ export default function AccountsVerificationModal({
           accountsVerificationModal.presetTitle ||
           accountsVerificationModal.selectedPreset ||
           accountsVerificationModal.isPresetOrder ||
+          matchedPi?.presetName ||
+          matchedPi?.preset ||
+          matchedPi?.isPresetOrder ||
           cleanNum(accountsVerificationModal.presetKitPrice) > 0 ||
           cleanNum(accountsVerificationModal.kitPrice) > 0 ||
           cleanNum(accountsVerificationModal.kitSubtotal) > 0 ||
+          cleanNum(matchedPi?.presetKitPrice) > 0 ||
+          cleanNum(matchedPi?.kitPrice) > 0 ||
+          cleanNum(matchedPi?.kitSubtotal) > 0 ||
           dynamicAccItems.some(it => it.isPresetItem || it.presetGroupId || it.presetName) ||
           (dynamicAccItems.length > 0 && dynamicAccItems.every(it => cleanNum(it.rate) === 0) && (orderValue > 0 || gTotal > 0 || sTotal > 0))
         );
@@ -1830,17 +1837,21 @@ export default function AccountsVerificationModal({
             accountsVerificationModal.presetTitle ||
             accountsVerificationModal.preset ||
             (typeof accountsVerificationModal.selectedPreset === 'string' ? accountsVerificationModal.selectedPreset : accountsVerificationModal.selectedPreset?.name) ||
+            matchedPi?.presetName ||
+            matchedPi?.presetTitle ||
+            matchedPi?.preset ||
             dynamicAccItems.find(it => it.presetName)?.presetName ||
             'Pre-Engineered Structure Kit Package';
 
-          const sCount = parseFloat(accountsVerificationModal.presetSetCount) || parseFloat(accountsVerificationModal.setCount) || 1;
-          const kPrice = cleanNum(accountsVerificationModal.presetKitPrice) || cleanNum(accountsVerificationModal.kitPrice) || cleanNum(accountsVerificationModal.kitSubtotal) || (sTotal > 0 ? Math.round((sTotal / sCount) * 100) / 100 : 0);
+          const sCount = parseFloat(accountsVerificationModal.presetSetCount) || parseFloat(accountsVerificationModal.setCount) || parseFloat(matchedPi?.presetSetCount) || parseFloat(matchedPi?.setCount) || 1;
+          const kPrice = cleanNum(accountsVerificationModal.presetKitPrice) || cleanNum(accountsVerificationModal.kitPrice) || cleanNum(accountsVerificationModal.kitSubtotal) || cleanNum(matchedPi?.presetKitPrice) || cleanNum(matchedPi?.kitPrice) || (sTotal > 0 ? Math.round((sTotal / sCount) * 100) / 100 : 0);
+          const pUnit = accountsVerificationModal.presetUnit || matchedPi?.presetUnit || (String(detectedName).toLowerCase().includes('kw') ? 'kW' : 'Sets');
 
           pGroups = [{
             presetName: detectedName,
             setCount: sCount,
-            unit: accountsVerificationModal.presetUnit || (String(detectedName).toLowerCase().includes('kw') ? 'kW' : 'Sets'),
-            unitType: accountsVerificationModal.presetUnit || (String(detectedName).toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+            unit: pUnit,
+            unitType: pUnit,
             kitPrice: kPrice
           }];
         }
