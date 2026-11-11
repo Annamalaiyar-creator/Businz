@@ -2104,6 +2104,61 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     };
   }, [bomList]);
 
+  // Date range calculator for period filtering navigation
+  const getPeriodDateRange = (period) => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    if (period === 'Today') {
+      return { start: todayStr, end: todayStr };
+    }
+    if (period === 'This Week') {
+      const d = new Date(now);
+      const day = d.getDay();
+      const diff = day === 0 ? 6 : day - 1;
+      d.setDate(d.getDate() - diff);
+      return { start: d.toISOString().slice(0, 10), end: todayStr };
+    }
+    if (period === 'MTD' || period === 'This Month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      return { start, end: todayStr };
+    }
+    if (period === 'Q2 FY27') {
+      return { start: '2026-07-01', end: '2026-09-30' };
+    }
+    if (period === 'YTD') {
+      return { start: `${now.getFullYear()}-01-01`, end: todayStr };
+    }
+    return { start: '', end: '' };
+  };
+
+  const handleOpenFilteredFullPage = () => {
+    const { start, end } = getPeriodDateRange(selectedPeriod);
+    if (activeKpiPopup === 'pi') {
+      try {
+        sessionStorage.setItem('controlroom_pi_initial_date_filter', JSON.stringify({ start, end }));
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent('controlroom_pi_filter_date', { detail: { startDate: start, endDate: end } }));
+      setActiveKpiPopup(null);
+      if (onNavigateTab) onNavigateTab('Proforma Invoice');
+    } else if (activeKpiPopup === 'bom' || activeKpiPopup === 'kits') {
+      try {
+        sessionStorage.setItem('controlroom_bom_initial_date_filter', JSON.stringify({ start, end }));
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent('controlroom_bom_filter_date', { detail: { startDate: start, endDate: end } }));
+      setActiveKpiPopup(null);
+      if (onNavigateTab) onNavigateTab('BOM Orders');
+    } else if (activeKpiPopup === 'po') {
+      setActiveKpiPopup(null);
+      if (onNavigateTab) onNavigateTab('Purchase Orders', null, pendingMdPOs.length > 0 ? 'WAITING FOR APPROVAL' : undefined);
+    } else if (activeKpiPopup === 'billing') {
+      setActiveKpiPopup(null);
+      if (onNavigateTab) onNavigateTab('Invoice Management');
+    } else if (activeKpiPopup === 'dispatch') {
+      setActiveKpiPopup(null);
+      if (onNavigateTab) onNavigateTab('Delivery Challans');
+    }
+  };
+
   // Configuration for 6 CEO KPI Popup Modals
   const kpiModalConfig = useMemo(() => {
     switch (activeKpiPopup) {
@@ -2117,7 +2172,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           themeColor: '#0E7490',
           themeBg: '#ECFEFF',
           icon: Receipt,
-          columns: ['#', 'PI NO.', 'Date', 'Customer Name', 'Sales Person', 'Total Value', 'Status']
+          columns: ['#', 'PI NO.', 'Date', 'Customer Name', 'Sales Person', 'Total Value', 'Status', 'Action'],
+          targetTab: 'Proforma Invoice',
+          targetTabLabel: 'Proforma Invoices'
         };
       case 'bom':
         return {
@@ -2129,7 +2186,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           themeColor: '#0284C7',
           themeBg: '#F0F9FF',
           icon: Factory,
-          columns: ['#', 'BOM Code', 'Date', 'Customer Name', 'Product / Structure', 'Order Value', 'Status']
+          columns: ['#', 'BOM Code', 'Date', 'Customer Name', 'Product / Structure', 'Order Value', 'Status', 'Action'],
+          targetTab: 'BOM Orders',
+          targetTabLabel: 'BOM Orders'
         };
       case 'po':
         return {
@@ -2141,7 +2200,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           themeColor: '#2563EB',
           themeBg: '#EFF6FF',
           icon: ShoppingCart,
-          columns: ['#', 'PO Number', 'Date', 'Vendor Name', 'Spend Amount', 'Approval Status']
+          columns: ['#', 'PO Number', 'Date', 'Vendor Name', 'Spend Amount', 'Approval Status', 'Action'],
+          targetTab: 'Purchase Orders',
+          targetTabLabel: 'Purchase Orders'
         };
       case 'dispatch':
         return {
@@ -2153,7 +2214,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           themeColor: '#059669',
           themeBg: '#ECFDF5',
           icon: Truck,
-          columns: ['#', 'Order / BOM Code', 'Date', 'Customer Name', 'Transporter / Carrier', 'LR / Vehicle No.', 'Status']
+          columns: ['#', 'Order / BOM Code', 'Date', 'Customer Name', 'Transporter / Carrier', 'LR / Vehicle No.', 'Status', 'Action'],
+          targetTab: 'Delivery Challans',
+          targetTabLabel: 'Delivery Challans'
         };
       case 'billing':
         return {
@@ -2165,7 +2228,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           themeColor: '#9333EA',
           themeBg: '#FAF5FF',
           icon: FileCheck,
-          columns: ['#', 'Invoice No.', 'Date', 'Customer Name', 'Billed Value', 'Tax Status']
+          columns: ['#', 'Invoice No.', 'Date', 'Customer Name', 'Billed Value', 'Tax Status', 'Action'],
+          targetTab: 'Invoice Management',
+          targetTabLabel: 'Invoices'
         };
       case 'accounts':
         return {
@@ -2177,7 +2242,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           themeColor: '#16A34A',
           themeBg: '#F0FDF4',
           icon: Wallet,
-          columns: ['#', 'Ref / Receipt No.', 'Date', 'Customer Name', 'Payment Mode', 'Amount Received', 'Status']
+          columns: ['#', 'Ref / Receipt No.', 'Date', 'Customer Name', 'Payment Mode', 'Amount Received', 'Status', 'Action'],
+          targetTab: 'Invoice Management',
+          targetTabLabel: 'Accounts'
         };
       case 'kits':
         return {
@@ -2189,7 +2256,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           themeColor: '#0E7490',
           themeBg: '#ECFEFF',
           icon: Boxes,
-          columns: ['#', 'BOM Code', 'Date', 'Customer Name', 'Kit Description', 'Order Value', 'Status']
+          columns: ['#', 'BOM Code', 'Date', 'Customer Name', 'Kit Description', 'Order Value', 'Status', 'Action'],
+          targetTab: 'BOM Orders',
+          targetTabLabel: 'BOM Orders'
         };
       default:
         return null;
@@ -2212,6 +2281,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         );
       }).map((pi, idx) => ({
         id: pi.piNo || idx,
+        rawRecord: pi,
         col1: pi.piNo || '—',
         col1Style: { color: '#0E7490', fontWeight: '800' },
         col2: pi.piDate || pi.date || '—',
@@ -2235,6 +2305,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         );
       }).map((b, idx) => ({
         id: b.bomCode || b.code || idx,
+        rawRecord: b,
         col1: b.bomCode || b.code || `BOM-${idx + 1}`,
         col1Style: { color: '#0284C7', fontWeight: '800' },
         col2: b.date || b.createdAt ? new Date(b.date || b.createdAt).toLocaleDateString('en-GB') : '—',
@@ -2259,6 +2330,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         const isPending = String(po.status || '').toLowerCase().includes('pending') || (!po.status && !po.is_approved);
         return {
           id: po.po_number || po.poNumber || idx,
+          rawRecord: po,
           col1: po.po_number || po.poNumber || `PO-${idx + 1}`,
           col1Style: { color: '#2563EB', fontWeight: '800' },
           col2: po.date || po.created_time || '—',
@@ -2284,6 +2356,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         );
       }).map((d, idx) => ({
         id: d.id || idx,
+        rawRecord: d,
         col1: d.code,
         col1Style: { color: '#059669', fontWeight: '800' },
         col2: d.date ? (typeof d.date === 'string' && d.date.includes('.') ? d.date : new Date(d.date).toLocaleDateString('en-GB')) : '—',
@@ -2306,6 +2379,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         );
       }).map((inv, idx) => ({
         id: inv.invNo || inv.invoice_number || idx,
+        rawRecord: inv,
         col1: inv.invNo || inv.invoice_number || `INV-${idx + 1}`,
         col1Style: { color: '#9333EA', fontWeight: '800' },
         col2: inv.invDate || inv.date || '—',
@@ -2329,6 +2403,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         );
       }).map((p, idx) => ({
         id: p.id || idx,
+        rawRecord: p,
         col1: p.refNo,
         col1Style: { color: '#16A34A', fontWeight: '800' },
         col2: p.date ? (typeof p.date === 'string' && p.date.includes('.') ? p.date : new Date(p.date).toLocaleDateString('en-GB')) : '—',
@@ -2351,6 +2426,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         );
       }).map((b, idx) => ({
         id: b.bomCode || b.code || idx,
+        rawRecord: b,
         col1: b.bomCode || b.code || `KIT-${idx + 1}`,
         col1Style: { color: '#0E7490', fontWeight: '800' },
         col2: b.date || b.createdAt ? new Date(b.date || b.createdAt).toLocaleDateString('en-GB') : '—',
@@ -2578,7 +2654,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#ECFEFF',
               bottomPrefix: 'Pipeline value ',
               bottomHighlight: totalPiPipelineFormatted,
-              onClick: () => onNavigateTab && onNavigateTab('Proforma Invoice')
+              onClick: () => setActiveKpiPopup('pi')
             },
             {
               title: 'BOM & PRODUCTION',
@@ -2590,7 +2666,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#F0F9FF',
               bottomPrefix: 'Order book value ',
               bottomHighlight: totalBomOrderValueFormatted,
-              onClick: () => onNavigateTab && onNavigateTab('BOM Orders')
+              onClick: () => setActiveKpiPopup('bom')
             },
             {
               title: 'PURCHASE ORDERS (PO)',
@@ -2603,7 +2679,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: totalPoSpendFormatted,
               highlightCard: pendingMdPOs.length > 0,
-              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, pendingMdPOs.length > 0 ? 'WAITING FOR APPROVAL' : undefined)
+              onClick: () => setActiveKpiPopup('po')
             },
             {
               title: 'BILLING & TAX INVOICES',
@@ -2615,7 +2691,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#FAF5FF',
               bottomPrefix: 'Total GST billed ',
               bottomHighlight: totalRevenueFormatted,
-              onClick: () => onNavigateTab && onNavigateTab('Invoice Management')
+              onClick: () => setActiveKpiPopup('billing')
             },
             ...(userRole === 'HR' ? [
               {
@@ -2628,7 +2704,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 iconBg: '#ECFEFF',
                 bottomPrefix: 'Kit order book ',
                 bottomHighlight: hrKitsOrderValueFormatted,
-                onClick: () => onNavigateTab && onNavigateTab('BOM Orders')
+                onClick: () => setActiveKpiPopup('kits')
               }
             ] : [])
           ]} />
@@ -6447,28 +6523,55 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setActiveKpiPopup(null)}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.2)',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  cursor: 'pointer',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '16px',
-                  fontWeight: 'bold',
-                  transition: 'background 0.15s ease'
-                }}
-                title="Close (Esc)"
-              >
-                <X size={18} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {kpiModalConfig.targetTab && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenFilteredFullPage()}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: '#FFFFFF',
+                      color: kpiModalConfig.themeColor,
+                      border: 'none',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title={`Open full ${kpiModalConfig.targetTabLabel || kpiModalConfig.targetTab} view with these ${kpiModalRows.length} records filtered`}
+                  >
+                    <span>Open Full Page (Filtered)</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiPopup(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    border: 'none',
+                    color: '#FFFFFF',
+                    cursor: 'pointer',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    transition: 'background 0.15s ease'
+                  }}
+                  title="Close (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Filter / Search Bar */}
@@ -6555,7 +6658,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                               textTransform: 'uppercase',
                               letterSpacing: '0.04em',
                               whiteSpace: 'nowrap',
-                              textAlign: cIdx === kpiModalConfig.columns.length - 2 ? 'right' : (cIdx === kpiModalConfig.columns.length - 1 ? 'center' : 'left'),
+                              textAlign: cIdx === kpiModalConfig.columns.length - 3 ? 'right' : (cIdx >= kpiModalConfig.columns.length - 2 ? 'center' : 'left'),
                               backgroundColor: '#F8FAFC'
                             }}
                           >
@@ -6584,9 +6687,26 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                             key={row.id || rIdx}
                             style={{
                               borderBottom: '1px solid #F1F5F9',
-                              transition: 'background-color 0.15s ease'
+                              transition: 'background-color 0.15s ease',
+                              cursor: 'pointer'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                            onClick={() => {
+                              if (activeKpiPopup === 'pi' && row.rawRecord) {
+                                setViewingPiModal(row.rawRecord);
+                              } else if ((activeKpiPopup === 'bom' || activeKpiPopup === 'kits') && row.rawRecord) {
+                                setViewingBomModal(row.rawRecord);
+                              } else if (activeKpiPopup === 'po' && onNavigateTab) {
+                                setActiveKpiPopup(null);
+                                onNavigateTab('Purchase Orders', row.rawRecord?.po_number || row.rawRecord?.poNumber || row.id);
+                              } else if (activeKpiPopup === 'billing' && onNavigateTab) {
+                                setActiveKpiPopup(null);
+                                onNavigateTab('Invoice Management');
+                              } else if (activeKpiPopup === 'dispatch' && onNavigateTab) {
+                                setActiveKpiPopup(null);
+                                onNavigateTab('Delivery Challans');
+                              }
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0FDFA'}
                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                           >
                             <td style={{ padding: '10px 14px', color: '#94A3B8', fontSize: '11.5px', width: '36px' }}>
@@ -6625,6 +6745,44 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                 {row.status}
                               </span>
                             </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (activeKpiPopup === 'pi' && row.rawRecord) {
+                                    setViewingPiModal(row.rawRecord);
+                                  } else if ((activeKpiPopup === 'bom' || activeKpiPopup === 'kits') && row.rawRecord) {
+                                    setViewingBomModal(row.rawRecord);
+                                  } else if (activeKpiPopup === 'po' && onNavigateTab) {
+                                    setActiveKpiPopup(null);
+                                    onNavigateTab('Purchase Orders', row.rawRecord?.po_number || row.rawRecord?.poNumber || row.id);
+                                  } else if (activeKpiPopup === 'billing' && onNavigateTab) {
+                                    setActiveKpiPopup(null);
+                                    onNavigateTab('Invoice Management');
+                                  } else if (activeKpiPopup === 'dispatch' && onNavigateTab) {
+                                    setActiveKpiPopup(null);
+                                    onNavigateTab('Delivery Challans');
+                                  }
+                                }}
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #CBD5E1',
+                                  backgroundColor: '#FFFFFF',
+                                  color: '#0E7490',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Eye size={12} />
+                                <span>View</span>
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -6641,28 +6799,55 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               borderTop: '1px solid #E2E8F0',
               display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '10px'
             }}>
               <span style={{ fontSize: '11.5px', color: '#64748B' }}>
-                Period: <strong>{selectedPeriod}</strong> • Total records: <strong>{kpiModalRows.length}</strong>
+                Period Filter: <strong>{selectedPeriod}</strong> • Showing <strong>{kpiModalRows.length}</strong> matching records
               </span>
-              <button
-                type="button"
-                onClick={() => setActiveKpiPopup(null)}
-                style={{
-                  padding: '7px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#334155',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                }}
-              >
-                Close
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {kpiModalConfig.targetTab && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenFilteredFullPage()}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: kpiModalConfig.themeColor,
+                      color: '#FFFFFF',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span>Open Full {kpiModalConfig.targetTabLabel || kpiModalConfig.targetTab} (Filtered)</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiPopup(null)}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

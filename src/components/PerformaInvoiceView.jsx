@@ -136,8 +136,39 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [validationAlert, setValidationAlert] = useState(null); // Interactive Missing Fields popup modal
   const [topToast, setTopToast] = useState(null);
   const toastTimeoutRef = useRef(null);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_pi_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.start || '';
+      }
+    } catch (_) {}
+    return '';
+  });
+  const [endDate, setEndDate] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_pi_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        sessionStorage.removeItem('controlroom_pi_initial_date_filter');
+        return parsed.end || '';
+      }
+    } catch (_) {}
+    return '';
+  });
+
+  useEffect(() => {
+    const handleFilterDate = (e) => {
+      if (e?.detail?.startDate !== undefined) {
+        setStartDate(e.detail.startDate || '');
+        setEndDate(e.detail.endDate || '');
+        setCurrentPage(1);
+      }
+    };
+    window.addEventListener('controlroom_pi_filter_date', handleFilterDate);
+    return () => window.removeEventListener('controlroom_pi_filter_date', handleFilterDate);
+  }, []);
 
   // Dynamic mobile viewport detection (<= 768px)
   const [isMobile, setIsMobile] = useState(() => {

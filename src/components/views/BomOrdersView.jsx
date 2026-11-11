@@ -332,8 +332,39 @@ export default function BomOrdersView(props) {
 
   // Search & Filter states
   const [searchQueryText, setSearchQueryText] = useState('');
-  const [filterDateVal, setFilterDateVal] = useState('');
-  const [filterEndDateVal, setFilterEndDateVal] = useState('');
+  const [filterDateVal, setFilterDateVal] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_bom_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.start || '';
+      }
+    } catch (_) {}
+    return '';
+  });
+  const [filterEndDateVal, setFilterEndDateVal] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_bom_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        sessionStorage.removeItem('controlroom_bom_initial_date_filter');
+        return parsed.end || '';
+      }
+    } catch (_) {}
+    return '';
+  });
+
+  useEffect(() => {
+    const handleFilterDate = (e) => {
+      if (e?.detail?.startDate !== undefined) {
+        setFilterDateVal(e.detail.startDate || '');
+        setFilterEndDateVal(e.detail.endDate || '');
+        setCurrentPage(1);
+      }
+    };
+    window.addEventListener('controlroom_bom_filter_date', handleFilterDate);
+    return () => window.removeEventListener('controlroom_bom_filter_date', handleFilterDate);
+  }, []);
   const [filterStatusSelect, setFilterStatusSelect] = useState('All');
   const [activeSubTab, setActiveSubTab] = useState('All');
   const [selectedRows, setSelectedRows] = useState([]);
