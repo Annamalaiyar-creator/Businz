@@ -186,6 +186,23 @@ export const PI_CODE_REGEX = /^(?:VRM-PI-\d{4}-\d+|PI-\d+|VRMS\/PI\/\d{2}-\d{2}\
  * - VRM-BOM-26-27-519-> 519
  * - VRM-INV-2026-999 -> 999
  */
+/**
+ * Normalizes legacy or non-standard BOM codes into official sequential format.
+ * - VRM-BOM-1132 -> VRMS/BOM/26-27/556
+ * - VRM-BOM-1166 -> VRMS/BOM/26-27/557
+ * - VRM-BOM-1198 -> VRMS/BOM/26-27/558
+ * - VRM-BOM-1227 -> VRMS/BOM/26-27/559
+ */
+export function normalizeBomCode(code) {
+  if (!code) return '';
+  const str = String(code).trim();
+  if (str === 'VRM-BOM-1132') return 'VRMS/BOM/26-27/556';
+  if (str === 'VRM-BOM-1166') return 'VRMS/BOM/26-27/557';
+  if (str === 'VRM-BOM-1198') return 'VRMS/BOM/26-27/558';
+  if (str === 'VRM-BOM-1227') return 'VRMS/BOM/26-27/559';
+  return str;
+}
+
 export function parseBomSequenceNumber(code) {
   if (!code) return 0;
   const str = String(code).trim();

@@ -27,6 +27,20 @@ export async function renumberBoms554And555() {
       customerMatch: 'Sri Vaarahi Enterprises',
       defaultAmount: 9416.40,
       defaultSubTotal: 7980
+    },
+    {
+      oldCode: 'VRM-BOM-1198',
+      newCode: 'VRMS/BOM/26-27/558',
+      customerMatch: 'Vilva Tech',
+      defaultAmount: 0,
+      defaultSubTotal: 0
+    },
+    {
+      oldCode: 'VRM-BOM-1227',
+      newCode: 'VRMS/BOM/26-27/559',
+      customerMatch: 'JYSL ASSOCIATES',
+      defaultAmount: 0,
+      defaultSubTotal: 0
     }
   ];
 

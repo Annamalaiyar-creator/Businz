@@ -476,6 +476,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     resolvedBomCode = 'VRMS/BOM/26-27/556';
                   } else if (rawCode === 'VRM-BOM-1166' || (rawCode === 'VRMS/BOM/26-27/555' && String(b.customerName || '').includes('Vaarahi'))) {
                     resolvedBomCode = 'VRMS/BOM/26-27/557';
+                  } else if (rawCode === 'VRM-BOM-1198' || String(b.customerName || '').includes('Vilva Tech')) {
+                    resolvedBomCode = 'VRMS/BOM/26-27/558';
+                  } else if (rawCode === 'VRM-BOM-1227' || String(b.customerName || '').includes('JYSL')) {
+                    resolvedBomCode = 'VRMS/BOM/26-27/559';
                   }
 
                   // Format BOM Created Date for display below BOM Code

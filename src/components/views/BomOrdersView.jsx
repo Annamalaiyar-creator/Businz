@@ -27,7 +27,7 @@ import ExecutiveOrderDossierModal from './ExecutiveOrderDossierModal';
 import LrUploadPopupModal from './LrUploadPopupModal';
 import DispatchMediaThumbnail from './DispatchMediaThumbnail';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts, notifyCreditPaymentSettled } from '../../services/notificationService';
-import { getNextSequence, compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator';
+import { getNextSequence, compareBomDescending, parseBomSequenceNumber, normalizeBomCode } from '../../utils/sequenceGenerator';
 
 export const formatAppliedAtDate = (r) => {
   if (!r) return '—';
@@ -2593,9 +2593,15 @@ export default function BomOrdersView(props) {
       const printDate = b.dispatchPrintedDateStr || (b.dispatchPrintedAt ? new Date(b.dispatchPrintedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
       const printedBy = b.dispatchPrintedBy || 'Dispatch Team';
 
+      const rawCode = b.bomCode || b.code || 'BOM-101';
+      const normalizedCode = normalizeBomCode(rawCode);
+
       return {
         ...b,
-        code: b.bomCode || b.code || 'BOM-101',
+        code: normalizedCode,
+        bomCode: normalizedCode,
+        rawBomCode: rawCode,
+        rawCode,
         c2: formattedDate,
         dateTimeObj: dt,
         c3: displayName,
