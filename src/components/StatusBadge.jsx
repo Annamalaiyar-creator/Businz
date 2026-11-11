@@ -7,6 +7,11 @@ import { AlertTriangle, Clock, Send, Search, CheckCircle2, XCircle } from 'lucid
  */
 export function formatTitleCase(text) {
   if (!text) return '';
+  if (typeof text === 'object') {
+    const candidate = text.label || text.name || text.status || text.title || '';
+    if (typeof candidate === 'string' && candidate) return formatTitleCase(candidate);
+    return '';
+  }
   const str = String(text).trim();
 
   // Special overrides for standard acronyms
@@ -457,7 +462,12 @@ export default function StatusBadge({ status, type, label, bg, color, border, st
   const finalColor = config.color;
   const finalBorder = config.border;
 
-  const rawLabel = label || config.label || status || '';
+  const rawLabel = (typeof label === 'string' && label) 
+    || (typeof config.label === 'string' && config.label) 
+    || (typeof status === 'string' && status) 
+    || (typeof label === 'object' ? (label?.label || label?.name || '') : '')
+    || (typeof status === 'object' ? (status?.label || status?.name || status?.status || '') : '')
+    || '';
   const displayLabel = formatTitleCase(rawLabel);
 
   return (

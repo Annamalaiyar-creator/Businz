@@ -43,6 +43,21 @@ export default function ProductionTableView({
 }) {
   const isSuperUser = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director';
 
+  const safeText = (val, fallback = '—') => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'number') return String(val);
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    if (React.isValidElement(val)) return val;
+    if (typeof val === 'object') {
+      const candidate = val.name || val.label || val.customerName || val.companyName || val.title || val.code || val.status || val.pay || val.date;
+      if (typeof candidate === 'string') return candidate;
+      if (typeof candidate === 'number') return String(candidate);
+      return fallback;
+    }
+    return String(val);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
 
@@ -308,7 +323,7 @@ export default function ProductionTableView({
                         style={{ padding: '14px 16px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
                         <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '800' }}>{row.code}</span>
+                          <span style={{ fontSize: '13px', fontWeight: '800' }}>{safeText(row.code, '—')}</span>
                           {activeTab === 'Dispatch Orders' && (
                             row.dispatchPrinted ? (
                               <span
@@ -371,7 +386,7 @@ export default function ProductionTableView({
                         onClick={() => onRowClick(row)}
                         style={{ padding: '14px 16px', fontWeight: '600', color: '#1E293B', cursor: 'pointer' }}
                       >
-                        {row.c2 || row.name}
+                        {safeText(row.c2 || row.name, '—')}
                       </td>
                       <td style={{
                         padding: '14px 16px',
@@ -492,52 +507,52 @@ export default function ProductionTableView({
                             );
                           })()
                         ) : (
-                          typeof row.c3 === 'object' ? (row.c3?.combined || row.c3?.date || '—') : (row.c3 || row.date1 || '—')
+                          typeof row.c3 === 'object' ? safeText(row.c3?.combined || row.c3?.date, '—') : safeText(row.c3 || row.date1, '—')
                         )}
                       </td>
                       <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
                         {activeTab === 'Accounts Verification' ? (
                           <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', lineHeight: '1.2' }}>
                             <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
-                              {row.paymentType || row.c4 || '100% Paid'}
+                              {safeText(row.paymentType || row.c4, '100% Paid')}
                             </span>
                             {(row.paymentStatusText || row.c7) && (
                               <span style={{
                                 fontSize: '10.5px',
                                 fontWeight: '700',
-                                color: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '#15803D' : ((row.paymentStatusText || row.c7).includes('Credit') ? '#1D4ED8' : '#B45309'),
-                                backgroundColor: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '#DCFCE7' : ((row.paymentStatusText || row.c7).includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
-                                border: ((row.paymentStatusText || row.c7).includes('Received') || (row.paymentStatusText || row.c7).includes('Settled') || (row.paymentStatusText || row.c7).includes('100%')) ? '1px solid #BBF7D0' : ((row.paymentStatusText || row.c7).includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                                color: (String(row.paymentStatusText || row.c7 || '').includes('Received') || String(row.paymentStatusText || row.c7 || '').includes('Settled') || String(row.paymentStatusText || row.c7 || '').includes('100%')) ? '#15803D' : (String(row.paymentStatusText || row.c7 || '').includes('Credit') ? '#1D4ED8' : '#B45309'),
+                                backgroundColor: (String(row.paymentStatusText || row.c7 || '').includes('Received') || String(row.paymentStatusText || row.c7 || '').includes('Settled') || String(row.paymentStatusText || row.c7 || '').includes('100%')) ? '#DCFCE7' : (String(row.paymentStatusText || row.c7 || '').includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                                border: (String(row.paymentStatusText || row.c7 || '').includes('Received') || String(row.paymentStatusText || row.c7 || '').includes('Settled') || String(row.paymentStatusText || row.c7 || '').includes('100%')) ? '1px solid #BBF7D0' : (String(row.paymentStatusText || row.c7 || '').includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
                                 padding: '1px 6px',
                                 borderRadius: '4px',
                                 display: 'inline-block',
                                 width: 'fit-content'
                               }}>
-                                {row.paymentStatusText || row.c7}
+                                {safeText(row.paymentStatusText || row.c7)}
                               </span>
                             )}
                           </div>
                         ) : (
-                          row.c4 || row.date2
+                          safeText(row.c4 || row.date2, '—')
                         )}
                       </td>
                       {row.c5 !== undefined && activeTab !== 'Dispatch Orders' && !pageConfig.headers[4]?.includes('Status') && (
                         <td style={{
                           padding: '14px 16px',
-                          fontWeight: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value') || pageConfig.headers[4]?.includes('Qty') || pageConfig.headers[4]?.includes('Price')) ? '700' : '600',
-                          color: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value')) ? '#0F172A' : '#334155',
-                          textAlign: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value')) ? 'right' : 'left',
+                          fontWeight: (String(row.c5 || '').includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value') || pageConfig.headers[4]?.includes('Qty') || pageConfig.headers[4]?.includes('Price')) ? '700' : '600',
+                          color: (String(row.c5 || '').includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value')) ? '#0F172A' : '#334155',
+                          textAlign: (String(row.c5 || '').includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value')) ? 'right' : 'left',
                           whiteSpace: 'nowrap'
                         }}>
-                          {row.c5 || row.value}
+                          {safeText(row.c5 || row.value, '—')}
                         </td>
                       )}
                       {row.c6 !== undefined && activeTab !== 'Customer Management' && pageConfig.headers.length > 6 && (
                         <td style={{
                           padding: '14px 16px',
-                          color: (row.c6?.toString()?.includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? '#0F172A' : '#475569',
-                          fontWeight: (row.c6?.toString()?.includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? '700' : '500',
-                          textAlign: (row.c6?.toString()?.includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? 'right' : 'left',
+                          color: (String(row.c6 || '').includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? '#0F172A' : '#475569',
+                          fontWeight: (String(row.c6 || '').includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? '700' : '500',
+                          textAlign: (String(row.c6 || '').includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? 'right' : 'left',
                           whiteSpace: 'nowrap'
                         }}>
                           {activeTab === 'Invoice Management' ? (
@@ -552,37 +567,37 @@ export default function ProductionTableView({
                               alignItems: 'center',
                               gap: '4px'
                             }}>
-                              {row.c6}
+                              {safeText(row.c6, '—')}
                             </span>
                           ) : activeTab === 'Accounts Verification' ? (
                             <span style={{
-                              color: row.c6?.includes('Nil') ? '#94A3B8' : '#B45309',
-                              fontWeight: row.c6?.includes('Nil') ? '500' : '700',
-                              backgroundColor: row.c6?.includes('Nil') ? 'transparent' : '#FFFBEB',
-                              padding: row.c6?.includes('Nil') ? '0' : '3px 8px',
+                              color: String(row.c6 || '').includes('Nil') ? '#94A3B8' : '#B45309',
+                              fontWeight: String(row.c6 || '').includes('Nil') ? '500' : '700',
+                              backgroundColor: String(row.c6 || '').includes('Nil') ? 'transparent' : '#FFFBEB',
+                              padding: String(row.c6 || '').includes('Nil') ? '0' : '3px 8px',
                               borderRadius: '6px',
-                              border: row.c6?.includes('Nil') ? 'none' : '1px solid #FDE68A',
+                              border: String(row.c6 || '').includes('Nil') ? 'none' : '1px solid #FDE68A',
                               display: 'inline-block'
                             }}>
-                              {row.c6}
+                              {safeText(row.c6, '—')}
                             </span>
                           ) : (
-                            row.c6
+                            safeText(row.c6, '—')
                           )}
                         </td>
                       )}
                       {row.c7 !== undefined && pageConfig.headers.length > 7 && (
                         <td style={{
                           padding: '14px 16px',
-                          fontWeight: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '700' : '500',
-                          color: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '#0F172A' : '#475569',
-                          textAlign: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? 'right' : (activeTab === 'Accounts Verification' ? 'center' : 'left'),
+                          fontWeight: (String(row.c7 || '').includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '700' : '500',
+                          color: (String(row.c7 || '').includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '#0F172A' : '#475569',
+                          textAlign: (String(row.c7 || '').includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? 'right' : (activeTab === 'Accounts Verification' ? 'center' : 'left'),
                           whiteSpace: 'nowrap'
                         }}>
                           {activeTab === 'Accounts Verification' ? (
                             <span style={{
-                              backgroundColor: row.c7?.includes('Received') ? '#DCFCE7' : (row.c7?.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
-                              color: row.c7?.includes('Received') ? '#166534' : (row.c7?.includes('Credit') ? '#1D4ED8' : '#B45309'),
+                              backgroundColor: String(row.c7 || '').includes('Received') ? '#DCFCE7' : (String(row.c7 || '').includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
+                              color: String(row.c7 || '').includes('Received') ? '#166534' : (String(row.c7 || '').includes('Credit') ? '#1D4ED8' : '#B45309'),
                               padding: '4px 10px',
                               borderRadius: '12px',
                               fontSize: '11px',
@@ -591,20 +606,20 @@ export default function ProductionTableView({
                               alignItems: 'center',
                               gap: '4px'
                             }}>
-                              {row.c7}
+                              {safeText(row.c7, '—')}
                             </span>
                           ) : (
-                            row.c7
+                            safeText(row.c7, '—')
                           )}
                         </td>
                       )}
                       {(pageConfig.headers.includes('Status') || pageConfig.headers.includes('Dispatch Packing Status') || pageConfig.headers.includes('Fulfillment Status')) && (
                         <td style={{ padding: '14px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
-                            <StatusBadge status={row.status} size="sm" />
+                            <StatusBadge status={safeText(row.status, 'Active')} size="sm" />
                             {activeTab === 'Dispatch Orders' && row.packingProgressText && (
                               <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', paddingLeft: '2px', whiteSpace: 'nowrap' }}>
-                                {row.packingProgressText}
+                                {safeText(row.packingProgressText)}
                               </span>
                             )}
                           </div>

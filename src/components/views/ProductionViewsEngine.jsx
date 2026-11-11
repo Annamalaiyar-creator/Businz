@@ -1755,9 +1755,9 @@ export default function ProductionViewsEngine(props) {
               if (prodFilterEndDateVal && rIso > prodFilterEndDateVal) matchesDate = false;
             }
 
-            const subTab = (prodActiveSubTab || 'All').toLowerCase();
-            const rStatus = (r.status || '').toLowerCase();
-            const rTabGroup = (r.tabGroup || '').toLowerCase();
+            const subTab = String(prodActiveSubTab || 'All').toLowerCase();
+            const rStatus = (typeof r.status === 'string' ? r.status : (r.status?.name || r.status?.label || '')).toLowerCase();
+            const rTabGroup = (typeof r.tabGroup === 'string' ? r.tabGroup : '').toLowerCase();
 
             const cleanSub = subTab.replace(/[^a-z0-9]/g, '');
             const cleanStatus = rStatus.replace(/[^a-z0-9]/g, '');

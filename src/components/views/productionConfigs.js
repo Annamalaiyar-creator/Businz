@@ -105,8 +105,26 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               };
             });
 
+          const safeStringVal = (val, fallback = '') => {
+            if (val === null || val === undefined) return fallback;
+            if (typeof val === 'string') return val.trim();
+            if (typeof val === 'number') return String(val);
+            if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+            if (typeof val === 'object') {
+              const candidate = val.name || val.customerName || val.companyName || val.title || val.label || val.code || val.invNo || val.status || val.pay;
+              if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+              return fallback;
+            }
+            return String(val);
+          };
+
           const cleanDateStr = (rawDate) => {
             if (!rawDate) return '-';
+            if (typeof rawDate === 'object') {
+              const innerDate = rawDate.date || rawDate.formatted || rawDate.val || rawDate.dateStr;
+              if (typeof innerDate === 'string' && innerDate.trim()) return cleanDateStr(innerDate);
+              return '-';
+            }
             const s = String(rawDate).trim();
             if (s.includes('T')) {
               const parts = s.split('T')[0].split('-');
@@ -350,27 +368,35 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               ],
               headers: ['Invoice No.', 'Customer / Vendor', 'BOM Ref', 'Invoice Date', 'Invoice Amount (₹)', 'Payment Status', 'Status'],
               rows: allInvoicesUnified.map(i => {
-                const isConfirmed = i.status === 'Invoice Confirmed' || i.status === 'Completed' || i.status === 'Confirmed' || i.pay === 'Completed & Locked';
-                const isReady = i.status === 'Ready for Payment' || i.status === 'Accounts Verified & Passed to Invoice' || i.status === 'Packing Verified - Ready for Billing' || i.status === 'Ready for Invoicing' || i.pay === 'Ready' || i.pay === 'Ready for Payment';
+                const statusStr = safeStringVal(i.status, '');
+                const payStr = safeStringVal(i.pay, '');
+                const isConfirmed = statusStr === 'Invoice Confirmed' || statusStr === 'Completed' || statusStr === 'Confirmed' || payStr === 'Completed & Locked';
+                const isReady = statusStr === 'Ready for Payment' || statusStr === 'Accounts Verified & Passed to Invoice' || statusStr === 'Packing Verified - Ready for Billing' || statusStr === 'Ready for Invoicing' || payStr === 'Ready' || payStr === 'Ready for Payment';
 
                 const matchingBom = findMatchingBom(i);
-                const resolvedBomCode = i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code || 'BOM-001';
+                const resolvedBomCode = safeStringVal(i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code, 'BOM-001');
                 const resolvedAmt = cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || 0;
                 const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
                 const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
-                const finalCode = (i.invNo && i.invNo !== 'Pending Confirmation' && !i.invNo.toLowerCase().includes('pending')) ? i.invNo : (matchingBom?.invoiceNo || fallbackInvNo);
+                const rawInvNo = safeStringVal(i.invNo, '');
+                const finalCode = (rawInvNo && rawInvNo !== 'Pending Confirmation' && !rawInvNo.toLowerCase().includes('pending')) ? rawInvNo : safeStringVal(matchingBom?.invoiceNo, fallbackInvNo);
+
+                const vendorName = safeStringVal(i.vendor || i.customerName || matchingBom?.customerName, 'Customer');
+                const paymentStatus = isConfirmed ? 'Completed & Locked' : (payStr || 'Ready for Payment');
+                const finalStatus = isConfirmed ? 'Invoice Confirmed' : (statusStr || 'Ready for Payment');
+                const formattedAmt = resolvedAmt > 0 ? formatCurrency(resolvedAmt) : (typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (typeof i.invAmt === 'string' ? i.invAmt : '₹ 0.00'));
 
                 return {
                   ...i,
                   code: finalCode,
                   invNo: finalCode,
                   invoiceNo: finalCode,
-                  c2: i.vendor || i.customerName || matchingBom?.customerName || 'Customer',
+                  c2: vendorName,
                   c3: resolvedBomCode,
                   c4: cleanDateStr(i.date),
-                  c5: resolvedAmt > 0 ? formatCurrency(resolvedAmt) : (typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (i.invAmt || '₹ 0.00')),
-                  c6: isConfirmed ? 'Completed & Locked' : (i.pay || 'Ready for Payment'),
-                  status: isConfirmed ? 'Invoice Confirmed' : (i.status || 'Ready for Payment'),
+                  c5: formattedAmt,
+                  c6: paymentStatus,
+                  status: finalStatus,
                   stBg: isConfirmed ? '#DCFCE7' : (isReady ? '#EFF6FF' : '#FEF3C7'),
                   stFg: isConfirmed ? '#166534' : (isReady ? '#2563EB' : '#B45309'),
                   stBorder: isConfirmed ? '1px solid #86EFAC' : (isReady ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
