@@ -1800,23 +1800,50 @@ export default function AccountsVerificationModal({
         });
 
         const rawPresetGroups = accountsVerificationModal.presetGroups || {};
-        const pGroups = (Array.isArray(rawPresetGroups) && rawPresetGroups.length > 0)
+        let pGroups = (Array.isArray(rawPresetGroups) && rawPresetGroups.length > 0)
           ? rawPresetGroups
           : (typeof rawPresetGroups === 'object' && Object.keys(rawPresetGroups).length > 0)
             ? Object.values(rawPresetGroups)
-            : (accountsVerificationModal.presetName || (cleanNum(accountsVerificationModal.presetKitPrice) > 0))
-              ? [{
-                  presetName: accountsVerificationModal.presetName || 'Pre-Engineered Structure Kit Package',
-                  setCount: parseFloat(accountsVerificationModal.presetSetCount) || 1,
-                  unit: accountsVerificationModal.presetUnit || (String(accountsVerificationModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
-                  unitType: accountsVerificationModal.presetUnit || (String(accountsVerificationModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
-                  kitPrice: cleanNum(accountsVerificationModal.presetKitPrice) || 0
-                }]
-              : [];
+            : [];
 
         // Order Subtotal and Grand Total
         const gTotal = cleanNum(accountsVerificationModal?.grandTotal) || orderValue || 0;
         const sTotal = cleanNum(accountsVerificationModal?.subTotal) || cleanNum(accountsVerificationModal?.subtotal) || (gTotal > 0 ? Math.round((gTotal / 1.18) * 100) / 100 : 0);
+
+        // Comprehensive Detection of Preset Structure Packages
+        const hasPresetMetadata = Boolean(
+          accountsVerificationModal.presetName ||
+          accountsVerificationModal.preset ||
+          accountsVerificationModal.presetId ||
+          accountsVerificationModal.presetTitle ||
+          accountsVerificationModal.selectedPreset ||
+          accountsVerificationModal.isPresetOrder ||
+          cleanNum(accountsVerificationModal.presetKitPrice) > 0 ||
+          cleanNum(accountsVerificationModal.kitPrice) > 0 ||
+          cleanNum(accountsVerificationModal.kitSubtotal) > 0 ||
+          dynamicAccItems.some(it => it.isPresetItem || it.presetGroupId || it.presetName) ||
+          (dynamicAccItems.length > 0 && dynamicAccItems.every(it => cleanNum(it.rate) === 0) && (orderValue > 0 || gTotal > 0 || sTotal > 0))
+        );
+
+        if (pGroups.length === 0 && hasPresetMetadata) {
+          const detectedName = accountsVerificationModal.presetName ||
+            accountsVerificationModal.presetTitle ||
+            accountsVerificationModal.preset ||
+            (typeof accountsVerificationModal.selectedPreset === 'string' ? accountsVerificationModal.selectedPreset : accountsVerificationModal.selectedPreset?.name) ||
+            dynamicAccItems.find(it => it.presetName)?.presetName ||
+            'Pre-Engineered Structure Kit Package';
+
+          const sCount = parseFloat(accountsVerificationModal.presetSetCount) || parseFloat(accountsVerificationModal.setCount) || 1;
+          const kPrice = cleanNum(accountsVerificationModal.presetKitPrice) || cleanNum(accountsVerificationModal.kitPrice) || cleanNum(accountsVerificationModal.kitSubtotal) || (sTotal > 0 ? Math.round((sTotal / sCount) * 100) / 100 : 0);
+
+          pGroups = [{
+            presetName: detectedName,
+            setCount: sCount,
+            unit: accountsVerificationModal.presetUnit || (String(detectedName).toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+            unitType: accountsVerificationModal.presetUnit || (String(detectedName).toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+            kitPrice: kPrice
+          }];
+        }
 
         // Fallback for Kit Price if 0 but order has value
         let presetKitsTotal = pGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseFloat(g.setCount) || 1)), 0);
@@ -1932,7 +1959,10 @@ export default function AccountsVerificationModal({
                       const kTotal = sCount * kPrice;
                       const unitType = grp.unit || grp.unitType || (grp.isKwBased || String(grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
 
-                      const kitItems = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
+                      const explicitKitItems = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
+                      const kitItems = explicitKitItems.length > 0
+                        ? explicitKitItems
+                        : (pGroups.length === 1 ? dynamicAccItems : []);
 
                       return (
                         <React.Fragment key={`acc-kit-${gIdx}`}>
@@ -2059,8 +2089,15 @@ export default function AccountsVerificationModal({
 
                     {/* Loose / Individual Products */}
                     {(() => {
+                      const allKitItemSet = new Set();
+                      pGroups.forEach((grp, gIdx) => {
+                        const explicit = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
+                        const itemsForGrp = explicit.length > 0 ? explicit : (pGroups.length === 1 ? dynamicAccItems : []);
+                        itemsForGrp.forEach(it => allKitItemSet.add(it));
+                      });
+
                       const looseItems = pGroups.length > 0
-                        ? dynamicAccItems.filter(it => !it.presetGroupId && !it.isPresetItem)
+                        ? dynamicAccItems.filter(it => !allKitItemSet.has(it) && !it.presetGroupId && !it.isPresetItem)
                         : dynamicAccItems;
 
                       if (looseItems.length === 0 && pGroups.length > 0) return null;
