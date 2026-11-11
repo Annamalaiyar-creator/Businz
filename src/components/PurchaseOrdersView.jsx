@@ -10,6 +10,7 @@ import { notifyPoSentForApproval } from '../services/notificationService';
 import { parseAddressString, formatAddressObj, getVendorLocations } from '../utils/otherViewsShared';
 import CreateProductModal from './views/CreateProductModal';
 import TypeableProductSelect from './TypeableProductSelect';
+import TypeableVendorSelect from './TypeableVendorSelect';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -825,6 +826,53 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   const handleItemChange = (idx, field, val) => {
     setItems(prev => (prev || []).map((it, i) => i === idx ? { ...it, [field]: val } : it));
+  };
+
+  const handleVendorChange = (val, vendorObj) => {
+    setVendorName(val);
+    const found = vendorObj || (zohoVendors || []).find(v => (v.name || '').trim().toLowerCase() === (val || '').trim().toLowerCase());
+    if (found) {
+      setContactPerson(found.contact || found.contactPerson || '');
+      setContactNo(found.phone || found.mobile || '');
+      setEmail(found.email || '');
+      setGstNo(found.gstin || found.gstNo || '33ABCDE1234F1Z5');
+      const vLocs = getVendorLocations(found);
+      if (vLocs.length > 0) {
+        const reg = vLocs.find(l => l.id === 'registered_office') || vLocs[0];
+        const ship = vLocs.find(l => l.id === 'factory_plant') || vLocs[1] || reg;
+        setBillingLocationId(reg.id);
+        setBillingAddress1(reg.address1 || '');
+        setBillingAddress2(reg.address2 || '');
+        setBillingCity(reg.city || '');
+        setBillingState(reg.state || '');
+        setBillingPincode(reg.pincode || '');
+        setBillingAddress(formatAddressObj(reg));
+
+        setDeliveryLocationId(ship.id);
+        setDeliveryAddress1(ship.address1 || '');
+        setDeliveryAddress2(ship.address2 || '');
+        setDeliveryCity(ship.city || '');
+        setDeliveryState(ship.state || '');
+        setDeliveryPincode(ship.pincode || '');
+        setDeliveryAddress(formatAddressObj(ship));
+      } else {
+        const vAddr = found.billingAddress || found.address || found.registeredAddress || `${val}, Main Road, Industrial Estate, Tamil Nadu - 600028`;
+        setBillingAddress(vAddr);
+        const parsedV = parseAddressString(vAddr);
+        setBillingAddress1(found.billingAddress1 || found.address1 || parsedV.address1 || '');
+        setBillingAddress2(found.billingAddress2 || found.address2 || parsedV.address2 || '');
+        setBillingCity(found.billingCity || found.city || parsedV.city || '');
+        setBillingState(found.billingState || found.state || parsedV.state || '');
+        setBillingPincode(found.billingPincode || found.pincode || parsedV.pincode || '');
+
+        setDeliveryAddress1(found.billingAddress1 || found.address1 || parsedV.address1 || '');
+        setDeliveryAddress2(found.billingAddress2 || found.address2 || parsedV.address2 || '');
+        setDeliveryCity(found.billingCity || found.city || parsedV.city || '');
+        setDeliveryState(found.billingState || found.state || parsedV.state || '');
+        setDeliveryPincode(found.billingPincode || found.pincode || parsedV.pincode || '');
+        setDeliveryAddress(vAddr);
+      }
+    }
   };
 
   const [formErrors, setFormErrors] = useState({});
@@ -4409,63 +4457,16 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     <label htmlFor="purchase-orders-company-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Company Name <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <select id="purchase-orders-company-name" name="companyName" aria-label="Company Name"
+                    <TypeableVendorSelect
+                      id="purchase-orders-company-name"
+                      name="companyName"
                       value={vendorName}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setVendorName(val);
-                        const found = zohoVendors.find(v => v.name === val);
-                        if (found) {
-                          setContactPerson(found.contact || '');
-                          setContactNo(found.phone || found.mobile || '');
-                          setEmail(found.email || '');
-                          setGstNo(found.gstin || found.gstNo || '33ABCDE1234F1Z5');
-                          const vLocs = getVendorLocations(found);
-                          if (vLocs.length > 0) {
-                            const reg = vLocs.find(l => l.id === 'registered_office') || vLocs[0];
-                            const ship = vLocs.find(l => l.id === 'factory_plant') || vLocs[1] || reg;
-                            setBillingLocationId(reg.id);
-                            setBillingAddress1(reg.address1 || '');
-                            setBillingAddress2(reg.address2 || '');
-                            setBillingCity(reg.city || '');
-                            setBillingState(reg.state || '');
-                            setBillingPincode(reg.pincode || '');
-                            setBillingAddress(formatAddressObj(reg));
-
-                            setDeliveryLocationId(ship.id);
-                            setDeliveryAddress1(ship.address1 || '');
-                            setDeliveryAddress2(ship.address2 || '');
-                            setDeliveryCity(ship.city || '');
-                            setDeliveryState(ship.state || '');
-                            setDeliveryPincode(ship.pincode || '');
-                            setDeliveryAddress(formatAddressObj(ship));
-                          } else {
-                            const vAddr = found.billingAddress || found.address || found.registeredAddress || `${val}, Main Road, Industrial Estate, Tamil Nadu - 600028`;
-                            setBillingAddress(vAddr);
-                            const parsedV = parseAddressString(vAddr);
-                            setBillingAddress1(found.billingAddress1 || found.address1 || parsedV.address1 || '');
-                            setBillingAddress2(found.billingAddress2 || found.address2 || parsedV.address2 || '');
-                            setBillingCity(found.billingCity || found.city || parsedV.city || '');
-                            setBillingState(found.billingState || found.state || parsedV.state || '');
-                            setBillingPincode(found.billingPincode || found.pincode || parsedV.pincode || '');
-
-                            setDeliveryAddress1(found.billingAddress1 || found.address1 || parsedV.address1 || '');
-                            setDeliveryAddress2(found.billingAddress2 || found.address2 || parsedV.address2 || '');
-                            setDeliveryCity(found.billingCity || found.city || parsedV.city || '');
-                            setDeliveryState(found.billingState || found.state || parsedV.state || '');
-                            setDeliveryPincode(found.billingPincode || found.pincode || parsedV.pincode || '');
-                            setDeliveryAddress(vAddr);
-                          }
-                        }
-                      }}
+                      vendors={zohoVendors}
+                      placeholder="Type or select Vendor..."
                       required
-                      style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', width: '100%', cursor: 'pointer', outline: 'none' }}
-                    >
-                      <option value="" disabled>Select Vendor...</option>
-                      {zohoVendors.map((v, idx) => (
-                        <option key={idx} value={v.name}>{v.name}</option>
-                      ))}
-                    </select>
+                      accentColor="#2563EB"
+                      onChange={handleVendorChange}
+                    />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-branch" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Branch / Location</label>
