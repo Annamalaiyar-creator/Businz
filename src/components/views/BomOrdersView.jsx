@@ -343,11 +343,12 @@ export default function BomOrdersView(props) {
       const saved = sessionStorage.getItem('controlroom_bom_initial_date_filter');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.targetKeys && parsed.targetKeys.length > 0) {
+        if (parsed.targetKeys && Array.isArray(parsed.targetKeys)) {
           return {
             targetKeys: new Set(parsed.targetKeys),
             periodLabel: parsed.periodLabel || 'Overview',
-            count: parsed.count || parsed.targetKeys.length
+            sourceLabel: parsed.sourceLabel || '',
+            count: parsed.count ?? parsed.targetKeys.length
           };
         }
       }
@@ -381,12 +382,14 @@ export default function BomOrdersView(props) {
       if (e?.detail) {
         if (e.detail.startDate !== undefined) setFilterDateVal(e.detail.startDate || '');
         if (e.detail.endDate !== undefined) setFilterEndDateVal(e.detail.endDate || '');
-        if (e.detail.targetKeys && Array.isArray(e.detail.targetKeys) && e.detail.targetKeys.length > 0) {
+        if (e.detail.targetKeys && Array.isArray(e.detail.targetKeys)) {
           setKpiFilterMeta({
             targetKeys: new Set(e.detail.targetKeys),
             periodLabel: e.detail.periodLabel || 'Overview',
-            count: e.detail.count || e.detail.targetKeys.length
+            sourceLabel: e.detail.sourceLabel || '',
+            count: e.detail.count ?? e.detail.targetKeys.length
           });
+          setActiveSubTab('All');
         }
         setCurrentPage(1);
       }
@@ -2675,12 +2678,16 @@ export default function BomOrdersView(props) {
 
     // KPI Filter from Overview
     let matchesKpi = true;
-    if (kpiFilterMeta && kpiFilterMeta.targetKeys && kpiFilterMeta.targetKeys.size > 0) {
-      const bKey1 = String(r.bomCode || '').trim().toLowerCase();
-      const bKey2 = String(r.code || '').trim().toLowerCase();
-      const bKey3 = String(r.id || '').trim().toLowerCase();
-      if (!kpiFilterMeta.targetKeys.has(bKey1) && !kpiFilterMeta.targetKeys.has(bKey2) && !kpiFilterMeta.targetKeys.has(bKey3)) {
+    if (kpiFilterMeta && kpiFilterMeta.targetKeys) {
+      if (kpiFilterMeta.targetKeys.size === 0) {
         matchesKpi = false;
+      } else {
+        const bKey1 = String(r.bomCode || '').trim().toLowerCase();
+        const bKey2 = String(r.code || '').trim().toLowerCase();
+        const bKey3 = String(r.id || '').trim().toLowerCase();
+        if (!kpiFilterMeta.targetKeys.has(bKey1) && !kpiFilterMeta.targetKeys.has(bKey2) && !kpiFilterMeta.targetKeys.has(bKey3)) {
+          matchesKpi = false;
+        }
       }
     }
 
@@ -10036,7 +10043,7 @@ export default function BomOrdersView(props) {
           marginBottom: '8px'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0369A1', fontWeight: '800' }}>
-            <span>Showing <strong>{filteredRows.length}</strong> BOM Orders filtered from Company Overview KPI ({kpiFilterMeta.periodLabel})</span>
+            <span>Showing <strong>{filteredRows.length}</strong> BOM Orders filtered from {kpiFilterMeta.sourceLabel ? `${kpiFilterMeta.sourceLabel} KPI` : 'Company Overview KPI'} ({kpiFilterMeta.periodLabel})</span>
           </div>
           <button
             type="button"

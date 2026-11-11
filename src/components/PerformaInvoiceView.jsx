@@ -141,11 +141,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const saved = sessionStorage.getItem('controlroom_pi_initial_date_filter');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.targetKeys && parsed.targetKeys.length > 0) {
+        if (parsed.targetKeys && Array.isArray(parsed.targetKeys)) {
           return {
             targetKeys: new Set(parsed.targetKeys),
             periodLabel: parsed.periodLabel || 'Overview',
-            count: parsed.count || parsed.targetKeys.length
+            sourceLabel: parsed.sourceLabel || '',
+            count: parsed.count ?? parsed.targetKeys.length
           };
         }
       }
@@ -179,12 +180,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (e?.detail) {
         if (e.detail.startDate !== undefined) setStartDate(e.detail.startDate || '');
         if (e.detail.endDate !== undefined) setEndDate(e.detail.endDate || '');
-        if (e.detail.targetKeys && Array.isArray(e.detail.targetKeys) && e.detail.targetKeys.length > 0) {
+        if (e.detail.targetKeys && Array.isArray(e.detail.targetKeys)) {
           setKpiFilterMeta({
             targetKeys: new Set(e.detail.targetKeys),
             periodLabel: e.detail.periodLabel || 'Overview',
-            count: e.detail.count || e.detail.targetKeys.length
+            sourceLabel: e.detail.sourceLabel || '',
+            count: e.detail.count ?? e.detail.targetKeys.length
           });
+          setPiTab('All');
         }
         setCurrentPage(1);
       }
@@ -3791,7 +3794,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           }
 
           // KPI Filter from Overview
-          if (kpiFilterMeta && kpiFilterMeta.targetKeys && kpiFilterMeta.targetKeys.size > 0) {
+          if (kpiFilterMeta && kpiFilterMeta.targetKeys) {
+            if (kpiFilterMeta.targetKeys.size === 0) {
+              return false;
+            }
             const piKey1 = String(pi.piNo || '').trim().toLowerCase();
             const piKey2 = String(pi.id || '').trim().toLowerCase();
             if (!kpiFilterMeta.targetKeys.has(piKey1) && !kpiFilterMeta.targetKeys.has(piKey2)) {
@@ -4083,7 +4089,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 flexWrap: 'wrap'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
-                  <span>Showing <strong>{filteredPIList.length}</strong> Proforma Invoices filtered from Company Overview KPI ({kpiFilterMeta.periodLabel})</span>
+                  <span>Showing <strong>{filteredPIList.length}</strong> Proforma Invoices filtered from {kpiFilterMeta.sourceLabel ? `${kpiFilterMeta.sourceLabel} KPI` : 'Company Overview KPI'} ({kpiFilterMeta.periodLabel})</span>
                 </div>
                 <button
                   type="button"

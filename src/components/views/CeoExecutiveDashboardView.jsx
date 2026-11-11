@@ -1480,6 +1480,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
     const baseTotal = Math.max(1, activePis.length, activeBoms.length);
 
+    const piKeys = activePis.map(p => String(p.piNo || p.id || '').trim().toLowerCase()).filter(Boolean);
+    const bomKeys = activeBoms.map(b => String(b.bomCode || b.code || b.id || '').trim().toLowerCase()).filter(Boolean);
+    const packedKeys = packedBoms.map(b => String(b.bomCode || b.code || b.id || '').trim().toLowerCase()).filter(Boolean);
+    const accountsKeys = accountsVerifiedBoms.map(b => String(b.bomCode || b.code || b.id || '').trim().toLowerCase()).filter(Boolean);
+    const invoicedKeys = invoicedBoms.map(b => String(b.bomCode || b.code || b.id || '').trim().toLowerCase()).filter(Boolean);
+    const dispatchedKeys = completedDispatchBoms.map(b => String(b.bomCode || b.code || b.id || '').trim().toLowerCase()).filter(Boolean);
+
     return [
       {
         step: 'STEP 01',
@@ -1495,6 +1502,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         bg: '#ECFEFF',
         border: '#A5F3FC',
         targetTab: 'Proforma Invoice',
+        stageType: 'pi',
+        targetKeys: piKeys,
+        sourceLabel: 'Proforma Invoice Stage',
         action: 'Open PIs'
       },
       {
@@ -1511,6 +1521,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         bg: '#F0F9FF',
         border: '#BAE6FD',
         targetTab: 'BOM Orders',
+        stageType: 'bom',
+        targetKeys: bomKeys,
+        sourceLabel: 'BOM Orders Stage',
         action: 'Open BOMs'
       },
       {
@@ -1521,12 +1534,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         value: fmtCompact(packedVal),
         valueLabel: 'Packed Value',
         statusBadge: `${pendingPackingBoms} Pending Packing`,
-        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((packedBoms.length / activeBoms.length) * 100)) : 0,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((packedBoms.length / Math.max(1, activeBoms.length)) * 100)) : 0,
         icon: Package,
         color: '#D97706',
         bg: '#FFFBEB',
         border: '#FDE68A',
-        targetTab: null,
+        targetTab: 'BOM Orders',
+        stageType: 'bom',
+        targetKeys: packedKeys,
+        sourceLabel: 'Dispatch Packing Stage',
         action: 'Packing Queue'
       },
       {
@@ -1537,12 +1553,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         value: fmtCompact(accountsVerifiedVal),
         valueLabel: 'Cleared Value',
         statusBadge: `${pendingAccountsBoms} In Queue`,
-        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((accountsVerifiedBoms.length / activeBoms.length) * 100)) : 0,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((accountsVerifiedBoms.length / Math.max(1, activeBoms.length)) * 100)) : 0,
         icon: ShieldCheck,
         color: '#7C3AED',
         bg: '#F5F3FF',
         border: '#DDD6FE',
-        targetTab: 'Accounts Verification',
+        targetTab: 'BOM Orders',
+        stageType: 'bom',
+        targetKeys: accountsKeys,
+        sourceLabel: 'Accounts Verification Stage',
         action: 'Verify Queue'
       },
       {
@@ -1553,12 +1572,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         value: fmtCompact(invoicedVal),
         valueLabel: 'GST Invoiced',
         statusBadge: `${pendingInvoicingBoms} Awaiting Billing`,
-        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((invoicedBoms.length / activeBoms.length) * 100)) : 0,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((invoicedBoms.length / Math.max(1, activeBoms.length)) * 100)) : 0,
         icon: FileCheck,
         color: '#2563EB',
         bg: '#EFF6FF',
         border: '#BFDBFE',
-        targetTab: 'Invoice Management',
+        targetTab: 'BOM Orders',
+        stageType: 'bom',
+        targetKeys: invoicedKeys,
+        sourceLabel: 'Billing & Invoice Stage',
         action: 'Tax Invoices'
       },
       {
@@ -1569,12 +1591,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         value: fmtCompact(dispatchedVal),
         valueLabel: 'Delivered Value',
         statusBadge: `${awaitingLoadBoms} Ready to Load`,
-        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((completedDispatchBoms.length / activeBoms.length) * 100)) : 0,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((completedDispatchBoms.length / Math.max(1, activeBoms.length)) * 100)) : 0,
         icon: Truck,
         color: '#16A34A',
         bg: '#F0FDF4',
         border: '#BBF7D0',
-        targetTab: null,
+        targetTab: 'BOM Orders',
+        stageType: 'bom',
+        targetKeys: dispatchedKeys,
+        sourceLabel: 'Final Dispatch Stage',
         action: 'Dispatch Log'
       }
     ];
@@ -2180,6 +2205,60 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       } 
     }));
     if (onNavigateTab) onNavigateTab('BOM Orders');
+  };
+
+  const handleNavigateFunnelStage = (stage) => {
+    if (!stage) return;
+    const { start, end } = getPeriodDateRange(selectedPeriod);
+    const targetKeys = stage.targetKeys || [];
+    const periodLabel = selectedPeriod;
+    const sourceLabel = stage.sourceLabel || stage.stage || 'Order-to-Cash';
+
+    if (stage.stageType === 'pi') {
+      try {
+        sessionStorage.setItem('controlroom_pi_initial_date_filter', JSON.stringify({
+          start,
+          end,
+          targetKeys,
+          periodLabel,
+          sourceLabel,
+          count: targetKeys.length
+        }));
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent('controlroom_pi_filter_date', {
+        detail: {
+          startDate: start,
+          endDate: end,
+          targetKeys,
+          periodLabel,
+          sourceLabel,
+          count: targetKeys.length
+        }
+      }));
+      if (onNavigateTab) onNavigateTab(stage.targetTab || 'Proforma Invoice');
+    } else {
+      try {
+        sessionStorage.setItem('controlroom_bom_initial_date_filter', JSON.stringify({
+          start,
+          end,
+          targetKeys,
+          periodLabel,
+          sourceLabel,
+          count: targetKeys.length
+        }));
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent('controlroom_bom_filter_date', {
+        detail: {
+          startDate: start,
+          endDate: end,
+          targetKeys,
+          periodLabel,
+          sourceLabel,
+          count: targetKeys.length
+        }
+      }));
+      if (onNavigateTab) onNavigateTab(stage.targetTab || 'BOM Orders');
+    }
   };
 
   const handleOpenFilteredFullPage = () => {
@@ -4356,20 +4435,19 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           
           {/* Order-to-Cash Lifecycle KPIs (BUSINZ DESIGN SYSTEM) */}
           <CeoKpiGrid kpis={funnelStages.map(stage => {
-            const isClickable = Boolean(stage.targetTab);
             return {
               title: stage.stage.toUpperCase(),
               value: stage.primaryMetric,
               trend: stage.statusBadge,
-              trendUp: isClickable || !stage.statusBadge.toLowerCase().includes('pending'),
-              trendNeutral: stage.statusBadge.toLowerCase().includes('pending') && !isClickable,
+              trendUp: true,
+              trendNeutral: false,
               hideTrendIcon: true,
               icon: stage.icon,
               iconColor: stage.color,
               iconBg: stage.bg,
               bottomPrefix: `${stage.valueLabel} `,
               bottomHighlight: stage.value,
-              onClick: isClickable ? () => onNavigateTab && onNavigateTab(stage.targetTab) : undefined
+              onClick: () => handleNavigateFunnelStage(stage)
             };
           })} />
 
