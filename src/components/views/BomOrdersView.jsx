@@ -398,6 +398,7 @@ export default function BomOrdersView(props) {
     return () => window.removeEventListener('controlroom_bom_filter_date', handleFilterDate);
   }, []);
   const [filterStatusSelect, setFilterStatusSelect] = useState('All');
+  const [filterSalesPerson, setFilterSalesPerson] = useState('All Sales');
   const [activeSubTab, setActiveSubTab] = useState('All');
   const [selectedRows, setSelectedRows] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -2397,6 +2398,14 @@ export default function BomOrdersView(props) {
 
   // Config for BOM Orders Table
   const isSalesBOM = activeTab === 'Sales BOM' || userRole === 'Sales Executive' || activeTab === 'Create BOM';
+  const filterBySelectedSales = (b) => {
+    if (!isCeo || !filterSalesPerson || filterSalesPerson === 'All' || filterSalesPerson === 'All Sales') return true;
+    const sp = (b?.salesPerson || b?.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
+    const clean = getCleanSalesPersonName(sp, b?.salesPersonCode || b?.createdById);
+    const target = filterSalesPerson.trim().toLowerCase();
+    return clean.toLowerCase() === target || clean.toLowerCase().includes(target);
+  };
+
   const pageConfig = {
     title: isCeo ? 'All Bill of Materials (BOM) — Master Register' :
            activeTab === 'Sales BOM' ? 'Sales Bill of Materials (BOM)' :
@@ -2412,13 +2421,13 @@ export default function BomOrdersView(props) {
     actionText: 'Create BOM',
     searchPlaceholder: `Search ${activeTab} (BOM Code, Customer Name, Product)...`,
     tabs: isCeo ? [
-      { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
-      { id: 'sales_confirmation_pending', label: 'Sales Confirmation Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Sales Confirmation Pending').length, bg: '#f1f5f9', fg: '#475569' },
-      { id: 'dispatch_packing_pending', label: 'Dispatch Packing Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Dispatch Packing Pending').length, bg: '#fef3c7', fg: '#b45309' },
-      { id: 'accounts_verification_pending', label: 'Accounts Verification Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Accounts Verification Pending').length, bg: '#f3e8ff', fg: '#7e22ce' },
-      { id: 'invoice_pending', label: 'Invoice Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Invoice Pending').length, bg: '#dbeafe', fg: '#1d4ed8' },
-      { id: 'vehicle_loading_pending', label: 'Vehicle Loading Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Vehicle Loading Pending').length, bg: '#cffafe', fg: '#0e7490' },
-      { id: 'dispatched', label: 'Dispatched', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Dispatched').length, bg: '#dcfce7', fg: '#166534' }
+      { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel')) && filterBySelectedSales(b)).length, bg: '#e2e8f0', fg: '#475569' },
+      { id: 'sales_confirmation_pending', label: 'Sales Confirmation Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Sales Confirmation Pending' && filterBySelectedSales(b)).length, bg: '#f1f5f9', fg: '#475569' },
+      { id: 'dispatch_packing_pending', label: 'Dispatch Packing Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Dispatch Packing Pending' && filterBySelectedSales(b)).length, bg: '#fef3c7', fg: '#b45309' },
+      { id: 'accounts_verification_pending', label: 'Accounts Verification Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Accounts Verification Pending' && filterBySelectedSales(b)).length, bg: '#f3e8ff', fg: '#7e22ce' },
+      { id: 'invoice_pending', label: 'Invoice Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Invoice Pending' && filterBySelectedSales(b)).length, bg: '#dbeafe', fg: '#1d4ed8' },
+      { id: 'vehicle_loading_pending', label: 'Vehicle Loading Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Vehicle Loading Pending' && filterBySelectedSales(b)).length, bg: '#cffafe', fg: '#0e7490' },
+      { id: 'dispatched', label: 'Dispatched', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Dispatched' && filterBySelectedSales(b)).length, bg: '#dcfce7', fg: '#166534' }
     ] : [
       { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
       { id: 'Pending', label: 'Pending Sales Confirmation', count: (visibleBomStore || []).filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
@@ -2637,6 +2646,17 @@ export default function BomOrdersView(props) {
     })
   };
 
+  const uniqueSalesPersons = React.useMemo(() => {
+    const set = new Set();
+    (pageConfig.rows || []).forEach(r => {
+      const name = String(r.salesPerson || '').trim();
+      if (name && name !== '—' && name !== '-') {
+        set.add(name);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [pageConfig.rows]);
+
   const filteredRows = (pageConfig.rows || []).filter(r => {
     const matchesSearch = !searchQueryText ||
       (r.code && r.code.toLowerCase().includes(searchQueryText.toLowerCase())) ||
@@ -2709,7 +2729,16 @@ export default function BomOrdersView(props) {
       }
     }
 
-    return matchesSearch && matchesTab && matchesDate && matchesKpi;
+    // Sales person filter for CEO
+    let matchesSalesPerson = true;
+    if (isCeo && filterSalesPerson && filterSalesPerson !== 'All' && filterSalesPerson !== 'All Sales') {
+      const targetSp = filterSalesPerson.trim().toLowerCase();
+      const rSp = String(r.salesPerson || '').trim().toLowerCase();
+      const rawSp = String(r.rawSalesPerson || r.createdBy || '').trim().toLowerCase();
+      matchesSalesPerson = (rSp === targetSp) || rSp.includes(targetSp) || (rawSp === targetSp) || rawSp.includes(targetSp);
+    }
+
+    return matchesSearch && matchesTab && matchesDate && matchesKpi && matchesSalesPerson;
   });
 
   // Calculate totals for Create BOM form
@@ -10008,6 +10037,37 @@ export default function BomOrdersView(props) {
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
+          {isCeo && (
+            <select
+              id="bom-orders-sales-filter"
+              name="salesPersonFilter"
+              aria-label="Filter by Sales Person"
+              value={filterSalesPerson}
+              onChange={(e) => {
+                setFilterSalesPerson(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                height: '38px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                padding: '0 24px 0 10px',
+                fontSize: '13px',
+                backgroundColor: '#ffffff',
+                color: filterSalesPerson !== 'All' && filterSalesPerson !== 'All Sales' ? '#0e7490' : '#334155',
+                fontWeight: filterSalesPerson !== 'All' && filterSalesPerson !== 'All Sales' ? '600' : '500',
+                outline: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <option value="All Sales">All Sales</option>
+              {uniqueSalesPersons.map(sp => (
+                <option key={sp} value={sp}>{sp}</option>
+              ))}
+            </select>
+          )}
+
           <ModernDateRangePicker
             startDate={filterDateVal}
             endDate={filterEndDateVal}
@@ -10024,6 +10084,7 @@ export default function BomOrdersView(props) {
               setFilterDateVal('');
               setFilterEndDateVal('');
               setFilterStatusSelect('All');
+              setFilterSalesPerson('All Sales');
               setKpiFilterMeta(null);
               try { sessionStorage.removeItem('controlroom_bom_initial_date_filter'); } catch (_) {}
             }}

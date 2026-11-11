@@ -136,6 +136,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [validationAlert, setValidationAlert] = useState(null); // Interactive Missing Fields popup modal
   const [topToast, setTopToast] = useState(null);
   const toastTimeoutRef = useRef(null);
+  const [filterSalesPerson, setFilterSalesPerson] = useState('All Sales');
   const [kpiFilterMeta, setKpiFilterMeta] = useState(() => {
     try {
       const saved = sessionStorage.getItem('controlroom_pi_initial_date_filter');
@@ -1519,6 +1520,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const clearFilters = () => {
     setSearchQuery('');
     setStatusFilter('All');
+    setFilterSalesPerson('All Sales');
     setStartDate('');
     setEndDate('');
     setKpiFilterMeta(null);
@@ -3733,6 +3735,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       {/* ==================== VIEW 1: LIST DASHBOARD SCREEN ==================== */}
       {viewMode === 'list' && (() => {
         const uniqueStatuses = ['All', ...new Set(visiblePIList.map(pi => pi.status))];
+        const uniqueSalesPersons = Array.from(new Set(
+          (visiblePIList || []).map(pi => {
+            const raw = (pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
+            return raw;
+          }).filter(sp => sp && sp !== '—' && sp !== '-' && !['Direct / Admin', 'undefined', 'null'].includes(sp))
+        )).sort((a, b) => a.localeCompare(b));
+
+        const matchesSelectedSalesPerson = (pi) => {
+          if (!isCeo || !filterSalesPerson || filterSalesPerson === 'All' || filterSalesPerson === 'All Sales') return true;
+          const target = filterSalesPerson.trim().toLowerCase();
+          const sp = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+          return sp === target || sp.includes(target);
+        };
+
         const filteredPIList = (visiblePIList || []).filter(pi => {
           if (!pi) return false;
           const matchedBoms = getConvertedBomsForPi(pi);
@@ -3805,7 +3821,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             }
           }
 
-          return matchesSearch && matchesStatus && matchesTab && matchesDateRange;
+          // Sales person filter for CEO
+          const matchesSalesPerson = matchesSelectedSalesPerson(pi);
+
+          return matchesSearch && matchesStatus && matchesTab && matchesDateRange && matchesSalesPerson;
         });
 
         const indexOfLastRow = currentPage * rowsPerPage;
@@ -4030,6 +4049,41 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 justifyContent: isMobile ? 'space-between' : 'flex-end',
                 flexShrink: 0
               }}>
+                {/* Sales Person Filter for CEO */}
+                {isCeo && (
+                  <select
+                    id="performa-invoice-sales-filter"
+                    name="salesPersonFilter"
+                    aria-label="Filter by Sales Person"
+                    value={filterSalesPerson}
+                    onChange={(e) => {
+                      setFilterSalesPerson(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    style={{
+                      height: '38px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      padding: '0 24px 0 10px',
+                      fontSize: '13px',
+                      backgroundColor: 'white',
+                      color: filterSalesPerson !== 'All' && filterSalesPerson !== 'All Sales' ? '#0e7490' : '#334155',
+                      fontWeight: filterSalesPerson !== 'All' && filterSalesPerson !== 'All Sales' ? '600' : '500',
+                      minWidth: isMobile ? '110px' : '140px',
+                      flex: isMobile ? '1 1 auto' : 'none',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="All Sales">All Sales</option>
+                    {uniqueSalesPersons.map(sp => (
+                      <option key={sp} value={sp}>
+                        {sp}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
                 {/* Modern Date Range Picker */}
                 <div style={{ flex: isMobile ? '1 1 auto' : 'none' }}>
                   <ModernDateRangePicker
@@ -4132,7 +4186,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 paddingBottom: isMobile ? '6px' : '0'
               }}>
                 {[
-                  { id: 'All', label: 'All Invoices (Total Sent)', count: visiblePIList.length },
+                  { id: 'All', label: 'All Invoices (Total Sent)', count: visiblePIList.filter(matchesSelectedSalesPerson).length },
                   { id: 'Issued', label: 'Issued / Active', count: visiblePIList.filter(pi => {
                     if (pi.status === 'Draft' || pi.statusType === 'draft' || pi.status === 'Cancelled') return false;
                     const matchedBoms = getConvertedBomsForPi(pi);
@@ -4144,7 +4198,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       pi.convertedBomNo
                     );
                     const isConverted = matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM');
-                    return !isConverted;
+                    return !isConverted && matchesSelectedSalesPerson(pi);
                   }).length },
                   { id: 'Converted to BOM', label: 'Converted to BOM', count: visiblePIList.filter(pi => {
                     if (pi.status === 'Draft' || pi.statusType === 'draft') return false;
@@ -4156,10 +4210,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       pi.convertedBomCode || 
                       pi.convertedBomNo
                     );
-                    return matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM');
+                    return matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM') && matchesSelectedSalesPerson(pi);
                   }).length },
-                  { id: 'Cancelled', label: 'Cancelled', count: visiblePIList.filter(pi => pi.status === 'Cancelled').length },
-                  { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => pi.status === 'Draft' || pi.statusType === 'draft').length }
+                  { id: 'Cancelled', label: 'Cancelled', count: visiblePIList.filter(pi => pi.status === 'Cancelled' && matchesSelectedSalesPerson(pi)).length },
+                  { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => (pi.status === 'Draft' || pi.statusType === 'draft') && matchesSelectedSalesPerson(pi)).length }
                 ].map(tab => (
                   <button
                     key={tab.id}
