@@ -7702,7 +7702,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       .filter(s => !s.isPreset)
                       .flatMap(s => s.items)
                       .reduce((sum, { item }) => {
-                        const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.bomQty || item.quantity || 0)) || 0;
+                        const q = (parseFloat(item.totalDispatchQty) > 0 ? parseFloat(item.totalDispatchQty) : (parseFloat(item.qty || item.bomQty || item.quantity || 0) || 0));
                         const r = parseFloat(item.rate || item.price || 0) || 0;
                         return sum + (q * r);
                       }, 0);
@@ -7840,7 +7840,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
                                       {/* Individual Component Items */}
                                       {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                        const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.bomQty || it.quantity || 0)) || 0;
+                                        const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0));
                                         const r = parseFloat(it.rate || it.price || 0) || 0;
                                         const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                         const taxRate = parseFloat(taxRateStr) || gstPct;
@@ -7917,7 +7917,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
                                 // CUSTOM / STANDALONE PRODUCTS SECTION
                                 const customSecTaxable = sec.items.reduce((sum, { item }) => {
-                                  const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.bomQty || item.quantity || 0)) || 0;
+                                  const q = (parseFloat(item.totalDispatchQty) > 0 ? parseFloat(item.totalDispatchQty) : (parseFloat(item.qty || item.bomQty || item.quantity || 0) || 0));
                                   const r = parseFloat(item.rate || item.price || 0) || 0;
                                   return sum + (q * r);
                                 }, 0);
@@ -7951,7 +7951,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                     </tr>
 
                                     {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                      const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.bomQty || it.quantity || 0)) || 0;
+                                      const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0));
                                       const r = parseFloat(it.rate || it.price || 0) || 0;
                                       const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                       const taxRate = parseFloat(taxRateStr) || 18;

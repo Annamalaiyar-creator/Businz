@@ -7086,7 +7086,7 @@ export default function BomOrdersView(props) {
                 .filter(s => !s.isPreset)
                 .flatMap(s => s.items)
                 .reduce((sum, { item }) => {
-                  const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.quantity || 0)) || 0;
+                  const q = (parseFloat(item.totalDispatchQty) > 0 ? parseFloat(item.totalDispatchQty) : (parseFloat(item.qty || item.quantity || item.bomQty || 0) || 0));
                   const r = parseFloat(item.rate || item.price || 0) || 0;
                   return sum + (q * r);
                 }, 0);
@@ -7224,7 +7224,7 @@ export default function BomOrdersView(props) {
 
                                 {/* Individual Component Items */}
                                 {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                  const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.quantity || 0)) || 0;
+                                  const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.quantity || it.bomQty || 0) || 0));
                                   const r = parseFloat(it.rate || it.price || 0) || 0;
                                   const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                   const taxRate = parseFloat(taxRateStr) || gstPct;
@@ -7301,7 +7301,7 @@ export default function BomOrdersView(props) {
 
                           // CUSTOM / STANDALONE PRODUCTS SECTION
                           const customSecTaxable = sec.items.reduce((sum, { item }) => {
-                            const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.quantity || 0)) || 0;
+                            const q = (parseFloat(item.totalDispatchQty) > 0 ? parseFloat(item.totalDispatchQty) : (parseFloat(item.qty || item.quantity || item.bomQty || 0) || 0));
                             const r = parseFloat(item.rate || item.price || 0) || 0;
                             return sum + (q * r);
                           }, 0);
@@ -7335,7 +7335,7 @@ export default function BomOrdersView(props) {
                               </tr>
 
                               {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.quantity || 0)) || 0;
+                                const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.quantity || it.bomQty || 0) || 0));
                                 const r = parseFloat(it.rate || it.price || 0) || 0;
                                 const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                 const taxRate = parseFloat(taxRateStr) || 18;
@@ -13628,7 +13628,7 @@ export default function BomOrdersView(props) {
                       .filter(s => !s.isPreset)
                       .flatMap(s => s.items)
                       .reduce((sum, { item }) => {
-                        const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.bomQty || item.quantity || 0)) || 0;
+                        const q = (parseFloat(item.totalDispatchQty) > 0 ? parseFloat(item.totalDispatchQty) : (parseFloat(item.qty || item.bomQty || item.quantity || 0) || 0));
                         const r = parseFloat(item.rate || item.price || 0) || 0;
                         return sum + (q * r);
                       }, 0);
@@ -13742,7 +13742,7 @@ export default function BomOrdersView(props) {
 
                                       {/* Preset Item Rows */}
                                       {sec.items.map(({ item: it, originalIndex }, pIdx) => {
-                                        const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.bomQty || it.quantity || 0)) || 0;
+                                        const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0));
                                         const r = parseFloat(it.rate || it.price || 0) || 0;
                                         const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                         const taxRate = parseFloat(taxRateStr) || 18;
@@ -13824,7 +13824,7 @@ export default function BomOrdersView(props) {
 
                                 // CUSTOM / STANDALONE PRODUCTS SECTION
                                 const customSecTaxable = sec.items.reduce((sum, { item }) => {
-                                  const q = parseFloat(item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '' ? item.totalDispatchQty : (item.qty || item.bomQty || item.quantity || 0)) || 0;
+                                  const q = (parseFloat(item.totalDispatchQty) > 0 ? parseFloat(item.totalDispatchQty) : (parseFloat(item.qty || item.bomQty || item.quantity || 0) || 0));
                                   const r = parseFloat(item.rate || item.price || 0) || 0;
                                   return sum + (q * r);
                                 }, 0);
@@ -13858,7 +13858,7 @@ export default function BomOrdersView(props) {
                                     </tr>
 
                                     {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                      const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && (it.qty || it.bomQty || it.quantity || 0)) || 0;
+                                      const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0));
                                       const r = parseFloat(it.rate || it.price || 0) || 0;
                                       const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                       const taxRate = parseFloat(taxRateStr) || 18;
