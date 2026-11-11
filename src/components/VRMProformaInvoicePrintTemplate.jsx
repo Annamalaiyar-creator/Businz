@@ -1339,37 +1339,6 @@ export function VRMProformaInvoicePrintSheet({
               const halfAmt = it.gstAmt / 2;
               return (
                 <React.Fragment key={idx}>
-                  {it.isPresetItem && it.isFirstInGroup && (
-                    <tr key={`preset_hdr_${it.grpId || idx}`} style={{ backgroundColor: '#F0F7FF', borderTop: '2px solid #0B3B60', borderBottom: '1px solid #CBD5E1' }}>
-                      <td colSpan={isIntra ? 8 : 7} style={{ padding: '6px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                          <div>
-                            📦 {it.presetName || 'Solar Structure MMS Kit'}
-                            <span style={{
-                              fontSize: '9px',
-                              fontWeight: '800',
-                              color: '#0E7490',
-                              backgroundColor: '#E0F2FE',
-                              padding: '1px 8px',
-                              borderRadius: '4px',
-                              marginLeft: '8px',
-                              border: '1px solid #BAE6FD'
-                            }}>
-                              {it.setCount} {it.groupUnit === 'kW' ? 'kW' : (parseFloat(it.setCount) > 1 ? 'Sets' : 'Set')}
-                            </span>
-                            {it.groupCount ? (
-                              <span style={{ fontSize: '8.5px', fontWeight: '600', color: '#64748B', marginLeft: '6px' }}>
-                                ({it.groupCount} components included)
-                              </span>
-                            ) : null}
-                          </div>
-                          <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0B3B60' }}>
-                            Rate: ₹ {Number(it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} / {it.groupUnit === 'kW' ? 'kW' : 'Set'}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
                   <tr style={{ backgroundColor: 'transparent' }}>
                     <td style={{
                       padding: '7px 10px',
