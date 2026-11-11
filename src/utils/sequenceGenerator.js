@@ -156,9 +156,9 @@ export function getNextSequence(moduleType, records = [], date = new Date()) {
 }
 
 /**
- * Helper to match any BOM code (both new VRM-BOM-YYYY-XX and legacy BOM-XXX)
+ * Helper to match any BOM code (both new VRMS/BOM/YY-YY/XXX, legacy VRM-BOM-YYYY-XX and BOM-XXX)
  */
-export const BOM_CODE_REGEX = /^(?:VRM-BOM-\d{4}-\d+|BOM-\d+)$/i;
+export const BOM_CODE_REGEX = /^(?:VRMS\/BOM\/\d{2}-\d{2}\/\d+|VRM-BOM-\d{4}-\d+|BOM-\d+)$/i;
 
 /**
  * Helper to match any Invoice code (both new VRM-INV-YYYY-XX and legacy INV-XXXXXX)

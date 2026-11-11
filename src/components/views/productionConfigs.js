@@ -507,7 +507,21 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                   // Format Total Amount
                   let totalAmtFormatted = '—';
-                  const rawAmt = Number(acc.totalAmount || b.grandTotal || b.subTotal || b.totalAmount || 0);
+                  const computedItemsSum = Array.isArray(b.items) && b.items.length > 0
+                    ? b.items.reduce((sum, it) => sum + ((parseFloat(it.qty || it.bomQty || it.quantity || 0) * parseFloat(it.rate || it.price || it.unitPrice || 0)) || 0), 0)
+                    : 0;
+                  const rawAmt = Number(
+                    acc.totalAmount || 
+                    b.grandTotal || 
+                    b.subTotal || 
+                    b.totalAmount || 
+                    b.amount || 
+                    b.total || 
+                    b.kitSubtotal || 
+                    b.presetKitPrice || 
+                    (computedItemsSum > 0 ? (computedItemsSum * 1.18) : 0) || 
+                    0
+                  );
                   if (rawAmt > 0) {
                     totalAmtFormatted = `₹ ${rawAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
                   }

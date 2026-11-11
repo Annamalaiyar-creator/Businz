@@ -2092,7 +2092,7 @@ export async function getAndReserveNextBomCode(commit = true) {
     if (apiRes && apiRes.ok) {
       const data = await apiRes.json().catch(() => null);
       const resolved = data?.nextBomCode || data?.nextCode;
-      if (resolved && (/^VRM-BOM-\d{4}-\d+$/i.test(resolved) || /^BOM-\d+$/i.test(resolved))) {
+      if (resolved && (/^VRMS\/BOM\/\d{2}-\d{2}\/\d+$/i.test(resolved) || /^VRM-BOM-\d{4}-\d+$/i.test(resolved) || /^BOM-\d+$/i.test(resolved))) {
         return resolved;
       }
     }

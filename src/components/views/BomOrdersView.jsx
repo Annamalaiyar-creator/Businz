@@ -1978,7 +1978,8 @@ export default function BomOrdersView(props) {
       }
 
       // 1. Calculate synchronous fallback BOM code immediately from local store
-      const initialCode = getNextSequence(bomStore, 'BOM');
+      const initialSeq = getNextSequence('BOM', bomStore || []);
+      const initialCode = (initialSeq && typeof initialSeq === 'object') ? initialSeq.code : initialSeq;
       setNewBomCode(initialCode);
 
       // 2. Sales Person
@@ -2207,7 +2208,7 @@ export default function BomOrdersView(props) {
 
       // 9. Non-blocking asynchronous refinement of atomic BOM code from server sequence
       getAndReserveNextBomCode(false).then(reservedCode => {
-        if (reservedCode && (reservedCode.startsWith('VRM-BOM-') || /^BOM-\d+$/i.test(reservedCode))) {
+        if (reservedCode && (reservedCode.startsWith('VRMS/BOM/') || reservedCode.startsWith('VRM-BOM-') || /^BOM-\d+$/i.test(reservedCode))) {
           setNewBomCode(reservedCode);
         }
       }).catch(err => {
@@ -6226,15 +6227,17 @@ export default function BomOrdersView(props) {
                         }
 
                         // 2. Offline / Direct fallback to atomic Supabase Sequence
-                        if (!finalAssignedCode || (!finalAssignedCode.startsWith('VRM-BOM-') && !/^BOM-\d+$/i.test(finalAssignedCode))) {
+                        const isValidBomCode = (c) => Boolean(c && (c.startsWith('VRMS/BOM/') || c.startsWith('VRM-BOM-') || /^BOM-\d+$/i.test(c)));
+                        if (!finalAssignedCode || !isValidBomCode(finalAssignedCode)) {
                           try {
                             const reservedCode = await getAndReserveNextBomCode(true);
-                            if (reservedCode && (reservedCode.startsWith('VRM-BOM-') || /^BOM-\d+$/i.test(reservedCode))) {
+                            if (reservedCode && isValidBomCode(reservedCode)) {
                               finalAssignedCode = reservedCode;
                             }
                           } catch (err) {
                             console.error('Error reserving atomic BOM code from Supabase:', err);
-                            finalAssignedCode = getNextSequence(bomStore, 'BOM');
+                            const fallbackSeq = getNextSequence('BOM', bomStore || []);
+                            finalAssignedCode = (fallbackSeq && typeof fallbackSeq === 'object') ? fallbackSeq.code : fallbackSeq;
                           }
                         }
 

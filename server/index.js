@@ -54,6 +54,7 @@ import {
   extractMaxSequence,
   getNextSequence
 } from './sequenceService.js';
+import { renumberBoms554And555 } from '../scripts/renumber_boms_554_555.js';
 import {
   verifyPasswordVerifier,
   hashPassword,
@@ -5397,14 +5398,14 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
           try {
             const dbRes = await query(`
               SELECT bom_code FROM public.bom_orders
-              WHERE bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
+              WHERE bom_code ~ '^VRMS/BOM/[0-9]{2}-[0-9]{2}/[0-9]+$' OR bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$' OR bom_code ~ '^VRM-BOM-[0-9]+$'
             `).catch(() => null);
             if (dbRes?.rows) records.push(...dbRes.rows);
 
             // Also check proforma_invoices for any converted_bom_code
             const piDbRes = await query(`
               SELECT converted_bom_code FROM public.proforma_invoices
-              WHERE converted_bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
+              WHERE converted_bom_code ~ '^VRMS/BOM/[0-9]{2}-[0-9]{2}/[0-9]+$' OR converted_bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$' OR converted_bom_code ~ '^VRM-BOM-[0-9]+$'
             `).catch(() => null);
             if (piDbRes?.rows) records.push(...piDbRes.rows);
           } catch (dbErr) {
@@ -5484,7 +5485,15 @@ app.post('/api/boms/reserve-code', async (req, res) => {
   }
 });
 
-// Dedicated endpoint to reset BOM, PI, Dispatch, Accounts Verification, and Invoice Ledger data - DISABLED
+// Dedicated endpoint to repair legacy BOM-1132 and BOM-1166 to standard VRMS/BOM/26-27/554 & 555
+app.post('/api/boms/repair-sequence-554-555', async (req, res) => {
+  try {
+    const result = await renumberBoms554And555();
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 // Protection 4: /api/reset-bom-workflow-data disabled with HTTP 403
 app.post('/api/reset-bom-workflow-data', async (req, res) => {
   return res.status(403).json({
@@ -6439,8 +6448,8 @@ app.post('/api/boms', async (req, res) => {
 
           let targetCode = incomingCode;
           if (!targetCode || isNew || !currentList.some(b => (b.bomCode || b.code || b.id) === targetCode)) {
-            const nextNum = currentList.length + 662;
-            targetCode = incomingCode || `VRM-BOM-${nextNum}`;
+            const nextNum = extractMaxSequence('BOM', getFinancialYear(), currentList) + 1;
+            targetCode = incomingCode || formatSequenceCode('BOM', nextNum);
           }
           bom.bomCode = targetCode;
           bom.code = targetCode;
@@ -11344,6 +11353,11 @@ if (process.env.BUSINZ_SKIP_LISTEN === 'true') {
         broadcastRealtimeEvent('whatsapp_chats_updated', { count: chatsList.length, chats: chatsList });
       }
     }).catch(() => {});
+
+    // Ensure legacy BOM numbers 1132 and 1166 are safely renumbered to standard 554 and 555
+    setTimeout(() => {
+      renumberBoms554And555().catch(e => console.warn('[BOM Auto-Renumber]:', e.message));
+    }, 2000);
   });
 }
 
