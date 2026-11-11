@@ -868,6 +868,8 @@ export function toConsumerBom(row) {
       row.sales_confirmed ||
       row.salesConfirmed ||
       row.salesReconfirmed ||
+      extraData.salesConfirmed ||
+      extraData.salesReconfirmed ||
       (typeof row.status === 'string' && (
         row.status.toLowerCase().includes('sales confirmed') ||
         row.status.toLowerCase().includes('sent to dispatch') ||
@@ -878,13 +880,34 @@ export function toConsumerBom(row) {
         row.status.toLowerCase().includes('dispatched')
       ))
     ),
-    salesConfirmedAt: row.sales_confirmed_at || (Boolean(
+    salesReconfirmed: Boolean(
+      row.sales_reconfirmed ||
+      row.salesReconfirmed ||
+      extraData.salesReconfirmed ||
       row.sales_confirmed ||
+      row.salesConfirmed ||
+      extraData.salesConfirmed ||
+      (typeof row.status === 'string' && (
+        row.status.toLowerCase().includes('sales confirmed') ||
+        row.status.toLowerCase().includes('sent to dispatch') ||
+        row.status.toLowerCase().includes('sent to production') ||
+        row.status.toLowerCase().includes('packed') ||
+        row.status.toLowerCase().includes('accounts verified') ||
+        row.status.toLowerCase().includes('invoice') ||
+        row.status.toLowerCase().includes('dispatched')
+      ))
+    ),
+    salesConfirmedAt: row.sales_confirmed_at || extraData.salesConfirmedAt || (Boolean(
+      row.sales_confirmed ||
+      row.sales_reconfirmed ||
+      extraData.salesConfirmed ||
+      extraData.salesReconfirmed ||
       (typeof row.status === 'string' && (
         row.status.toLowerCase().includes('sales confirmed') ||
         row.status.toLowerCase().includes('sent to dispatch')
       ))
     ) ? (row.created_at || new Date().toISOString()) : null),
+    reconfirmedAt: row.reconfirmed_at || extraData.reconfirmedAt || row.sales_confirmed_at || extraData.salesConfirmedAt || null,
     salesPerson: salesRep,
     salesPersonCode: salesPersonCode,
     c8: salesRep,
@@ -990,7 +1013,7 @@ export function toDatabaseBomRow(item) {
     'deliveryAddressProofDoc', 'transportMode', 'transportScope',
     'transporterName', 'vehicleNo', 'lrNo', 'paymentType', 'partialAmount',
     'balanceAmount', 'creditDays', 'creditDueDate', 'paymentProofDoc',
-    'remarks', 'status', 'salesConfirmed', 'salesConfirmedAt', 'salesPerson',
+    'remarks', 'status', 'salesConfirmed', 'salesConfirmedAt', 'salesReconfirmed', 'reconfirmedAt', 'salesPerson',
     'salesPersonCode', 'createdBy', 'createdById', 'items', 'payments',
     'dispatchPacking', 'accountsVerification', 'invoiceConfirmed',
     'invoiceDeducted', 'stockBlocked', 'stockBlockedAt', 'presetName',
@@ -1013,6 +1036,9 @@ export function toDatabaseBomRow(item) {
   if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
   if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
   if (item.lrCopyDoc) mergedExtra.lrCopyDoc = item.lrCopyDoc;
+  if (item.salesReconfirmed !== undefined) mergedExtra.salesReconfirmed = Boolean(item.salesReconfirmed);
+  if (item.reconfirmedAt) mergedExtra.reconfirmedAt = item.reconfirmedAt;
+  if (item.salesConfirmedAt) mergedExtra.salesConfirmedAt = item.salesConfirmedAt;
   if (item.packingStatus) mergedExtra.packingStatus = item.packingStatus;
   if (item.packedAt) mergedExtra.packedAt = item.packedAt;
   if (item.packedBy) mergedExtra.packedBy = item.packedBy;
@@ -1182,13 +1208,21 @@ export async function saveCloudBomRow(bom) {
       const baseUrl = (typeof window !== 'undefined' && window.location?.origin) ? '' : (process.env.BUSINZ_TEST_API_URL || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : ''));
       if (baseUrl !== undefined) {
         const sesId = typeof window !== 'undefined' && window.localStorage
-          ? localStorage.getItem('controlroom_device_session_id')
+          ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
           : null;
+        const curRole = typeof window !== 'undefined' && window.localStorage
+          ? (localStorage.getItem('controlroom_user_role') || 'Sales')
+          : 'Sales';
+        const curEmp = typeof window !== 'undefined' && window.localStorage
+          ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
+          : 'SE-001';
         fetch(`${baseUrl}/api/boms`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(sesId ? { 'x-session-id': sesId } : {})
+            ...(sesId ? { 'x-session-id': sesId } : {}),
+            'x-user-role': curRole,
+            'x-employee-code': curEmp
           },
           body: JSON.stringify({ bom: consumerBom, isUpdate: true })
         }).catch(() => {});
@@ -1900,7 +1934,7 @@ export function getWorkflowRank(b) {
   if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
   if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
   // Sales confirmed BOM
-  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
+  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed || b.salesReconfirmed) return 10;
   return 1;
 }
 
@@ -1971,9 +2005,26 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
         continue;
       }
 
+      const isSalesConf = Boolean(
+        existing.salesConfirmed || b.salesConfirmed ||
+        existing.salesReconfirmed || b.salesReconfirmed ||
+        (existing.status && String(existing.status).toLowerCase().includes('sales confirmed')) ||
+        (b.status && String(b.status).toLowerCase().includes('sales confirmed')) ||
+        (existing.status && String(existing.status).toLowerCase().includes('dispatch')) ||
+        (b.status && String(b.status).toLowerCase().includes('dispatch'))
+      );
+      const isSalesReconf = Boolean(
+        existing.salesReconfirmed || b.salesReconfirmed ||
+        existing.salesConfirmed || b.salesConfirmed
+      );
+
       resolvedList[idx] = newRank >= existingRank ? {
         ...existing,
         ...b,
+        salesConfirmed: isSalesConf,
+        salesReconfirmed: isSalesReconf,
+        salesConfirmedAt: b.salesConfirmedAt || existing.salesConfirmedAt || b.reconfirmedAt || existing.reconfirmedAt || null,
+        reconfirmedAt: b.reconfirmedAt || existing.reconfirmedAt || b.salesConfirmedAt || existing.salesConfirmedAt || null,
         dispatchPacking: mergedPacking,
         packingStatus: mergedPackingStatus,
         accountsVerification: {
@@ -1993,6 +2044,10 @@ export function resolveBomCollisions(bomList, sequenceMax = 663) {
       } : {
         ...b,
         ...existing,
+        salesConfirmed: isSalesConf,
+        salesReconfirmed: isSalesReconf,
+        salesConfirmedAt: existing.salesConfirmedAt || b.salesConfirmedAt || existing.reconfirmedAt || b.reconfirmedAt || null,
+        reconfirmedAt: existing.reconfirmedAt || b.reconfirmedAt || existing.salesConfirmedAt || b.salesConfirmedAt || null,
         dispatchPacking: mergedPacking,
         packingStatus: mergedPackingStatus,
         accountsVerification: {

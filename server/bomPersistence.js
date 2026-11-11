@@ -48,7 +48,7 @@ export function getWorkflowRankServer(b) {
   if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
   if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
   if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
-  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
+  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed || b.salesReconfirmed) return 10;
   return 1;
 }
 
@@ -209,6 +209,8 @@ export const toConsumerBomServer = (row) => {
       row.sales_confirmed ||
       row.salesConfirmed ||
       row.salesReconfirmed ||
+      extraData.salesConfirmed ||
+      extraData.salesReconfirmed ||
       (typeof row.status === 'string' && (
         row.status.toLowerCase().includes('sales confirmed') ||
         row.status.toLowerCase().includes('sent to dispatch') ||
@@ -219,13 +221,34 @@ export const toConsumerBomServer = (row) => {
         row.status.toLowerCase().includes('dispatched')
       ))
     ),
-    salesConfirmedAt: row.sales_confirmed_at || (Boolean(
+    salesReconfirmed: Boolean(
+      row.sales_reconfirmed ||
+      row.salesReconfirmed ||
+      extraData.salesReconfirmed ||
       row.sales_confirmed ||
+      row.salesConfirmed ||
+      extraData.salesConfirmed ||
+      (typeof row.status === 'string' && (
+        row.status.toLowerCase().includes('sales confirmed') ||
+        row.status.toLowerCase().includes('sent to dispatch') ||
+        row.status.toLowerCase().includes('sent to production') ||
+        row.status.toLowerCase().includes('packed') ||
+        row.status.toLowerCase().includes('accounts verified') ||
+        row.status.toLowerCase().includes('invoice') ||
+        row.status.toLowerCase().includes('dispatched')
+      ))
+    ),
+    salesConfirmedAt: row.sales_confirmed_at || extraData.salesConfirmedAt || (Boolean(
+      row.sales_confirmed ||
+      row.sales_reconfirmed ||
+      extraData.salesConfirmed ||
+      extraData.salesReconfirmed ||
       (typeof row.status === 'string' && (
         row.status.toLowerCase().includes('sales confirmed') ||
         row.status.toLowerCase().includes('sent to dispatch')
       ))
     ) ? (row.created_at || new Date().toISOString()) : null),
+    reconfirmedAt: row.reconfirmed_at || extraData.reconfirmedAt || row.sales_confirmed_at || extraData.salesConfirmedAt || null,
     salesPerson: salesRep,
     salesPersonCode: salesPersonCode,
     c8: salesRep,
@@ -395,7 +418,7 @@ export const toDatabaseBomRowServer = (item) => {
     'deliveryAddressProofDoc', 'transportMode', 'transportScope',
     'transporterName', 'vehicleNo', 'lrNo', 'paymentType', 'partialAmount',
     'balanceAmount', 'creditDays', 'creditDueDate', 'paymentProofDoc',
-    'remarks', 'status', 'salesConfirmed', 'salesConfirmedAt', 'salesPerson',
+    'remarks', 'status', 'salesConfirmed', 'salesConfirmedAt', 'salesReconfirmed', 'reconfirmedAt', 'salesPerson',
     'salesPersonCode', 'createdBy', 'createdById', 'items', 'payments',
     'dispatchPacking', 'accountsVerification', 'invoiceConfirmed',
     'invoiceDeducted', 'stockBlocked', 'stockBlockedAt', 'presetName',
@@ -418,6 +441,9 @@ export const toDatabaseBomRowServer = (item) => {
   if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
   if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
   if (item.lrCopyDoc) mergedExtra.lrCopyDoc = item.lrCopyDoc;
+  if (item.salesReconfirmed !== undefined) mergedExtra.salesReconfirmed = Boolean(item.salesReconfirmed);
+  if (item.reconfirmedAt) mergedExtra.reconfirmedAt = item.reconfirmedAt;
+  if (item.salesConfirmedAt) mergedExtra.salesConfirmedAt = item.salesConfirmedAt;
   if (item.packingStatus) mergedExtra.packingStatus = item.packingStatus;
   if (item.packedAt) mergedExtra.packedAt = item.packedAt;
   if (item.packedBy) mergedExtra.packedBy = item.packedBy;
@@ -630,7 +656,18 @@ export function mergeBomRecords(existing, incoming) {
         existing.status.toLowerCase().includes('dispatched')
       ))
     ),
-    salesConfirmedAt: incoming.salesConfirmedAt || existing.salesConfirmedAt || null,
+    salesReconfirmed: Boolean(
+      incoming.salesReconfirmed ||
+      incoming.salesConfirmed ||
+      existing.salesReconfirmed ||
+      existing.salesConfirmed ||
+      (typeof incoming.status === 'string' && (
+        incoming.status.toLowerCase().includes('sales confirmed') ||
+        incoming.status.toLowerCase().includes('sent to dispatch')
+      ))
+    ),
+    salesConfirmedAt: incoming.salesConfirmedAt || existing.salesConfirmedAt || incoming.reconfirmedAt || existing.reconfirmedAt || null,
+    reconfirmedAt: incoming.reconfirmedAt || existing.reconfirmedAt || incoming.salesConfirmedAt || existing.salesConfirmedAt || null,
     // Workflow progression safety: do not allow a stale lower-rank status to regress progress,
     // while explicitly honoring legitimate cancellation / stock restoration requests.
     status: (incoming.cancelled || String(incoming.status || '').toLowerCase().includes('cancel') || String(incoming.status || '').toLowerCase().includes('stock restored') || iRank >= eRank)

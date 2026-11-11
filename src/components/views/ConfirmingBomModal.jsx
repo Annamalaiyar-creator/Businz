@@ -282,7 +282,7 @@ export default function ConfirmingBomModal({
 
                 // 2. Update React State and persist locally & to cloud
                 setBomStore(prev => {
-                  const updated = (prev || []).map(b => b.bomCode === confirmingBomModal.bomCode ? { ...b, ...updatedBomRecord } : b);
+                  const updated = (prev || []).map(b => ((b.bomCode && (b.bomCode === confirmingBomModal.bomCode || b.bomCode === confirmingBomModal.id || b.bomCode === confirmingBomModal.code)) || (b.id && (b.id === confirmingBomModal.id || b.id === confirmingBomModal.bomCode)) || (b.code && (b.code === confirmingBomModal.code || b.code === confirmingBomModal.bomCode))) ? { ...b, ...updatedBomRecord } : b);
                   try {
                     localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
                     saveCloudBomRow({ ...confirmingBomModal, ...updatedBomRecord });

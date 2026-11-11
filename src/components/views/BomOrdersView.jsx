@@ -565,6 +565,26 @@ export default function BomOrdersView(props) {
             setBomStore(prev => {
               let mergedCleaned = [...cleaned];
               if (Array.isArray(prev) && prev.length > 0) {
+                const prevMap = new Map();
+                prev.forEach(p => {
+                  const c = p?.bomCode || p?.code || p?.id;
+                  if (c) prevMap.set(c, p);
+                });
+
+                // Prevent stale cloud cache from regressing locally confirmed or advanced orders
+                mergedCleaned = mergedCleaned.map(item => {
+                  const c = item?.bomCode || item?.code || item?.id;
+                  const prevItem = c ? prevMap.get(c) : null;
+                  if (prevItem && (prevItem.salesConfirmed || prevItem.salesReconfirmed || prevItem.status === 'Sales Confirmed - Sent to Dispatch')) {
+                    const prevRank = getWorkflowRank(prevItem);
+                    const itemRank = getWorkflowRank(item);
+                    if (prevRank > itemRank) {
+                      return { ...item, ...prevItem };
+                    }
+                  }
+                  return item;
+                });
+
                 const cleanedCodes = new Set(cleaned.map(b => b?.bomCode || b?.code || b?.id).filter(Boolean));
                 const recentLocalPending = prev.filter(b => {
                   const code = b?.bomCode || b?.code || b?.id;
@@ -7697,15 +7717,28 @@ export default function BomOrdersView(props) {
                   saveCloudBomRow(updatedBomData);
                   try {
                     const sesId = typeof window !== 'undefined' && window.localStorage
-                      ? localStorage.getItem('controlroom_device_session_id')
+                      ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
                       : null;
+                    const curRole = typeof window !== 'undefined' && window.localStorage
+                      ? (localStorage.getItem('controlroom_user_role') || userRole || 'Sales')
+                      : (userRole || 'Sales');
+                    const curEmp = typeof window !== 'undefined' && window.localStorage
+                      ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
+                      : 'SE-001';
+
                     fetch('/api/boms', {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
-                        ...(sesId ? { 'x-session-id': sesId } : {})
+                        ...(sesId ? { 'x-session-id': sesId } : {}),
+                        'x-user-role': curRole,
+                        'x-employee-code': curEmp
                       },
                       body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
+                    }).then(res => {
+                      if (!res.ok) {
+                        console.warn('[BomOrdersView] POST /api/boms response not OK:', res.status);
+                      }
                     }).catch(err => console.error('Error updating BOM to Dispatch:', err));
                   } catch (_) {}
 
