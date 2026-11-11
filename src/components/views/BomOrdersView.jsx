@@ -110,7 +110,7 @@ export const getBomActiveStage = (row) => {
     statusStr.includes('invoice') ||
     Boolean(row.invoiceConfirmedAt || row.invoicedAt || row.stockDeductionDate);
   if (isInvoiceGenerated) {
-    return { name: 'Vehicle Loading', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC', dot: '#0891B2' };
+    return { name: 'Vehicle Loading Pending', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC', dot: '#0891B2' };
   }
 
   const isAccountsVerified = Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
@@ -119,7 +119,7 @@ export const getBomActiveStage = (row) => {
     statusStr.includes('passed to invoice') ||
     Boolean(row.accountsVerifiedAt || row.accountsVerification?.verifiedAt);
   if (isAccountsVerified) {
-    return { name: 'Invoice Management', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', dot: '#2563EB' };
+    return { name: 'Invoice Pending', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', dot: '#2563EB' };
   }
 
   const isPackingVerified = Boolean(row.dispatchPackingVerified || row.packingVerified || row.dispatchPackingDone) ||
@@ -130,7 +130,7 @@ export const getBomActiveStage = (row) => {
     Boolean(row.awaitingSalesPaymentProof) ||
     Boolean(row.packingCompletedAt || row.packedAt || row.packingVerifiedAt || row.accountsVerification?.packedAt || row.packingStatus === 'PACKING_VERIFIED');
   if (isPackingVerified) {
-    return { name: 'Accounts Verification', bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF', dot: '#9333EA' };
+    return { name: 'Accounts Verification Pending', bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF', dot: '#9333EA' };
   }
 
   const isSalesConfirmed = Boolean(row.salesConfirmed || row.salesReconfirmed || row.creditSettled || row.paymentSettled) ||
@@ -140,10 +140,10 @@ export const getBomActiveStage = (row) => {
     statusStr.includes('credit settled') ||
     Boolean(row.salesConfirmedAt || row.confirmedAt || row.reconfirmedAt);
   if (isSalesConfirmed) {
-    return { name: 'Dispatch Packing', bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', dot: '#D97706' };
+    return { name: 'Dispatch Packing Pending', bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', dot: '#D97706' };
   }
 
-  return { name: 'Sales Confirmation', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', dot: '#64748B' };
+  return { name: 'Sales Confirmation Pending', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', dot: '#64748B' };
 };
 
 
@@ -266,16 +266,16 @@ export const getBomStageTiming = (b, matchingPi = null) => {
   const totalTurnaround = (dDispatch && dConfirmed) ? formatDuration(dDispatch.getTime() - dConfirmed.getTime()) : null;
 
   const activeStageName = hasDispatch
-    ? 'Completed'
+    ? 'Dispatched'
     : (isDispatchActive
-        ? 'Stage 6 · Final Dispatched'
+        ? 'Vehicle Loading Pending'
         : (isInvoiceActive
-            ? 'Stage 5 · GST Invoiced'
+            ? 'Invoice Pending'
             : (isAccountsActive
-                ? 'Stage 4 · Accounts Verification'
+                ? 'Accounts Verification Pending'
                 : (isPackingActive
-                    ? 'Stage 3 · Dispatch Packing'
-                    : 'Stage 2 · BOM Confirmed'))));
+                    ? 'Dispatch Packing Pending'
+                    : 'Sales Confirmation Pending'))));
 
   return {
     piDate: formatDateStr(pPi),
@@ -2411,7 +2411,15 @@ export default function BomOrdersView(props) {
               'Create and manage customer order BOMs, product specifications, and payment terms',
     actionText: 'Create BOM',
     searchPlaceholder: `Search ${activeTab} (BOM Code, Customer Name, Product)...`,
-    tabs: [
+    tabs: isCeo ? [
+      { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
+      { id: 'sales_confirmation_pending', label: 'Sales Confirmation Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Sales Confirmation Pending').length, bg: '#f1f5f9', fg: '#475569' },
+      { id: 'dispatch_packing_pending', label: 'Dispatch Packing Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Dispatch Packing Pending').length, bg: '#fef3c7', fg: '#b45309' },
+      { id: 'accounts_verification_pending', label: 'Accounts Verification Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Accounts Verification Pending').length, bg: '#f3e8ff', fg: '#7e22ce' },
+      { id: 'invoice_pending', label: 'Invoice Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Invoice Pending').length, bg: '#dbeafe', fg: '#1d4ed8' },
+      { id: 'vehicle_loading_pending', label: 'Vehicle Loading Pending', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Vehicle Loading Pending').length, bg: '#cffafe', fg: '#0e7490' },
+      { id: 'dispatched', label: 'Dispatched', count: (visibleBomStore || []).filter(b => getBomActiveStage(b).name === 'Dispatched').length, bg: '#dcfce7', fg: '#166534' }
+    ] : [
       { id: 'All', label: 'All BOMs', count: (visibleBomStore || []).filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
       { id: 'Pending', label: 'Pending Sales Confirmation', count: (visibleBomStore || []).filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
       { id: 'AddressAction', label: 'Address Proof Requested', count: (visibleBomStore || []).filter(b => (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && !b.cancelled).length, bg: '#fee2e2', fg: '#b91c1c' },
@@ -2647,24 +2655,34 @@ export default function BomOrdersView(props) {
     const isCancelled = Boolean(r.cancelled || r.status === 'Cancelled & Stock Restored' || rStatus.includes('cancel') || rTabGroup === 'cancelled');
 
     let matchesTab = false;
-    if (subTab === 'all' || subTab === 'all boms') {
-      matchesTab = !isCancelled;
-    } else if (subTab === 'pendingprint') {
-      matchesTab = !isPrinted && !isCancelled && !isClosedOrDone;
-    } else if (subTab === 'printed') {
-      matchesTab = isPrinted && !isCancelled && !isClosedOrDone;
-    } else if (subTab === 'addressaction') {
-      matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof')) && !isCancelled;
-    } else if (subTab.includes('closed') || subTab.includes('complete')) {
-      matchesTab = Boolean(isClosedOrDone) && !isCancelled;
-    } else if (subTab.includes('cancel')) {
-      matchesTab = isCancelled;
-    } else if (subTab.includes('pending') || subTab.includes('draft')) {
-      matchesTab = Boolean((rStatus.includes('pending') || rStatus.includes('draft')) && !isCancelled);
-    } else if (subTab.includes('sent')) {
-      matchesTab = Boolean((rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !isCancelled);
+    if (isCeo) {
+      if (subTab === 'all' || subTab === 'all boms') {
+        matchesTab = !isCancelled;
+      } else {
+        const activeStage = getBomActiveStage(r);
+        const stageNorm = activeStage.name.toLowerCase().replace(/\s+/g, '_');
+        matchesTab = (activeStage.name.toLowerCase() === subTab || stageNorm === subTab) && !isCancelled;
+      }
     } else {
-      matchesTab = (rTabGroup === subTab) && !isCancelled;
+      if (subTab === 'all' || subTab === 'all boms') {
+        matchesTab = !isCancelled;
+      } else if (subTab === 'pendingprint') {
+        matchesTab = !isPrinted && !isCancelled && !isClosedOrDone;
+      } else if (subTab === 'printed') {
+        matchesTab = isPrinted && !isCancelled && !isClosedOrDone;
+      } else if (subTab === 'addressaction') {
+        matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof')) && !isCancelled;
+      } else if (subTab.includes('closed') || subTab.includes('complete')) {
+        matchesTab = Boolean(isClosedOrDone) && !isCancelled;
+      } else if (subTab.includes('cancel')) {
+        matchesTab = isCancelled;
+      } else if (subTab.includes('pending') || subTab.includes('draft')) {
+        matchesTab = Boolean((rStatus.includes('pending') || rStatus.includes('draft')) && !isCancelled);
+      } else if (subTab.includes('sent')) {
+        matchesTab = Boolean((rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !isCancelled);
+      } else {
+        matchesTab = (rTabGroup === subTab) && !isCancelled;
+      }
     }
 
     // Date range filter matching
