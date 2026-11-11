@@ -114,10 +114,16 @@ const buildActivePresets = () => {
  */
 export async function syncPresetsWithCloud() {
   try {
-    const [cloudPresets, serverRes] = await Promise.all([
-      fetchCloudStore('presets_store', {}).catch(() => ({})),
-      fetch('/api/store/presets_store').then(r => r.ok ? r.json() : null).catch(() => null)
-    ]);
+    let serverRes = null;
+    let cloudPresets = null;
+    try {
+      const res = await fetch('/api/store/presets_store');
+      if (res.ok) serverRes = await res.json();
+    } catch (_) {}
+
+    if (!serverRes || !serverRes.data) {
+      cloudPresets = await fetchCloudStore('presets_store', {}).catch(() => ({}));
+    }
 
     let incomingMap = {};
     if (serverRes && serverRes.data && typeof serverRes.data === 'object') {

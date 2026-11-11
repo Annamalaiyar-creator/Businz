@@ -108,14 +108,33 @@ export default function InvoiceDetailModal({
     return () => { isMounted = false; };
   }, [inv.deliveryAddressProofDoc, matchingBom?.deliveryAddressProofDoc, inv.paymentProofDoc, matchingBom?.paymentProofDoc, matchingBom?.paymentProof, bomRefText]);
 
+  const safeStringVal = (val, fallback = '') => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed || trimmed === '[object Object]' || trimmed.includes('[object')) return fallback;
+      return trimmed;
+    }
+    if (typeof val === 'number') return String(val);
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    if (typeof val === 'object') {
+      const candidate = val.name || val.label || val.customerName || val.companyName || val.title || val.code || val.invNo || val.status || val.pay || val.date || val.address;
+      if (typeof candidate === 'string' && candidate.trim()) return safeStringVal(candidate, fallback);
+      if (typeof candidate === 'number') return String(candidate);
+      return fallback;
+    }
+    return String(val);
+  };
+
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
   const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'VRM-INV-2026-01'));
-  const invNoText = isEditingInvoice
+  const rawInvNo = isEditingInvoice
     ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'))
     : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'));
-  const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer') : (inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer');
-  const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
-  const paymentTypeText = isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || matchingBom?.paymentType || '100% Advance') : (inv.paymentType || matchingBom?.paymentType || '100% Advance');
+  const invNoText = safeStringVal(rawInvNo, 'Pending Confirmation');
+  const customerText = safeStringVal(isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2) : (inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2), 'Customer');
+  const invDateText = safeStringVal(isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4) : (inv.date || inv.c4), '21 May 2025');
+  const paymentTypeText = safeStringVal(isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || matchingBom?.paymentType) : (inv.paymentType || matchingBom?.paymentType), '100% Advance');
   const isFullAdvance = paymentTypeText === '100% Advance';
   const is50Percent = paymentTypeText.includes('50%') || paymentTypeText === '50% Advance / 50% Dispatch';
 
@@ -1966,8 +1985,10 @@ export default function InvoiceDetailModal({
           const addressProofDoc = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
           const bObj = inv.billingAddressObj || matchingBom?.billingAddressObj || {};
           const dObj = inv.deliveryAddressObj || matchingBom?.deliveryAddressObj || {};
-          const bAddr = inv.billingAddress || matchingBom?.billingAddress || bObj.address || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai, Tamil Nadu - 600058';
-          const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || dObj.address || bAddr;
+          const rawBAddr = inv.billingAddress || matchingBom?.billingAddress || bObj.address || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai, Tamil Nadu - 600058';
+          const rawDAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || dObj.address || rawBAddr;
+          const bAddr = safeStringVal(rawBAddr, 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai, Tamil Nadu - 600058');
+          const dAddr = safeStringVal(rawDAddr, bAddr);
           const isSame = Boolean(inv.sameAsBilling || matchingBom?.sameAsBilling || (bAddr.trim() === dAddr.trim()));
 
           return (

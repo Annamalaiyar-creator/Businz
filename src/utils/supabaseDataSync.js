@@ -1311,11 +1311,67 @@ const inFlightCloudStoreRequests = new Map();
 const recentCloudStoreCache = new Map();
 const CLOUD_STORE_DEDUP_TTL_MS = 3500;
 
+let inFlightBomsPromise = null;
+let bomsCache = null;
+let bomsCacheTimestamp = 0;
+const BOMS_CACHE_TTL_MS = 15000;
+
+export async function fetchBomsCached({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && bomsCache && Array.isArray(bomsCache) && bomsCache.length > 0 && (now - bomsCacheTimestamp < BOMS_CACHE_TTL_MS)) {
+    return bomsCache;
+  }
+  if (inFlightBomsPromise) {
+    return inFlightBomsPromise;
+  }
+  inFlightBomsPromise = (async () => {
+    try {
+      const url = force ? '/api/boms?refresh=true' : '/api/boms';
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), 12000) : null;
+      const res = await fetch(url, controller ? { signal: controller.signal } : {}).catch(() => null);
+      if (timeoutId) clearTimeout(timeoutId);
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json && Array.isArray(json.data) && json.data.length > 0) {
+          bomsCache = json.data;
+          bomsCacheTimestamp = Date.now();
+          return bomsCache;
+        }
+      }
+    } catch (_) {}
+
+    try {
+      const fallback = await fetchCloudStore('bom_store', []);
+      if (Array.isArray(fallback) && fallback.length > 0) {
+        bomsCache = fallback;
+        bomsCacheTimestamp = Date.now();
+        return bomsCache;
+      }
+    } catch (_) {}
+
+    return bomsCache || [];
+  })().finally(() => {
+    inFlightBomsPromise = null;
+  });
+
+  return inFlightBomsPromise;
+}
+
+export function invalidateBomsCache() {
+  bomsCache = null;
+  bomsCacheTimestamp = 0;
+}
+
 export function invalidateCloudStoreCache(storeKey) {
   if (storeKey) {
     recentCloudStoreCache.delete(String(storeKey));
+    if (storeKey === 'bom_store') {
+      invalidateBomsCache();
+    }
   } else {
     recentCloudStoreCache.clear();
+    invalidateBomsCache();
   }
 }
 

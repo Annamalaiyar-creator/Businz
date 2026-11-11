@@ -47,6 +47,7 @@ export function formatTitleCase(text) {
  */
 
 const IconPending = ({ size = 13 }) => <AlertTriangle size={size} style={{ flexShrink: 0 }} />;
+const IconAlert = ({ size = 13 }) => <AlertTriangle size={size} style={{ flexShrink: 0 }} />;
 const IconInProgress = ({ size = 13 }) => <Clock size={size} style={{ flexShrink: 0 }} />;
 const IconSubmitted = ({ size = 13 }) => <Send size={size} style={{ flexShrink: 0 }} />;
 const IconInReview = ({ size = 13 }) => <Search size={size} style={{ flexShrink: 0 }} />;
@@ -468,7 +469,8 @@ export default function StatusBadge({ status, type, label, bg, color, border, st
     || (typeof label === 'object' ? (label?.label || label?.name || '') : '')
     || (typeof status === 'object' ? (status?.label || status?.name || status?.status || '') : '')
     || '';
-  const displayLabel = formatTitleCase(rawLabel);
+  const displayLabel = typeof rawLabel === 'string' ? formatTitleCase(rawLabel) : String(rawLabel || 'Active');
+  const SafeIcon = (typeof Icon === 'function' || typeof Icon === 'object') ? Icon : IconPending;
 
   return (
     <span
@@ -491,7 +493,7 @@ export default function StatusBadge({ status, type, label, bg, color, border, st
         ...style
       }}
     >
-      <Icon size={iconSize} />
+      <SafeIcon size={iconSize} />
       <span>{displayLabel}</span>
     </span>
   );

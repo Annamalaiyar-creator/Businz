@@ -5485,8 +5485,8 @@ app.post('/api/boms/reserve-code', async (req, res) => {
   }
 });
 
-// Dedicated endpoint to repair legacy BOM-1132 and BOM-1166 to standard VRMS/BOM/26-27/554 & 555
-app.post('/api/boms/repair-sequence-554-555', async (req, res) => {
+// Dedicated endpoint to repair legacy BOM-1132 and BOM-1166 to standard VRMS/BOM/26-27/556 & 557
+app.all(['/api/boms/repair-sequence-554-555', '/api/boms/repair-sequence-556-557'], async (req, res) => {
   try {
     const result = await renumberBoms554And555();
     res.json({ success: true, result });

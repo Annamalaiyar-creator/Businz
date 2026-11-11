@@ -45,13 +45,20 @@ export default function ProductionTableView({
 
   const safeText = (val, fallback = '—') => {
     if (val === null || val === undefined) return fallback;
-    if (typeof val === 'string') return val;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed || trimmed === '[object Object]' || trimmed.includes('[object')) return fallback;
+      return trimmed;
+    }
     if (typeof val === 'number') return String(val);
     if (typeof val === 'boolean') return val ? 'Yes' : 'No';
     if (React.isValidElement(val)) return val;
     if (typeof val === 'object') {
-      const candidate = val.name || val.label || val.customerName || val.companyName || val.title || val.code || val.status || val.pay || val.date;
-      if (typeof candidate === 'string') return candidate;
+      if (Array.isArray(val)) {
+        return val.length > 0 ? safeText(val[0], fallback) : fallback;
+      }
+      const candidate = val.name || val.label || val.customerName || val.companyName || val.title || val.code || val.invNo || val.status || val.pay || val.date;
+      if (typeof candidate === 'string' && candidate.trim()) return safeText(candidate, fallback);
       if (typeof candidate === 'number') return String(candidate);
       return fallback;
     }
@@ -429,7 +436,7 @@ export default function ProductionTableView({
                               <span>Invoice</span>
                             </span>
                           )
-                        ) : (activeTab === 'Dispatch Orders' || String(activeTab || '').toLowerCase().includes('dispatch') || pageConfig.headers[2]?.includes('Date') || row.dateTimeObj) ? (
+                        ) : (activeTab === 'Dispatch Orders' || String(activeTab || '').toLowerCase().includes('dispatch') || (pageConfig.headers[2] && (pageConfig.headers[2].includes('Date') || pageConfig.headers[2].includes('Time')))) ? (
                           (() => {
                             const dObj = (row.dateTimeObj && typeof row.dateTimeObj === 'object') ? row.dateTimeObj : (typeof row.c3 === 'object' ? row.c3 : null);
                             let dateStr = '';
@@ -477,12 +484,12 @@ export default function ProductionTableView({
                               }
                             }
 
-                            const safeDate = (dateStr && dateStr !== '[object Object]') ? dateStr : '—';
-                            let safeTime = (timeStr && timeStr !== '[object Object]') ? timeStr : '';
+                            const safeDate = (dateStr && typeof dateStr === 'string' && dateStr !== '[object Object]') ? dateStr : '—';
+                            let safeTime = (timeStr && typeof timeStr === 'string' && timeStr !== '[object Object]') ? timeStr : '';
                             if (!safeTime || safeTime === '—') {
-                              if (row.dispatchPrintTimeStr) {
+                              if (typeof row.dispatchPrintTimeStr === 'string') {
                                 safeTime = row.dispatchPrintTimeStr;
-                              } else if (row.firstPrintTimeStr) {
+                              } else if (typeof row.firstPrintTimeStr === 'string') {
                                 safeTime = row.firstPrintTimeStr;
                               } else {
                                 const codeStr = String(row.code || row.bomCode || row.id || '390');
@@ -500,14 +507,14 @@ export default function ProductionTableView({
                             return (
                               <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
                                 <span style={{ fontWeight: '700', color: '#1E293B', fontSize: '13px' }}>{safeDate}</span>
-                                {safeTime && (
+                                {safeTime && typeof safeTime === 'string' && (
                                   <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{safeTime}</span>
                                 )}
                               </div>
                             );
                           })()
                         ) : (
-                          typeof row.c3 === 'object' ? safeText(row.c3?.combined || row.c3?.date, '—') : safeText(row.c3 || row.date1, '—')
+                          safeText(row.c3 || row.date1, '—')
                         )}
                       </td>
                       <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>

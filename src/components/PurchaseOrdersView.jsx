@@ -9,6 +9,7 @@ import { getNextSequence } from '../utils/sequenceGenerator';
 import { notifyPoSentForApproval } from '../services/notificationService';
 import { parseAddressString, formatAddressObj, getVendorLocations } from '../utils/otherViewsShared';
 import CreateProductModal from './views/CreateProductModal';
+import TypeableProductSelect from './TypeableProductSelect';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -823,9 +824,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const handleItemChange = (idx, field, val) => {
-    const updated = [...items];
-    updated[idx][field] = val;
-    setItems(updated);
+    setItems(prev => (prev || []).map((it, i) => i === idx ? { ...it, [field]: val } : it));
   };
 
   const [formErrors, setFormErrors] = useState({});
@@ -5053,54 +5052,40 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                               <td style={{ padding: '8px 12px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  <select
+                                  <TypeableProductSelect
                                     id={`purchase-orders-item-select-${typeof idx !== 'undefined' ? idx : 0}`}
                                     name={`poItemSelect_${typeof idx !== 'undefined' ? idx : 0}`}
-                                    aria-label="Select Item from Item Directory"
                                     value={item.name || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      const found = availableCatalogItems.find(zi => zi.name.toLowerCase() === val.toLowerCase());
-                                      handleItemChange(idx, 'name', val);
-                                      if (found) {
-                                        handleItemChange(idx, 'rate', found.rate || 0);
-                                        handleItemChange(idx, 'unit', (found.unit || 'NOS').toUpperCase());
-                                        if (found.account) {
-                                          handleItemChange(idx, 'account', found.account);
+                                    itemsList={availableCatalogItems}
+                                    placeholder="Type or select Item from Directory..."
+                                    accentColor="#2563EB"
+                                    style={{ width: '100%', minWidth: '220px', height: '34px' }}
+                                    onChange={(val, matched) => {
+                                      const found = matched || availableCatalogItems.find(zi => (zi.name || '').toLowerCase() === (val || '').toLowerCase());
+                                      setItems(prev => (prev || []).map((it, i) => {
+                                        if (i !== idx) return it;
+                                        const next = { ...it, name: val };
+                                        if (found) {
+                                          if (found.rate !== undefined && found.rate !== null && Number(found.rate) > 0) {
+                                            next.rate = Number(found.rate);
+                                          }
+                                          if (found.unit || found.uom) {
+                                            next.unit = (found.unit || found.uom || 'NOS').toUpperCase();
+                                          }
+                                          if (found.account) {
+                                            next.account = found.account;
+                                          }
+                                          if (found.tax !== undefined && found.tax !== null) {
+                                            next.tax = Number(found.tax);
+                                          }
+                                          if (found.description && !it.description) {
+                                            next.description = found.description;
+                                          }
                                         }
-                                        if (found.tax !== undefined && found.tax !== null) {
-                                          handleItemChange(idx, 'tax', Number(found.tax));
-                                        }
-                                        if (found.description && !item.description) {
-                                          handleItemChange(idx, 'description', found.description);
-                                        }
-                                      }
+                                        return next;
+                                      }));
                                     }}
-                                    required
-                                    style={{
-                                      width: '100%',
-                                      height: '34px',
-                                      borderRadius: '6px',
-                                      border: '1px solid #CBD5E1',
-                                      padding: '0 8px',
-                                      fontSize: '12px',
-                                      backgroundColor: '#FFFFFF',
-                                      color: '#0F172A',
-                                      fontWeight: '600',
-                                      cursor: 'pointer',
-                                      outline: 'none'
-                                    }}
-                                  >
-                                    <option value="" disabled>-- Select Item from Item Directory --</option>
-                                    {item.name && !availableCatalogItems.some(zi => zi.name.toLowerCase() === item.name.toLowerCase()) && (
-                                      <option value={item.name}>{item.name}</option>
-                                    )}
-                                    {availableCatalogItems.map((zi, zidx) => (
-                                      <option key={zidx} value={zi.name}>
-                                        {zi.sku ? `[${zi.sku}] ${zi.name}` : zi.name}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  />
                                   <input id={`purchase-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter item description / specifications"
                                     type="text"
                                     value={item.description || ''}

@@ -10,19 +10,23 @@ const __dirname = path.dirname(__filename);
 
 export async function renumberBoms554And555() {
   console.log('==================================================');
-  console.log('🔄 BUSINZ: Renumbering Legacy BOMs to 554 & 555');
+  console.log('🔄 BUSINZ: Renumbering Legacy BOMs to 556 & 557');
   console.log('==================================================');
 
   const renames = [
     {
       oldCode: 'VRM-BOM-1132',
-      newCode: 'VRMS/BOM/26-27/554',
-      customerMatch: 'SRI SASTHAA SOLAR'
+      newCode: 'VRMS/BOM/26-27/556',
+      customerMatch: 'SRI SASTHAA SOLAR',
+      defaultAmount: 27612,
+      defaultSubTotal: 23400
     },
     {
       oldCode: 'VRM-BOM-1166',
-      newCode: 'VRMS/BOM/26-27/555',
-      customerMatch: 'Sri Vaarahi Enterprises'
+      newCode: 'VRMS/BOM/26-27/557',
+      customerMatch: 'Sri Vaarahi Enterprises',
+      defaultAmount: 9416.40,
+      defaultSubTotal: 7980
     }
   ];
 
@@ -61,6 +65,10 @@ export async function renumberBoms554And555() {
                 }
               } catch (_) {}
             }
+            if (grandTotal <= 0 && item.defaultAmount) {
+              grandTotal = item.defaultAmount;
+              subTotal = item.defaultSubTotal || Math.round(grandTotal / 1.18);
+            }
 
             console.log(`Updating PostgreSQL bom_orders: ${row.bom_code} -> ${item.newCode} (Customer: ${row.customer_name}, Amount: ${grandTotal})`);
 
@@ -93,11 +101,15 @@ export async function renumberBoms554And555() {
         let changed = false;
         const updatedList = crRes.rows[0].data.map(b => {
           for (const item of renames) {
-            const matchesCode = b.bomCode === item.oldCode || b.code === item.oldCode || b.id === item.oldCode;
+            const matchesCode = b.bomCode === item.oldCode || b.code === item.oldCode || b.id === item.oldCode ||
+              (item.oldCode === 'VRM-BOM-1132' && (b.bomCode === 'VRMS/BOM/26-27/554' && String(b.customerName || '').includes('SASTHAA'))) ||
+              (item.oldCode === 'VRM-BOM-1166' && (b.bomCode === 'VRMS/BOM/26-27/555' && String(b.customerName || '').includes('Vaarahi')));
             const matchesCustomer = item.customerMatch && (
               String(b.customerName || '').toLowerCase().includes(item.customerMatch.toLowerCase()) ||
               String(b.companyName || '').toLowerCase().includes(item.customerMatch.toLowerCase())
-            ) && (b.bomCode === item.oldCode || String(b.bomCode || '').includes('1166') || String(b.bomCode || '').includes('1132'));
+            ) && (b.bomCode === item.oldCode || String(b.bomCode || '').includes('1166') || String(b.bomCode || '').includes('1132') ||
+              (item.oldCode === 'VRM-BOM-1132' && b.bomCode === 'VRMS/BOM/26-27/554') ||
+              (item.oldCode === 'VRM-BOM-1166' && b.bomCode === 'VRMS/BOM/26-27/555'));
 
             if (matchesCode || matchesCustomer) {
               changed = true;
@@ -108,6 +120,9 @@ export async function renumberBoms554And555() {
               if (gTotal <= 0 && Array.isArray(b.items) && b.items.length > 0) {
                 const s = b.items.reduce((acc, it) => acc + ((parseFloat(it.qty || it.bomQty || 1) * parseFloat(it.rate || it.price || 0)) || 0), 0);
                 if (s > 0) gTotal = Math.round(s * 1.18 * 100) / 100;
+              }
+              if (gTotal <= 0 && item.defaultAmount) {
+                gTotal = item.defaultAmount;
               }
 
               return {
@@ -162,13 +177,19 @@ export async function renumberBoms554And555() {
         let changed = false;
         const updatedList = fileData.map(b => {
           for (const item of renames) {
-            if (b.bomCode === item.oldCode || b.code === item.oldCode || b.id === item.oldCode) {
+            const matches = b.bomCode === item.oldCode || b.code === item.oldCode || b.id === item.oldCode ||
+              (item.oldCode === 'VRM-BOM-1132' && (b.bomCode === 'VRMS/BOM/26-27/554' && String(b.customerName || '').includes('SASTHAA'))) ||
+              (item.oldCode === 'VRM-BOM-1166' && (b.bomCode === 'VRMS/BOM/26-27/555' && String(b.customerName || '').includes('Vaarahi')));
+            if (matches) {
               changed = true;
               diskUpdated++;
               let gTotal = parseFloat(b.grandTotal || b.totalAmount || 0);
               if (gTotal <= 0 && Array.isArray(b.items)) {
                 const s = b.items.reduce((acc, it) => acc + ((parseFloat(it.qty || it.bomQty || 1) * parseFloat(it.rate || it.price || 0)) || 0), 0);
                 if (s > 0) gTotal = Math.round(s * 1.18 * 100) / 100;
+              }
+              if (gTotal <= 0 && item.defaultAmount) {
+                gTotal = item.defaultAmount;
               }
               return {
                 ...b,
@@ -196,8 +217,8 @@ export async function renumberBoms554And555() {
   console.log(`   - PostgreSQL bom_orders updated: ${pgUpdated}`);
   console.log(`   - controlroom_store items updated: ${crStoreUpdated}`);
   console.log(`   - Disk store items updated: ${diskUpdated}`);
-  console.log(`   - Target 1: VRM-BOM-1132 -> VRMS/BOM/26-27/554 (SRI SASTHAA SOLAR)`);
-  console.log(`   - Target 2: VRM-BOM-1166 -> VRMS/BOM/26-27/555 (Sri Vaarahi Enterprises)\n`);
+  console.log(`   - Target 1: VRM-BOM-1132 -> VRMS/BOM/26-27/556 (SRI SASTHAA SOLAR)`);
+  console.log(`   - Target 2: VRM-BOM-1166 -> VRMS/BOM/26-27/557 (Sri Vaarahi Enterprises)\n`);
 
   return { pgUpdated, crStoreUpdated, diskUpdated };
 }
@@ -211,3 +232,4 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(1);
   });
 }
+

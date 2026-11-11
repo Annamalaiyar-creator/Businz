@@ -10,7 +10,7 @@ import POStatusOverview from './POStatusOverview';
 import DailyProductionTrendChart from './DailyProductionTrendChart';
 import StatusBadge from './StatusBadge';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
-import { fetchCloudStore } from '../utils/supabaseDataSync';
+import { fetchCloudStore, fetchBomsCached } from '../utils/supabaseDataSync';
 import { compareBomDescending } from '../utils/sequenceGenerator';
 
 export default function ProductionAdminView({ activeTab, userRole }) {
@@ -33,18 +33,8 @@ export default function ProductionAdminView({ activeTab, userRole }) {
   useEffect(() => {
     const loadBoms = async () => {
       try {
-        let boms = null;
-        try {
-          const apiRes = await fetch('/api/boms');
-          if (apiRes.ok) {
-            const json = await apiRes.json();
-            if (json && Array.isArray(json.data)) {
-              boms = json.data;
-            }
-          }
-        } catch (_) {}
-
-        if (boms === null) {
+        let boms = await fetchBomsCached();
+        if (boms === null || !Array.isArray(boms)) {
           boms = await fetchCloudStore('bom_store', []);
         }
 

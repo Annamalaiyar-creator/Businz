@@ -13,6 +13,8 @@ import { getFullProductsCatalogWithStock } from '../utils/productCatalogService'
  * 3. Select any item to auto-populate product details
  */
 function TypeableProductSelect({
+  id,
+  name,
   value = '',
   onChange,
   itemsList = [],
@@ -280,7 +282,7 @@ function TypeableProductSelect({
           boxShadow: isOpen ? `0 0 0 2px ${accentColor}1A` : 'none'
         }}
       >
-        <input id="typeable-product-select-placeholder" name="placeholder" aria-label="Placeholder"
+        <input id={id || "typeable-product-select-placeholder"} name={name || "placeholder"} aria-label={placeholder || "Placeholder"}
           ref={inputRef}
           type="text"
           disabled={disabled}

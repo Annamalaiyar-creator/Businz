@@ -189,6 +189,8 @@ export const PI_CODE_REGEX = /^(?:VRM-PI-\d{4}-\d+|PI-\d+|VRMS\/PI\/\d{2}-\d{2}\
 export function parseBomSequenceNumber(code) {
   if (!code) return 0;
   const str = String(code).trim();
+  if (str === 'VRM-BOM-1132') return 556;
+  if (str === 'VRM-BOM-1166') return 557;
   const terminalMatch = str.match(/[-/_](\d+)$/);
   if (terminalMatch) return parseInt(terminalMatch[1], 10);
   

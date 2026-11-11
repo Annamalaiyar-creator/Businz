@@ -29,7 +29,7 @@ import { UploadPaymentModal, UpdatePaymentModal, ReuploadAddressProofModal } fro
 import { CompletedBomSummaryModal, ActiveMediaPreviewModal, PreviewAddressProofModal, DispatchChecklistPreviewModal, ViewingProofDocModal, BomCancelPromptModal } from './DispatchAndPreviewModals';
 import { buildProductionConfigs } from './productionConfigs';
 import { CloseInvoiceReasonModal, ConfirmInvoiceSuccessModal } from './InvoiceModals';
-import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, getWorkflowRank } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, fetchBomsCached, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, getWorkflowRank } from '../../utils/supabaseDataSync';
 import { getItems, getVendors } from '../../services/businzDataService';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
@@ -274,18 +274,8 @@ export default function ProductionViewsEngine(props) {
       if (isSyncingCloudRef.current) return;
       isSyncingCloudRef.current = true;
       try {
-        let data = null;
-        try {
-          const apiRes = await fetch('/api/boms?refresh=true');
-          if (apiRes.ok) {
-            const json = await apiRes.json();
-            if (json && Array.isArray(json.data)) {
-              data = json.data;
-            }
-          }
-        } catch (_) {}
-
-        if (data === null) {
+        let data = await fetchBomsCached();
+        if (data === null || !Array.isArray(data)) {
           data = await fetchCloudStore('bom_store', []);
         }
 
@@ -370,7 +360,10 @@ export default function ProductionViewsEngine(props) {
         }
 
         // Sync Customers directly from Supabase & backend (loaded once and re-fetched only on customer updates)
-        if (!hasFetchedCustomersRef.current) {
+        // Skip heavy customer directory sync for operations logins (Dispatch, Accounts, Billing, Logistics) to optimize network performance
+        const roleLower = String(userRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '').toLowerCase();
+        const isOperationsRole = roleLower.includes('dispatch') || roleLower.includes('account') || roleLower.includes('billing') || roleLower.includes('logistics') || roleLower.includes('production');
+        if (!hasFetchedCustomersRef.current && !isOperationsRole) {
           try {
             let custs = await fetchCloudStore('customer_store', []);
             if (!Array.isArray(custs) || custs.length === 0) {
