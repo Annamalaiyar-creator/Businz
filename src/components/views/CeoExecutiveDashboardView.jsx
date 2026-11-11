@@ -7300,7 +7300,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             done: timing?.hasPi,
             active: false,
             date: timing?.piDate || '—',
-            time: timing?.piTime || (timing?.hasPi ? 'Completed' : '—'),
+            completedTime: timing?.piTime,
+            receivedTime: timing?.piTime,
+            duration: null,
             subtext: timing?.hasPi ? 'Issued to Client' : 'Direct Order'
           },
           {
@@ -7309,7 +7311,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             done: timing?.hasConfirmed,
             active: !timing?.hasConfirmed,
             date: timing?.confirmedDate || '—',
-            time: timing?.confirmedTime || (timing?.hasConfirmed ? 'Confirmed' : 'Draft'),
+            completedTime: timing?.confirmedTime,
+            receivedTime: timing?.piTime || timing?.confirmedTime,
+            duration: null,
             subtext: timing?.hasConfirmed ? 'Sales Confirmed' : 'Draft Order'
           },
           {
@@ -7318,35 +7322,43 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             done: timing?.hasPacking,
             active: timing?.isPackingActive,
             date: timing?.packingDate || (timing?.isPackingActive ? timing?.confirmedDate : '—'),
-            time: timing?.packingTime ? timing.packingTime : (timing?.isPackingActive ? 'Processing...' : '—'),
-            subtext: timing?.hasPacking ? (timing.packingDuration ? `Took ${timing.packingDuration}` : 'Packing Verified') : (timing?.isPackingActive ? `Started ${timing.packingStartedTime || timing.confirmedTime || ''}` : 'Pending')
+            completedTime: timing?.packingCompletedTime,
+            receivedTime: timing?.packingReceivedTime,
+            duration: timing?.packingDuration,
+            subtext: timing?.hasPacking ? 'Packing Verified' : 'Awaiting Packing'
           },
           {
             num: 4,
             label: 'Accounts Verified',
             done: timing?.hasAccounts,
             active: timing?.isAccountsActive,
-            date: timing?.accountsDate || (timing?.isAccountsActive ? timing?.packingDate : '—'),
-            time: timing?.accountsTime ? timing.accountsTime : (timing?.isAccountsActive ? 'Processing...' : '—'),
-            subtext: timing?.hasAccounts ? (timing.accountsDuration ? `Took ${timing.accountsDuration}` : 'Accounts Verified') : (timing?.isAccountsActive ? `Started ${timing.accountsStartedTime || ''}` : 'Pending')
+            date: timing?.accountsDate || (timing?.isAccountsActive ? (timing?.packingDate || timing?.confirmedDate) : '—'),
+            completedTime: timing?.accountsCompletedTime,
+            receivedTime: timing?.accountsReceivedTime,
+            duration: timing?.accountsDuration,
+            subtext: timing?.hasAccounts ? 'Accounts Verified' : 'Awaiting Accounts'
           },
           {
             num: 5,
             label: 'GST Invoiced',
             done: timing?.hasInvoice,
             active: timing?.isInvoiceActive,
-            date: timing?.invoiceDate || (timing?.isInvoiceActive ? timing?.accountsDate : '—'),
-            time: timing?.invoiceTime ? timing.invoiceTime : (timing?.isInvoiceActive ? 'Processing...' : '—'),
-            subtext: timing?.hasInvoice ? (timing.invoiceDuration ? `Took ${timing.invoiceDuration}` : 'Invoice Confirmed') : (timing?.isInvoiceActive ? `Started ${timing.invoiceStartedTime || ''}` : 'Pending')
+            date: timing?.invoiceDate || (timing?.isInvoiceActive ? (timing?.accountsDate || timing?.packingDate) : '—'),
+            completedTime: timing?.invoiceCompletedTime,
+            receivedTime: timing?.invoiceReceivedTime,
+            duration: timing?.invoiceDuration,
+            subtext: timing?.hasInvoice ? 'Invoice Confirmed' : 'Awaiting Billing'
           },
           {
             num: 6,
             label: 'Final Dispatched',
             done: timing?.hasDispatch,
             active: timing?.isDispatchActive,
-            date: timing?.dispatchDate || (timing?.isDispatchActive ? timing?.invoiceDate : '—'),
-            time: timing?.dispatchTime ? timing.dispatchTime : (timing?.isDispatchActive ? 'Processing...' : '—'),
-            subtext: timing?.hasDispatch ? (timing.dispatchDuration ? `Took ${timing.dispatchDuration}` : 'Dispatched') : (timing?.isDispatchActive ? `Started ${timing.dispatchStartedTime || ''}` : 'Pending')
+            date: timing?.dispatchDate || (timing?.isDispatchActive ? (timing?.invoiceDate || timing?.accountsDate) : '—'),
+            completedTime: timing?.dispatchCompletedTime,
+            receivedTime: timing?.dispatchReceivedTime,
+            duration: timing?.dispatchDuration,
+            subtext: timing?.hasDispatch ? 'Dispatched' : 'Awaiting Loading'
           }
         ];
 
@@ -7529,31 +7541,67 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           {/* TIME & STAGE STATUS */}
                           <div style={{
                             backgroundColor: isComplete ? '#DCFCE7' : (isCurrent ? '#E0F2FE' : '#F1F5F9'),
-                            border: `1px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#BAE6FD' : '#E2E8F0')}`,
-                            padding: '3px 4px',
-                            borderRadius: '6px',
+                            border: `1.5px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#0E7490' : '#E2E8F0')}`,
+                            padding: '4px 4px',
+                            borderRadius: '8px',
                             marginTop: 'auto',
                             width: '100%',
                             boxSizing: 'border-box',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            gap: '1px'
+                            gap: '2px'
                           }}>
+                            {/* Primary Status */}
                             <span style={{
                               fontSize: '9.5px',
-                              fontWeight: '800',
-                              color: isComplete ? '#15803D' : (isCurrent ? '#0284C7' : '#475569')
+                              fontWeight: '900',
+                              color: isComplete ? '#15803D' : (isCurrent ? '#0369A1' : '#64748B'),
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px'
                             }}>
-                              {stg.time}
+                              {isComplete ? '✓ Completed' : (isCurrent ? '⏳ Processing' : '⚪ Pending')}
                             </span>
-                            {stg.subtext && (
+
+                            {/* Exact Operational Timestamp */}
+                            {isComplete ? (
+                              <span style={{
+                                fontSize: '9px',
+                                fontWeight: '800',
+                                color: '#166534',
+                                lineHeight: '1.2'
+                              }}>
+                                {stg.completedTime ? `At ${stg.completedTime}` : (stg.date !== '—' ? stg.date : 'Done')}
+                              </span>
+                            ) : isCurrent ? (
+                              <span style={{
+                                fontSize: '9px',
+                                fontWeight: '800',
+                                color: '#0E7490',
+                                lineHeight: '1.2'
+                              }}>
+                                {stg.receivedTime ? `Received: ${stg.receivedTime}` : 'In Progress'}
+                              </span>
+                            ) : (
                               <span style={{
                                 fontSize: '8.5px',
-                                fontWeight: '700',
-                                color: isComplete ? '#166534' : (isCurrent ? '#0369A1' : '#64748B')
+                                fontWeight: '600',
+                                color: '#94A3B8'
                               }}>
-                                {stg.subtext}
+                                Waiting
+                              </span>
+                            )}
+
+                            {/* Turnaround Duration if Completed */}
+                            {isComplete && stg.duration && (
+                              <span style={{
+                                fontSize: '8px',
+                                fontWeight: '700',
+                                color: '#15803D',
+                                opacity: 0.85
+                              }}>
+                                Took {stg.duration}
                               </span>
                             )}
                           </div>
