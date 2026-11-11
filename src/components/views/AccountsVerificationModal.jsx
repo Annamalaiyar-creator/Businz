@@ -948,7 +948,7 @@ export default function AccountsVerificationModal({
               <input id="accounts-verification-slice-0-10" name="slice010" aria-label="Slice 0 10"
                 type="date"
                 disabled={isAlreadyCompleted}
-                value={currentPayDate ? currentPayDate.slice(0, 10) : ''}
+                value={currentPayDate ? String(currentPayDate).slice(0, 10) : ''}
                 onChange={(e) => {
                   if (isAlreadyCompleted) return;
                   const val = e.target.value;

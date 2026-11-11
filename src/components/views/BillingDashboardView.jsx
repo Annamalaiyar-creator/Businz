@@ -17,6 +17,24 @@ const formatLakhsCr = (val) => {
   return `₹ ${Math.round(num).toLocaleString('en-IN')}`;
 };
 
+// Safe date string normalizer to prevent .slice errors on numbers/objects
+const safeDateToIsoStr = (val, fallback = '') => {
+  if (!val) return fallback || new Date().toISOString().slice(0, 10);
+  if (typeof val === 'string') return val.slice(0, 10);
+  if (typeof val === 'number') {
+    try {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    } catch (_) {}
+  }
+  if (val instanceof Date) {
+    try {
+      if (!isNaN(val.getTime())) return val.toISOString().slice(0, 10);
+    } catch (_) {}
+  }
+  return String(val || '').slice(0, 10) || fallback || new Date().toISOString().slice(0, 10);
+};
+
 export default function BillingDashboardView({ userRole = 'Billing', onNavigateTab }) {
   // Filters & State
   const [selectedPeriod, setSelectedPeriod] = useState('MTD');
@@ -138,7 +156,7 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
           invNo: invNum || 'INV-CONFIRMED',
           customerName: inv.customerName || inv.vendor || 'Customer Client',
           bomRef: bomRef || 'BOM Order',
-          date: inv.date || inv.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+          date: inv.date || safeDateToIsoStr(inv.createdAt),
           amount: cleanNum(inv.invAmt) || cleanNum(inv.total) || cleanNum(inv.amount) || 0,
           stockDeducted: true,
           matchStatus: '100% Match',
@@ -162,7 +180,7 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
             invNo: invNum,
             customerName: b.customerName || b.companyName || 'Customer Client',
             bomRef: b.bomCode || b.code || 'BOM Order',
-            date: b.updatedAt?.slice(0, 10) || b.date || new Date().toISOString().slice(0, 10),
+            date: safeDateToIsoStr(b.updatedAt || b.date),
             amount: totalVal,
             stockDeducted: true,
             matchStatus: '100% Match',
