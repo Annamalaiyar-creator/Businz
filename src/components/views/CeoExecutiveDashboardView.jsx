@@ -2131,6 +2131,54 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return { start: '', end: '' };
   };
 
+  const handleNavigateWithPiFilter = () => {
+    const { start, end } = getPeriodDateRange(selectedPeriod);
+    const targetKeys = (piList || []).map(p => String(p.piNo || p.id || '').trim().toLowerCase()).filter(Boolean);
+    try {
+      sessionStorage.setItem('controlroom_pi_initial_date_filter', JSON.stringify({ 
+        start, 
+        end, 
+        targetKeys,
+        periodLabel: selectedPeriod,
+        count: targetKeys.length
+      }));
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent('controlroom_pi_filter_date', { 
+      detail: { 
+        startDate: start, 
+        endDate: end, 
+        targetKeys,
+        periodLabel: selectedPeriod,
+        count: targetKeys.length
+      } 
+    }));
+    if (onNavigateTab) onNavigateTab('Proforma Invoice');
+  };
+
+  const handleNavigateWithBomFilter = () => {
+    const { start, end } = getPeriodDateRange(selectedPeriod);
+    const targetKeys = (bomList || []).map(b => String(b.bomCode || b.code || b.id || '').trim().toLowerCase()).filter(Boolean);
+    try {
+      sessionStorage.setItem('controlroom_bom_initial_date_filter', JSON.stringify({ 
+        start, 
+        end, 
+        targetKeys,
+        periodLabel: selectedPeriod,
+        count: targetKeys.length
+      }));
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent('controlroom_bom_filter_date', { 
+      detail: { 
+        startDate: start, 
+        endDate: end, 
+        targetKeys,
+        periodLabel: selectedPeriod,
+        count: targetKeys.length
+      } 
+    }));
+    if (onNavigateTab) onNavigateTab('BOM Orders');
+  };
+
   const handleOpenFilteredFullPage = () => {
     const { start, end } = getPeriodDateRange(selectedPeriod);
     if (activeKpiPopup === 'pi') {
@@ -2654,7 +2702,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#ECFEFF',
               bottomPrefix: 'Pipeline value ',
               bottomHighlight: totalPiPipelineFormatted,
-              onClick: () => setActiveKpiPopup('pi')
+              onClick: handleNavigateWithPiFilter
             },
             {
               title: 'BOM & PRODUCTION',
@@ -2666,7 +2714,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#F0F9FF',
               bottomPrefix: 'Order book value ',
               bottomHighlight: totalBomOrderValueFormatted,
-              onClick: () => setActiveKpiPopup('bom')
+              onClick: handleNavigateWithBomFilter
             },
             {
               title: 'PURCHASE ORDERS (PO)',
@@ -2679,7 +2727,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: totalPoSpendFormatted,
               highlightCard: pendingMdPOs.length > 0,
-              onClick: () => setActiveKpiPopup('po')
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, pendingMdPOs.length > 0 ? 'WAITING FOR APPROVAL' : undefined)
             },
             {
               title: 'BILLING & TAX INVOICES',
@@ -2691,7 +2739,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#FAF5FF',
               bottomPrefix: 'Total GST billed ',
               bottomHighlight: totalRevenueFormatted,
-              onClick: () => setActiveKpiPopup('billing')
+              onClick: () => onNavigateTab && onNavigateTab('Invoice Management')
             },
             ...(userRole === 'HR' ? [
               {
@@ -2704,7 +2752,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 iconBg: '#ECFEFF',
                 bottomPrefix: 'Kit order book ',
                 bottomHighlight: hrKitsOrderValueFormatted,
-                onClick: () => setActiveKpiPopup('kits')
+                onClick: handleNavigateWithBomFilter
               }
             ] : [])
           ]} />

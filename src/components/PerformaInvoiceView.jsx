@@ -136,6 +136,23 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [validationAlert, setValidationAlert] = useState(null); // Interactive Missing Fields popup modal
   const [topToast, setTopToast] = useState(null);
   const toastTimeoutRef = useRef(null);
+  const [kpiFilterMeta, setKpiFilterMeta] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_pi_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.targetKeys && parsed.targetKeys.length > 0) {
+          return {
+            targetKeys: new Set(parsed.targetKeys),
+            periodLabel: parsed.periodLabel || 'Overview',
+            count: parsed.count || parsed.targetKeys.length
+          };
+        }
+      }
+    } catch (_) {}
+    return null;
+  });
+
   const [startDate, setStartDate] = useState(() => {
     try {
       const saved = sessionStorage.getItem('controlroom_pi_initial_date_filter');
@@ -151,7 +168,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const saved = sessionStorage.getItem('controlroom_pi_initial_date_filter');
       if (saved) {
         const parsed = JSON.parse(saved);
-        sessionStorage.removeItem('controlroom_pi_initial_date_filter');
         return parsed.end || '';
       }
     } catch (_) {}
@@ -160,9 +176,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   useEffect(() => {
     const handleFilterDate = (e) => {
-      if (e?.detail?.startDate !== undefined) {
-        setStartDate(e.detail.startDate || '');
-        setEndDate(e.detail.endDate || '');
+      if (e?.detail) {
+        if (e.detail.startDate !== undefined) setStartDate(e.detail.startDate || '');
+        if (e.detail.endDate !== undefined) setEndDate(e.detail.endDate || '');
+        if (e.detail.targetKeys && Array.isArray(e.detail.targetKeys) && e.detail.targetKeys.length > 0) {
+          setKpiFilterMeta({
+            targetKeys: new Set(e.detail.targetKeys),
+            periodLabel: e.detail.periodLabel || 'Overview',
+            count: e.detail.count || e.detail.targetKeys.length
+          });
+        }
         setCurrentPage(1);
       }
     };
@@ -1495,6 +1518,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setStatusFilter('All');
     setStartDate('');
     setEndDate('');
+    setKpiFilterMeta(null);
+    try { sessionStorage.removeItem('controlroom_pi_initial_date_filter'); } catch (_) {}
     setPiTab('All');
     setCurrentPage(1);
   };
@@ -3765,6 +3790,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             matchesDateRange = false;
           }
 
+          // KPI Filter from Overview
+          if (kpiFilterMeta && kpiFilterMeta.targetKeys && kpiFilterMeta.targetKeys.size > 0) {
+            const piKey1 = String(pi.piNo || '').trim().toLowerCase();
+            const piKey2 = String(pi.id || '').trim().toLowerCase();
+            if (!kpiFilterMeta.targetKeys.has(piKey1) && !kpiFilterMeta.targetKeys.has(piKey2)) {
+              return false;
+            }
+          }
+
           return matchesSearch && matchesStatus && matchesTab && matchesDateRange;
         });
 
@@ -4034,6 +4068,42 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </button>
               </div>
             </div>
+
+            {/* KPI FILTER ALERT BANNER */}
+            {kpiFilterMeta && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#ECFEFF',
+                border: '1.5px solid #0E7490',
+                borderRadius: '10px',
+                padding: '9px 16px',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
+                  <span>Showing <strong>{filteredPIList.length}</strong> Proforma Invoices filtered from Company Overview KPI ({kpiFilterMeta.periodLabel})</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  style={{
+                    border: 'none',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  ✕ Show All Proforma Invoices
+                </button>
+              </div>
+            )}
 
             {/* 2. STATUS SUB-TABS ROW & EXPORT BUTTON */}
             <div style={{
