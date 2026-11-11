@@ -8358,30 +8358,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 gap: '8px'
               }}>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {linkedPiNo && matchingPi && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewingBomModal(null);
-                        setViewingPiModal(matchingPi);
-                      }}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid #A5F3FC',
-                        backgroundColor: '#ECFEFF',
-                        color: '#0E7490',
-                        fontSize: '11.5px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <Receipt size={13} /> View Commercial PI ({linkedPiNo}) →
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => {

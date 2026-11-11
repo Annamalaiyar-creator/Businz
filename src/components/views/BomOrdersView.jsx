@@ -14163,40 +14163,11 @@ export default function BomOrdersView(props) {
                 backgroundColor: '#F8FAFC',
                 borderTop: '1px solid #E2E8F0',
                 display: 'flex',
-                justifyContent: 'space-between',
+                justifyContent: 'flex-end',
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 gap: '8px'
               }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {linkedPiNo && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCeoBomDetailModal(null);
-                        if (props.onNavigateTab) {
-                          props.onNavigateTab('Performa Invoice', null, null, null);
-                        }
-                      }}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid #A5F3FC',
-                        backgroundColor: '#ECFEFF',
-                        color: '#0E7490',
-                        fontSize: '11.5px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <Receipt size={13} /> View Commercial PI ({linkedPiNo}) →
-                    </button>
-                  )}
-                </div>
-
                 <button
                   type="button"
                   onClick={() => setCeoBomDetailModal(null)}
