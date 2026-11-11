@@ -191,6 +191,8 @@ export function parseBomSequenceNumber(code) {
   const str = String(code).trim();
   if (str === 'VRM-BOM-1132') return 556;
   if (str === 'VRM-BOM-1166') return 557;
+  if (str === 'VRM-BOM-1198') return 558;
+  if (str === 'VRM-BOM-1227') return 559;
   const terminalMatch = str.match(/[-/_](\d+)$/);
   if (terminalMatch) return parseInt(terminalMatch[1], 10);
   
