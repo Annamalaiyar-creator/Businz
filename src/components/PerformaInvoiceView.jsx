@@ -5389,6 +5389,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       {(viewMode === 'create' || viewMode === 'edit') && (() => {
         const totals = calculatePiTotals();
         const hasAnyPreset = (piItems || []).some(it => it.isPresetItem);
+        const hasAnyKwPreset = (piItems || []).some(it => isKwPreset(it.presetName, it.unit || it.uom, it)) ||
+          Object.values(presetGroups || {}).some(g => isKwPreset(g.presetName || g.name, g.unit || g.unitType));
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC', padding: '24px', borderRadius: '16px', boxSizing: 'border-box' }}>
@@ -6271,7 +6273,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
                       <th style={{ padding: '12px 6px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
-                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '105px', minWidth: '105px', textAlign: 'center' }}>Qty / Set <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '85px', minWidth: '85px', textAlign: 'center' }}>Set / kW</th>
+                      <th style={{ padding: '12px 8px', fontWeight: '700', width: '110px', minWidth: '110px', textAlign: 'center' }}>{hasAnyKwPreset ? 'Qty / kW' : 'Qty / Set'} <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '135px', minWidth: '135px', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
@@ -6288,7 +6291,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <tbody>
                     {piItems.length === 0 ? (
                       <tr>
-                        <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        <td colSpan={hasAnyPreset ? 14 : 13} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
@@ -6348,7 +6351,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <React.Fragment key={i}>
                             {isFirstInGroup && (
                               <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 14 : 13} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{
@@ -6378,15 +6381,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         color: theme.tagText,
                                         border: `1px solid ${theme.border}`
                                       }}>
-                                        Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                        Total Quantity: {currentGroup?.setCount || 1} {currentGroup?.unit === 'kW' ? 'kW' : ((currentGroup?.setCount || 1) > 1 ? 'Sets' : 'Set')} ({groupCount} components)
                                       </span>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
                                         {(parseFloat(currentGroup?.setCount) || 1) !== 1 ? (
-                                          <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseFloat(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
+                                          <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> / {currentGroup?.unit === 'kW' ? 'kW' : 'Set'} | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseFloat(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
                                         ) : (
-                                          <>Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
+                                          <>Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> / {currentGroup?.unit === 'kW' ? 'kW' : 'Set'} + {currentGroup?.gstRate || '18%'} GST</>
                                         )}
                                       </span>
 
@@ -6464,7 +6467,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
                               <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 14 : 13} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
                                       padding: '2px 8px',
@@ -6777,6 +6780,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       <option value="LOT">LOT</option>
                                       <option value="TON">TON</option>
                                     </select>
+                                  );
+                                })()}
+                              </td>
+                              {/* Set / kW Column */}
+                              <td style={{ padding: '12px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                {(() => {
+                                  const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
+                                  const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
+                                  const rowIsKw = isKwPreset(effectivePresetName, effectiveUnit, item) || String(item.uom || item.unit || '').toUpperCase() === 'KW';
+                                  return (
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      backgroundColor: rowIsKw ? '#E0F2FE' : (isPresetItem ? '#ECFEFF' : '#F1F5F9'),
+                                      color: rowIsKw ? '#0284C7' : (isPresetItem ? '#0E7490' : '#64748B'),
+                                      border: `1px solid ${rowIsKw ? '#BAE6FD' : (isPresetItem ? '#A5F3FC' : '#E2E8F0')}`
+                                    }}>
+                                      {rowIsKw ? 'kW' : (isPresetItem ? 'Set' : (item.uom === 'SET' ? 'Set' : '—'))}
+                                    </span>
                                   );
                                 })()}
                               </td>
@@ -7751,6 +7776,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <th style={{ padding: '8px 10px', width: '38px', textAlign: 'center' }}>#</th>
                           <th style={{ padding: '8px 10px' }}>Product / Component</th>
                           <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center' }}>HSN / SAC</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Set / kW</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Qty</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>UOM</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Rate (₹)</th>
@@ -7799,7 +7825,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <React.Fragment key={sec.key}>
                                   {/* PRESET HEADER BANNER WITH KIT VALUE */}
                                   <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2.5px solid #0E7490', borderBottom: '1.5px solid #A5F3FC' }}>
-                                    <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                    <td colSpan={9} style={{ padding: '9px 12px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                                         {/* Left: Preset Badge & Name */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -7830,7 +7856,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             borderRadius: '12px',
                                             border: '1px solid #A5F3FC'
                                           }}>
-                                            Total Qty: {setCount} {pUnit} ({sec.items.length} components)
+                                            Total Qty: {setCount} {pUnit === 'kW' ? 'kW' : (setCount > 1 ? 'Sets' : 'Set')} ({sec.items.length} components)
                                           </span>
                                         </div>
 
@@ -7894,6 +7920,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           )}
                                         </td>
                                         <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
+                                        <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                          <span style={{
+                                            display: 'inline-block',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '9.5px',
+                                            fontWeight: '800',
+                                            backgroundColor: (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
+                                            color: (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? '#0284C7' : '#0E7490',
+                                            border: `1px solid ${(pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? '#BAE6FD' : '#A5F3FC'}`
+                                          }}>
+                                            {(pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW') ? 'kW' : 'Set'}
+                                          </span>
+                                        </td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center' }}>
@@ -7921,7 +7961,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                                   {/* END OF PRESET DIVIDER */}
                                   <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1px dashed #99F6E4', borderBottom: '2.5px solid #0E7490' }}>
-                                    <td colSpan={8} style={{ padding: '8px 14px', textAlign: 'center' }}>
+                                    <td colSpan={9} style={{ padding: '8px 14px', textAlign: 'center' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                                         <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
                                         <span style={{
@@ -7958,7 +7998,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               <React.Fragment key="custom_section">
                                 {/* START OF CUSTOM PRODUCTS HEADER */}
                                 <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2.5px solid #475569', borderBottom: '1.5px solid #CBD5E1' }}>
-                                  <td colSpan={8} style={{ padding: '9px 12px' }}>
+                                  <td colSpan={9} style={{ padding: '9px 12px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span style={{
@@ -8006,6 +8046,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         )}
                                       </td>
                                       <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center', color: '#94A3B8', fontWeight: '700' }}>—</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'right', color: '#334155', fontWeight: '700' }}>
@@ -8021,7 +8062,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                                 {/* END OF CUSTOM PRODUCTS DIVIDER */}
                                 <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px dashed #CBD5E1', borderBottom: '2.5px solid #475569' }}>
-                                  <td colSpan={8} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                  <td colSpan={9} style={{ padding: '7px 14px', textAlign: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                                       <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
                                       <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', letterSpacing: '0.4px' }}>
@@ -8036,7 +8077,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           })
                         ) : (
                           <tr>
-                            <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                            <td colSpan={9} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
                               No individual line items listed.
                             </td>
                           </tr>

@@ -102,6 +102,7 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   // Table Columns Visibility
   showSnoCol: true,
   showHsn: true,
+  showSetKwCol: true,
   showQty: true,
   showUom: true,
   showItemDescription: true,
@@ -115,6 +116,8 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   colHeaderSno: '#',
   colHeaderDesc: 'Item & Description',
   colHeaderHsn: 'HSN/SAC',
+  colHeaderSetKw: 'Set / kW',
+  setKwColLabel: 'Set / kW',
   colHeaderQty: 'Qty / Set',
   colHeaderUom: 'UOM',
   colHeaderRate: 'Rate',
@@ -836,7 +839,7 @@ export function VRMProformaInvoicePrintSheet({
       const grp = presetGroups[grpId];
       const uPrice = parseFloat(grp.kitPrice) || 0;
       const sCount = parseFloat(grp.setCount || grp.quantity || 1) || 1;
-      const pUnit = grp.unit || 'Sets';
+      const pUnit = grp.unit || grp.unitType || (grp.isKwBased || String(grp.presetName || grp.name || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
       const grpSub = uPrice * sCount;
       const gItems = rawItems.filter(it => (it.presetGroupId || 'legacy_default') === grpId);
       const tQty = gItems.reduce((s, it) => s + (parseFloat(it.qty) || 1), 0);
@@ -876,6 +879,7 @@ export function VRMProformaInvoicePrintSheet({
     const uPrice = Math.round(rawVal);
     const sCount = 1;
     const grpSub = uPrice;
+    const detectedFallbackUnit = pi.presetUnit || (String(pi.presetName || pi.productName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
     const tQty = rawItems.reduce((s, it) => s + (parseFloat(it.qty) || 1), 0);
     let grpGst = 0;
     rawItems.forEach(it => {
@@ -891,12 +895,18 @@ export function VRMProformaInvoicePrintSheet({
       kitPrice: uPrice,
       taxable: grpSub,
       setCount: sCount,
+      unit: detectedFallbackUnit,
       groupSubtotal: grpSub,
       groupGst: grpGst,
       groupTotal: grpSub + grpGst,
       gstRateStr: '18%'
     };
   }
+
+  const isAnyKw = Object.values(groupMetaMap).some(g => g.unit === 'kW' || String(g.unit).toLowerCase() === 'kw') ||
+    rawItems.some(it => String(it.uom || it.unit || '').toUpperCase() === 'KW' || String(it.groupUnit || '').toLowerCase() === 'kw') ||
+    String(pi.presetUnit || '').toLowerCase() === 'kw' ||
+    String(pi.presetName || '').toLowerCase().includes('kw');
 
   // Distinct preset groups in items
   const distinctPrintGroupIds = [];
@@ -1047,7 +1057,7 @@ export function VRMProformaInvoicePrintSheet({
       groupCount,
       presetName: grpMeta?.presetName || grpMeta?.name || '',
       setCount: grpMeta?.setCount || 1,
-      groupUnit: grpMeta?.unit || 'Sets',
+      groupUnit: grpMeta?.unit || (String(it.uom || it.unit || '').toUpperCase() === 'KW' ? 'kW' : (isAnyKw ? 'kW' : 'Sets')),
       groupPrice: grpMeta?.kitPrice || grpMeta?.groupSubtotal || 0,
       groupTaxable: grpMeta?.groupSubtotal || grpMeta?.taxable || 0,
       groupGst: grpMeta?.groupGst || 0,
@@ -1131,6 +1141,7 @@ export function VRMProformaInvoicePrintSheet({
     { key: 'showTransportDetails', label: 'Transport / LR Details' },
     { key: 'showSnoCol', label: 'S.No Column' },
     { key: 'showHsn', label: 'HSN/SAC Column' },
+    { key: 'showSetKwCol', label: 'Set / kW Column' },
     { key: 'showQty', label: 'Qty Column' },
     { key: 'showUom', label: 'UOM Column' },
     { key: 'showRateCol', label: 'Rate (₹) Column' },
@@ -1290,6 +1301,7 @@ export function VRMProformaInvoicePrintSheet({
           <thead>
             <tr style={{ backgroundColor: '#0B3B60', color: '#FFFFFF', fontWeight: '700', fontSize: '9px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
               <th style={{ padding: '8px 10px', textAlign: 'left' }}>ITEM & DESCRIPTION</th>
+              <th style={{ padding: '8px 6px', textAlign: 'center', width: '55px' }}>SET / kW</th>
               <th style={{ padding: '8px 6px', textAlign: 'center', width: '60px' }}>QTY</th>
               <th style={{ padding: '8px 8px', textAlign: 'right', width: '80px' }}>RATE (₹)</th>
               <th style={{ padding: '8px 8px', textAlign: 'right', width: '90px' }}>TAXABLE (₹)</th>
@@ -1321,13 +1333,32 @@ export function VRMProformaInvoicePrintSheet({
                 <React.Fragment key={idx}>
                   {it.isPresetItem && it.isFirstInGroup && (
                     <tr key={`preset_hdr_${it.grpId || idx}`} style={{ backgroundColor: '#F0F7FF', borderTop: '2px solid #0B3B60', borderBottom: '1px solid #CBD5E1' }}>
-                      <td colSpan={isIntra ? 7 : 6} style={{ padding: '6px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '10px' }}>
-                        📦 {it.presetName || 'Solar Structure MMS Kit'}
-                        {it.groupCount ? (
-                          <span style={{ fontSize: '8.5px', fontWeight: '600', color: '#64748B', marginLeft: '8px' }}>
-                            ({it.groupCount} components included)
-                          </span>
-                        ) : null}
+                      <td colSpan={isIntra ? 8 : 7} style={{ padding: '6px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                          <div>
+                            📦 {it.presetName || 'Solar Structure MMS Kit'}
+                            <span style={{
+                              fontSize: '9px',
+                              fontWeight: '800',
+                              color: '#0E7490',
+                              backgroundColor: '#E0F2FE',
+                              padding: '1px 8px',
+                              borderRadius: '4px',
+                              marginLeft: '8px',
+                              border: '1px solid #BAE6FD'
+                            }}>
+                              {it.setCount} {it.groupUnit === 'kW' ? 'kW' : (parseFloat(it.setCount) > 1 ? 'Sets' : 'Set')}
+                            </span>
+                            {it.groupCount ? (
+                              <span style={{ fontSize: '8.5px', fontWeight: '600', color: '#64748B', marginLeft: '6px' }}>
+                                ({it.groupCount} components included)
+                              </span>
+                            ) : null}
+                          </div>
+                          <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0B3B60' }}>
+                            Rate: ₹ {Number(it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} / {it.groupUnit === 'kW' ? 'kW' : 'Set'}
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -1347,6 +1378,26 @@ export function VRMProformaInvoicePrintSheet({
                           {it.description}
                         </div>
                       ) : null}
+                    </td>
+                    <td style={{
+                      padding: '7px 6px',
+                      textAlign: 'center',
+                      verticalAlign: 'top',
+                      fontWeight: '800',
+                      backgroundColor: it.isPresetItem ? '#FCFDFE' : 'transparent',
+                      borderBottom: (it.isPresetItem && it.isLastInGroup) ? '1px solid #CBD5E1' : '1px solid #E2E8F0'
+                    }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontSize: '8.5px',
+                        fontWeight: '800',
+                        backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : (it.isPresetItem || it.groupUnit ? '#F1F5F9' : 'transparent'),
+                        color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : (it.isPresetItem || it.groupUnit ? '#475569' : '#94A3B8')
+                      }}>
+                        {(it.groupUnit === 'kW' || it.uom === 'KW') ? 'kW' : ((it.isPresetItem || it.groupUnit || it.uom === 'SET') ? 'Set' : '—')}
+                      </span>
                     </td>
                     <td style={{
                       padding: '7px 6px',
@@ -1380,7 +1431,7 @@ export function VRMProformaInvoicePrintSheet({
                         >
                           <div>{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           <div style={{ fontSize: '7.5px', color: '#64748B', fontWeight: '500', marginTop: '1px' }}>
-                            {it.groupUnit === 'kW' ? 'per kW' : 'per set'}
+                            {it.groupUnit === 'kW' ? 'per kW' : 'per Set'}
                           </div>
                         </td>
                       ) : null
@@ -2409,6 +2460,7 @@ export function VRMProformaInvoicePrintSheet({
             const hasSno = cfg.showSnoCol !== false;
             const hasDesc = cfg.showItemDescription !== false;
             const hasHsn = cfg.showHsn !== false;
+            const hasSetKwCol = cfg.showSetKwCol !== false;
             const hasQty = cfg.showQty !== false;
             const hasRate = cfg.showRateCol !== false;
             const hasGst = cfg.showGstCol !== false && (totalGst > 0 || (gstTiers && gstTiers.length > 0));
@@ -2417,6 +2469,7 @@ export function VRMProformaInvoicePrintSheet({
             const computedColSpan = (hasSno ? 1 : 0) +
               (hasDesc ? 1 : 0) +
               (hasHsn ? 1 : 0) +
+              (hasSetKwCol ? 1 : 0) +
               (hasQty ? 1 : 0) +
               (hasRate ? 1 : 0) +
               (hasGst ? (isIntra ? 4 : 2) : 0) +
@@ -2501,12 +2554,35 @@ export function VRMProformaInvoicePrintSheet({
                         </div>
                       </th>
                     )}
+                    {hasSetKwCol && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '55px', textAlign: 'center', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <EditableText
+                            value={cfg.setKwColLabel || cfg.colHeaderSetKw || 'Set / kW'}
+                            fallback="Set / kW"
+                            onSave={(v) => onUpdateSetting?.({ setKwColLabel: v, colHeaderSetKw: v })}
+                          />
+                          {isEditable && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={() => {
+                                onUpdateSetting?.({ showSetKwCol: false });
+                                onElementRemoved?.('showSetKwCol', 'Set / kW Column');
+                              }}
+                              title="Remove Set / kW Column"
+                              style={colHeaderRemoveBtnStyle}
+                            >×</button>
+                          )}
+                        </div>
+                      </th>
+                    )}
                     {hasQty && (
                       <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '60px', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <EditableText
-                            value={cfg.qtyColLabel || cfg.colHeaderQty || 'Qty / Set'}
-                            fallback="Qty / Set"
+                            value={cfg.qtyColLabel || cfg.colHeaderQty || (isAnyKw ? 'Qty / kW' : 'Qty / Set')}
+                            fallback={isAnyKw ? 'Qty / kW' : 'Qty / Set'}
                             onSave={(v) => onUpdateSetting?.({ qtyColLabel: v, colHeaderQty: v })}
                           />
                           {isEditable && (
@@ -2636,7 +2712,7 @@ export function VRMProformaInvoicePrintSheet({
                               borderTop: `2px solid ${cfg.accentColor || '#1E2F5B'}`
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
                               <span style={{ fontWeight: '800', color: cfg.accentColor || '#1E2F5B', fontSize: '10px' }}>
                                 <EditableText
                                   value={it.presetName}
@@ -2645,6 +2721,17 @@ export function VRMProformaInvoicePrintSheet({
                                     if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
                                   }}
                                 />
+                              </span>
+                              <span style={{
+                                fontSize: '9px',
+                                fontWeight: '800',
+                                color: '#0E7490',
+                                backgroundColor: '#E0F2FE',
+                                padding: '1px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid #BAE6FD'
+                              }}>
+                                {it.setCount} {it.groupUnit === 'kW' ? 'kW' : (parseFloat(it.setCount) > 1 ? 'Sets' : 'Set')}
                               </span>
                             </div>
                           </td>
@@ -2704,6 +2791,26 @@ export function VRMProformaInvoicePrintSheet({
                             />
                           </td>
                         )}
+                        {hasSetKwCol && (
+                          <td style={{
+                            border: '1px solid #CBD5E1',
+                            padding: '2.5px 3px',
+                            textAlign: 'center',
+                            verticalAlign: it.isPresetItem ? 'middle' : 'top'
+                          }}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              fontSize: '8px',
+                              fontWeight: '800',
+                              backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : (it.isPresetItem || it.groupUnit ? '#F1F5F9' : 'transparent'),
+                              color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : (it.isPresetItem || it.groupUnit ? '#475569' : '#94A3B8')
+                            }}>
+                              {(it.groupUnit === 'kW' || it.uom === 'KW') ? 'kW' : ((it.isPresetItem || it.groupUnit || it.uom === 'SET') ? 'Set' : '—')}
+                            </span>
+                          </td>
+                        )}
                         {hasQty && (
                           <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
                             <div>
@@ -2755,7 +2862,7 @@ export function VRMProformaInvoicePrintSheet({
                                   />
                                 </div>
                                 <div style={{ fontSize: '8px', color: '#64748B', fontWeight: '500', marginTop: '2px' }}>
-                                  {it.groupUnit === 'kW' ? 'per kW' : 'per set'}
+                                  {it.groupUnit === 'kW' ? 'per kW' : 'per Set'}
                                 </div>
                               </td>
                             ) : null
@@ -3952,6 +4059,16 @@ function TemplateCustomizerDrawer({
                 type="checkbox"
                 checked={settings.showTaxableCol !== false}
                 onChange={(e) => onUpdateSettings({ showTaxableCol: e.target.checked })}
+                style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
+               />
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
+              <span>Set / kW Column</span>
+              <input id="vrmproforma-invoice-print-template-set-kw-column" name="setKwColumn" aria-label="Set / kW Column"
+                type="checkbox"
+                checked={settings.showSetKwCol !== false}
+                onChange={(e) => onUpdateSettings({ showSetKwCol: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
                />
             </label>
