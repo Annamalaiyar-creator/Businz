@@ -9,7 +9,7 @@
  * 4. Local media cache fallback (IndexedDB / memory map)
  */
 
-import { getMediaFromCache } from './mediaUtils.js';
+import { getMediaFromCache, saveMediaToCache } from './mediaUtils.js';
 
 // Client-side in-memory cache for generated signed URLs: storagePath -> { signedUrl, expiresAt }
 const signedUrlCache = new Map();

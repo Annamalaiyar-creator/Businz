@@ -3290,7 +3290,7 @@ export default function ItemsDirectoryView(props) {
                           .then(res => res.json())
                           .then(data => {
                             console.log('Item deleted from database & Control Room:', data);
-                            fetchItems();
+                            fetchItemsFromBackend();
                           })
                           .catch(err => console.error('Failed to delete item in backend:', err));
                       }

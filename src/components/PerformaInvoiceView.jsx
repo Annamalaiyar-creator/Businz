@@ -1219,6 +1219,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       return p;
     });
 
+    const cleanSalesPerson = (targetPi.salesPerson || targetPi.salesperson || targetPi.createdBy || 'Sales Executive').trim();
+    const amtStr = targetPi.amount ? `₹${parseFloat(targetPi.amount).toLocaleString('en-IN')}` : (targetPi.totalAmount ? `₹${parseFloat(targetPi.totalAmount).toLocaleString('en-IN')}` : '');
+
     updatePiList(updatedList);
     notifyPiCreated({
       piNo: cleanPiNo,
@@ -3117,7 +3120,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         resetForm();
         setViewMode('list');
 
-        const safeCustomer = (vendorName || customerName || 'Customer').trim();
+        const safeCustomer = (vendorName || 'Customer').trim();
         if (isDraft) {
           showTopToast(`📝 Proforma Invoice (${finalEstNo}) for ${safeCustomer} has been saved as Draft in BUSINZ database.`, 'info', 5000);
         } else {
@@ -4130,7 +4133,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   ) : (
                     currentRows.map((pi) => {
                       const isSelected = selectedPIs.includes(pi.piNo);
-                      const stStyle = getStatusBadgeStyle(pi.status);
                       const contactPerson = pi.contactPerson || pi.customerContactPerson || pi.attn || pi.customerContact || '—';
                       const phone = pi.phone || pi.customerPhone || pi.mobile || '';
 
@@ -4166,21 +4168,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 {pi.piNo}
                               </span>
                             </div>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              backgroundColor: stStyle.bg,
-                              color: stStyle.color,
-                              border: `1px solid ${stStyle.border}`
-                            }}>
-                              {stStyle.icon}
-                              {pi.status}
-                            </span>
+                            <StatusBadge type={pi.status} label={pi.status} size="sm" />
                           </div>
 
                           {/* Customer Name & Contact */}
@@ -4227,12 +4215,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#64748B' }}>
                               <Calendar size={13} style={{ color: '#94A3B8' }} />
-                              <span>{formatDate(pi.piDate)}</span>
+                              <span>{pi.piDate ? new Date(pi.piDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                               <span style={{ fontSize: '11px', color: '#64748B' }}>Total:</span>
                               <span style={{ fontSize: '15px', fontWeight: '900', color: '#0F172A' }}>
-                                {formatCurrency(pi.grandTotal || pi.totalAmount || 0)}
+                                {pi.grandTotal || pi.totalAmount ? `₹${Number(pi.grandTotal || pi.totalAmount || 0).toLocaleString('en-IN')}` : '₹0'}
                               </span>
                             </div>
                           </div>
@@ -4255,7 +4243,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setQuickCompleteModal(pi);
+                                    handleReleaseDraftPi(pi);
                                   }}
                                   style={{
                                     marginLeft: 'auto',

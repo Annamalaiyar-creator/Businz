@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
-    "build": "vite build && cp -r dist/assets/* assets/",
+    "build": "oxlint -c .oxlintrc.json -A all -D no-undef src/ && vite build && cp -r dist/assets/* assets/",
     "lint": "oxlint",
     "preview": "vite preview",
     "backup": "node scripts/backup.js",

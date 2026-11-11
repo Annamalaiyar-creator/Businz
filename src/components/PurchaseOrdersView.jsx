@@ -8,6 +8,7 @@ import ModernDateRangePicker from './ModernDateRangePicker';
 import { getNextSequence } from '../utils/sequenceGenerator';
 import { notifyPoSentForApproval } from '../services/notificationService';
 import { parseAddressString, formatAddressObj, getVendorLocations } from '../utils/otherViewsShared';
+import { centralInventoryStore } from '../utils/centralInventoryStore';
 import CreateProductModal from './views/CreateProductModal';
 import TypeableProductSelect from './TypeableProductSelect';
 import TypeableVendorSelect from './TypeableVendorSelect';
@@ -6075,7 +6076,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               </h3>
               <div style={{ fontSize: '12px', color: '#64748B', display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
                 <div>Vendor: <strong style={{ color: '#0F172A' }}>{cancellingPo.vendor || cancellingPo.vendorName || vendorName}</strong></div>
-                <div>Amount: <strong style={{ color: '#0F172A' }}>{cancellingPo.amount || (grandTotal ? `₹${grandTotal.toLocaleString('en-IN')}` : '—')}</strong></div>
+                <div>Amount: <strong style={{ color: '#0F172A' }}>{cancellingPo.amount ? `₹${Number(cancellingPo.amount).toLocaleString('en-IN')}` : (cancellingPo.total ? `₹${Number(cancellingPo.total).toLocaleString('en-IN')}` : '—')}</strong></div>
                 <div>Current Status: <strong style={{ color: '#0E7490' }}>{cancellingPo.status || 'Active'}</strong></div>
               </div>
 

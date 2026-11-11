@@ -1,7 +1,7 @@
 import React from "react";
 import {
   Plus, Check, Trash2, FileText, AlertCircle, CheckCircle,
-  CheckSquare, Truck, Package, Upload, Camera, Video, Eye
+  CheckSquare, Truck, Package, Upload, Camera, Video, Eye, XCircle
 } from "lucide-react";
 import { normalizePaymentTerm, stripDataUrlsFromRecord, getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";

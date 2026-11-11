@@ -10,6 +10,7 @@ import { prodModuleEngine } from '../../utils/productionModuleEngine';
 import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from '../../utils/vrmProductsData';
 import { fetchCloudStore, subscribeToCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
 import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
+import * as XLSX from 'xlsx';
 
 export const isRawZohoNumericId = (code) => Boolean(code && /^\d{10,}$/.test(String(code).trim()));
 
@@ -993,6 +994,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const sFp = wordFingerprint(selectedMat.name || '');
 
     const transactionEvents = [];
+    const processedBomCodes = new Set();
 
     // 1. Authoritative Sales BOM Allocations & Dispatch Deductions
     try {
@@ -1016,7 +1018,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         }
       } catch (_) {}
 
-      const processedBomCodes = new Set();
       if (Array.isArray(boms)) {
         boms.forEach(b => {
           const bCode = String(b?.bomCode || b?.code || b?.id || '').toUpperCase().trim();

@@ -8,7 +8,7 @@ import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
 } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
-import { saveCloudStoreImmediate, saveCloudBomRow } from "../../utils/supabaseDataSync";
+import { saveCloudStoreImmediate, saveCloudBomRow, getAndReserveNextBomCode, resolveBomCollisions } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { getFullProductsCatalogWithStock } from "../../utils/productCatalogService";
 import { resolveProductCode, normalizeProductName } from "../../utils/vrmProductsData";
@@ -41,6 +41,12 @@ export default function CreateBomFormPage(props) {
     showClearConfirmModal, setShowClearConfirmModal,
     bomConfirmModal, setBomConfirmModal, showCustomAlert
   } = props;
+  const [internalBomMaterialsList, setInternalBomMaterialsList] = React.useState(props.bomMaterialsList || []);
+  const bomMaterialsList = props.bomMaterialsList !== undefined ? props.bomMaterialsList : internalBomMaterialsList;
+  const setBomMaterialsList = props.setBomMaterialsList || setInternalBomMaterialsList;
+  const userRole = props.userRole || localStorage.getItem('controlroom_user_role') || '';
+  const setCurrentPage = props.setCurrentPage || (() => {});
+  const presetFullPrice = presetKitPrice;
   const [internalPresetUnit, setInternalPresetUnit] = React.useState(props.presetUnit || (String(props.selectedPreset || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'));
   const presetUnit = props.presetUnit !== undefined ? props.presetUnit : internalPresetUnit;
   const setPresetUnit = props.setPresetUnit || setInternalPresetUnit;
@@ -500,7 +506,6 @@ export default function CreateBomFormPage(props) {
                 if (val === 'DC') {
                   setNewBomPaymentType('100% Paid');
                   setNewBomPaymentProofDoc(null);
-                  setPaymentDocs([]);
                 }
                 if (bomFormErrors.docType) {
                   setBomFormErrors(prev => ({ ...prev, docType: null }));

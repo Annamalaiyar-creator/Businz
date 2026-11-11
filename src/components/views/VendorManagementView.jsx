@@ -3675,7 +3675,7 @@ export default function VendorManagementView(props) {
                             .then(res => res.json())
                             .then(data => {
                               console.log('Vendor deleted from BUSINZ:', data);
-                              fetchVendors();
+                              loadVendorsFromBackend();
                             })
                             .catch(err => console.error('Failed to delete vendor in backend:', err));
                         }

@@ -1371,8 +1371,8 @@ export default function BomOrdersView(props) {
             return pNo === String(sPiNo).trim().toLowerCase();
           });
           if (targetPi) {
-            const piOwner = resolveBomOwner(targetPi);
-            if (piOwner) return curCode === piOwner;
+            const piOwner = (targetPi.salesPersonCode || targetPi.createdById || targetPi.salesPerson || targetPi.salesperson || '').toLowerCase().trim();
+            if (piOwner) return (curCode && curCode.toLowerCase() === piOwner) || (curName && piOwner.includes(curName.toLowerCase()));
           }
         } catch (_) {}
       }
@@ -7352,7 +7352,7 @@ export default function BomOrdersView(props) {
                               </tr>
 
                               {sec.items.map(({ item: it, originalIndex }, cIdx) => {
-                                const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? item.totalDispatchQty : (it.qty || it.quantity || 0)) || 0;
+                                const q = parseFloat(it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '' ? it.totalDispatchQty : (it.qty || it.quantity || 0)) || 0;
                                 const r = parseFloat(it.rate || it.price || 0) || 0;
                                 const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
                                 const taxRate = parseFloat(taxRateStr) || 18;

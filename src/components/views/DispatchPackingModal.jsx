@@ -268,6 +268,9 @@ export default function DispatchPackingModal({
   };
 
   const targetCode = dispatchPackingModal?.bomCode || dispatchPackingModal?.code || dispatchPackingModal?.id;
+  const resolvedCustomer = (dispatchPackingModal?.customerName && dispatchPackingModal.customerName !== 'Customer' && dispatchPackingModal.customerName !== '-')
+    ? dispatchPackingModal.customerName
+    : (dispatchPackingModal?.companyName || dispatchPackingModal?.vendor || 'Valued Customer');
 
   const syncBOMMediaItem = (itemType, itemId, permanentUrl) => {
     if (!targetCode || !permanentUrl) return;

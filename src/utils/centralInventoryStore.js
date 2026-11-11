@@ -849,12 +849,12 @@ class CentralInventoryStore {
             return (pCode && rCode === pCode) || (pName && (rName === pName || rName.includes(pName) || pName.includes(rName)));
           });
           if (rMatch) {
-            const cur = Math.max(0, parseFloat(String(r.stock).replace(/,/g, '')) || 0);
+            const cur = Math.max(0, parseFloat(String(rMatch.stock).replace(/,/g, '')) || 0);
             const next = Math.max(0, cur - qty);
-            r.stock = String(next);
-            r.allocated = (parseFloat(String(r.allocated).replace(/,/g, '')) || 0) + qty;
-            const minL = parseFloat(String(r.minLevel || '50').replace(/,/g, '')) || 50;
-            r.status = next <= 0 ? 'Out of Stock' : (next <= minL ? 'Low Stock' : 'In Stock');
+            rMatch.stock = String(next);
+            rMatch.allocated = (parseFloat(String(rMatch.allocated).replace(/,/g, '')) || 0) + qty;
+            const minL = parseFloat(String(rMatch.minLevel || '50').replace(/,/g, '')) || 50;
+            rMatch.status = next <= 0 ? 'Out of Stock' : (next <= minL ? 'Low Stock' : 'In Stock');
           }
         });
         localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(stockRegistry));

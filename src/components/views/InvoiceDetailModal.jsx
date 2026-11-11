@@ -9,6 +9,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
+import { prodModuleEngine } from "../../utils/productionModuleEngine";
 import { addLiveNotification } from "../Header";
 import DocPreviewModal from "./DocPreviewModal";
 import { isTamilNaduIntra } from "../../utils/gstHelper";
@@ -34,6 +35,7 @@ export default function InvoiceDetailModal({
   setPreviewDocModal,
   setActiveMediaPreviewModal = () => {},
   setPendingDcModal = () => {},
+  setDispatchChecklistPreviewModal = () => {},
   showCustomAlert
 }) {
   const invoiceList = passedInvoiceList || invoices || [];
@@ -411,7 +413,7 @@ export default function InvoiceDetailModal({
         invoiceNo: invoiceEditForm.invNo || b.invoiceNo
       } : b);
       try {
-        const updatedBom = updatedBoms.find(b => (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode)) || (matchingBom && b.bomCode === matchingBom.bomCode));
+        const updatedBom = updatedBoms.find(b => (targetCode && (b.bomCode === targetCode || b.code === targetCode)) || (matchingBom && b.bomCode === matchingBom.bomCode));
         if (updatedBom) {
           saveCloudBomRow(updatedBom);
         }
@@ -663,35 +665,31 @@ export default function InvoiceDetailModal({
                 if (!isStockAlreadyBlocked) {
                   // 2. Reduce stock in stockRegistry (if available)
                   try {
-                    if (typeof setStockRegistry === 'function') {
-                      setStockRegistry(prevRegistry => {
-                        const updated = [...(prevRegistry || [])];
-                        packedItemsToDeduct.forEach(pItem => {
-                          const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
-                          const matchIdx = updated.findIndex(r =>
-                            (r.code && pItem.code && r.code.toLowerCase().trim() === pItem.code.toLowerCase().trim()) ||
-                            (r.item && pItem.name && (
-                              r.item.toLowerCase().trim() === pItem.name.toLowerCase().trim() ||
-                              r.item.toLowerCase().includes(pItem.name.toLowerCase().trim()) ||
-                              pItem.name.toLowerCase().includes(r.item.toLowerCase().trim())
-                            ))
-                          );
-                          if (matchIdx !== -1) {
-                            const currentStock = Math.max(0, parseInt(String(updated[matchIdx].stock).replace(/,/g, ''), 10) || 0);
-                            const newStock = Math.max(0, currentStock - qtyToDeduct);
-                            const minLvl = parseInt(String(updated[matchIdx].minLevel || '500').replace(/,/g, ''), 10) || 500;
-                            updated[matchIdx] = {
-                              ...updated[matchIdx],
-                              stock: String(newStock),
-                              status: newStock === 0 ? 'Out of Stock' : (newStock <= minLvl ? 'Low Stock' : 'In Stock')
-                            };
-                          }
-                        });
-                        try {
-                          localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(updated));
-                        } catch (e) { }
-                        return updated;
+                    const rawRegistry = localStorage.getItem('controlroom_stock_registry_store');
+                    if (rawRegistry) {
+                      const updated = JSON.parse(rawRegistry) || [];
+                      packedItemsToDeduct.forEach(pItem => {
+                        const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
+                        const matchIdx = updated.findIndex(r =>
+                          (r.code && pItem.code && r.code.toLowerCase().trim() === pItem.code.toLowerCase().trim()) ||
+                          (r.item && pItem.name && (
+                            r.item.toLowerCase().trim() === pItem.name.toLowerCase().trim() ||
+                            r.item.toLowerCase().includes(pItem.name.toLowerCase().trim()) ||
+                            pItem.name.toLowerCase().includes(r.item.toLowerCase().trim())
+                          ))
+                        );
+                        if (matchIdx !== -1) {
+                          const currentStock = Math.max(0, parseInt(String(updated[matchIdx].stock).replace(/,/g, ''), 10) || 0);
+                          const newStock = Math.max(0, currentStock - qtyToDeduct);
+                          const minLvl = parseInt(String(updated[matchIdx].minLevel || '500').replace(/,/g, ''), 10) || 500;
+                          updated[matchIdx] = {
+                            ...updated[matchIdx],
+                            stock: String(newStock),
+                            status: newStock === 0 ? 'Out of Stock' : (newStock <= minLvl ? 'Low Stock' : 'In Stock')
+                          };
+                        }
                       });
+                      localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(updated));
                     }
                   } catch (e) { console.warn('Stock registry update warning in InvoiceDetailModal:', e); }
 
@@ -758,17 +756,8 @@ export default function InvoiceDetailModal({
                   if (savedMatStr) {
                     try { currentMats = JSON.parse(savedMatStr); } catch (e) { }
                   }
-                  if (!Array.isArray(currentMats) || currentMats.length === 0) {
-                    currentMats = ALUMINUM_PROFILES.map(p => ({
-                      ...p,
-                      lastUpdated: 'Live Store',
-                      reserved: 0,
-                      openingStock: p.stock,
-                      goodsReceived: 0,
-                      issuedProd: 0,
-                      matReturn: 0,
-                      stockAdj: 0
-                    }));
+                  if (!Array.isArray(currentMats)) {
+                    currentMats = [];
                   }
 
                   packedItemsToDeduct.forEach(pItem => {

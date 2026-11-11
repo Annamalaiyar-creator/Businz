@@ -5,7 +5,7 @@ import { saveCloudBomRow, saveCloudInvoiceRow } from '../../utils/supabaseDataSy
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import { stripDataUrlsFromRecord } from '../../utils/otherViewsShared';
 import { notifyDispatchCompletedToSales } from '../../services/notificationService';
-import { saveMediaToCache } from '../../utils/mediaUtils';
+import { saveMediaToCache, getMediaFromCache } from '../../utils/mediaUtils';
 
 /**
  * Fast client-side image compression helper

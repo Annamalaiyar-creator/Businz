@@ -207,7 +207,7 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
   // Check stored employee status list for access permission
   try {
     const existingEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-    const storedEmp = existingEmps.find(e => (e.employee_code || '').toUpperCase() === upperCode || (e.email || '').toLowerCase() === cleanUsername);
+    const storedEmp = existingEmps.find(e => (e.employee_code || '').toUpperCase() === cleanEmpCodeNorm || (e.email || '').toLowerCase() === cleanUsername);
 
     if (storedEmp && !isCoreOrLeadership) {
       if (storedEmp.status === 'Pending Approval') {

@@ -505,6 +505,7 @@ export default function ProductionViewsEngine(props) {
   const dispatchCameraStreamRef = useRef(null);
 
   const [newBomCode, setNewBomCode] = useState('');
+  const [newBomCustomer, setNewBomCustomer] = useState('');
   const [newBomDeliveryDate, setNewBomDeliveryDate] = useState('');
   const [newBomProductName, setNewBomProductName] = useState('');
   const [newBomSku, setNewBomSku] = useState('');
@@ -1295,6 +1296,7 @@ export default function ProductionViewsEngine(props) {
                 setPreviewDocModal={setPreviewDocModal}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setPendingDcModal={setPendingDcModal}
+                setDispatchChecklistPreviewModal={setDispatchChecklistPreviewModal}
                 showCustomAlert={showCustomAlert}
                 newBomDocType={newBomDocType}
                 setNewBomDocType={setNewBomDocType}

@@ -232,6 +232,7 @@ export default function VehicleLoadingModal({
   });
   const [loadingPhotos, setLoadingPhotos] = useState(() => (Array.isArray(existingLoading.photos) && existingLoading.photos.length > 0 ? existingLoading.photos : []));
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadingLr, setUploadingLr] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
   const [showLiveCameraModal, setShowLiveCameraModal] = useState(false);
