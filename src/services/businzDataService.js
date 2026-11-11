@@ -29,7 +29,10 @@ export async function getPurchaseOrders() {
     clearTimeout(timeoutId);
     if (res && res.ok) {
       const data = await res.json().catch(() => null);
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
+        if (data.length === 0) {
+          return [];
+        }
         const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
         const merged = data.map(poItem => {
           const zNo = normalize(poItem.poNo);
@@ -273,7 +276,7 @@ export async function getVendors() {
     const res = await fetch('/api/vendors');
     if (res.ok) {
       const data = await res.json().catch(() => null);
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         try {
           localStorage.setItem('controlroom_vendor_store', JSON.stringify(data));
         } catch (_) {}

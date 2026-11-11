@@ -9020,8 +9020,8 @@ app.delete(['/api/purchaseorders/:id', '/api/zoho/purchaseorders/:id'], async (r
   res.json({ success: true, message: `PO ${targetId} deleted from BUSINZ!`, remainingCount: updatedPOs.length });
 });
 
-// Endpoint to safely clear all vendors from BUSINZ Authoritative Store
-app.post('/api/procurement/clear-all-vendors', async (req, res) => {
+// Endpoint to safely clear all vendors from BUSINZ Authoritative Store (supports GET and POST)
+app.all('/api/procurement/clear-all-vendors', async (req, res) => {
   try {
     saveLocalVendors([]);
     res.json({
@@ -9034,15 +9034,15 @@ app.post('/api/procurement/clear-all-vendors', async (req, res) => {
   }
 });
 
-// Endpoint to delete dummy purchase orders
-app.post('/api/procurement/clear-dummy-pos', async (req, res) => {
+// Endpoint to delete dummy purchase orders (supports GET and POST)
+app.all(['/api/procurement/clear-dummy-pos', '/api/procurement/clear-all-pos'], async (req, res) => {
   try {
-    const { poNumbers, all = false } = req.body || {};
+    const { poNumbers, all = true } = req.body || {};
     const localPOs = loadLocalPOs();
     let updatedPOs = [];
 
-    if (all) {
-      // Clear all POs
+    if (all || (!poNumbers && req.query.all !== 'false')) {
+      // Clear all dummy test POs completely
       updatedPOs = [];
     } else if (Array.isArray(poNumbers) && poNumbers.length > 0) {
       const targets = new Set(poNumbers.map(n => String(n).trim().toLowerCase()));
@@ -9051,14 +9051,6 @@ app.post('/api/procurement/clear-dummy-pos', async (req, res) => {
         const noLower = String(p.poNo || p.po_number || '').trim().toLowerCase();
         return !targets.has(idLower) && !targets.has(noLower);
       });
-    } else {
-      // Default: remove known dummy/test PO prefixes or dummy identifiers
-      updatedPOs = localPOs.filter(p => {
-        const poNo = String(p.poNo || p.po_number || p.id || '').trim();
-        const vendor = String(p.vendor || p.vendorName || '').trim().toLowerCase();
-        const isDummy = poNo.startsWith('VRM-PO-2026-') || vendor.includes('dummy') || vendor.includes('test') || p.isDummy;
-        return !isDummy;
-      });
     }
 
     const removedCount = localPOs.length - updatedPOs.length;
@@ -9066,7 +9058,7 @@ app.post('/api/procurement/clear-dummy-pos', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Successfully removed ${removedCount} dummy Purchase Order(s).`,
+      message: `Successfully removed ${removedCount} Purchase Order(s).`,
       removedCount,
       remainingCount: updatedPOs.length,
       remainingPOs: updatedPOs.map(p => p.poNo || p.id)

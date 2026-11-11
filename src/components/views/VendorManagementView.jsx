@@ -1056,7 +1056,7 @@ export default function VendorManagementView(props) {
     setVendorLoading(true);
     try {
       const backendVendors = await getVendors();
-      if (Array.isArray(backendVendors) && backendVendors.length > 0) {
+      if (Array.isArray(backendVendors)) {
         setVendorList(backendVendors);
       } else {
         const res = await fetch('/api/vendors').catch(() => null);

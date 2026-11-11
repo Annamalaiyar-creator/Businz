@@ -362,6 +362,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           return p;
         });
 
+        if (Array.isArray(incomingList) && incomingList.length === 0) {
+          return [];
+        }
+
         const existingKeys = new Set(mergedIncoming.map(p => normalize(p?.poNo || p?.id)));
         const safePrev = Array.isArray(currentPrev) ? currentPrev : [];
         const localOnly = safePrev.filter(p => {
@@ -388,7 +392,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         });
       };
 
-      if (Array.isArray(safePOs) && safePOs.length > 0) {
+      if (Array.isArray(safePOs)) {
         updateIfChanged(safePOs);
       } else {
         const response = await fetchWithTimeout('/api/purchaseorders', { timeout: 25000 }).catch(() => null);
