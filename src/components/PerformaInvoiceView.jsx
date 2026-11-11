@@ -6273,8 +6273,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <th style={{ padding: '12px 10px', fontWeight: '700', minWidth: '280px' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
                       <th style={{ padding: '12px 6px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
-                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '85px', minWidth: '85px', textAlign: 'center' }}>Set / kW</th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '110px', minWidth: '110px', textAlign: 'center' }}>{hasAnyKwPreset ? 'Qty / kW' : 'Qty / Set'} <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '85px', minWidth: '85px', textAlign: 'center' }}>Set / kW</th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '135px', minWidth: '135px', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
@@ -6783,37 +6783,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   );
                                 })()}
                               </td>
-                              {/* Set / kW Column */}
-                              <td style={{ padding: '12px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                {(() => {
-                                  if (!isPresetItem) {
-                                    return <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }}>—</span>;
-                                  }
-                                  const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
-                                  const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
-                                  const nestedSub = isSub && currentGroup?.nestedSubPresets?.find(n => (n.id === item.subPresetId || n.name === item.subPresetName));
-                                  const effectiveSetCount = isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1);
-                                  const rowIsKw = isKwPreset(effectivePresetName, effectiveUnit, item) || String(effectiveUnit).toUpperCase() === 'KW';
-                                  const numCount = parseFloat(effectiveSetCount) || 1;
-                                  const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
-                                  const unitLabel = rowIsKw ? 'kW' : 'Set';
-                                  return (
-                                    <span style={{
-                                      display: 'inline-block',
-                                      padding: '2px 8px',
-                                      borderRadius: '6px',
-                                      fontSize: '11px',
-                                      fontWeight: '800',
-                                      backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
-                                      color: rowIsKw ? '#0284C7' : '#0E7490',
-                                      border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
-                                    }}>
-                                      {cleanCountStr} {unitLabel}
-                                    </span>
-                                  );
-                                })()}
-                              </td>
-                              <td style={{ padding: '12px 6px', verticalAlign: 'middle' }}>
+                               <td style={{ padding: '12px 6px', verticalAlign: 'middle' }}>
                                 <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                   <input id={`performa-invoice-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                                     type="number"
@@ -6836,6 +6806,51 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   />
                                 </div>
                               </td>
+                              {/* Set / kW Column: Positioned after Qty and merged vertically in middle for Presets */}
+                              {isPresetItem ? (
+                                isFirstInGroup ? (
+                                  <td
+                                    rowSpan={groupCount}
+                                    style={{
+                                      padding: '12px 6px',
+                                      textAlign: 'center',
+                                      verticalAlign: 'middle',
+                                      backgroundColor: groupIndex % 2 === 1 ? '#FAF5FF' : '#F0FDFA',
+                                      borderLeft: '1px solid #E2E8F0',
+                                      borderRight: '1px solid #E2E8F0'
+                                    }}
+                                  >
+                                    {(() => {
+                                      const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
+                                      const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
+                                      const nestedSub = isSub && currentGroup?.nestedSubPresets?.find(n => (n.id === item.subPresetId || n.name === item.subPresetName));
+                                      const effectiveSetCount = isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1);
+                                      const rowIsKw = isKwPreset(effectivePresetName, effectiveUnit, item) || String(effectiveUnit).toUpperCase() === 'KW';
+                                      const numCount = parseFloat(effectiveSetCount) || 1;
+                                      const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
+                                      const unitLabel = rowIsKw ? 'kW' : 'Set';
+                                      return (
+                                        <span style={{
+                                          display: 'inline-block',
+                                          padding: '2px 8px',
+                                          borderRadius: '6px',
+                                          fontSize: '11px',
+                                          fontWeight: '800',
+                                          backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
+                                          color: rowIsKw ? '#0284C7' : '#0E7490',
+                                          border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
+                                        }}>
+                                          {cleanCountStr} {unitLabel}
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
+                                ) : null
+                              ) : (
+                                <td style={{ padding: '12px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                  <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }}>—</span>
+                                </td>
+                              )}
                               {/* Total Dispatch Quantity Column */}
                               <td style={{ padding: '12px 6px', textAlign: 'center', backgroundColor: isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : '#F8FAFC' }}>
                                 {(() => {
@@ -7784,9 +7799,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <th style={{ padding: '8px 10px', width: '38px', textAlign: 'center' }}>#</th>
                           <th style={{ padding: '8px 10px' }}>Product / Component</th>
                           <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center' }}>HSN / SAC</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Set / kW</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Qty</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>UOM</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '75px' }}>Set / kW</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Rate (₹)</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>GST</th>
                           <th style={{ padding: '8px 10px', textAlign: 'right', width: '110px' }}>Total (₹)</th>
@@ -7928,30 +7943,43 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           )}
                                         </td>
                                         <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
-                                        <td style={{ padding: '7px 10px', textAlign: 'center' }}>
-                                          {(() => {
-                                            const rowIsKw = (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW' || String(sec.presetName || '').toLowerCase().includes('kw'));
-                                            const numCount = parseFloat(setCount) || 1;
-                                            const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
-                                            const unitLabel = rowIsKw ? 'kW' : 'Set';
-                                            return (
-                                              <span style={{
-                                                display: 'inline-block',
-                                                padding: '1px 6px',
-                                                borderRadius: '4px',
-                                                fontSize: '9.5px',
-                                                fontWeight: '800',
-                                                backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
-                                                color: rowIsKw ? '#0284C7' : '#0E7490',
-                                                border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
-                                              }}>
-                                                {cleanCountStr} {unitLabel}
-                                              </span>
-                                            );
-                                          })()}
-                                        </td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                        {/* Set / kW Column: Merged vertically in middle for entire preset group */}
+                                        {cIdx === 0 ? (
+                                          <td
+                                            rowSpan={sec.items.length}
+                                            style={{
+                                              padding: '7px 10px',
+                                              textAlign: 'center',
+                                              verticalAlign: 'middle',
+                                              backgroundColor: '#F8FAFC',
+                                              borderLeft: '1px solid #E2E8F0',
+                                              borderRight: '1px solid #E2E8F0'
+                                            }}
+                                          >
+                                            {(() => {
+                                              const rowIsKw = (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW' || String(sec.presetName || '').toLowerCase().includes('kw'));
+                                              const numCount = parseFloat(setCount) || 1;
+                                              const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
+                                              const unitLabel = rowIsKw ? 'kW' : 'Set';
+                                              return (
+                                                <span style={{
+                                                  display: 'inline-block',
+                                                  padding: '2px 8px',
+                                                  borderRadius: '6px',
+                                                  fontSize: '11px',
+                                                  fontWeight: '800',
+                                                  backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
+                                                  color: rowIsKw ? '#0284C7' : '#0E7490',
+                                                  border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
+                                                }}>
+                                                  {cleanCountStr} {unitLabel}
+                                                </span>
+                                              );
+                                            })()}
+                                          </td>
+                                        ) : null}
                                         <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                                           {hasExplicitRate ? (
                                             <span style={{ color: '#475569', fontWeight: '700' }}>₹ {r.toLocaleString('en-IN')}</span>
@@ -8062,9 +8090,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         )}
                                       </td>
                                       <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
-                                      <td style={{ padding: '7px 10px', textAlign: 'center', color: '#94A3B8', fontWeight: '700' }}>—</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center', color: '#94A3B8', fontWeight: '700' }}>—</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'right', color: '#334155', fontWeight: '700' }}>
                                         ₹ {r.toLocaleString('en-IN')}
                                       </td>

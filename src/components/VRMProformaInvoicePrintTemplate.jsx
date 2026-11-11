@@ -1309,8 +1309,8 @@ export function VRMProformaInvoicePrintSheet({
           <thead>
             <tr style={{ backgroundColor: '#0B3B60', color: '#FFFFFF', fontWeight: '700', fontSize: '9px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
               <th style={{ padding: '8px 10px', textAlign: 'left' }}>ITEM & DESCRIPTION</th>
-              <th style={{ padding: '8px 6px', textAlign: 'center', width: '55px' }}>SET / kW</th>
               <th style={{ padding: '8px 6px', textAlign: 'center', width: '60px' }}>QTY</th>
+              <th style={{ padding: '8px 6px', textAlign: 'center', width: '65px' }}>SET / kW</th>
               <th style={{ padding: '8px 8px', textAlign: 'right', width: '80px' }}>RATE (₹)</th>
               <th style={{ padding: '8px 8px', textAlign: 'right', width: '90px' }}>TAXABLE (₹)</th>
               {isIntra ? (
@@ -1356,30 +1356,7 @@ export function VRMProformaInvoicePrintSheet({
                         </div>
                       ) : null}
                     </td>
-                    <td style={{
-                      padding: '7px 6px',
-                      textAlign: 'center',
-                      verticalAlign: 'top',
-                      fontWeight: '800',
-                      backgroundColor: it.isPresetItem ? '#FCFDFE' : 'transparent',
-                      borderBottom: (it.isPresetItem && it.isLastInGroup) ? '1px solid #CBD5E1' : '1px solid #E2E8F0'
-                    }}>
-                      {it.isPresetItem && it.setKwDisplay && it.setKwDisplay !== '—' ? (
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          fontSize: '8.5px',
-                          fontWeight: '800',
-                          backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
-                          color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : '#0E7490'
-                        }}>
-                          {it.setKwDisplay}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '9px' }}>—</span>
-                      )}
-                    </td>
+                    {/* QTY COLUMN: Individual component qty */}
                     <td style={{
                       padding: '7px 6px',
                       textAlign: 'center',
@@ -1390,6 +1367,52 @@ export function VRMProformaInvoicePrintSheet({
                     }}>
                       {it.qty} {it.uom || 'NOS'}
                     </td>
+
+                    {/* SET / kW COLUMN: Merged vertically in middle for Preset Kit */}
+                    {it.isPresetItem ? (
+                      it.isFirstInGroup ? (
+                        <td
+                          rowSpan={it.groupCount}
+                          style={{
+                            padding: '8px 6px',
+                            textAlign: 'center',
+                            verticalAlign: 'middle',
+                            backgroundColor: '#F8FAFC',
+                            borderLeft: '1px solid #E2E8F0',
+                            borderRight: '1px solid #E2E8F0',
+                            borderBottom: '1px solid #CBD5E1',
+                            position: 'relative',
+                            zIndex: 10
+                          }}
+                        >
+                          {it.setKwDisplay && it.setKwDisplay !== '—' ? (
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '9.5px',
+                              fontWeight: '800',
+                              backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
+                              color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : '#0E7490',
+                              border: `1px solid ${(it.groupUnit === 'kW' || it.uom === 'KW') ? '#BAE6FD' : '#A5F3FC'}`
+                            }}>
+                              {it.setKwDisplay}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '9px' }}>—</span>
+                          )}
+                        </td>
+                      ) : null
+                    ) : (
+                      <td style={{
+                        padding: '7px 6px',
+                        textAlign: 'center',
+                        verticalAlign: 'top',
+                        borderBottom: '1px solid #E2E8F0'
+                      }}>
+                        <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '9px' }}>—</span>
+                      </td>
+                    )}
 
                     {/* RATE COLUMN: Merged vertically in middle for Preset Kit */}
                     {it.isPresetItem ? (
@@ -2535,29 +2558,6 @@ export function VRMProformaInvoicePrintSheet({
                         </div>
                       </th>
                     )}
-                    {hasSetKwCol && (
-                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '55px', textAlign: 'center', position: 'relative' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <EditableText
-                            value={cfg.setKwColLabel || cfg.colHeaderSetKw || 'Set / kW'}
-                            fallback="Set / kW"
-                            onSave={(v) => onUpdateSetting?.({ setKwColLabel: v, colHeaderSetKw: v })}
-                          />
-                          {isEditable && (
-                            <button
-                              type="button"
-                              className="no-print"
-                              onClick={() => {
-                                onUpdateSetting?.({ showSetKwCol: false });
-                                onElementRemoved?.('showSetKwCol', 'Set / kW Column');
-                              }}
-                              title="Remove Set / kW Column"
-                              style={colHeaderRemoveBtnStyle}
-                            >×</button>
-                          )}
-                        </div>
-                      </th>
-                    )}
                     {hasQty && (
                       <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '60px', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2575,6 +2575,29 @@ export function VRMProformaInvoicePrintSheet({
                                 onElementRemoved?.('showQty', 'Quantity Column');
                               }}
                               title="Remove Quantity Column"
+                              style={colHeaderRemoveBtnStyle}
+                            >×</button>
+                          )}
+                        </div>
+                      </th>
+                    )}
+                    {hasSetKwCol && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #1E4E79', padding: '7px 4px', width: '55px', textAlign: 'center', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <EditableText
+                            value={cfg.setKwColLabel || cfg.colHeaderSetKw || 'Set / kW'}
+                            fallback="Set / kW"
+                            onSave={(v) => onUpdateSetting?.({ setKwColLabel: v, colHeaderSetKw: v })}
+                          />
+                          {isEditable && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={() => {
+                                onUpdateSetting?.({ showSetKwCol: false });
+                                onElementRemoved?.('showSetKwCol', 'Set / kW Column');
+                              }}
+                              title="Remove Set / kW Column"
                               style={colHeaderRemoveBtnStyle}
                             >×</button>
                           )}
@@ -2772,30 +2795,6 @@ export function VRMProformaInvoicePrintSheet({
                             />
                           </td>
                         )}
-                        {hasSetKwCol && (
-                          <td style={{
-                            border: '1px solid #CBD5E1',
-                            padding: '2.5px 3px',
-                            textAlign: 'center',
-                            verticalAlign: it.isPresetItem ? 'middle' : 'top'
-                          }}>
-                            {it.isPresetItem && it.setKwDisplay && it.setKwDisplay !== '—' ? (
-                              <span style={{
-                                display: 'inline-block',
-                                padding: '1px 5px',
-                                borderRadius: '3px',
-                                fontSize: '8px',
-                                fontWeight: '800',
-                                backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
-                                color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : '#0E7490'
-                              }}>
-                                {it.setKwDisplay}
-                              </span>
-                            ) : (
-                              <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '8.5px' }}>—</span>
-                            )}
-                          </td>
-                        )}
                         {hasQty && (
                           <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
                             <div>
@@ -2816,6 +2815,48 @@ export function VRMProformaInvoicePrintSheet({
                               />
                             </div>
                           </td>
+                        )}
+                        {hasSetKwCol && (
+                          it.isPresetItem ? (
+                            it.isFirstInGroup ? (
+                              <td
+                                rowSpan={it.groupCount}
+                                style={{
+                                  border: '1px solid #CBD5E1',
+                                  padding: '4px 6px',
+                                  textAlign: 'center',
+                                  verticalAlign: 'middle',
+                                  backgroundColor: '#F8FAFC'
+                                }}
+                              >
+                                {it.setKwDisplay && it.setKwDisplay !== '—' ? (
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    fontSize: '9px',
+                                    fontWeight: '800',
+                                    backgroundColor: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#E0F2FE' : '#ECFEFF',
+                                    color: (it.groupUnit === 'kW' || it.uom === 'KW') ? '#0284C7' : '#0E7490',
+                                    border: `1px solid ${(it.groupUnit === 'kW' || it.uom === 'KW') ? '#BAE6FD' : '#A5F3FC'}`
+                                  }}>
+                                    {it.setKwDisplay}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '9px' }}>—</span>
+                                )}
+                              </td>
+                            ) : null
+                          ) : (
+                            <td style={{
+                              border: '1px solid #CBD5E1',
+                              padding: '2.5px 3px',
+                              textAlign: 'center',
+                              verticalAlign: 'top'
+                            }}>
+                              <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '8.5px' }}>—</span>
+                            </td>
+                          )
                         )}
 
                         {/* RATE COLUMN: Merged vertically in middle for Preset Kit */}
