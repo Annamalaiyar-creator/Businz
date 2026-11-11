@@ -78,8 +78,14 @@ export const formatAppliedAtDate = (r) => {
 export const formatBomDateDot = (raw) => {
   if (!raw) return '—';
   if (typeof raw === 'object' && raw.date) return formatBomDateDot(raw.date);
+  const s = String(raw).trim();
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) return s;
+  const ddmmyyyy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (ddmmyyyy) {
+    return `${ddmmyyyy[1].padStart(2, '0')}.${ddmmyyyy[2].padStart(2, '0')}.${ddmmyyyy[3]}`;
+  }
   const d = new Date(raw);
-  if (isNaN(d.getTime())) return String(raw);
+  if (isNaN(d.getTime())) return s;
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yyyy = d.getFullYear();

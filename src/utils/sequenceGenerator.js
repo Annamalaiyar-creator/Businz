@@ -205,19 +205,90 @@ export function parseBomSequenceNumber(code) {
 }
 
 /**
- * Comparator to sort BOM records in descending order (highest BOM number first, e.g. 999, 998, 997...).
- * Ensures newly created BOMs automatically appear at the very top.
+ * Safely parses any date candidate from a BOM record into an epoch timestamp (ms).
+ */
+export function parseBomDateTimestamp(item) {
+  if (!item) return 0;
+  if (typeof item === 'number' && !isNaN(item)) return item;
+
+  const candidates = [
+    item.salesConfirmedAt,
+    item.sales_confirmed_at,
+    item.createdAt,
+    item.created_at,
+    item.updatedAt,
+    item.updated_at,
+    item.appliedAt,
+    item.bomDate,
+    item.date,
+    item.dateTimeObj?.combined,
+    item.dateTimeObj?.date
+  ];
+
+  for (const c of candidates) {
+    if (!c) continue;
+    if (typeof c === 'number' && !isNaN(c)) return c;
+    if (c instanceof Date && !isNaN(c.getTime())) return c.getTime();
+    const s = String(c).trim();
+    if (!s || s === '—' || s === '-' || s === '[object Object]') continue;
+
+    // Check DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY format
+    const ddmmyyyy = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(.*)$/);
+    if (ddmmyyyy) {
+      const day = parseInt(ddmmyyyy[1], 10);
+      const month = parseInt(ddmmyyyy[2], 10) - 1;
+      const year = parseInt(ddmmyyyy[3], 10);
+      const rest = ddmmyyyy[4].trim();
+      if (rest) {
+        const parsedRest = new Date(`${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')} ${rest}`);
+        if (!isNaN(parsedRest.getTime())) return parsedRest.getTime();
+      }
+      return new Date(year, month, day).getTime();
+    }
+
+    const t = new Date(s).getTime();
+    if (!isNaN(t)) return t;
+  }
+  return 0;
+}
+
+/**
+ * Comparator to sort BOM records in descending order.
+ * Ensures the most recently created orders (Today > Yesterday > Older) appear at the top,
+ * and within the same calendar day breaks ties with sequential BOM number or exact timestamp.
  */
 export function compareBomDescending(a, b) {
+  const dateA = parseBomDateTimestamp(a);
+  const dateB = parseBomDateTimestamp(b);
+
+  if (dateA > 0 && dateB === 0) return -1;
+  if (dateA === 0 && dateB > 0) return 1;
+
+  if (dateA > 0 && dateB > 0) {
+    const da = new Date(dateA);
+    const db = new Date(dateB);
+    const dayKeyA = `${da.getFullYear()}-${String(da.getMonth() + 1).padStart(2, '0')}-${String(da.getDate()).padStart(2, '0')}`;
+    const dayKeyB = `${db.getFullYear()}-${String(db.getMonth() + 1).padStart(2, '0')}-${String(db.getDate()).padStart(2, '0')}`;
+
+    // If on different calendar days, the newer day ALWAYS comes first
+    if (dayKeyA !== dayKeyB) {
+      return dayKeyB.localeCompare(dayKeyA);
+    }
+
+    // Within the same calendar day, if timestamps differ significantly (>= 1 minute), sort by timestamp descending
+    if (Math.abs(dateB - dateA) >= 60000) {
+      return dateB - dateA;
+    }
+  }
+
+  // Same day or equal timestamps or no date: sort by sequence number descending
   const codeA = a?.bomCode || a?.code || a?.poNo || a?.invNo || a?.id || '';
   const codeB = b?.bomCode || b?.code || b?.poNo || b?.invNo || b?.id || '';
   const seqA = parseBomSequenceNumber(codeA);
   const seqB = parseBomSequenceNumber(codeB);
   if (seqA !== seqB) {
-    return seqB - seqA; // Descending
+    return seqB - seqA;
   }
-  const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-  const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-  return dateB - dateA;
+  return (dateB || 0) - (dateA || 0);
 }
 
