@@ -2765,17 +2765,65 @@ const saveLocalPOs = (pos) => {
   saveDatabaseStore('po_store', pos);
 };
 
+const getNextVendorSequence = (existingVendors) => {
+  let highest = 100;
+  if (Array.isArray(existingVendors)) {
+    for (const v of existingVendors) {
+      const match = String(v.code || v.id || '').match(/VEND-(\d+)/i);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (!isNaN(n) && n > highest) highest = n;
+      }
+    }
+  }
+  return highest;
+};
+
+const repairDuplicateVendorCodes = (vendors) => {
+  if (!Array.isArray(vendors) || vendors.length === 0) return vendors;
+  const seenCodes = new Set();
+  let highestSeq = getNextVendorSequence(vendors);
+  let changed = false;
+
+  const repaired = vendors.map(v => {
+    const rawCode = String(v.code || v.id || '').trim().toUpperCase();
+    if (!rawCode || seenCodes.has(rawCode)) {
+      highestSeq++;
+      const newCode = `VEND-${highestSeq}`;
+      changed = true;
+      seenCodes.add(newCode.toUpperCase());
+      return {
+        ...v,
+        id: (v.id && !seenCodes.has(String(v.id).toUpperCase())) ? v.id : newCode,
+        code: newCode
+      };
+    }
+    seenCodes.add(rawCode);
+    return v;
+  });
+
+  if (changed) {
+    try {
+      const p = getStoreFilePath('vendor_store.json');
+      fs.writeFileSync(p, JSON.stringify(repaired, null, 2), 'utf8');
+      saveDatabaseStore('vendor_store', repaired);
+    } catch (_) {}
+  }
+  return repaired;
+};
+
 const loadLocalVendors = () => {
   if (supabaseMemoryStore.vendor_store && Array.isArray(supabaseMemoryStore.vendor_store) && supabaseMemoryStore.vendor_store.length > 0) {
-    return supabaseMemoryStore.vendor_store;
+    return repairDuplicateVendorCodes(supabaseMemoryStore.vendor_store);
   }
   try {
     const p = getStoreFilePath('vendor_store.json');
     if (fs.existsSync(p)) {
       const data = JSON.parse(fs.readFileSync(p, 'utf8'));
       if (Array.isArray(data) && data.length > 0) {
-        supabaseMemoryStore.vendor_store = data;
-        return data;
+        const fixed = repairDuplicateVendorCodes(data);
+        supabaseMemoryStore.vendor_store = fixed;
+        return fixed;
       }
     }
   } catch (_) {}
@@ -4226,11 +4274,16 @@ app.post('/api/vendors', async (req, res) => {
       const incomingList = req.body;
       const createdVendors = [];
       let currentVendors = [...localVendors];
+      let highestSeq = getNextVendorSequence(currentVendors);
 
       for (let i = 0; i < incomingList.length; i++) {
         const item = incomingList[i];
         const vName = String(item.name || item.companyName || `Vendor ${i + 1}`).trim();
-        const vId = item.id || item.code || item.vendorCode || `VEND-${100 + currentVendors.length + 1}`;
+        let vId = item.id || item.code || item.vendorCode;
+        if (!vId || vId === '—' || (vId === 'VEND-171' && !item.code)) {
+          highestSeq++;
+          vId = `VEND-${highestSeq}`;
+        }
 
         const vAddress1 = item.address_1 || item.address1 || item.street || item.address || '';
         const vAddress2 = item.address_2 || item.address2 || item.street2 || '';
@@ -4320,7 +4373,12 @@ app.post('/api/vendors', async (req, res) => {
 
     const incoming = req.body || {};
     const vendorName = String(incoming.name || incoming.companyName || 'New Vendor').trim();
-    const vendorId = incoming.id || incoming.code || incoming.vendorCode || `VEND-${100 + localVendors.length + 1}`;
+    let highestSeq = getNextVendorSequence(localVendors);
+    let vendorId = incoming.id || incoming.code || incoming.vendorCode;
+    if (!vendorId || vendorId === '—' || (vendorId === 'VEND-171' && !incoming.code)) {
+      highestSeq++;
+      vendorId = `VEND-${highestSeq}`;
+    }
 
     const vAddress1 = incoming.address_1 || incoming.address1 || incoming.street || incoming.address || '';
     const vAddress2 = incoming.address_2 || incoming.address2 || incoming.street2 || '';
