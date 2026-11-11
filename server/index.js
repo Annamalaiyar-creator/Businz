@@ -9003,8 +9003,8 @@ app.post('/api/purchaseorders/:id/close', async (req, res) => {
   res.json({ success: true, message: `Purchase Order ${targetId} marked as CLOSED in BUSINZ!` });
 });
 
-// Endpoint to delete a Purchase Order in BUSINZ Authoritative Store (Native BUSINZ Store)
-app.delete('/api/purchaseorders/:id', async (req, res) => {
+// Endpoint to delete a Purchase Order in BUSINZ Authoritative Store (supports both /api/purchaseorders/:id and /api/zoho/purchaseorders/:id)
+app.delete(['/api/purchaseorders/:id', '/api/zoho/purchaseorders/:id'], async (req, res) => {
   const targetId = req.params.id;
 
   // Remove from local store
@@ -9012,12 +9012,68 @@ app.delete('/api/purchaseorders/:id', async (req, res) => {
   const targetClean = String(targetId).trim().toLowerCase();
   const updatedPOs = localPOs.filter(p => {
     const pId = String(p.id || '').toLowerCase();
-    const pNo = String(p.poNo || '').toLowerCase();
+    const pNo = String(p.poNo || p.po_number || '').toLowerCase();
     return pId !== targetClean && pNo !== targetClean;
   });
   saveLocalPOs(updatedPOs);
 
-  res.json({ success: true, message: `PO ${targetId} deleted from BUSINZ!` });
+  res.json({ success: true, message: `PO ${targetId} deleted from BUSINZ!`, remainingCount: updatedPOs.length });
+});
+
+// Endpoint to safely clear all vendors from BUSINZ Authoritative Store
+app.post('/api/procurement/clear-all-vendors', async (req, res) => {
+  try {
+    saveLocalVendors([]);
+    res.json({
+      success: true,
+      message: 'All vendors successfully removed from BUSINZ Authoritative Store.',
+      vendorCount: 0
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Endpoint to delete dummy purchase orders
+app.post('/api/procurement/clear-dummy-pos', async (req, res) => {
+  try {
+    const { poNumbers, all = false } = req.body || {};
+    const localPOs = loadLocalPOs();
+    let updatedPOs = [];
+
+    if (all) {
+      // Clear all POs
+      updatedPOs = [];
+    } else if (Array.isArray(poNumbers) && poNumbers.length > 0) {
+      const targets = new Set(poNumbers.map(n => String(n).trim().toLowerCase()));
+      updatedPOs = localPOs.filter(p => {
+        const idLower = String(p.id || '').trim().toLowerCase();
+        const noLower = String(p.poNo || p.po_number || '').trim().toLowerCase();
+        return !targets.has(idLower) && !targets.has(noLower);
+      });
+    } else {
+      // Default: remove known dummy/test PO prefixes or dummy identifiers
+      updatedPOs = localPOs.filter(p => {
+        const poNo = String(p.poNo || p.po_number || p.id || '').trim();
+        const vendor = String(p.vendor || p.vendorName || '').trim().toLowerCase();
+        const isDummy = poNo.startsWith('VRM-PO-2026-') || vendor.includes('dummy') || vendor.includes('test') || p.isDummy;
+        return !isDummy;
+      });
+    }
+
+    const removedCount = localPOs.length - updatedPOs.length;
+    saveLocalPOs(updatedPOs);
+
+    res.json({
+      success: true,
+      message: `Successfully removed ${removedCount} dummy Purchase Order(s).`,
+      removedCount,
+      remainingCount: updatedPOs.length,
+      remainingPOs: updatedPOs.map(p => p.poNo || p.id)
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Real-time synchronization endpoint retrieving approval pending counts strictly from BUSINZ local stores
