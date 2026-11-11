@@ -143,7 +143,6 @@ export const getBomActiveStage = (row) => {
 
 export const getBomStageTiming = (b, matchingPi = null) => {
   if (!b) return null;
-  const now = Date.now();
 
   const parseAnyDate = (val) => {
     if (!val) return null;
@@ -161,7 +160,7 @@ export const getBomStageTiming = (b, matchingPi = null) => {
       const day = parseInt(ddmmyyyy[1], 10);
       const month = parseInt(ddmmyyyy[2], 10) - 1;
       const year = parseInt(ddmmyyyy[3], 10);
-      let hours = ddmmyyyy[4] ? parseInt(ddmmyyyy[4], 10) : 10;
+      let hours = ddmmyyyy[4] ? parseInt(ddmmyyyy[4], 10) : 0;
       const mins = ddmmyyyy[5] ? parseInt(ddmmyyyy[5], 10) : 0;
       const secs = ddmmyyyy[6] ? parseInt(ddmmyyyy[6], 10) : 0;
       const ampm = ddmmyyyy[7] ? ddmmyyyy[7].toUpperCase() : null;
@@ -171,137 +170,122 @@ export const getBomStageTiming = (b, matchingPi = null) => {
     }
 
     const d = new Date(str);
-    if (!isNaN(d.getTime())) {
-      if (str.length <= 10 && d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
-        d.setHours(10, 0, 0, 0);
-      }
-      return d;
-    }
+    if (!isNaN(d.getTime())) return d;
     return null;
   };
 
   const formatTimeStr = (d) => {
-    if (!d || isNaN(d.getTime())) return '10:00 AM';
+    if (!d || isNaN(d.getTime())) return null;
     return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
   const formatDateStr = (d) => {
-    if (!d || isNaN(d.getTime())) return '10 Nov';
+    if (!d || isNaN(d.getTime())) return null;
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
   };
 
-  const formatMins = (mins) => {
-    if (mins == null || isNaN(mins) || mins < 0) return '0m';
-    if (mins < 60) return `${Math.round(mins)}m`;
-    const h = Math.floor(mins / 60);
-    const m = Math.round(mins % 60);
+  const formatDuration = (ms) => {
+    if (!ms || ms <= 0) return null;
+    const totalMins = Math.round(ms / 60000);
+    if (totalMins < 60) return `${totalMins}m`;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
-  const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.reconfirmedAt || b.date || b.createdAt;
-  const dConfirmed = parseAnyDate(rawConfirmed) || new Date();
-
+  // 1. Stage 1: PI Commercial
   const rawPi = matchingPi?.createdAt || matchingPi?.piDate || matchingPi?.date || b.piDate || b.sourcePiDate;
-  const dPi = parseAnyDate(rawPi) || new Date(dConfirmed.getTime() - 30 * 60000);
+  const dPi = parseAnyDate(rawPi);
+  const hasPi = Boolean(dPi || b.sourcePiNo || b.piNo);
 
+  // 2. Stage 2: BOM Confirmed (locked to exact confirmed time, never changing)
+  const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.reconfirmedAt || b.createdAt || b.date;
+  const dConfirmed = parseAnyDate(rawConfirmed);
+  const hasConfirmed = Boolean(b.salesConfirmed || (b.status && b.status !== 'Draft' && !String(b.status).toLowerCase().includes('draft')));
+
+  // 3. Stage 3: Dispatch Packing
   const rawPacking = b.packingCompletedAt || b.packedAt || b.packingVerifiedAt || b.accountsVerification?.packedAt || (b.packingStatus === 'PACKING_VERIFIED' ? (b.updatedAt || b.date) : null);
   const dPacking = parseAnyDate(rawPacking);
+  const hasPacking = Boolean(dPacking || b.packingStatus === 'PACKING_VERIFIED');
+  const isPackingActive = hasConfirmed && !hasPacking;
 
+  // 4. Stage 4: Accounts Verification
   const rawAccounts = b.accountsVerifiedAt || b.accountsVerification?.verifiedAt || (b.isAccountsDone ? (b.updatedAt || b.date) : null);
   const dAccounts = parseAnyDate(rawAccounts);
+  const hasAccounts = Boolean(dAccounts || b.isAccountsDone || b.accountsVerification?.verified);
+  const isAccountsActive = hasPacking && !hasAccounts;
 
+  // 5. Stage 5: GST Invoiced
   const rawInvoice = b.invoiceConfirmedAt || b.invoicedAt || b.stockDeductionDate || (b.invoiceConfirmed ? (b.updatedAt || b.date) : null);
   const dInvoice = parseAnyDate(rawInvoice);
+  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed);
+  const isInvoiceActive = hasAccounts && !hasInvoice;
 
+  // 6. Stage 6: Final Dispatched
   const rawDispatch = b.dispatchedAt || b.vehicleLoading?.loadedAt || (b.fullyCompleted ? (b.updatedAt || b.date) : null);
   const dDispatch = parseAnyDate(rawDispatch);
-
-  // Targets (30 mins per stage up to 2 hours total)
-  const dPackingTarget = new Date(dConfirmed.getTime() + 30 * 60000);
-  const refPacking = dPacking || dPackingTarget;
-  const dAccountsTarget = new Date(refPacking.getTime() + 30 * 60000);
-  const refAccounts = dAccounts || dAccountsTarget;
-  const dInvoiceTarget = new Date(refAccounts.getTime() + 30 * 60000);
-  const dDispatchTarget = new Date(dConfirmed.getTime() + 120 * 60000);
-
-  // Stage 1 (PI Commercial)
-  const piDate = formatDateStr(dPi);
-  const piTime = formatTimeStr(dPi);
-
-  // Stage 2 (BOM Confirmed)
-  const confirmedDate = formatDateStr(dConfirmed);
-  const confirmedTime = formatTimeStr(dConfirmed);
-
-  // Stage 3 (Dispatch Packing)
-  const hasPacking = Boolean(dPacking || b.packingStatus === 'PACKING_VERIFIED');
-  const packingDate = formatDateStr(dPacking || dConfirmed);
-  const packingTime = dPacking ? formatTimeStr(dPacking) : `Target: ${formatTimeStr(dPackingTarget)}`;
-  const packingMins = dPacking ? Math.max(0, (dPacking.getTime() - dConfirmed.getTime()) / 60000) : null;
-  const packingDurationStr = packingMins != null ? formatMins(packingMins) : null;
-
-  // Stage 4 (Accounts Verification)
-  const hasAccounts = Boolean(dAccounts || b.isAccountsDone || b.accountsVerification?.verified);
-  const accountsDate = formatDateStr(dAccounts || (dPacking ? dPacking : dConfirmed));
-  const accountsTime = dAccounts ? formatTimeStr(dAccounts) : `Target: ${formatTimeStr(dAccountsTarget)}`;
-  const accountsMins = dAccounts ? Math.max(0, (dAccounts.getTime() - (dPacking ? dPacking.getTime() : dConfirmed.getTime())) / 60000) : null;
-  const accountsDurationStr = accountsMins != null ? formatMins(accountsMins) : null;
-
-  // Stage 5 (GST Invoiced)
-  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed);
-  const invoiceDate = formatDateStr(dInvoice || (dAccounts ? dAccounts : dConfirmed));
-  const invoiceTime = dInvoice ? formatTimeStr(dInvoice) : `Target: ${formatTimeStr(dInvoiceTarget)}`;
-  const invoiceMins = dInvoice ? Math.max(0, (dInvoice.getTime() - (dAccounts ? dAccounts.getTime() : (dPacking ? dPacking.getTime() : dConfirmed.getTime()))) / 60000) : null;
-  const invoiceDurationStr = invoiceMins != null ? formatMins(invoiceMins) : null;
-
-  // Stage 6 (Final Dispatched)
   const hasDispatch = Boolean(dDispatch || b.fullyCompleted);
-  const dispatchDate = formatDateStr(dDispatch || (dInvoice ? dInvoice : dConfirmed));
-  const dispatchTime = dDispatch ? formatTimeStr(dDispatch) : `Target: ${formatTimeStr(dDispatchTarget)}`;
-  const dispatchMins = dDispatch ? Math.max(0, (dDispatch.getTime() - (dInvoice ? dInvoice.getTime() : dConfirmed.getTime())) / 60000) : null;
-  const dispatchDurationStr = dispatchMins != null ? formatMins(dispatchMins) : null;
+  const isDispatchActive = hasInvoice && !hasDispatch;
 
-  // Total Elapsed (Timer starts at BOM confirmation)
-  let totalElapsedMins = 0;
-  if (dDispatch) {
-    totalElapsedMins = Math.max(0, (dDispatch.getTime() - dConfirmed.getTime()) / 60000);
-  } else {
-    totalElapsedMins = Math.max(0, (now - dConfirmed.getTime()) / 60000);
-  }
+  // Turnaround durations between actual completions
+  const packingDuration = (dPacking && dConfirmed) ? formatDuration(dPacking.getTime() - dConfirmed.getTime()) : null;
+  const accountsDuration = (dAccounts && dPacking) ? formatDuration(dAccounts.getTime() - dPacking.getTime()) : null;
+  const invoiceDuration = (dInvoice && dAccounts) ? formatDuration(dInvoice.getTime() - dAccounts.getTime()) : null;
+  const dispatchDuration = (dDispatch && dInvoice) ? formatDuration(dDispatch.getTime() - dInvoice.getTime()) : null;
+  const totalTurnaround = (dDispatch && dConfirmed) ? formatDuration(dDispatch.getTime() - dConfirmed.getTime()) : null;
 
-  const isCompleted = Boolean(hasDispatch);
-  const isBreached = totalElapsedMins > 120;
-  const isApproaching = totalElapsedMins >= 90 && totalElapsedMins <= 120;
+  const activeStageName = hasDispatch
+    ? 'Completed'
+    : (isDispatchActive
+        ? 'Stage 6 · Final Dispatched'
+        : (isInvoiceActive
+            ? 'Stage 5 · GST Invoiced'
+            : (isAccountsActive
+                ? 'Stage 4 · Accounts Verification'
+                : (isPackingActive
+                    ? 'Stage 3 · Dispatch Packing'
+                    : 'Stage 2 · BOM Confirmed'))));
 
   return {
-    piTime,
-    piDate,
-    confirmedTime,
-    confirmedDate,
-    packingTime,
-    packingDate,
-    packingMins,
-    packingDurationStr,
+    piDate: formatDateStr(dPi),
+    piTime: formatTimeStr(dPi),
+    hasPi,
+
+    confirmedDate: formatDateStr(dConfirmed),
+    confirmedTime: formatTimeStr(dConfirmed),
+    hasConfirmed,
+
+    packingDate: formatDateStr(dPacking),
+    packingTime: formatTimeStr(dPacking),
     hasPacking,
-    accountsTime,
-    accountsDate,
-    accountsMins,
-    accountsDurationStr,
+    isPackingActive,
+    packingStartedTime: isPackingActive ? formatTimeStr(dConfirmed) : null,
+    packingDuration,
+
+    accountsDate: formatDateStr(dAccounts),
+    accountsTime: formatTimeStr(dAccounts),
     hasAccounts,
-    invoiceTime,
-    invoiceDate,
-    invoiceMins,
-    invoiceDurationStr,
+    isAccountsActive,
+    accountsStartedTime: isAccountsActive ? (formatTimeStr(dPacking) || formatTimeStr(dConfirmed)) : null,
+    accountsDuration,
+
+    invoiceDate: formatDateStr(dInvoice),
+    invoiceTime: formatTimeStr(dInvoice),
     hasInvoice,
-    dispatchTime,
-    dispatchDate,
-    dispatchMins,
-    dispatchDurationStr,
+    isInvoiceActive,
+    invoiceStartedTime: isInvoiceActive ? (formatTimeStr(dAccounts) || formatTimeStr(dPacking) || formatTimeStr(dConfirmed)) : null,
+    invoiceDuration,
+
+    dispatchDate: formatDateStr(dDispatch),
+    dispatchTime: formatTimeStr(dDispatch),
     hasDispatch,
-    totalElapsedMins,
-    totalElapsedStr: formatMins(totalElapsedMins),
-    isCompleted,
-    isBreached,
-    isApproaching
+    isDispatchActive,
+    dispatchStartedTime: isDispatchActive ? (formatTimeStr(dInvoice) || formatTimeStr(dAccounts) || formatTimeStr(dPacking) || formatTimeStr(dConfirmed)) : null,
+    dispatchDuration,
+
+    totalTurnaround,
+    isCompleted: hasDispatch,
+    activeStageName
   };
 };
 
@@ -6783,7 +6767,7 @@ export default function BomOrdersView(props) {
             </div>
           </div>
 
-          {/* 1. TOP SECTION: ALL STAGES WITH ACTUAL TIME & DURATION PUSHED TO NEXT STAGE */}
+          {/* 1. TOP SECTION: ALL STAGES WITH ACTUAL TIME & STAGE PROCESSING AUDIT */}
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
@@ -6794,7 +6778,7 @@ export default function BomOrdersView(props) {
             flexDirection: 'column',
             gap: '16px'
           }}>
-            {/* Stopwatch Header & SLA Status Banner */}
+            {/* Header & Stage Status Banner */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -6802,7 +6786,7 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                    2-Hour Order-to-Dispatch Stopwatch & Stage Turnaround
+                    Order-to-Cash Lifecycle Progress
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
                     Live timestamp audit tracking each handover from BOM confirmation to final loading.
@@ -6814,9 +6798,9 @@ export default function BomOrdersView(props) {
                 <span style={{
                   fontSize: '11.5px',
                   fontWeight: '800',
-                  color: timing?.isBreached ? '#DC2626' : (timing?.isApproaching ? '#D97706' : '#16A34A'),
-                  backgroundColor: timing?.isBreached ? '#FEF2F2' : (timing?.isApproaching ? '#FFFBEB' : '#F0FDF4'),
-                  border: `1px solid ${timing?.isBreached ? '#FECACA' : (timing?.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                  color: timing?.isCompleted ? '#16A34A' : '#0E7490',
+                  backgroundColor: timing?.isCompleted ? '#F0FDF4' : '#ECFEFF',
+                  border: `1px solid ${timing?.isCompleted ? '#BBF7D0' : '#BAE6FD'}`,
                   padding: '5px 12px',
                   borderRadius: '12px',
                   display: 'inline-flex',
@@ -6824,12 +6808,11 @@ export default function BomOrdersView(props) {
                   gap: '6px'
                 }}>
                   <Clock size={13} />
-                  <span>Total Elapsed: <strong>{timing?.totalElapsedStr || '0m'}</strong></span>
-                  <span>•</span>
-                  <span>{timing?.isBreached ? '🔴 SLA Breached (>2h)' : (timing?.isApproaching ? '🟡 Approaching 2h' : '🟢 Within 2-Hour SLA')}</span>
-                </span>
-                <span style={{ fontSize: '11px', color: '#64748B', backgroundColor: '#F1F5F9', padding: '5px 10px', borderRadius: '10px', fontWeight: '700' }}>
-                  Target: 2 Hours Max (30m / stage)
+                  {timing?.isCompleted ? (
+                    <span>Status: <strong>Order Completed & Dispatched</strong> {timing?.totalTurnaround ? `(Turnaround: ${timing.totalTurnaround})` : ''}</span>
+                  ) : (
+                    <span>Current Stage: <strong>{timing?.activeStageName || 'In Processing'}</strong></span>
+                  )}
                 </span>
               </div>
             </div>
@@ -6859,18 +6842,18 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>
-                    {timing?.piTime || 'Done'}
+                    {timing?.piTime || (timing?.hasPi ? 'Completed' : '—')}
                   </div>
                   <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
-                    {confirmingBomModal.sourcePiNo ? `Ref: ${confirmingBomModal.sourcePiNo}` : 'Proforma Invoice'}
+                    {confirmingBomModal.sourcePiNo ? `Ref: ${confirmingBomModal.sourcePiNo}` : (timing?.hasPi ? 'Proforma Invoice' : 'Direct BOM Order')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid #E2E8F0', fontSize: '10.5px', fontWeight: '700', color: '#0284C7', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>→ Converted to BOM</span>
+                  <span>{timing?.hasPi ? '✓ Converted to BOM' : '—'}</span>
                 </div>
               </div>
 
-              {/* Stage 2: BOM Confirmed (Timer Start) */}
+              {/* Stage 2: BOM Confirmed */}
               <div style={{
                 backgroundColor: '#F0F9FF',
                 border: '1.5px solid #BAE6FD',
@@ -6888,21 +6871,21 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: '#0369A1' }}>
-                    {timing?.confirmedTime || 'Confirmed'}
+                    {timing?.confirmedTime || (timing?.hasConfirmed ? 'Confirmed' : 'Draft')}
                   </div>
                   <div style={{ fontSize: '10px', color: '#0284C7', marginTop: '1px' }}>
-                    {timing?.confirmedDate} • Timer 00:00 Started
+                    {timing?.confirmedDate ? `${timing.confirmedDate} • Confirmed to Dispatch` : 'Pending Sales Confirmation'}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid #BAE6FD', fontSize: '10.5px', fontWeight: '700', color: '#0284C7', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>→ Pushed to Packing</span>
+                  <span>{timing?.hasConfirmed ? '✓ Pushed to Packing' : 'Draft'}</span>
                 </div>
               </div>
 
               {/* Stage 3: Dispatch Packing */}
               <div style={{
-                backgroundColor: timing?.hasPacking ? '#ECFDF5' : (timing?.confirmedTime ? '#FFFBEB' : '#F8FAFC'),
-                border: `1.5px solid ${timing?.hasPacking ? '#A7F3D0' : (timing?.confirmedTime ? '#FDE68A' : '#E2E8F0')}`,
+                backgroundColor: timing?.hasPacking ? '#ECFDF5' : (timing?.isPackingActive ? '#FFFBEB' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasPacking ? '#A7F3D0' : (timing?.isPackingActive ? '#FDE68A' : '#E2E8F0')}`,
                 borderRadius: '12px',
                 padding: '12px 14px',
                 display: 'flex',
@@ -6910,28 +6893,28 @@ export default function BomOrdersView(props) {
                 gap: '8px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasPacking ? '#059669' : (timing?.confirmedTime ? '#D97706' : '#64748B'), textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasPacking ? '#059669' : (timing?.isPackingActive ? '#D97706' : '#64748B'), textTransform: 'uppercase' }}>
                     Step 3 · Packing
                   </span>
                   <PackageCheck size={14} color={timing?.hasPacking ? '#059669' : '#D97706'} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasPacking ? '#047857' : (timing?.confirmedTime ? '#B45309' : '#475569') }}>
-                    {timing?.packingTime || (timing?.confirmedTime ? 'In Progress' : 'Pending')}
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasPacking ? '#047857' : (timing?.isPackingActive ? '#B45309' : '#475569') }}>
+                    {timing?.hasPacking ? (timing?.packingTime || 'Packed') : (timing?.isPackingActive ? 'Processing...' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasPacking ? '#047857' : '#B45309', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasPacking ? `${timing.packingDurationStr} taken` : (timing?.confirmedTime ? `+${timing.packingDurationStr} in progress` : 'Awaiting packing')}
+                    {timing?.hasPacking ? (timing.packingDuration ? `Took ${timing.packingDuration}` : 'Packing Verified') : (timing?.isPackingActive ? `Started ${timing.packingStartedTime || timing.confirmedTime || ''}` : 'Awaiting packing')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasPacking ? '#A7F3D0' : '#FDE68A'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasPacking ? '#059669' : '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasPacking ? '→ Pushed to Accounts' : 'In Packing Queue'}</span>
+                  <span>{timing?.hasPacking ? '✓ Pushed to Accounts' : (timing?.isPackingActive ? 'In Packing Queue' : 'Pending')}</span>
                 </div>
               </div>
 
               {/* Stage 4: Accounts Verification */}
               <div style={{
-                backgroundColor: timing?.hasAccounts ? '#ECFDF5' : (timing?.hasPacking ? '#F5F3FF' : '#F8FAFC'),
-                border: `1.5px solid ${timing?.hasAccounts ? '#A7F3D0' : (timing?.hasPacking ? '#DDD6FE' : '#E2E8F0')}`,
+                backgroundColor: timing?.hasAccounts ? '#ECFDF5' : (timing?.isAccountsActive ? '#F5F3FF' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasAccounts ? '#A7F3D0' : (timing?.isAccountsActive ? '#DDD6FE' : '#E2E8F0')}`,
                 borderRadius: '12px',
                 padding: '12px 14px',
                 display: 'flex',
@@ -6939,28 +6922,28 @@ export default function BomOrdersView(props) {
                 gap: '8px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasAccounts ? '#059669' : (timing?.hasPacking ? '#7C3AED' : '#64748B'), textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasAccounts ? '#059669' : (timing?.isAccountsActive ? '#7C3AED' : '#64748B'), textTransform: 'uppercase' }}>
                     Step 4 · Accounts
                   </span>
                   <CreditCard size={14} color={timing?.hasAccounts ? '#059669' : '#7C3AED'} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasAccounts ? '#047857' : (timing?.hasPacking ? '#6D28D9' : '#475569') }}>
-                    {timing?.accountsTime || (timing?.hasPacking ? 'In Progress' : 'Pending')}
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasAccounts ? '#047857' : (timing?.isAccountsActive ? '#6D28D9' : '#475569') }}>
+                    {timing?.hasAccounts ? (timing?.accountsTime || 'Verified') : (timing?.isAccountsActive ? 'Processing...' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasAccounts ? '#047857' : '#6D28D9', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : (timing?.hasPacking ? `+${timing.accountsDurationStr} in progress` : 'Awaiting verification')}
+                    {timing?.hasAccounts ? (timing.accountsDuration ? `Took ${timing.accountsDuration}` : 'Accounts Verified') : (timing?.isAccountsActive ? `Started ${timing.accountsStartedTime || ''}` : 'Awaiting accounts')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasAccounts ? '#A7F3D0' : '#DDD6FE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasAccounts ? '#059669' : '#7C3AED', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasAccounts ? '→ Pushed to Billing' : (timing?.hasPacking ? 'In Verification' : 'Pending')}</span>
+                  <span>{timing?.hasAccounts ? '✓ Pushed to Billing' : (timing?.isAccountsActive ? 'In Verification' : 'Pending')}</span>
                 </div>
               </div>
 
               {/* Stage 5: GST Invoicing */}
               <div style={{
-                backgroundColor: timing?.hasInvoice ? '#ECFDF5' : (timing?.hasAccounts ? '#EFF6FF' : '#F8FAFC'),
-                border: `1.5px solid ${timing?.hasInvoice ? '#A7F3D0' : (timing?.hasAccounts ? '#BFDBFE' : '#E2E8F0')}`,
+                backgroundColor: timing?.hasInvoice ? '#ECFDF5' : (timing?.isInvoiceActive ? '#EFF6FF' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasInvoice ? '#A7F3D0' : (timing?.isInvoiceActive ? '#BFDBFE' : '#E2E8F0')}`,
                 borderRadius: '12px',
                 padding: '12px 14px',
                 display: 'flex',
@@ -6968,28 +6951,28 @@ export default function BomOrdersView(props) {
                 gap: '8px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasInvoice ? '#059669' : (timing?.hasAccounts ? '#2563EB' : '#64748B'), textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasInvoice ? '#059669' : (timing?.isInvoiceActive ? '#2563EB' : '#64748B'), textTransform: 'uppercase' }}>
                     Step 5 · Invoicing
                   </span>
                   <Receipt size={14} color={timing?.hasInvoice ? '#059669' : '#2563EB'} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasInvoice ? '#047857' : (timing?.hasAccounts ? '#1D4ED8' : '#475569') }}>
-                    {timing?.invoiceTime || (timing?.hasAccounts ? 'In Progress' : 'Pending')}
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasInvoice ? '#047857' : (timing?.isInvoiceActive ? '#1D4ED8' : '#475569') }}>
+                    {timing?.hasInvoice ? (timing?.invoiceTime || 'Invoiced') : (timing?.isInvoiceActive ? 'Processing...' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasInvoice ? '#047857' : '#1D4ED8', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : (timing?.hasAccounts ? `+${timing.invoiceDurationStr} in progress` : 'Awaiting billing')}
+                    {timing?.hasInvoice ? (timing.invoiceDuration ? `Took ${timing.invoiceDuration}` : 'Invoice Confirmed') : (timing?.isInvoiceActive ? `Started ${timing.invoiceStartedTime || ''}` : 'Awaiting billing')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasInvoice ? '#A7F3D0' : '#BFDBFE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasInvoice ? '#059669' : '#2563EB', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasInvoice ? '→ Pushed to Loading' : (timing?.hasAccounts ? 'Generating Invoice' : 'Pending')}</span>
+                  <span>{timing?.hasInvoice ? '✓ Pushed to Loading' : (timing?.isInvoiceActive ? 'Generating Invoice' : 'Pending')}</span>
                 </div>
               </div>
 
               {/* Stage 6: Final Loading & Dispatch */}
               <div style={{
-                backgroundColor: timing?.hasDispatch ? '#F0FDF4' : (timing?.hasInvoice ? '#F0FDF4' : '#F8FAFC'),
-                border: `1.5px solid ${timing?.hasDispatch ? '#86EFAC' : (timing?.hasInvoice ? '#BBF7D0' : '#E2E8F0')}`,
+                backgroundColor: timing?.hasDispatch ? '#F0FDF4' : (timing?.isDispatchActive ? '#F0FDF4' : '#F8FAFC'),
+                border: `1.5px solid ${timing?.hasDispatch ? '#86EFAC' : (timing?.isDispatchActive ? '#BBF7D0' : '#E2E8F0')}`,
                 borderRadius: '12px',
                 padding: '12px 14px',
                 display: 'flex',
@@ -7003,15 +6986,15 @@ export default function BomOrdersView(props) {
                   <Truck size={14} color={timing?.hasDispatch ? '#16A34A' : '#64748B'} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasDispatch ? '#15803D' : (timing?.hasInvoice ? '#16A34A' : '#475569') }}>
-                    {timing?.dispatchTime || (timing?.hasInvoice ? 'Loading' : 'Pending')}
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasDispatch ? '#15803D' : (timing?.isDispatchActive ? '#16A34A' : '#475569') }}>
+                    {timing?.hasDispatch ? (timing?.dispatchTime || 'Dispatched') : (timing?.isDispatchActive ? 'Processing...' : 'Pending')}
                   </div>
-                  <div style={{ fontSize: '10px', color: timing?.hasDispatch ? '#15803D' : '#64748B', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : (timing?.hasInvoice ? `+${timing.dispatchDurationStr} loading` : 'Awaiting dispatch')}
+                  <div style={{ fontSize: '10px', color: timing?.hasDispatch ? '#15803D' : '#16A34A', marginTop: '1px', fontWeight: '700' }}>
+                    {timing?.hasDispatch ? (timing.dispatchDuration ? `Took ${timing.dispatchDuration}` : 'Final Dispatched') : (timing?.isDispatchActive ? `Started ${timing.dispatchStartedTime || ''}` : 'Awaiting loading')}
                   </div>
                 </div>
-                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasDispatch ? '#86EFAC' : '#E2E8F0'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasDispatch ? '#15803D' : '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasDispatch ? 'Dispatched & Cleared' : 'Final Loading Step'}</span>
+                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasDispatch ? '#86EFAC' : '#BBF7D0'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasDispatch ? '#16A34A' : '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>{timing?.hasDispatch ? '✓ Order Completed' : (timing?.isDispatchActive ? 'Loading Vehicle' : 'Pending')}</span>
                 </div>
               </div>
             </div>
@@ -10328,11 +10311,11 @@ export default function BomOrdersView(props) {
                           if (!timing || !timing.confirmedTime) return null;
                           return (
                             <span
-                              title={`2-Hour Target SLA • Confirmed at ${timing.confirmedTime} • Elapsed: ${timing.totalElapsedStr}`}
+                              title={`Current Stage: ${timing.activeStageName}`}
                               style={{
-                                backgroundColor: timing.isBreached ? '#FEF2F2' : (timing.isApproaching ? '#FFFBEB' : '#F0FDF4'),
-                                color: timing.isBreached ? '#DC2626' : (timing.isApproaching ? '#D97706' : '#16A34A'),
-                                border: `1px solid ${timing.isBreached ? '#FECACA' : (timing.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
+                                backgroundColor: timing.isCompleted ? '#F0FDF4' : '#ECFEFF',
+                                color: timing.isCompleted ? '#16A34A' : '#0E7490',
+                                border: `1px solid ${timing.isCompleted ? '#BBF7D0' : '#BAE6FD'}`,
                                 padding: '3px 9px',
                                 borderRadius: '12px',
                                 fontSize: '11px',
@@ -10343,10 +10326,7 @@ export default function BomOrdersView(props) {
                               }}
                             >
                               <Clock size={12} />
-                              <span>⏱️ {timing.totalElapsedStr} {timing.isCompleted ? 'Total TAT' : 'Elapsed'}</span>
-                              <span style={{ fontSize: '9.5px', fontWeight: '800', opacity: 0.85 }}>
-                                ({timing.isBreached ? 'Breached' : (timing.isApproaching ? 'Near 2h' : '≤ 2h SLA')})
-                              </span>
+                              <span>{timing.isCompleted ? '✓ Dispatched' : timing.activeStageName}</span>
                             </span>
                           );
                         })()}
@@ -13241,61 +13221,61 @@ export default function BomOrdersView(props) {
 
         const timing = getBomStageTiming(bom, matchingPi);
 
-        // 6 Lifecycle stage indicators with Date & 2-Hour SLA Timing
+        // 6 Lifecycle stage indicators with Real Operational Timestamps & Active Processing Stage
         const stages = [
           {
             num: 1,
             label: 'PI Commercial',
-            done: Boolean(linkedPiNo),
-            active: !bom.salesConfirmed,
-            date: timing?.piDate || '10 Nov',
-            time: timing?.piTime || '09:30 AM',
-            duration: 'Sent to Client'
+            done: timing?.hasPi,
+            active: false,
+            date: timing?.piDate || '—',
+            time: timing?.piTime || (timing?.hasPi ? 'Completed' : '—'),
+            subtext: timing?.hasPi ? 'Issued to Client' : 'Direct Order'
           },
           {
             num: 2,
             label: 'BOM Confirmed',
-            done: Boolean(bom.salesConfirmed || st.includes('confirm')),
-            active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED',
-            date: timing?.confirmedDate || '10 Nov',
-            time: timing?.confirmedTime || '10:00 AM',
-            duration: 'Timer Start'
+            done: timing?.hasConfirmed,
+            active: !timing?.hasConfirmed,
+            date: timing?.confirmedDate || '—',
+            time: timing?.confirmedTime || (timing?.hasConfirmed ? 'Confirmed' : 'Draft'),
+            subtext: timing?.hasConfirmed ? 'Sales Confirmed' : 'Draft Order'
           },
           {
             num: 3,
-            label: 'Dispatch Packed',
-            done: Boolean(timing?.hasPacking || bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
-            active: bom.packingStatus !== 'PACKING_VERIFIED' && Boolean(bom.salesConfirmed),
-            date: timing?.packingDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.packingTime,
-            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : 'Target: 30m'
+            label: 'Dispatch Packing',
+            done: timing?.hasPacking,
+            active: timing?.isPackingActive,
+            date: timing?.packingDate || (timing?.isPackingActive ? timing?.confirmedDate : '—'),
+            time: timing?.packingTime ? timing.packingTime : (timing?.isPackingActive ? 'Processing...' : '—'),
+            subtext: timing?.hasPacking ? (timing.packingDuration ? `Took ${timing.packingDuration}` : 'Packing Verified') : (timing?.isPackingActive ? `Started ${timing.packingStartedTime || timing.confirmedTime || ''}` : 'Pending')
           },
           {
             num: 4,
             label: 'Accounts Verified',
-            done: Boolean(timing?.hasAccounts || bom.isAccountsDone || bom.accountsVerification?.verified),
-            active: Boolean(bom.packingStatus === 'PACKING_VERIFIED') && !bom.isAccountsDone,
-            date: timing?.accountsDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.accountsTime,
-            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : 'Target: 30m'
+            done: timing?.hasAccounts,
+            active: timing?.isAccountsActive,
+            date: timing?.accountsDate || (timing?.isAccountsActive ? timing?.packingDate : '—'),
+            time: timing?.accountsTime ? timing.accountsTime : (timing?.isAccountsActive ? 'Processing...' : '—'),
+            subtext: timing?.hasAccounts ? (timing.accountsDuration ? `Took ${timing.accountsDuration}` : 'Accounts Verified') : (timing?.isAccountsActive ? `Started ${timing.accountsStartedTime || ''}` : 'Pending')
           },
           {
             num: 5,
             label: 'GST Invoiced',
-            done: Boolean(timing?.hasInvoice || bom.invoiceConfirmed || st.includes('invoice')),
-            active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed,
-            date: timing?.invoiceDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.invoiceTime,
-            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : 'Target: 30m'
+            done: timing?.hasInvoice,
+            active: timing?.isInvoiceActive,
+            date: timing?.invoiceDate || (timing?.isInvoiceActive ? timing?.accountsDate : '—'),
+            time: timing?.invoiceTime ? timing.invoiceTime : (timing?.isInvoiceActive ? 'Processing...' : '—'),
+            subtext: timing?.hasInvoice ? (timing.invoiceDuration ? `Took ${timing.invoiceDuration}` : 'Invoice Confirmed') : (timing?.isInvoiceActive ? `Started ${timing.invoiceStartedTime || ''}` : 'Pending')
           },
           {
             num: 6,
             label: 'Final Dispatched',
-            done: Boolean(timing?.hasDispatch || bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
-            active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted,
-            date: timing?.dispatchDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.dispatchTime,
-            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : 'Max 2h SLA'
+            done: timing?.hasDispatch,
+            active: timing?.isDispatchActive,
+            date: timing?.dispatchDate || (timing?.isDispatchActive ? timing?.invoiceDate : '—'),
+            time: timing?.dispatchTime ? timing.dispatchTime : (timing?.isDispatchActive ? 'Processing...' : '—'),
+            subtext: timing?.hasDispatch ? (timing.dispatchDuration ? `Took ${timing.dispatchDuration}` : 'Dispatched') : (timing?.isDispatchActive ? `Started ${timing.dispatchStartedTime || ''}` : 'Pending')
           }
         ];
 
@@ -13402,22 +13382,26 @@ export default function BomOrdersView(props) {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                      Order-to-Cash Lifecycle Progress • Target: 2 Hours Max (30m / stage)
+                      Order-to-Cash Lifecycle Progress
                     </div>
-                    {timing && timing.confirmedTime && (
+                    {timing && (
                       <span style={{
-                        fontSize: '10px',
+                        fontSize: '10.5px',
                         fontWeight: '800',
-                        color: timing.isBreached ? '#DC2626' : (timing.isApproaching ? '#D97706' : '#16A34A'),
-                        backgroundColor: timing.isBreached ? '#FEF2F2' : (timing.isApproaching ? '#FFFBEB' : '#F0FDF4'),
-                        border: `1px solid ${timing.isBreached ? '#FECACA' : (timing.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
-                        padding: '2px 8px',
+                        color: timing.isCompleted ? '#16A34A' : '#0E7490',
+                        backgroundColor: timing.isCompleted ? '#F0FDF4' : '#ECFEFF',
+                        border: `1px solid ${timing.isCompleted ? '#BBF7D0' : '#BAE6FD'}`,
+                        padding: '2px 10px',
                         borderRadius: '999px',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '4px'
+                        gap: '5px'
                       }}>
-                        <Clock size={11} /> Total Elapsed: {timing.totalElapsedStr} / 2h Max
+                        {timing.isCompleted ? (
+                          <>✓ Order Completed & Dispatched {timing.totalTurnaround ? `(Turnaround: ${timing.totalTurnaround})` : ''}</>
+                        ) : (
+                          <>⏳ Current: {timing.activeStageName} (In Processing)</>
+                        )}
                       </span>
                     )}
                   </div>
@@ -13459,7 +13443,7 @@ export default function BomOrdersView(props) {
                           }}>
                             {stg.label}
                           </span>
-                          {/* DATE - ALWAYS VISIBLE */}
+                          {/* DATE */}
                           <span style={{
                             fontSize: '10px',
                             fontWeight: '700',
@@ -13471,7 +13455,7 @@ export default function BomOrdersView(props) {
                           }}>
                             {stg.date}
                           </span>
-                          {/* TIME & SLA BADGE - ALWAYS VISIBLE */}
+                          {/* TIME & STAGE STATUS */}
                           <div style={{
                             backgroundColor: isComplete ? '#DCFCE7' : (isCurrent ? '#E0F2FE' : '#F1F5F9'),
                             border: `1px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#BAE6FD' : '#E2E8F0')}`,
@@ -13492,13 +13476,13 @@ export default function BomOrdersView(props) {
                             }}>
                               {stg.time}
                             </span>
-                            {stg.duration && (
+                            {stg.subtext && (
                               <span style={{
                                 fontSize: '8.5px',
                                 fontWeight: '700',
                                 color: isComplete ? '#166534' : (isCurrent ? '#0369A1' : '#64748B')
                               }}>
-                                {stg.duration}
+                                {stg.subtext}
                               </span>
                             )}
                           </div>

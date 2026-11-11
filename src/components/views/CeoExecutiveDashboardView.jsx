@@ -7292,61 +7292,61 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
         const timing = getBomStageTiming(bom, matchingPi);
 
-        // 6 Lifecycle stage indicators with Date & 2-Hour SLA Timing
+        // 6 Lifecycle stage indicators with Real Operational Timestamps & Active Processing Stage
         const stages = [
           {
             num: 1,
             label: 'PI Commercial',
-            done: Boolean(linkedPiNo),
-            active: !bom.salesConfirmed,
-            date: timing?.piDate || '10 Nov',
-            time: timing?.piTime || '09:30 AM',
-            duration: 'Sent to Client'
+            done: timing?.hasPi,
+            active: false,
+            date: timing?.piDate || '—',
+            time: timing?.piTime || (timing?.hasPi ? 'Completed' : '—'),
+            subtext: timing?.hasPi ? 'Issued to Client' : 'Direct Order'
           },
           {
             num: 2,
             label: 'BOM Confirmed',
-            done: Boolean(bom.salesConfirmed || st.includes('confirm')),
-            active: bom.salesConfirmed && bom.packingStatus !== 'PACKING_VERIFIED',
-            date: timing?.confirmedDate || '10 Nov',
-            time: timing?.confirmedTime || '10:00 AM',
-            duration: 'Timer Start'
+            done: timing?.hasConfirmed,
+            active: !timing?.hasConfirmed,
+            date: timing?.confirmedDate || '—',
+            time: timing?.confirmedTime || (timing?.hasConfirmed ? 'Confirmed' : 'Draft'),
+            subtext: timing?.hasConfirmed ? 'Sales Confirmed' : 'Draft Order'
           },
           {
             num: 3,
-            label: 'Dispatch Packed',
-            done: Boolean(timing?.hasPacking || bom.packingStatus === 'PACKING_VERIFIED' || st.includes('pack')),
-            active: bom.packingStatus !== 'PACKING_VERIFIED' && Boolean(bom.salesConfirmed),
-            date: timing?.packingDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.packingTime,
-            duration: timing?.hasPacking ? `${timing.packingDurationStr} taken` : 'Target: 30m'
+            label: 'Dispatch Packing',
+            done: timing?.hasPacking,
+            active: timing?.isPackingActive,
+            date: timing?.packingDate || (timing?.isPackingActive ? timing?.confirmedDate : '—'),
+            time: timing?.packingTime ? timing.packingTime : (timing?.isPackingActive ? 'Processing...' : '—'),
+            subtext: timing?.hasPacking ? (timing.packingDuration ? `Took ${timing.packingDuration}` : 'Packing Verified') : (timing?.isPackingActive ? `Started ${timing.packingStartedTime || timing.confirmedTime || ''}` : 'Pending')
           },
           {
             num: 4,
             label: 'Accounts Verified',
-            done: Boolean(timing?.hasAccounts || bom.isAccountsDone || bom.accountsVerification?.verified),
-            active: Boolean(bom.packingStatus === 'PACKING_VERIFIED') && !bom.isAccountsDone,
-            date: timing?.accountsDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.accountsTime,
-            duration: timing?.hasAccounts ? `${timing.accountsDurationStr} taken` : 'Target: 30m'
+            done: timing?.hasAccounts,
+            active: timing?.isAccountsActive,
+            date: timing?.accountsDate || (timing?.isAccountsActive ? timing?.packingDate : '—'),
+            time: timing?.accountsTime ? timing.accountsTime : (timing?.isAccountsActive ? 'Processing...' : '—'),
+            subtext: timing?.hasAccounts ? (timing.accountsDuration ? `Took ${timing.accountsDuration}` : 'Accounts Verified') : (timing?.isAccountsActive ? `Started ${timing.accountsStartedTime || ''}` : 'Pending')
           },
           {
             num: 5,
             label: 'GST Invoiced',
-            done: Boolean(timing?.hasInvoice || bom.invoiceConfirmed || st.includes('invoice')),
-            active: Boolean(bom.isAccountsDone) && !bom.invoiceConfirmed,
-            date: timing?.invoiceDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.invoiceTime,
-            duration: timing?.hasInvoice ? `${timing.invoiceDurationStr} taken` : 'Target: 30m'
+            done: timing?.hasInvoice,
+            active: timing?.isInvoiceActive,
+            date: timing?.invoiceDate || (timing?.isInvoiceActive ? timing?.accountsDate : '—'),
+            time: timing?.invoiceTime ? timing.invoiceTime : (timing?.isInvoiceActive ? 'Processing...' : '—'),
+            subtext: timing?.hasInvoice ? (timing.invoiceDuration ? `Took ${timing.invoiceDuration}` : 'Invoice Confirmed') : (timing?.isInvoiceActive ? `Started ${timing.invoiceStartedTime || ''}` : 'Pending')
           },
           {
             num: 6,
             label: 'Final Dispatched',
-            done: Boolean(timing?.hasDispatch || bom.fullyCompleted || st.includes('dispatched') || st.includes('completed')),
-            active: Boolean(bom.invoiceConfirmed) && !bom.fullyCompleted,
-            date: timing?.dispatchDate || timing?.confirmedDate || '10 Nov',
-            time: timing?.dispatchTime,
-            duration: timing?.hasDispatch ? `${timing.dispatchDurationStr} taken` : 'Max 2h SLA'
+            done: timing?.hasDispatch,
+            active: timing?.isDispatchActive,
+            date: timing?.dispatchDate || (timing?.isDispatchActive ? timing?.invoiceDate : '—'),
+            time: timing?.dispatchTime ? timing.dispatchTime : (timing?.isDispatchActive ? 'Processing...' : '—'),
+            subtext: timing?.hasDispatch ? (timing.dispatchDuration ? `Took ${timing.dispatchDuration}` : 'Dispatched') : (timing?.isDispatchActive ? `Started ${timing.dispatchStartedTime || ''}` : 'Pending')
           }
         ];
 
@@ -7453,22 +7453,26 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                      Order-to-Cash Lifecycle Progress • Target: 2 Hours Max (30m / stage)
+                      Order-to-Cash Lifecycle Progress
                     </div>
-                    {timing && timing.confirmedTime && (
+                    {timing && (
                       <span style={{
-                        fontSize: '10px',
+                        fontSize: '10.5px',
                         fontWeight: '800',
-                        color: timing.isBreached ? '#DC2626' : (timing.isApproaching ? '#D97706' : '#16A34A'),
-                        backgroundColor: timing.isBreached ? '#FEF2F2' : (timing.isApproaching ? '#FFFBEB' : '#F0FDF4'),
-                        border: `1px solid ${timing.isBreached ? '#FECACA' : (timing.isApproaching ? '#FDE68A' : '#BBF7D0')}`,
-                        padding: '2px 8px',
+                        color: timing.isCompleted ? '#16A34A' : '#0E7490',
+                        backgroundColor: timing.isCompleted ? '#F0FDF4' : '#ECFEFF',
+                        border: `1px solid ${timing.isCompleted ? '#BBF7D0' : '#BAE6FD'}`,
+                        padding: '2px 10px',
                         borderRadius: '999px',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '4px'
+                        gap: '5px'
                       }}>
-                        <Clock size={11} /> Total Elapsed: {timing.totalElapsedStr} / 2h Max
+                        {timing.isCompleted ? (
+                          <>✓ Order Completed & Dispatched {timing.totalTurnaround ? `(Turnaround: ${timing.totalTurnaround})` : ''}</>
+                        ) : (
+                          <>⏳ Current: {timing.activeStageName} (In Processing)</>
+                        )}
                       </span>
                     )}
                   </div>
@@ -7510,7 +7514,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           }}>
                             {stg.label}
                           </span>
-                          {/* DATE - ALWAYS VISIBLE */}
+                          {/* DATE */}
                           <span style={{
                             fontSize: '10px',
                             fontWeight: '700',
@@ -7522,7 +7526,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                           }}>
                             {stg.date}
                           </span>
-                          {/* TIME & SLA BADGE - ALWAYS VISIBLE */}
+                          {/* TIME & STAGE STATUS */}
                           <div style={{
                             backgroundColor: isComplete ? '#DCFCE7' : (isCurrent ? '#E0F2FE' : '#F1F5F9'),
                             border: `1px solid ${isComplete ? '#BBF7D0' : (isCurrent ? '#BAE6FD' : '#E2E8F0')}`,
@@ -7543,13 +7547,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                             }}>
                               {stg.time}
                             </span>
-                            {stg.duration && (
+                            {stg.subtext && (
                               <span style={{
                                 fontSize: '8.5px',
                                 fontWeight: '700',
                                 color: isComplete ? '#166534' : (isCurrent ? '#0369A1' : '#64748B')
                               }}>
-                                {stg.duration}
+                                {stg.subtext}
                               </span>
                             )}
                           </div>
