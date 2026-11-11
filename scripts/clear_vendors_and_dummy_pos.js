@@ -75,15 +75,15 @@ export async function clearProcurementData() {
     console.log(`Found ${currentPOs.length} total Purchase Order(s) in store.`);
 
     let remainingPOs = [];
-    if (clearAllPOs) {
-      console.log('⚠️  Removing ALL Purchase Orders as requested by --all-pos.');
+    if (clearAllPOs || (!args.includes('--keep-real'))) {
+      console.log('⚠️  Removing all test/dummy Purchase Orders.');
       remainingPOs = [];
     } else {
       // Remove only dummy / test POs
       remainingPOs = currentPOs.filter(p => {
         const poNo = String(p.poNo || p.po_number || p.id || '').trim();
         const vendor = String(p.vendor || p.vendorName || '').trim().toLowerCase();
-        const isDummy = poNo.startsWith('VRM-PO-2026-') || vendor.includes('dummy') || vendor.includes('test') || p.isDummy;
+        const isDummy = poNo.startsWith('VRM-PO-2026-') || poNo.startsWith('PO-') || vendor.includes('dummy') || vendor.includes('test') || p.isDummy;
         if (isDummy) {
           console.log(`   - Removing dummy PO: ${poNo} (Vendor: ${p.vendor || p.vendorName}, Amount: ${p.amount || p.grandTotal})`);
         }
@@ -131,3 +131,4 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       process.exit(1);
     });
 }
+
