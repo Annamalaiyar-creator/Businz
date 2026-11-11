@@ -7483,7 +7483,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                         {timing.isCompleted ? (
                           <>✓ Order Completed & Dispatched {timing.totalTurnaround ? `(Turnaround: ${timing.totalTurnaround})` : ''}</>
                         ) : (
-                          <>⏳ Current: {timing.activeStageName} (In Processing)</>
+                          <>Current: {timing.activeStageName} (In Processing)</>
                         )}
                       </span>
                     )}
@@ -7561,7 +7561,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                               alignItems: 'center',
                               gap: '2px'
                             }}>
-                              {isComplete ? '✓ Completed' : (isCurrent ? '⏳ Processing' : '⚪ Pending')}
+                              {isComplete ? '✓ Completed' : (isCurrent ? 'Processing' : 'Pending')}
                             </span>
 
                             {/* Exact Operational Timestamp */}

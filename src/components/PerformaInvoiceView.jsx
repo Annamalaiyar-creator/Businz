@@ -1083,7 +1083,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (!targetPi || syncingPiNo) return;
     const cleanNo = String(targetPi.piNo || targetPi.id || '').trim();
     setSyncingPiNo(cleanNo);
-    showTopToast(`⏳ Pushing Proforma Invoice ${cleanNo} to Zoho Books Quotes...`, 'info', 4000);
+    showTopToast(`Pushing Proforma Invoice ${cleanNo} to Zoho Books Quotes...`, 'info', 4000);
 
     try {
       const sanitizedPi = stripDataUrlsFromRecord(targetPi);

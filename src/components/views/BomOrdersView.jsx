@@ -6933,7 +6933,7 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasPacking ? '#047857' : (timing?.isPackingActive ? '#B45309' : '#475569') }}>
-                    {timing?.hasPacking ? (timing?.packingCompletedTime ? `At ${timing.packingCompletedTime}` : 'Packed') : (timing?.isPackingActive ? '⏳ Processing' : 'Pending')}
+                    {timing?.hasPacking ? (timing?.packingCompletedTime ? `At ${timing.packingCompletedTime}` : 'Packed') : (timing?.isPackingActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasPacking ? '#047857' : '#B45309', marginTop: '1px', fontWeight: '700' }}>
                     {timing?.hasPacking ? (timing.packingDuration ? `Took ${timing.packingDuration}` : 'Packing Verified') : (timing?.isPackingActive ? `Received: ${timing.packingReceivedTime || timing.confirmedTime || 'In Queue'}` : 'Awaiting packing')}
@@ -6962,7 +6962,7 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasAccounts ? '#047857' : (timing?.isAccountsActive ? '#6D28D9' : '#475569') }}>
-                    {timing?.hasAccounts ? (timing?.accountsCompletedTime ? `At ${timing.accountsCompletedTime}` : 'Verified') : (timing?.isAccountsActive ? '⏳ Processing' : 'Pending')}
+                    {timing?.hasAccounts ? (timing?.accountsCompletedTime ? `At ${timing.accountsCompletedTime}` : 'Verified') : (timing?.isAccountsActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasAccounts ? '#047857' : '#6D28D9', marginTop: '1px', fontWeight: '700' }}>
                     {timing?.hasAccounts ? (timing.accountsDuration ? `Took ${timing.accountsDuration}` : 'Accounts Verified') : (timing?.isAccountsActive ? `Received: ${timing.accountsReceivedTime || ''}` : 'Awaiting accounts')}
@@ -6991,7 +6991,7 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasInvoice ? '#047857' : (timing?.isInvoiceActive ? '#1D4ED8' : '#475569') }}>
-                    {timing?.hasInvoice ? (timing?.invoiceCompletedTime ? `At ${timing.invoiceCompletedTime}` : 'Invoiced') : (timing?.isInvoiceActive ? '⏳ Processing' : 'Pending')}
+                    {timing?.hasInvoice ? (timing?.invoiceCompletedTime ? `At ${timing.invoiceCompletedTime}` : 'Invoiced') : (timing?.isInvoiceActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasInvoice ? '#047857' : '#1D4ED8', marginTop: '1px', fontWeight: '700' }}>
                     {timing?.hasInvoice ? (timing.invoiceDuration ? `Took ${timing.invoiceDuration}` : 'Invoice Confirmed') : (timing?.isInvoiceActive ? `Received: ${timing.invoiceReceivedTime || ''}` : 'Awaiting billing')}
@@ -7020,7 +7020,7 @@ export default function BomOrdersView(props) {
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '900', color: timing?.hasDispatch ? '#15803D' : (timing?.isDispatchActive ? '#16A34A' : '#475569') }}>
-                    {timing?.hasDispatch ? (timing?.dispatchCompletedTime ? `At ${timing.dispatchCompletedTime}` : 'Dispatched') : (timing?.isDispatchActive ? '⏳ Processing' : 'Pending')}
+                    {timing?.hasDispatch ? (timing?.dispatchCompletedTime ? `At ${timing.dispatchCompletedTime}` : 'Dispatched') : (timing?.isDispatchActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasDispatch ? '#15803D' : '#16A34A', marginTop: '1px', fontWeight: '700' }}>
                     {timing?.hasDispatch ? (timing.dispatchDuration ? `Took ${timing.dispatchDuration}` : 'Final Dispatched') : (timing?.isDispatchActive ? `Received: ${timing.dispatchReceivedTime || ''}` : 'Awaiting loading')}
@@ -13445,7 +13445,7 @@ export default function BomOrdersView(props) {
                         {timing.isCompleted ? (
                           <>✓ Order Completed & Dispatched {timing.totalTurnaround ? `(Turnaround: ${timing.totalTurnaround})` : ''}</>
                         ) : (
-                          <>⏳ Current: {timing.activeStageName} (In Processing)</>
+                          <>Current: {timing.activeStageName} (In Processing)</>
                         )}
                       </span>
                     )}
@@ -13523,7 +13523,7 @@ export default function BomOrdersView(props) {
                               alignItems: 'center',
                               gap: '2px'
                             }}>
-                              {isComplete ? '✓ Completed' : (isCurrent ? '⏳ Processing' : '⚪ Pending')}
+                              {isComplete ? '✓ Completed' : (isCurrent ? 'Processing' : 'Pending')}
                             </span>
 
                             {/* Exact Operational Timestamp */}
