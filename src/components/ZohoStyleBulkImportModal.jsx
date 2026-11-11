@@ -180,13 +180,23 @@ export default function ZohoStyleBulkImportModal({
     setIsImporting(true);
     setErrorMsg(null);
     try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('You appear to be offline. Please verify your internet connection and try again.');
+      }
       if (typeof onImport === 'function') {
         await onImport(compiledData, rawRows);
       }
       handleClose();
     } catch (err) {
       console.error('Import error:', err);
-      setErrorMsg('Import failed: ' + (err.message || 'Unknown error occurred'));
+      const isNetworkErr = err?.name === 'TypeError' || 
+        String(err?.message || '').toLowerCase().includes('failed to fetch') || 
+        String(err?.message || '').toLowerCase().includes('network') ||
+        String(err?.message || '').toLowerCase().includes('offline');
+      setErrorMsg(isNetworkErr 
+        ? 'Network connection error: Unable to reach the server. Please check your internet connection and retry.' 
+        : 'Import failed: ' + (err.message || 'Unknown error occurred')
+      );
     } finally {
       setIsImporting(false);
     }
