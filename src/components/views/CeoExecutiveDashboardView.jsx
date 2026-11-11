@@ -8,10 +8,12 @@ import {
   Receipt, ArrowRight, Clock, BarChart3, Database, Zap,
   ShoppingCart, Truck, Factory, UserCheck, AlertTriangle, Sparkles, ChevronRight,
   Users, User, Briefcase, Search, Award, Target, Phone, Mail, Eye, Activity,
-  LayoutDashboard, Wrench, Boxes, Package, FileCheck, ClipboardList, Calculator, CheckCircle, Warehouse, Edit3, GitBranch
+  LayoutDashboard, Wrench, Boxes, Package, FileCheck, ClipboardList, Calculator, CheckCircle, Warehouse, Edit3, GitBranch, CreditCard
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { resolveDocumentUrl } from '../../utils/documentResolver';
+import { getMediaFromCache } from '../../utils/otherViewsShared';
 import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
 import { getBomStageTiming } from './BomOrdersView';
 
@@ -215,6 +217,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [viewingRepBomsModal, setViewingRepBomsModal] = useState(null);
   const [viewingPiModal, setViewingPiModal] = useState(null);
   const [viewingBomModal, setViewingBomModal] = useState(null);
+  const [previewDocModal, setPreviewDocModal] = useState(null);
   const [otcScope, setOtcScope] = useState('ALL'); // 'ALL' = Full Factory Order Pipeline | 'PERIOD' = Filtered by selectedPeriod
   const [activeKpiPopup, setActiveKpiPopup] = useState(null); // 'pi' | 'bom' | 'po' | 'dispatch' | 'billing' | 'accounts' | 'kits'
   const [kpiPopupSearch, setKpiPopupSearch] = useState('');
@@ -7545,6 +7548,36 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
+        // Payment Proof Documents for CEO
+        const pDocs = (Array.isArray(bom.paymentProofDocs) && bom.paymentProofDocs.length > 0)
+          ? bom.paymentProofDocs
+          : (Array.isArray(bom.payments?.proofDocObjs) && bom.payments.proofDocObjs.length > 0)
+            ? bom.payments.proofDocObjs
+            : (bom.paymentProofDoc
+                ? (Array.isArray(bom.paymentProofDoc) ? bom.paymentProofDoc : [bom.paymentProofDoc])
+                : (bom.payments?.proofDoc
+                    ? [{ name: bom.payments.proofDoc, dataUrl: bom.payments.proofDocData }]
+                    : (matchingPi?.paymentProofDocs && matchingPi.paymentProofDocs.length > 0
+                        ? matchingPi.paymentProofDocs
+                        : (matchingPi?.paymentProofDoc ? [matchingPi.paymentProofDoc] : []))));
+        const validPDocs = (pDocs || []).filter(d => Boolean(d && (typeof d === 'string' ? d.trim() : (d.name || d.url || d.dataUrl || d.storagePath))));
+
+        // Address Proof Documents for CEO
+        const aDocs = (Array.isArray(bom.deliveryAddressProofDocs) && bom.deliveryAddressProofDocs.length > 0)
+          ? bom.deliveryAddressProofDocs
+          : (Array.isArray(bom.deliveryProofDocs) && bom.deliveryProofDocs.length > 0)
+            ? bom.deliveryProofDocs
+            : (bom.deliveryAddressProofDoc
+                ? (Array.isArray(bom.deliveryAddressProofDoc) ? bom.deliveryAddressProofDoc : [bom.deliveryAddressProofDoc])
+                : (bom.deliveryProofDoc
+                    ? (Array.isArray(bom.deliveryProofDoc) ? bom.deliveryProofDoc : [bom.deliveryProofDoc])
+                    : (matchingPi?.deliveryAddressProofDocs && matchingPi.deliveryAddressProofDocs.length > 0
+                        ? matchingPi.deliveryAddressProofDocs
+                        : (matchingPi?.deliveryAddressProofDoc
+                            ? [matchingPi.deliveryAddressProofDoc]
+                            : (matchingPi?.deliveryProofDoc ? [matchingPi.deliveryProofDoc] : [])))));
+        const validADocs = (aDocs || []).filter(d => Boolean(d && (typeof d === 'string' ? d.trim() : (d.name || d.url || d.dataUrl || d.storagePath))));
+
         const timing = getBomStageTiming(bom, matchingPi);
 
         // 6 Lifecycle stage indicators with Real Operational Timestamps & Active Processing Stage
@@ -7868,20 +7901,31 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
                 {/* Info Cards Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Linked PI Reference</div>
                     {linkedPiNo ? (
                       <div style={{ marginTop: '3px' }}>
                         <button
                           type="button"
                           onClick={() => {
-                            if (matchingPi) {
-                              setViewingBomModal(null);
-                              setViewingPiModal(matchingPi);
-                            } else if (onNavigateTab) {
-                              setViewingBomModal(null);
-                              onNavigateTab('Performa Invoice');
-                            }
+                            const targetPi = matchingPi || {
+                              piNo: linkedPiNo,
+                              id: linkedPiNo,
+                              customerName: customer,
+                              customer: customer,
+                              date: timing?.piDate !== '—' ? timing?.piDate : bomDate,
+                              salesPerson: salesPerson,
+                              grandTotal: grandTotal,
+                              subtotal: subtotal,
+                              taxTotal: taxTotal,
+                              items: items,
+                              paymentTerms: bom.paymentType || '100% Paid',
+                              status: 'Converted to BOM',
+                              convertedBomCode: bomCode,
+                              bomCode: bomCode
+                            };
+                            setViewingBomModal(null);
+                            setViewingPiModal(targetPi);
                           }}
                           style={{
                             border: 'none',
@@ -7896,6 +7940,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                             alignItems: 'center',
                             gap: '4px'
                           }}
+                          title="Open Commercial PI Details (same page, in-modal)"
                         >
                           {linkedPiNo} <Receipt size={13} />
                         </button>
@@ -7905,25 +7950,120 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px' }}>Direct Factory BOM</div>
                     )}
                   </div>
-                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Dispatch Units</div>
-                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginTop: '3px' }}>
-                      {Math.round(totalUnits).toLocaleString('en-IN')} Units
+
+                  {/* Payment Attachment */}
+                  <div style={{ backgroundColor: validPDocs.length > 0 ? '#F0FDF4' : '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: validPDocs.length > 0 ? '1px solid #BBF7D0' : '1px solid #E2E8F0', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                      <span style={{ fontSize: '10.5px', color: validPDocs.length > 0 ? '#15803D' : '#64748B', fontWeight: '700', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CreditCard size={12} /> Payment Attachment
+                      </span>
+                      {validPDocs.length > 0 && (
+                        <span style={{ fontSize: '9px', fontWeight: '800', color: '#16A34A', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '999px', border: '1px solid #BBF7D0' }}>
+                          ✓ {validPDocs.length} {validPDocs.length === 1 ? 'File' : 'Files'}
+                        </span>
+                      )}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Across {items.length} Material Items</div>
-                  </div>
-                  <div style={{ backgroundColor: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Packing & Dispatch</div>
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: bom.packingStatus === 'PACKING_VERIFIED' ? '#16A34A' : '#D97706', marginTop: '3px' }}>
-                      {bom.packingStatus === 'PACKING_VERIFIED' ? '✓ Packing Verified' : 'Pending Packing'}
-                    </div>
-                    {bom.dispatchDetails?.transporterName && (
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                        {bom.dispatchDetails.transporterName} {bom.dispatchDetails.vehicleNo ? `(${bom.dispatchDetails.vehicleNo})` : ''}
+                    {validPDocs.length > 0 ? (
+                      <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {validPDocs.map((pDoc, pIdx) => {
+                          const rawName = typeof pDoc === 'string' ? pDoc : (pDoc?.name || pDoc?.originalName || `Payment Slip #${pIdx + 1}`);
+                          const isPdf = /\.pdf($|\?)/i.test(rawName);
+                          return (
+                            <button
+                              key={pIdx}
+                              type="button"
+                              onClick={() => setPreviewDocModal({ title: `Payment Proof #${pIdx + 1}: ${rawName}`, doc: pDoc, bomCode })}
+                              style={{
+                                border: '1px solid #BBF7D0',
+                                backgroundColor: '#FFFFFF',
+                                borderRadius: '6px',
+                                padding: '3px 6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                gap: '6px',
+                                width: '100%',
+                                boxSizing: 'border-box'
+                              }}
+                              title={`Click to preview ${rawName}`}
+                            >
+                              <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                {isPdf ? '📑' : '🖼️'} {rawName}
+                              </span>
+                              <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                <Eye size={10} /> View
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: '4px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: '700', color: '#94A3B8' }}>Not Attached</div>
+                        <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '1px' }}>No payment receipt on file</div>
                       </div>
                     )}
                   </div>
-                  <div style={{ backgroundColor: '#F0F9FF', padding: '10px 12px', borderRadius: '10px', border: '1px solid #BAE6FD' }}>
+
+                  {/* Address Proof */}
+                  <div style={{ backgroundColor: validADocs.length > 0 ? '#F0FDFA' : '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: validADocs.length > 0 ? '1px solid #99F6E4' : '1px solid #E2E8F0', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                      <span style={{ fontSize: '10.5px', color: validADocs.length > 0 ? '#0F766E' : '#64748B', fontWeight: '700', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Truck size={12} /> Address Proof
+                      </span>
+                      {validADocs.length > 0 && (
+                        <span style={{ fontSize: '9px', fontWeight: '800', color: '#0D9488', backgroundColor: '#CCFBF1', padding: '1px 6px', borderRadius: '999px', border: '1px solid #99F6E4' }}>
+                          ✓ {validADocs.length} {validADocs.length === 1 ? 'File' : 'Files'}
+                        </span>
+                      )}
+                    </div>
+                    {validADocs.length > 0 ? (
+                      <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {validADocs.map((aDoc, aIdx) => {
+                          const rawName = typeof aDoc === 'string' ? aDoc : (aDoc?.name || aDoc?.originalName || `Address Proof #${aIdx + 1}`);
+                          const isPdf = /\.pdf($|\?)/i.test(rawName);
+                          return (
+                            <button
+                              key={aIdx}
+                              type="button"
+                              onClick={() => setPreviewDocModal({ title: `Address Proof #${aIdx + 1}: ${rawName}`, doc: aDoc, bomCode })}
+                              style={{
+                                border: '1px solid #99F6E4',
+                                backgroundColor: '#FFFFFF',
+                                borderRadius: '6px',
+                                padding: '3px 6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                gap: '6px',
+                                width: '100%',
+                                boxSizing: 'border-box'
+                              }}
+                              title={`Click to preview ${rawName}`}
+                            >
+                              <span style={{ fontSize: '11px', color: '#0F766E', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                {isPdf ? '📑' : '📍'} {rawName}
+                              </span>
+                              <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                <Eye size={10} /> View
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: '4px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: '700', color: '#94A3B8' }}>Not Attached</div>
+                        <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '1px' }}>No address proof on file</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ backgroundColor: '#F0F9FF', padding: '10px 12px', borderRadius: '10px', border: '1px solid #BAE6FD', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div style={{ fontSize: '10.5px', color: '#0284C7', fontWeight: '800', textTransform: 'uppercase' }}>BOM Order Value</div>
                     <div style={{ fontSize: '16px', fontWeight: '900', color: '#0284C7', marginTop: '3px' }}>
                       ₹ {Math.round(grandTotal).toLocaleString('en-IN')}
@@ -8400,6 +8540,137 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 >
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* DOCUMENT PREVIEW MODAL */}
+      {previewDocModal && (() => {
+        const rawDoc = previewDocModal.doc;
+        const docTitle = previewDocModal.title || 'Document Preview';
+        const docName = typeof rawDoc === 'string' ? rawDoc : (rawDoc?.name || 'Uploaded File');
+
+        let resolvedData = null;
+        if (typeof rawDoc === 'string') {
+          if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
+            resolvedData = rawDoc;
+          } else {
+            resolvedData = getMediaFromCache(rawDoc) || null;
+          }
+        } else if (rawDoc && typeof rawDoc === 'object') {
+          resolvedData = rawDoc.dataUrl || rawDoc.url || rawDoc.fileData || rawDoc.previewUrl || getMediaFromCache(rawDoc.name) || resolveDocumentUrl(rawDoc) || null;
+        }
+        if (resolvedData && typeof resolvedData === 'string' && resolvedData.startsWith('/uploads/')) {
+          resolvedData = `/api${resolvedData}`;
+        }
+
+        const isPdf = /\.pdf($|\?)/i.test(docName) || (typeof resolvedData === 'string' && resolvedData.startsWith('data:application/pdf'));
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(15,23,42,0.75)',
+              backdropFilter: 'blur(3px)',
+              zIndex: 999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px'
+            }}
+            onClick={() => setPreviewDocModal(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '16px',
+                maxWidth: '850px',
+                width: '100%',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+                border: '1px solid #E2E8F0'
+              }}
+            >
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>{docTitle}</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748B', wordBreak: 'break-all' }}>{docName}</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {resolvedData && (
+                    <a
+                      href={resolvedData}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={docName || 'document'}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: '#0E7490',
+                        backgroundColor: '#ECFEFF',
+                        border: '1px solid #A5F3FC',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        textDecoration: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Download size={13} /> Open / Download
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDocModal(null)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#64748B',
+                      backgroundColor: '#F1F5F9'
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div style={{ padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F5F9', minHeight: '350px' }}>
+                {resolvedData ? (
+                  isPdf ? (
+                    <iframe
+                      src={resolvedData}
+                      title={docName}
+                      style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '8px', backgroundColor: '#FFFFFF' }}
+                    />
+                  ) : (
+                    <img
+                      src={resolvedData}
+                      alt={docName}
+                      style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                    />
+                  )
+                ) : (
+                  <div style={{ textAlign: 'center', color: '#64748B' }}>
+                    <FileText size={40} style={{ opacity: 0.5, marginBottom: '8px' }} />
+                    <p style={{ margin: 0, fontWeight: '700' }}>Document preview unavailable or loading...</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px' }}>{docName}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
