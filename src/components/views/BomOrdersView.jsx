@@ -11583,7 +11583,7 @@ export default function BomOrdersView(props) {
                         <CheckCircle style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
                         <div>
                           <strong style={{ color: '#065F46', fontSize: '13px', display: 'block' }}>
-                            📦 Notice to Sales: Goods Verified & Packed by Dispatch
+                            Notice to Sales: Goods Verified & Packed by Dispatch
                           </strong>
                           <span style={{ color: '#047857', fontSize: '12px' }}>
                             Dispatch has packed this BOM ({quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' ? '100% Fully Packed' : 'Partially Packed'}). Review the comparison below between ordered BOM Qty and actual Packed Qty.

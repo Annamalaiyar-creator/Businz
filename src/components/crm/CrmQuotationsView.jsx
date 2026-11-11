@@ -3888,7 +3888,7 @@ export default function CrmQuotationsView({
                         <tr key={`quote_grp_${gid}_${gIdx}`} style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
                           <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
-                              📦 {gInfo.name}
+                              {gInfo.name}
                             </div>
                             {compItems.length > 0 && (
                               <div style={{

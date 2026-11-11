@@ -264,7 +264,7 @@ export default function QuickPreviewDrawer({
         );
 
         let buttonBg = 'linear-gradient(135deg, #0E7490, #06B6D4)';
-        let buttonContent = <>📦 Pack Goods & Verify Items for Dispatch</>;
+        let buttonContent = <>Pack Goods & Verify Items for Dispatch</>;
 
         if (isClosed) {
           buttonBg = 'linear-gradient(135deg, #15803D, #16A34A)';

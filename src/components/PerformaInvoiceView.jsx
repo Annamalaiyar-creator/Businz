@@ -6366,7 +6366,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         fontWeight: '800',
                                         letterSpacing: '0.5px'
                                       }}>
-                                        <Boxes size={12} />
                                         {theme.badge}
                                       </span>
                                       <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
@@ -7859,12 +7858,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             fontWeight: '900',
                                             padding: '2.5px 8px',
                                             borderRadius: '6px',
-                                            letterSpacing: '0.5px',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px'
+                                            letterSpacing: '0.5px'
                                           }}>
-                                            <Boxes size={12} />
                                             PRESET {presetIdx + 1}
                                           </span>
                                           <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
