@@ -53,17 +53,17 @@ export function CeoKpiGrid({ kpis }) {
             role={kpi.onClick ? 'button' : undefined}
             tabIndex={kpi.onClick ? 0 : undefined}
             style={{
-              backgroundColor: kpi.isSelected ? '#F0FDFA' : (isHovered ? '#F8FAFC' : '#FFFFFF'),
+              backgroundColor: kpi.isSelected ? '#F0FDFA' : (isHovered ? '#F0FDFA' : '#FFFFFF'),
               borderRadius: '16px',
               border: kpi.isSelected ? '2px solid #0E7490' : (isHovered ? '1.5px solid #0E7490' : (kpi.highlightCard ? '1.5px solid #FCA5A5' : '1px solid #EAEFEF')),
               padding: '12px 14px',
               display: 'flex',
               flexDirection: 'column',
               gap: '8px',
-              boxShadow: isHovered ? '0 8px 24px rgba(14, 116, 144, 0.12)' : (kpi.isSelected ? '0 6px 20px rgba(14, 116, 144, 0.18)' : (kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)')),
-              transform: isHovered ? 'translateY(-2px)' : 'none',
+              boxShadow: kpi.isSelected ? '0 4px 18px rgba(14, 116, 144, 0.12)' : (kpi.highlightCard ? '0 4px 18px rgba(220, 38, 38, 0.08)' : '0 4px 18px rgba(15, 23, 42, 0.03)'),
+              transform: 'none',
               cursor: kpi.onClick ? 'pointer' : 'default',
-              transition: 'all 0.18s ease',
+              transition: 'background-color 0.15s ease, border-color 0.15s ease',
               minWidth: 0,
               boxSizing: 'border-box'
             }}
