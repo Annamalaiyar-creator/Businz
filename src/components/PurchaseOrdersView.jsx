@@ -257,11 +257,70 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const [statusFilter, setStatusFilter] = useState('All');
-  const [filterDate, setFilterDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
+  const [kpiFilterMeta, setKpiFilterMeta] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_po_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.targetKeys && Array.isArray(parsed.targetKeys)) {
+          return {
+            targetKeys: new Set(parsed.targetKeys.map(k => String(k || '').trim().toLowerCase())),
+            periodLabel: parsed.periodLabel || 'Overview',
+            sourceLabel: parsed.sourceLabel || '',
+            count: parsed.count ?? parsed.targetKeys.length
+          };
+        }
+      }
+    } catch (_) {}
+    return null;
+  });
+
+  const [filterDate, setFilterDate] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_po_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.start || '';
+      }
+    } catch (_) {}
+    return '';
+  });
+
+  const [filterEndDate, setFilterEndDate] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('controlroom_po_initial_date_filter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.end || '';
+      }
+    } catch (_) {}
+    return '';
+  });
+
   const [poTab, setPoTab] = useState('All');
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    const handleFilterDate = (e) => {
+      if (e?.detail) {
+        if (e.detail.startDate !== undefined) setFilterDate(e.detail.startDate || '');
+        if (e.detail.endDate !== undefined) setFilterEndDate(e.detail.endDate || '');
+        if (e.detail.targetKeys && Array.isArray(e.detail.targetKeys)) {
+          setKpiFilterMeta({
+            targetKeys: new Set(e.detail.targetKeys.map(k => String(k || '').trim().toLowerCase())),
+            periodLabel: e.detail.periodLabel || 'Overview',
+            sourceLabel: e.detail.sourceLabel || '',
+            count: e.detail.count ?? e.detail.targetKeys.length
+          });
+          setPoTab('All');
+        }
+        setCurrentPage(1);
+      }
+    };
+    window.addEventListener('controlroom_po_filter_date', handleFilterDate);
+    return () => window.removeEventListener('controlroom_po_filter_date', handleFilterDate);
+  }, []);
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -270,6 +329,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     setFilterEndDate('');
     setPoTab('All');
     setCurrentPage(1);
+    setKpiFilterMeta(null);
+    try {
+      sessionStorage.removeItem('controlroom_po_initial_date_filter');
+    } catch (_) {}
   };
 
   const [poList, setPoList] = useState([]);
@@ -2223,7 +2286,26 @@ Procurement Team | BUSINZ`;
           'Cancelled'
         ];
 
-        const filteredPOList = poList.filter(po => {
+        const kpiBaseList = (!kpiFilterMeta || !kpiFilterMeta.targetKeys)
+          ? poList
+          : (kpiFilterMeta.targetKeys.size === 0
+            ? []
+            : poList.filter(po => {
+                if (!po) return false;
+                const k1 = String(po.poNo || '').trim().toLowerCase();
+                const k2 = String(po.id || '').trim().toLowerCase();
+                const k3 = String(po.purchaseorder_number || '').trim().toLowerCase();
+                const k4 = String(po.poNumber || '').trim().toLowerCase();
+                const k5 = String(po._id || '').trim().toLowerCase();
+                return (k1 && kpiFilterMeta.targetKeys.has(k1)) ||
+                       (k2 && kpiFilterMeta.targetKeys.has(k2)) ||
+                       (k3 && kpiFilterMeta.targetKeys.has(k3)) ||
+                       (k4 && kpiFilterMeta.targetKeys.has(k4)) ||
+                       (k5 && kpiFilterMeta.targetKeys.has(k5));
+              })
+            );
+
+        const filteredPOList = kpiBaseList.filter(po => {
           if (!po) return false;
           const pNo = String(po.poNo || po.id || '');
           const pVend = String(po.vendor || po.companyName || '');
@@ -2246,7 +2328,7 @@ Procurement Team | BUSINZ`;
           const matchesTab = poTab === 'All' || currentStage === poTab;
 
           let matchesDate = true;
-          if (filterDate || filterEndDate) {
+          if (!kpiFilterMeta && (filterDate || filterEndDate)) {
             const rawDate = po.poDate || po.date || po.createdAt;
             if (rawDate) {
               const dStr = String(rawDate).substring(0, 10);
@@ -2392,26 +2474,66 @@ Procurement Team | BUSINZ`;
               </div>
             </div>
 
+            {/* KPI Filter Notification Banner */}
+            {kpiFilterMeta && (
+              <div style={{
+                backgroundColor: '#F0F9FF',
+                border: '1px solid #BAE6FD',
+                borderRadius: '10px',
+                padding: '10px 16px',
+                marginBottom: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0369A1', fontWeight: '800' }}>
+                  <span>Showing <strong>{filteredPOList.length}</strong> Purchase Orders filtered from {kpiFilterMeta.sourceLabel ? `${kpiFilterMeta.sourceLabel} KPI` : "Today's POs KPI"} ({kpiFilterMeta.periodLabel})</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  style={{
+                    border: 'none',
+                    backgroundColor: '#0284C7',
+                    color: '#FFFFFF',
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  Clear Filter ✕
+                </button>
+              </div>
+            )}
+
             {/* 2. STATUS TABS ROW */}
             <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
               {(isExecutiveOrMD ? [
-                { id: 'All', label: 'All orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' }
+                { id: 'All', label: 'All orders', count: kpiBaseList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Draft', label: 'Pending Approval', count: kpiBaseList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'MD Approved', count: kpiBaseList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' }
               ] : isAccounts ? [
-                { id: 'All', label: 'All orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' }
+                { id: 'All', label: 'All orders', count: kpiBaseList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Draft', label: 'Pending Approval', count: kpiBaseList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'MD Approved', count: kpiBaseList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
+                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: kpiBaseList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' }
               ] : [
-                { id: 'All', label: 'All orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
-                { id: 'PROCEED_PO', label: 'Proceed PO', count: poList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
-                { id: 'PARTIALLY_RECEIVED', label: 'Partially Received', count: poList.filter(po => getPoStage(po) === 'PARTIALLY_RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
-                { id: 'CLOSED', label: 'Fully Received', count: poList.filter(po => getPoStage(po) === 'CLOSED').length, bg: '#dcfce7', fg: '#15803d' },
-                { id: 'CANCELLED', label: 'Cancelled', count: poList.filter(po => getPoStage(po) === 'CANCELLED').length, bg: '#fee2e2', fg: '#b91c1c' }
+                { id: 'All', label: 'All orders', count: kpiBaseList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Draft', label: 'Pending Approval', count: kpiBaseList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'MD Approved', count: kpiBaseList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
+                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: kpiBaseList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
+                { id: 'PROCEED_PO', label: 'Proceed PO', count: kpiBaseList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
+                { id: 'PARTIALLY_RECEIVED', label: 'Partially Received', count: kpiBaseList.filter(po => getPoStage(po) === 'PARTIALLY_RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'CLOSED', label: 'Fully Received', count: kpiBaseList.filter(po => getPoStage(po) === 'CLOSED').length, bg: '#dcfce7', fg: '#15803d' },
+                { id: 'CANCELLED', label: 'Cancelled', count: kpiBaseList.filter(po => getPoStage(po) === 'CANCELLED').length, bg: '#fee2e2', fg: '#b91c1c' }
               ]).map(tab => (
                 <button
                   key={tab.id}

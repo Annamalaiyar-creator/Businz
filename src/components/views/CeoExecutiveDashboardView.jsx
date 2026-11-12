@@ -2272,14 +2272,22 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const handleNavigateWithPoFilter = (period = selectedPeriod, initialTab = 'All') => {
     const { start, end } = getPeriodDateRange(period);
     const targetPOs = period === 'Today' ? todayPoList : (initialTab === 'Draft' ? pendingMdPOs : poList);
-    const targetKeys = (targetPOs || []).map(p => String(p.poNumber || p.id || '').trim().toLowerCase()).filter(Boolean);
+    const targetKeys = (targetPOs || []).flatMap(p => [
+      p.poNo,
+      p.purchaseorder_number,
+      p.poNumber,
+      p.id,
+      p._id
+    ]).map(k => String(k || '').trim().toLowerCase()).filter(Boolean);
+    const sourceLabel = period === 'Today' ? "Total POs Today" : (initialTab === 'Draft' ? "Pending MD Approvals" : "Procurement");
     try {
       sessionStorage.setItem('controlroom_po_initial_date_filter', JSON.stringify({ 
         start, 
         end, 
         targetKeys,
         periodLabel: period,
-        count: targetKeys.length
+        sourceLabel,
+        count: targetPOs.length
       }));
     } catch (_) {}
     window.dispatchEvent(new CustomEvent('controlroom_po_filter_date', { 
@@ -2288,7 +2296,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         endDate: end, 
         targetKeys,
         periodLabel: period,
-        count: targetKeys.length
+        sourceLabel,
+        count: targetPOs.length
       } 
     }));
     if (onNavigateTab) onNavigateTab('Purchase Orders', null, initialTab);
