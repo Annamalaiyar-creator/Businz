@@ -954,6 +954,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     });
   }, [poList]);
 
+  const pendingMdPoValNum = useMemo(() => {
+    return pendingMdPOs.reduce((acc, po) => acc + parseAmt(po.amount || po.total), 0);
+  }, [pendingMdPOs]);
+  const pendingMdPoValFormatted = formatRealCurrency(pendingMdPoValNum);
+
   const totalPoSpendNum = useMemo(() => {
     return poList.reduce((acc, po) => acc + parseAmt(po.amount || po.total), 0);
   }, [poList]);
@@ -976,6 +981,14 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     return todayPoList.reduce((acc, po) => acc + parseAmt(po.amount || po.total), 0);
   }, [todayPoList]);
   const todayPoSpendFormatted = formatRealCurrency(todayPoSpendNum);
+
+  const todayDraftCount = useMemo(() => {
+    return todayPoList.filter(p => {
+      const st = String(p.stage || p.status || '').toLowerCase();
+      return st.includes('draft') || st.includes('pending') || st.includes('approval');
+    }).length;
+  }, [todayPoList]);
+  const todayApprovedCount = Math.max(0, todayPoCount - todayDraftCount);
 
   const totalPiPipelineNum = useMemo(() => {
     return piList
@@ -1088,6 +1101,23 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     }).length;
   }, [grnList]);
 
+  const completedGrnPoValNum = useMemo(() => {
+    const fromPOs = poList
+      .filter(p => {
+        const st = String(p.status || p.order_status || '').toUpperCase();
+        return st.includes('CLOSED') || st.includes('COMPLETED') || st.includes('INWARDED');
+      })
+      .reduce((acc, p) => acc + parseAmt(p.amount || p.total), 0);
+    const fromGrns = grnList
+      .filter(g => {
+        const st = String(g.status || '').toUpperCase();
+        return st.includes('CLOSED') || st.includes('FULLY') || st.includes('APPROVED') || st.includes('COMPLETED') || g.forceClosePO;
+      })
+      .reduce((acc, g) => acc + parseAmt(g.totalAmount || g.amount || g.poAmount || g.total || 0), 0);
+    return Math.max(fromPOs, fromGrns);
+  }, [poList, grnList]);
+  const completedGrnPoValFormatted = formatRealCurrency(completedGrnPoValNum);
+
   const pendingGrnCount = useMemo(() => {
     const openGrns = grnList.filter(g => {
       const st = String(g.status || '').toUpperCase();
@@ -1095,10 +1125,22 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     }).length;
     const posAwaitingInwarding = poList.filter(p => {
       const st = String(p.status || p.order_status || '').toUpperCase();
-      return (st.includes('APPROVED') || st.includes('ISSUED') || st.includes('OPEN') || st.includes('PARTIAL')) && !st.includes('CLOSED');
+      return (st.includes('APPROVED') || st.includes('ISSUED') || st.includes('OPEN') || st.includes('PARTIAL') || st.includes('PROCEED')) && !st.includes('CLOSED');
     }).length;
     return Math.max(openGrns, posAwaitingInwarding > 0 ? posAwaitingInwarding : openGrns);
   }, [grnList, poList]);
+
+  const pendingGrnPoList = useMemo(() => {
+    return poList.filter(p => {
+      const st = String(p.status || p.order_status || '').toUpperCase();
+      return (st.includes('APPROVED') || st.includes('ISSUED') || st.includes('OPEN') || st.includes('PARTIAL') || st.includes('PROCEED')) && !st.includes('CLOSED');
+    });
+  }, [poList]);
+
+  const pendingGrnPoValNum = useMemo(() => {
+    return pendingGrnPoList.reduce((acc, p) => acc + parseAmt(p.amount || p.total), 0);
+  }, [pendingGrnPoList]);
+  const pendingGrnPoValFormatted = formatRealCurrency(pendingGrnPoValNum);
 
   // Operational drilldown records for the 6 CEO KPI popup modals
   const dispatchKpiRecords = useMemo(() => {
@@ -2225,6 +2267,31 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       } 
     }));
     if (onNavigateTab) onNavigateTab('BOM Orders');
+  };
+
+  const handleNavigateWithPoFilter = (period = selectedPeriod, initialTab = 'All') => {
+    const { start, end } = getPeriodDateRange(period);
+    const targetPOs = period === 'Today' ? todayPoList : (initialTab === 'Draft' ? pendingMdPOs : poList);
+    const targetKeys = (targetPOs || []).map(p => String(p.poNumber || p.id || '').trim().toLowerCase()).filter(Boolean);
+    try {
+      sessionStorage.setItem('controlroom_po_initial_date_filter', JSON.stringify({ 
+        start, 
+        end, 
+        targetKeys,
+        periodLabel: period,
+        count: targetKeys.length
+      }));
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent('controlroom_po_filter_date', { 
+      detail: { 
+        startDate: start, 
+        endDate: end, 
+        targetKeys,
+        periodLabel: period,
+        count: targetKeys.length
+      } 
+    }));
+    if (onNavigateTab) onNavigateTab('Purchase Orders', null, initialTab);
   };
 
   const handleNavigateFunnelStage = (stage) => {
@@ -4064,68 +4131,68 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {activeSubTab === 'procurement' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Procurement Top Ribbon (BUSINZ DESIGN SYSTEM) */}
+          {/* Procurement Top Ribbon (BUSINZ DESIGN SYSTEM - DISPATCH LIFECYCLE PARITY) */}
           <CeoKpiGrid kpis={[
             {
               title: 'TOTAL POS TODAY',
-              value: `${todayPoCount} PO${todayPoCount === 1 ? '' : 's'}`,
-              trend: todayPoCount > 0 ? `${todayPoSpendFormatted}` : '0 Today',
+              value: `${todayPoCount} Raised Today`,
+              trend: todayPoCount > 0 ? `${todayDraftCount} Pending · ${todayApprovedCount} Active` : '0 Today',
               trendUp: todayPoCount > 0,
               icon: Calendar,
               iconColor: '#0E7490',
               iconBg: '#ECFEFF',
-              bottomPrefix: "Today's volume ",
-              bottomHighlight: todayPoCount > 0 ? `${todayPoCount} Raised (${todayPoSpendFormatted})` : '0 raised today',
-              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
+              bottomPrefix: "Today's PO spend ",
+              bottomHighlight: todayPoSpendFormatted,
+              onClick: () => handleNavigateWithPoFilter('Today', 'All')
             },
             {
               title: 'TOTAL PO SPEND HANDLED',
               value: `₹ ${totalPoSpendCr} Cr`,
-              trend: `${poList.length} POs`,
+              trend: `${poList.length} Active POs`,
               trendUp: poList.length > 0,
               icon: ShoppingCart,
               iconColor: '#2563EB',
               iconBg: '#EFF6FF',
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: totalPoSpendFormatted,
-              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
+              onClick: () => handleNavigateWithPoFilter(selectedPeriod, 'All')
             },
             {
               title: 'PENDING MD APPROVALS',
-              value: `${pendingMdPOs.length} Draft POs`,
-              trend: pendingMdPOs.length > 0 ? `${pendingMdPOs.length} Pending` : 'All Approved',
+              value: `${pendingMdPOs.length} Awaiting MD`,
+              trend: pendingMdPOs.length > 0 ? `${pendingMdPOs.length} In Queue` : 'All Approved',
               trendUp: pendingMdPOs.length === 0,
               highlightCard: pendingMdPOs.length > 0,
               icon: AlertCircle,
               iconColor: pendingMdPOs.length > 0 ? '#DC2626' : '#16A34A',
               iconBg: pendingMdPOs.length > 0 ? '#FEF2F2' : '#F0FDF4',
-              bottomPrefix: 'Executive signature ',
-              bottomHighlight: pendingMdPOs.length > 0 ? 'Awaiting CEO / MD' : 'Fully Authorized',
-              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')
+              bottomPrefix: 'Value pending ',
+              bottomHighlight: pendingMdPOs.length > 0 ? `${pendingMdPoValFormatted} Awaiting CEO / MD` : 'Fully Authorized (₹ 0)',
+              onClick: () => handleNavigateWithPoFilter(selectedPeriod, 'Draft')
             },
             {
               title: 'PENDING GRN',
-              value: `${pendingGrnCount} Pending`,
-              trend: pendingGrnCount > 0 ? `${pendingGrnCount} In Queue` : '0 Pending',
+              value: `${pendingGrnCount} Inward Queue`,
+              trend: pendingGrnCount > 0 ? `${pendingGrnCount} In Transit` : 'All Inwarded',
               trendUp: pendingGrnCount === 0,
               highlightCard: pendingGrnCount > 0,
               icon: Package,
               iconColor: pendingGrnCount > 0 ? '#D97706' : '#16A34A',
               iconBg: pendingGrnCount > 0 ? '#FFFBEB' : '#F0FDF4',
-              bottomPrefix: 'Inward queue ',
-              bottomHighlight: pendingGrnCount > 0 ? 'Awaiting Physical Verification' : 'All Clear',
+              bottomPrefix: 'Pending inward ',
+              bottomHighlight: pendingGrnCount > 0 ? `${pendingGrnPoValFormatted} Awaiting Delivery` : 'All Inwarded (₹ 0)',
               onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
             },
             {
               title: 'COMPLETED GRN',
-              value: `${completedGrnCount} GRNs`,
-              trend: `${completedGrnCount} Inwarded`,
+              value: `${completedGrnCount} Inwarded`,
+              trend: `${completedGrnCount} Verified`,
               trendUp: true,
               icon: CheckCircle2,
               iconColor: '#16A34A',
               iconBg: '#F0FDF4',
-              bottomPrefix: 'Stock verified ',
-              bottomHighlight: `${completedGrnCount} Inwarded & Stock Updated`,
+              bottomPrefix: 'Received value ',
+              bottomHighlight: `${completedGrnPoValFormatted} Inwarded & Stock Updated`,
               onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
             }
           ]} />
