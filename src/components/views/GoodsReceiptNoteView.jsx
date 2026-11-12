@@ -132,6 +132,9 @@ export default function GoodsReceiptNoteView(props) {
 
   const [showCeoGrnModal, setShowCeoGrnModal] = useState(false);
   const [selectedGrnForModal, setSelectedGrnForModal] = useState(null);
+  const [showPoModal, setShowPoModal] = useState(false);
+  const [selectedPoData, setSelectedPoData] = useState(null);
+  const [previousGrnForBack, setPreviousGrnForBack] = useState(null);
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [challanDate, setChallanDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [grnCreatedBy, setGrnCreatedBy] = useState(() => getLoggedInUserName());
@@ -307,6 +310,68 @@ export default function GoodsReceiptNoteView(props) {
     setEditingGrnId(row.id);
     setIsViewOnlyMode(false);
     setShowCreateGRN(true);
+  };
+
+  const handleOpenPoModal = (poNoOrId) => {
+    const poRef = poNoOrId || selectedGRNPo;
+    if (!poRef) return;
+
+    if (selectedGrnForModal) {
+      setPreviousGrnForBack(selectedGrnForModal);
+    }
+
+    setShowCeoGrnModal(false);
+    setShowCreateGRN(false);
+
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const cleanRef = normalize(poRef);
+    const matched = (livePOs || []).find(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      return cleanRef && (pNo === cleanRef || pId === cleanRef || (pNo && cleanRef.includes(pNo)) || (pId && cleanRef.includes(pId)));
+    });
+
+    const fallbackItems = (grnItems && grnItems.length > 0)
+      ? grnItems.map(it => ({
+          name: it.name,
+          desc: it.desc,
+          uom: it.uom,
+          quantity: it.ordered || it.quantity || 1,
+          rate: it.rate || 0,
+          amount: (it.ordered || 1) * (it.rate || 0)
+        }))
+      : [];
+
+    const initialPo = matched || {
+      poNo: poRef,
+      vendor: selectedGRNVendor || 'Vendor',
+      date: new Date().toISOString().split('T')[0],
+      items: fallbackItems
+    };
+
+    setSelectedPoData(initialPo);
+    setShowPoModal(true);
+
+    const targetId = matched?.id || matched?.poNo || poRef;
+    fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(detail => {
+        if (detail) {
+          setSelectedPoData(prev => ({
+            ...prev,
+            ...detail,
+            items: (detail.items && Array.isArray(detail.items) && detail.items.length > 0) ? detail.items : (prev?.items || fallbackItems)
+          }));
+        }
+      })
+      .catch(err => console.error('Error loading PO details for modal:', err));
+  };
+
+  const handleBackToGrn = () => {
+    setShowPoModal(false);
+    if (previousGrnForBack) {
+      handleOpenViewGrn(previousGrnForBack);
+    }
   };
 
   // Top-level state for Production Admin views to obey React Hook rules
@@ -2794,7 +2859,7 @@ export default function GoodsReceiptNoteView(props) {
                       {selectedGRNPo && (
                         <button
                           type="button"
-                          onClick={() => onChangeTab('Purchase Orders', selectedGRNPo)}
+                          onClick={() => handleOpenPoModal(selectedGRNPo)}
                           style={{
                             padding: '4px 8px',
                             borderRadius: '6px',
@@ -2832,7 +2897,13 @@ export default function GoodsReceiptNoteView(props) {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <div>
-                                  <strong style={{ fontSize: '16px', color: '#0F172A' }}>{selectedGRNPo}</strong>
+                                  <strong
+                                    onClick={() => handleOpenPoModal(selectedGRNPo)}
+                                    title="Click to view Purchase Order in popup"
+                                    style={{ fontSize: '16px', color: '#0E7490', cursor: 'pointer', textDecoration: 'underline' }}
+                                  >
+                                    {selectedGRNPo}
+                                  </strong>
                                   <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{selectedGRNVendor || 'Vendor'}</div>
                                 </div>
                                 <span style={{
@@ -3960,7 +4031,11 @@ export default function GoodsReceiptNoteView(props) {
                                     {row.vendor || '—'}
                                   </span>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap' }}>
-                                    <span>PO: <strong style={{ color: '#0E7490' }}>{row.poRef || '—'}</strong></span>
+                                    <span>PO: <strong
+                                      onClick={(e) => { e.stopPropagation(); handleOpenPoModal(row.poRef); }}
+                                      title="Click to view Purchase Order popup"
+                                      style={{ color: '#0E7490', cursor: 'pointer', textDecoration: 'underline' }}
+                                    >{row.poRef || '—'}</strong></span>
                                     <span>•</span>
                                     <span>Created By: <strong style={{ color: '#7E22CE' }}>{row.createdBy || row.receivedBy || '—'}</strong></span>
                                     <span>•</span>
@@ -4068,7 +4143,13 @@ export default function GoodsReceiptNoteView(props) {
                                       </a>
                                     </td>
                                     <td style={{ padding: '12px 14px', color: '#475569', textAlign: 'left', fontWeight: '500' }}>
-                                      {row.poRef}
+                                      <span
+                                        onClick={(e) => { e.stopPropagation(); handleOpenPoModal(row.poRef); }}
+                                        title="Click to view Purchase Order in popup"
+                                        style={{ color: '#0E7490', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }}
+                                      >
+                                        {row.poRef}
+                                      </span>
                                     </td>
                                     <td style={{ padding: '12px 14px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
                                       {row.vendor}
@@ -4611,7 +4692,13 @@ export default function GoodsReceiptNoteView(props) {
                     <StatusBadge status={getEffectiveGrnStatus(selectedGrnForModal)} size="sm" />
                   </div>
                   <span style={{ fontSize: '12px', color: '#64748B' }}>
-                    PO Ref: <strong style={{ color: '#0E7490' }}>{selectedGrnForModal?.poRef || selectedGRNPo || '—'}</strong> • Vendor: <strong style={{ color: '#0F172A' }}>{selectedGrnForModal?.vendor || selectedGRNVendor || '—'}</strong> • Date: {selectedGrnForModal?.date || '—'}
+                    PO Ref: <strong
+                      onClick={() => handleOpenPoModal(selectedGrnForModal?.poRef || selectedGRNPo)}
+                      title="Click to view Purchase Order in popup"
+                      style={{ color: '#0E7490', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      {selectedGrnForModal?.poRef || selectedGRNPo || '—'}
+                    </strong> • Vendor: <strong style={{ color: '#0F172A' }}>{selectedGrnForModal?.vendor || selectedGRNVendor || '—'}</strong> • Date: {selectedGrnForModal?.date || '—'}
                   </span>
                 </div>
               </div>
@@ -4708,6 +4795,336 @@ export default function GoodsReceiptNoteView(props) {
                     border: 'none',
                     borderRadius: '8px',
                     padding: '8px 22px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: 'white',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== PURCHASE ORDER DETAILS POPUP MODAL ==================== */}
+      {showPoModal && (
+        <div
+          className="po-details-modal-overlay"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10000,
+            padding: '20px',
+            boxSizing: 'border-box'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPoModal(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              width: '100%',
+              maxWidth: '1100px',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px 24px',
+                borderBottom: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#E0F2FE',
+                  color: '#0369A1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                      Purchase Order: {selectedPoData?.poNo || selectedPoData?.id || selectedGRNPo}
+                    </h3>
+                    <StatusBadge status={selectedPoData?.status || 'Open / Active'} size="sm" />
+                  </div>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>
+                    Vendor: <strong style={{ color: '#0F172A' }}>{selectedPoData?.vendor || selectedGRNVendor || '—'}</strong> • PO Date: {selectedPoData?.date || selectedPoData?.poDate || '—'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons in Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    color: '#334155',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Print / Export PDF"
+                >
+                  <Printer size={13} /> Print
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPoModal(false)}
+                  style={{
+                    backgroundColor: '#F1F5F9',
+                    border: 'none',
+                    borderRadius: '8px',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748B',
+                    marginLeft: '4px'
+                  }}
+                  title="Close popup"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* Cards Grid: Vendor & Order Information */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                {/* Vendor Card */}
+                <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                    🏢 Vendor Information
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                      {selectedPoData?.vendor || selectedGRNVendor || '—'}
+                    </span>
+                    {selectedPoData?.vendorEmail && (
+                      <span style={{ color: '#64748B' }}>Email: {selectedPoData.vendorEmail}</span>
+                    )}
+                    {selectedPoData?.vendorGst && (
+                      <span style={{ color: '#64748B' }}>GSTIN: {selectedPoData.vendorGst}</span>
+                    )}
+                    <div style={{ color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
+                      {selectedPoData?.billingAddress || selectedPoData?.billing_address || 'Chennai, Tamil Nadu, India'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* PO & Delivery Details Card */}
+                <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                    📦 Order & Delivery Details
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', fontSize: '12px' }}>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', fontWeight: '600' }}>PO Date</span>
+                      <strong style={{ color: '#0F172A' }}>{selectedPoData?.date || selectedPoData?.poDate || '—'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', fontWeight: '600' }}>Expected Delivery</span>
+                      <strong style={{ color: '#0F172A' }}>{selectedPoData?.expectedDelivery || selectedPoData?.expected_delivery_date || selectedPoData?.deliveryDate || '—'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', fontWeight: '600' }}>Payment Terms</span>
+                      <strong style={{ color: '#0E7490' }}>{selectedPoData?.paymentTerms || selectedPoData?.payment_terms || '100% Advance'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: '11px', fontWeight: '600' }}>Delivery Location</span>
+                      <strong style={{ color: '#0F172A' }}>{selectedPoData?.deliveryAddress || selectedPoData?.delivery_address || 'VRM Structures, Unit 2'}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Line Items Table */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
+                  📋 Purchase Order Items
+                </div>
+                <div style={{ overflowX: 'auto', width: '100%' }}>
+                  <table style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#64748B' }}>
+                        <th style={{ padding: '10px 8px', width: '36px' }}>#</th>
+                        <th style={{ padding: '10px 8px', minWidth: '220px' }}>Item & Description</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'center', width: '70px' }}>UOM</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'center', width: '80px' }}>Qty</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'right', width: '110px' }}>Rate (₹)</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'right', width: '90px' }}>Discount</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'right', width: '120px' }}>Amount (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const items = Array.isArray(selectedPoData?.items) && selectedPoData.items.length > 0
+                          ? selectedPoData.items
+                          : (Array.isArray(grnItems) && grnItems.length > 0 ? grnItems : []);
+
+                        if (items.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan="7" style={{ padding: '24px', textAlign: 'center', color: '#94A3B8' }}>
+                                No items found in this Purchase Order.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return items.map((it, idx) => {
+                          const name = it.name || it.item_name || it.description || 'Material Item';
+                          const qty = Number(it.quantity !== undefined ? it.quantity : (it.ordered !== undefined ? it.ordered : (it.qty || 0)));
+                          const rate = Number(it.rate !== undefined ? it.rate : (it.item_rate !== undefined ? it.item_rate : (it.price || 0)));
+                          const discount = it.discount ? `${it.discount}%` : '—';
+                          const rawAmt = it.amount !== undefined ? it.amount : (it.item_total !== undefined ? it.item_total : (qty * rate));
+                          const amount = Number(rawAmt || 0);
+
+                          return (
+                            <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '10px 8px', color: '#94A3B8' }}>{idx + 1}</td>
+                              <td style={{ padding: '10px 8px' }}>
+                                <div style={{ fontWeight: '700', color: '#0F172A' }}>{name}</div>
+                                {it.desc && it.desc !== name && (
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{it.desc}</div>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', color: '#475569' }}>
+                                {it.uom || it.unit || 'NOS'}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '700', color: '#0F172A' }}>
+                                {qty}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'right', color: '#334155' }}>
+                                ₹{rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'right', color: '#64748B' }}>
+                                {discount}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                                ₹{amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Notes & Terms Box */}
+              {selectedPoData?.notes && (
+                <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px', fontSize: '12px', color: '#475569' }}>
+                  <strong style={{ color: '#0F172A', display: 'block', marginBottom: '4px' }}>Terms & Notes:</strong>
+                  <div style={{ whiteSpace: 'pre-line', lineHeight: '1.5' }}>{selectedPoData.notes}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '14px 24px',
+                borderTop: '1px solid #E2E8F0',
+                backgroundColor: '#FFFFFF'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>PO Total:</span>
+                <strong style={{ fontSize: '16px', color: '#0E7490', fontWeight: '800' }}>
+                  {(() => {
+                    const rawAmt = selectedPoData?.amount || selectedPoData?.total || selectedPoData?.val;
+                    if (typeof rawAmt === 'string' && rawAmt.startsWith('₹')) return rawAmt;
+                    if (rawAmt) return `₹ ${Number(rawAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                    const items = Array.isArray(selectedPoData?.items) ? selectedPoData.items : [];
+                    const sum = items.reduce((acc, it) => acc + (Number(it.amount || (Number(it.qty || it.quantity || 0) * Number(it.rate || it.item_rate || 0))) || 0), 0);
+                    return `₹ ${sum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                  })()}
+                </strong>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {previousGrnForBack && (
+                  <button
+                    type="button"
+                    onClick={handleBackToGrn}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: '#2563EB',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    ← Back to GRN
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowPoModal(false)}
+                  style={{
+                    backgroundColor: '#0E7490',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 20px',
                     fontSize: '13px',
                     fontWeight: '700',
                     color: 'white',
