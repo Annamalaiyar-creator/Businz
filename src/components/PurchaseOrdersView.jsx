@@ -2668,6 +2668,8 @@ Procurement Team | BUSINZ`;
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap' }}>
                               <span>PO Date: <strong>{po.poDate || '—'}</strong></span>
+                              <span>•</span>
+                              <span>Issued By: <strong style={{ color: '#0369A1' }}>{po.purchaser || po.issuedBy || po.createdBy || po.created_by || '—'}</strong></span>
                               {po.deliveryDate && <span>• Due: <strong>{po.deliveryDate}</strong></span>}
                             </div>
                           </div>
@@ -2726,11 +2728,12 @@ Procurement Team | BUSINZ`;
                           </span>
                         </div>
                       </th>
-                      <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Company Name</th>
-                      <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO Date</th>
-                      <th style={{ width: '16%', minWidth: '140px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Expected Delivery</th>
-                      <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                      <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                      <th style={{ width: '22%', minWidth: '180px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Company Name</th>
+                      <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Issued By</th>
+                      <th style={{ width: '13%', minWidth: '110px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO Date</th>
+                      <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Expected Delivery</th>
+                      <th style={{ width: '12%', minWidth: '110px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
+                      <th style={{ width: '11%', minWidth: '110px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2745,6 +2748,9 @@ Procurement Team | BUSINZ`;
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             <div className="skeleton-shimmer skeleton-text" style={{ width: '70%', height: '14px' }} />
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            <div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} />
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             <div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} />
@@ -2795,6 +2801,28 @@ Procurement Team | BUSINZ`;
                               </a>
                             </td>
                             <td style={{ fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>{po.vendor}</td>
+                            <td style={{ color: '#334155', fontWeight: '500', textAlign: 'left' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{
+                                  width: '22px',
+                                  height: '22px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#E0F2FE',
+                                  color: '#0369A1',
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}>
+                                  {String(po.purchaser || po.issuedBy || po.createdBy || po.created_by || 'U').trim().charAt(0).toUpperCase()}
+                                </span>
+                                <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: '600' }}>
+                                  {po.purchaser || po.issuedBy || po.createdBy || po.created_by || '—'}
+                                </span>
+                              </div>
+                            </td>
                             <td style={{ color: '#64748b', textAlign: 'left' }}>{po.poDate}</td>
                             <td style={{ color: '#64748b', textAlign: 'left' }}>{po.deliveryDate}</td>
                             <td style={{ fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>{po.amount}</td>

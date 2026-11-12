@@ -68,6 +68,26 @@ export default function GoodsReceiptNoteView(props) {
     effectiveRole.toLowerCase().includes('finance')
   );
 
+  const getLoggedInUserName = () => {
+    const storedName = typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '';
+    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+    } catch(e) {}
+    if (userRole === 'Production Head') return 'Senthil Kumar';
+    if (userRole === 'Technical Administrator' || userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD') return 'Annamalaiyar';
+    if (userRole === 'Procurement Head' || userRole === 'Procurement Admin' || (userRole || '').includes('Procurement')) return 'Annamalaiyar';
+    if (userRole === 'Dispatch Head') return 'Kalpana';
+    if (userRole === 'Floor Supervisor') return 'Floor Supervisor';
+    if (userRole === 'Floor Employee') return 'Floor Employee';
+    if (userRole === 'Accounts Head') return 'Venkatesh';
+    return storedName || 'Annamalaiyar';
+  };
+
   // Common states
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -101,7 +121,7 @@ export default function GoodsReceiptNoteView(props) {
   const [deleteDocConfirmIdx, setDeleteDocConfirmIdx] = useState(null);
   const [activeDocPreviewModal, setActiveDocPreviewModal] = useState(null);
 
-  const [grnReceivedBy, setGrnReceivedBy] = useState('');
+  const [grnReceivedBy, setGrnReceivedBy] = useState(() => getLoggedInUserName());
   const [grnInspectorName, setGrnInspectorName] = useState('');
   const [grnInspectionRemarks, setGrnInspectionRemarks] = useState('');
 
@@ -519,7 +539,7 @@ export default function GoodsReceiptNoteView(props) {
     setSelectedGRNPo('');
     setSelectedGRNVendor('');
     setGrnChallanNo('');
-    setGrnReceivedBy('');
+    setGrnReceivedBy(getLoggedInUserName());
     setGrnInspectorName('');
     setGrnInspectionRemarks('');
     setGrnItems([]);
@@ -957,7 +977,7 @@ export default function GoodsReceiptNoteView(props) {
       receivedQty: totalNow,
       acceptedQty: totalAccepted,
       rejectedQty: totalRejected,
-      receivedBy: grnReceivedBy || 'Store Manager',
+      receivedBy: grnReceivedBy || getLoggedInUserName(),
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || '',
       items: processedItems,
@@ -1140,7 +1160,7 @@ export default function GoodsReceiptNoteView(props) {
       receivedQty: totalAccepted,
       acceptedQty: totalAccepted,
       rejectedQty: 0,
-      receivedBy: grnReceivedBy || 'Store Manager',
+      receivedBy: grnReceivedBy || getLoggedInUserName(),
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
       items: completedItems,
@@ -1162,7 +1182,7 @@ export default function GoodsReceiptNoteView(props) {
       receivedQty: totalAccepted,
       acceptedQty: totalAccepted,
       rejectedQty: 0,
-      receivedBy: grnReceivedBy || 'Store Manager',
+      receivedBy: grnReceivedBy || getLoggedInUserName(),
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
       items: completedItems,
@@ -2861,9 +2881,10 @@ export default function GoodsReceiptNoteView(props) {
                                   <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', lineHeight: '1.3' }}>
                                     {row.vendor || '—'}
                                   </span>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
-                                    <span>PO:</span>
-                                    <strong style={{ color: '#0E7490' }}>{row.poRef || '—'}</strong>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap' }}>
+                                    <span>PO: <strong style={{ color: '#0E7490' }}>{row.poRef || '—'}</strong></span>
+                                    <span>•</span>
+                                    <span>Received By: <strong style={{ color: '#0369A1' }}>{row.receivedBy || row.createdBy || '—'}</strong></span>
                                   </div>
                                 </div>
 
@@ -2911,18 +2932,19 @@ export default function GoodsReceiptNoteView(props) {
                                   style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
                                  />
                               </th>
-                              <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
-                              <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
-                              <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
-                              <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN Date</th>
-                              <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                              <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                              <th style={{ width: '15%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
+                              <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
+                              <th style={{ width: '22%', minWidth: '180px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
+                              <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Received By</th>
+                              <th style={{ width: '12%', minWidth: '110px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN Date</th>
+                              <th style={{ width: '12%', minWidth: '110px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
+                              <th style={{ width: '11%', minWidth: '110px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                             </tr>
                           </thead>
                           <tbody>
                             {sortedGrns.length === 0 ? (
                               <tr>
-                                <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                                <td colSpan="8" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
                                   No Goods Receipt Notes found matching the criteria.{!isAccountsUser ? ' Click "Create GRN" to record a receipt.' : ''}
                                 </td>
                               </tr>
@@ -2969,6 +2991,28 @@ export default function GoodsReceiptNoteView(props) {
                                     </td>
                                     <td style={{ padding: '12px 16px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
                                       {row.vendor}
+                                    </td>
+                                    <td style={{ padding: '12px 16px', textAlign: 'left' }}>
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{
+                                          width: '22px',
+                                          height: '22px',
+                                          borderRadius: '50%',
+                                          backgroundColor: '#E0F2FE',
+                                          color: '#0369A1',
+                                          fontSize: '10px',
+                                          fontWeight: '700',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          flexShrink: 0
+                                        }}>
+                                          {String(row.receivedBy || row.createdBy || 'U').trim().charAt(0).toUpperCase()}
+                                        </span>
+                                        <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: '600' }}>
+                                          {row.receivedBy || row.createdBy || '—'}
+                                        </span>
+                                      </div>
                                     </td>
                                     <td style={{ padding: '12px 16px', color: '#64748b', textAlign: 'left' }}>
                                       {row.date}
