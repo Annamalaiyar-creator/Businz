@@ -3,6 +3,48 @@
 ## Application Identity & Branding
 - This application is **BUSINZ** (not Control Room). All user-facing references, communications, and documentation MUST strictly use the name **BUSINZ**.
 
+## The 4 Core Principles (Mandatory Engineering Standard)
+Derived from Andrej Karpathy's guidelines to prevent common LLM coding pitfalls:
+
+### 1. Think Before Coding
+- **Don't assume. Don't hide confusion. Surface tradeoffs.**
+- State assumptions explicitly before implementing. If uncertain, ASK first.
+- If multiple interpretations exist, present them — never pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, STOP. Name what is confusing. Ask.
+
+### 2. Simplicity First
+- **Minimum code that solves the problem. Nothing speculative.**
+- Write NO features beyond what was explicitly asked.
+- NO abstractions for single-use code.
+- NO "flexibility" or "configurability" that wasn't requested.
+- NO error handling for impossible scenarios.
+- If 50 lines solve it, never write 200 lines.
+- Ask: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+- **Touch only what you must. Clean up only your own mess.**
+- Do NOT "improve" adjacent code, comments, or formatting.
+- Do NOT refactor things that aren't broken.
+- Match existing style strictly, even if you would write it differently.
+- If you notice unrelated dead code, mention it — do NOT delete it.
+- Remove imports/variables/functions that YOUR changes made unused.
+- **The Golden Test**: Every changed line in the git diff must trace directly back to the user's request.
+
+### 4. Goal-Driven Execution
+- **Define success criteria. Loop until verified.**
+- Transform tasks into verifiable goals:
+  - "Add validation" → Verify tests/checks for invalid inputs, then make them pass.
+  - "Fix the bug" → Reproduce it, then make the check pass.
+  - "Refactor" → Ensure checks/builds pass before and after.
+- For multi-step tasks, state a brief plan:
+  ```
+  1. [Step] → verify: [check]
+  2. [Step] → verify: [check]
+  3. [Step] → verify: [check]
+  ```
+- Loop independently until verification is 100% complete.
+
 ## Strict Frozen Workflows (LOCKED BY USER)
 The following core workflows and modules have been thoroughly tested, verified, and are **STRICTLY LOCKED & FROZEN**. Do NOT alter, refactor, or modify these flows without explicit written user instruction:
 1. **PI Flow (Proforma Invoices)**:
