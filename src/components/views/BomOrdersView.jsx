@@ -472,19 +472,58 @@ export default function BomOrdersView(props) {
     return c || '';
   };
 
+  // Canonical Salesperson Code to Name mapping
+  const CODE_TO_SALES_NAME = {
+    'SE-001': 'Manojraj Selvaraj',
+    'SH-001': 'Manojraj Selvaraj',
+    'SH-VRM001': 'Manojraj Selvaraj',
+    'SE-002': 'Sanjai kumar',
+    'SE-VRM002': 'Sanjai kumar',
+    'SE-003': 'Vasanth Kumar S',
+    'SE-VRM006': 'Vasanth Kumar S',
+    'SE-004': 'Mohith JV',
+    'SE-015': 'Mohith JV',
+    'SE-VRM004': 'Mohith JV',
+    'SE-005': 'Shanthi',
+    'SE-006': 'Dhana Sekar',
+    'SE-020': 'Dhana Sekar',
+    'SE-007': 'PRASHANTH',
+    'SE-008': 'Pavithra',
+    'SE-010': 'Pavithra',
+    'SE-009': 'KALAISELVI T',
+    'SE-VRM090': 'KALAISELVI T',
+    'SE-VRM005': 'KALAISELVI T'
+  };
+
   // Helper to resolve salesperson actual human name rather than role title
   const getCleanSalesPersonName = (rawName, code) => {
     let name = String(rawName || '').replace(/\s*\([^)]*\)/g, '').trim();
-    const genericTerms = ['sales executive', 'sales', 'sales department', 'salesperson', 'sales rep', 'se', 'sls', 'admin', 'user', 'undefined', 'null'];
-
     const cleanCode = String(code || '').trim().toUpperCase();
+
+    const nonSalesPersons = [
+      'kalpanaram', 'kalpana', 'tech support', 'ts-001', 'ts-002',
+      'dispatch', 'dispatch head', 'dh-vrm001', 'dh-001', 'admin',
+      'sales executive', 'sales', 'sales department', 'salesperson', 'sales rep',
+      'se', 'sls', 'user', 'undefined', 'null', 'direct / admin'
+    ];
+
+    // If a sales code is provided that maps to a real sales executive,
+    // and the record creator name is a non-sales user (e.g. KalpanaRam/Tech Support/Dispatch/Admin) or generic,
+    // the true salesperson is the assigned sales executive!
+    if (cleanCode && CODE_TO_SALES_NAME[cleanCode]) {
+      if (!name || nonSalesPersons.includes(name.toLowerCase())) {
+        return CODE_TO_SALES_NAME[cleanCode];
+      }
+    }
+
     if (cleanCode === 'SE-015' || (!name && cleanCode === 'SE-004') || String(rawName || '').includes('SE-015')) return 'Mohith JV';
     if (cleanCode === 'SH-001' || cleanCode === 'SH-VRM001') return 'Manojraj Selvaraj';
+    if (cleanCode === 'SE-002' || cleanCode === 'SE-VRM002') return 'Sanjai kumar';
     if (cleanCode === 'SE-020') return 'Dhana Sekar';
     if (cleanCode === 'SE-010') return 'Pavithra';
     if (cleanCode === 'SE-VRM090') return 'KALAISELVI T';
 
-    if (!name || genericTerms.includes(name.toLowerCase())) {
+    if (!name || nonSalesPersons.includes(name.toLowerCase())) {
       try {
         const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
         if (cleanCode) {
@@ -499,7 +538,7 @@ export default function BomOrdersView(props) {
       } catch (_) {}
 
       const storedName = (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_logged_emp_name') || '').trim();
-      if (storedName && !genericTerms.includes(storedName.toLowerCase())) {
+      if (storedName && !nonSalesPersons.includes(storedName.toLowerCase())) {
         return storedName;
       }
       return 'Annamalaiyar';

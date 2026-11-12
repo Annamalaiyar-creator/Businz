@@ -105,6 +105,54 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
   return c || '';
 };
 
+export const CODE_TO_SALES_NAME = {
+  'SE-001': 'Manojraj Selvaraj',
+  'SH-001': 'Manojraj Selvaraj',
+  'SH-VRM001': 'Manojraj Selvaraj',
+  'SE-002': 'Sanjai kumar',
+  'SE-VRM002': 'Sanjai kumar',
+  'SE-003': 'Vasanth Kumar S',
+  'SE-VRM006': 'Vasanth Kumar S',
+  'SE-004': 'Mohith JV',
+  'SE-015': 'Mohith JV',
+  'SE-VRM004': 'Mohith JV',
+  'SE-005': 'Shanthi',
+  'SE-006': 'Dhana Sekar',
+  'SE-020': 'Dhana Sekar',
+  'SE-007': 'PRASHANTH',
+  'SE-008': 'Pavithra',
+  'SE-010': 'Pavithra',
+  'SE-009': 'KALAISELVI T',
+  'SE-VRM090': 'KALAISELVI T',
+  'SE-VRM005': 'KALAISELVI T'
+};
+
+export const resolvePiSalesPersonName = (pi) => {
+  const raw = String(pi?.salesPerson || pi?.salesperson || pi?.salesRep || pi?.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
+  const rawCode = String(pi?.salesPersonCode || pi?.assignedSalespersonCode || pi?.createdById || '').trim().toUpperCase();
+  const canonicalCode = canonicalizeSalespersonCode(rawCode, raw);
+
+  const nonSales = ['kalpanaram', 'kalpana', 'tech support', 'ts-001', 'ts-002', 'dispatch', 'dispatch head', 'admin', 'direct / admin', 'undefined', 'null', '—', '-'];
+
+  if (canonicalCode && CODE_TO_SALES_NAME[canonicalCode]) {
+    if (!raw || nonSales.includes(raw.toLowerCase())) {
+      return CODE_TO_SALES_NAME[canonicalCode];
+    }
+  }
+  if (rawCode && CODE_TO_SALES_NAME[rawCode]) {
+    if (!raw || nonSales.includes(raw.toLowerCase())) {
+      return CODE_TO_SALES_NAME[rawCode];
+    }
+  }
+
+  if (nonSales.includes(raw.toLowerCase())) {
+    if (canonicalCode && CODE_TO_SALES_NAME[canonicalCode]) return CODE_TO_SALES_NAME[canonicalCode];
+    if (rawCode && CODE_TO_SALES_NAME[rawCode]) return CODE_TO_SALES_NAME[rawCode];
+    return '';
+  }
+  return raw;
+};
+
 export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procurement Head', onNavigateTab, targetPiNo, clearTargetPi }) {
   const isCeo = Boolean(
     (userRole && ['CEO', 'MD', 'Managing Director'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())) ||
@@ -3736,16 +3784,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       {viewMode === 'list' && (() => {
         const uniqueStatuses = ['All', ...new Set(visiblePIList.map(pi => pi.status))];
         const uniqueSalesPersons = Array.from(new Set(
-          (visiblePIList || []).map(pi => {
-            const raw = (pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-            return raw;
-          }).filter(sp => sp && sp !== '—' && sp !== '-' && !['Direct / Admin', 'undefined', 'null'].includes(sp))
+          (visiblePIList || []).map(pi => resolvePiSalesPersonName(pi)).filter(Boolean)
         )).sort((a, b) => a.localeCompare(b));
 
         const matchesSelectedSalesPerson = (pi) => {
           if (!isCeo || !filterSalesPerson || filterSalesPerson === 'All' || filterSalesPerson === 'All Sales') return true;
           const target = filterSalesPerson.trim().toLowerCase();
-          const sp = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+          const sp = (resolvePiSalesPersonName(pi) || '').toLowerCase();
           return sp === target || sp.includes(target);
         };
 
@@ -4869,12 +4914,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     fontWeight: '800',
                                     flexShrink: 0
                                   }}>
-                                    {(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'S')[0]?.toUpperCase()}
+                                    {(resolvePiSalesPersonName(pi) || 'S')[0]?.toUpperCase()}
                                   </div>
                                   <div style={{ minWidth: 0, flex: 1 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                                       <div style={{ fontWeight: '700', fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Direct / Admin'}
+                                        {resolvePiSalesPersonName(pi) || 'Direct / Admin'}
                                       </div>
                                       {canAssignPi && (
                                         <button
