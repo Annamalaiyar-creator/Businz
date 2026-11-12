@@ -269,7 +269,32 @@ export default function GoodsReceiptNoteView(props) {
     if (row.items && Array.isArray(row.items) && row.items.length > 0) {
       setGrnItems(row.items);
     } else {
-      loadPOItems(row.poRef);
+      const pMatch = (livePOs || []).find(p => p.poNo === row.poRef || p.id === row.poRef);
+      if (pMatch && Array.isArray(pMatch.items) && pMatch.items.length > 0) {
+        const recQty = Number(row.receivedQty || 0);
+        const mapped = pMatch.items.map((it, idx) => {
+          const ord = Number(it.qty !== undefined ? it.qty : (it.quantity || 0));
+          const effectiveRec = recQty > 0 ? recQty : ord;
+          return {
+            id: it.id || `ITEM-${idx}`,
+            name: it.name || it.item_name || 'Material Item',
+            sku: it.sku || `SKU-${101 + idx}`,
+            desc: it.description || it.desc || '',
+            uom: it.unit || it.uom || 'NOS',
+            ordered: ord,
+            prev: 0,
+            remaining: Math.max(0, ord - effectiveRec),
+            now: effectiveRec,
+            accepted: effectiveRec,
+            rejected: 0,
+            reason: '—',
+            batch: it.batch || `LOT-2026-${idx + 1}`
+          };
+        });
+        setGrnItems(mapped);
+      } else {
+        loadPOItems(row.poRef);
+      }
     }
     if (row.documents && Array.isArray(row.documents) && row.documents.length > 0) {
       setGrnDocs(row.documents);
@@ -308,7 +333,32 @@ export default function GoodsReceiptNoteView(props) {
     if (row.items && Array.isArray(row.items) && row.items.length > 0) {
       setGrnItems(row.items);
     } else {
-      loadPOItems(row.poRef);
+      const pMatch = (livePOs || []).find(p => p.poNo === row.poRef || p.id === row.poRef);
+      if (pMatch && Array.isArray(pMatch.items) && pMatch.items.length > 0) {
+        const recQty = Number(row.receivedQty || 0);
+        const mapped = pMatch.items.map((it, idx) => {
+          const ord = Number(it.qty !== undefined ? it.qty : (it.quantity || 0));
+          const effectiveRec = recQty > 0 ? recQty : ord;
+          return {
+            id: it.id || `ITEM-${idx}`,
+            name: it.name || it.item_name || 'Material Item',
+            sku: it.sku || `SKU-${101 + idx}`,
+            desc: it.description || it.desc || '',
+            uom: it.unit || it.uom || 'NOS',
+            ordered: ord,
+            prev: 0,
+            remaining: Math.max(0, ord - effectiveRec),
+            now: effectiveRec,
+            accepted: effectiveRec,
+            rejected: 0,
+            reason: '—',
+            batch: it.batch || `LOT-2026-${idx + 1}`
+          };
+        });
+        setGrnItems(mapped);
+      } else {
+        loadPOItems(row.poRef);
+      }
     }
     setEditingGrnId(row.id);
     setIsViewOnlyMode(false);
@@ -2892,9 +2942,41 @@ export default function GoodsReceiptNoteView(props) {
                         {(() => {
                           const totOrd = grnItems.reduce((acc, curr) => acc + (curr.ordered || 0), 0);
                           const totPrev = grnItems.reduce((acc, curr) => acc + (curr.prev || 0), 0);
-                          const totNow = grnItems.reduce((acc, curr) => acc + (curr.now || 0), 0);
-                          const totRemaining = Math.max(0, totOrd - totPrev - totNow);
-                          const pct = totOrd > 0 ? (((totPrev + totNow) / totOrd) * 100).toFixed(1) : 0;
+                          const totNow = grnItems.reduce((acc, curr) => acc + (curr.now !== undefined ? Number(curr.now) : Number(curr.accepted || 0)), 0);
+
+                          // In view-only mode, we are viewing an already saved GRN.
+                          // Total received up to and including this GRN:
+                          const totalReceivedUpToNow = isViewOnlyMode ? (totPrev + totNow) : totPrev;
+                          const actualPct = totOrd > 0 ? ((totalReceivedUpToNow / totOrd) * 100).toFixed(1) : 0;
+                          
+                          // Future projected if this draft GRN is submitted:
+                          const projectedReceived = totPrev + totNow;
+                          const projectedPct = totOrd > 0 ? ((projectedReceived / totOrd) * 100).toFixed(1) : 0;
+                          const totRemaining = Math.max(0, totOrd - projectedReceived);
+
+                          // Effective status of the PO:
+                          // In entry mode: PO is closed ONLY IF confirmed past receipts totPrev >= totOrd. It does NOT prematurely close while entering a draft!
+                          const isPoClosed = isViewOnlyMode 
+                            ? (projectedReceived >= totOrd && totOrd > 0)
+                            : (totPrev >= totOrd && totOrd > 0);
+                          const isPoPartial = isViewOnlyMode
+                            ? (projectedReceived > 0 && !isPoClosed)
+                            : (totPrev > 0 && !isPoClosed);
+
+                          const statusLabel = isPoClosed 
+                            ? 'CLOSED / FULLY RECEIVED' 
+                            : (isPoPartial ? 'OPEN / PARTIALLY RECEIVED' : 'OPEN / PENDING RECEIPT');
+                          const statusBg = isPoClosed ? '#E6F7ED' : (isPoPartial ? '#FEF3C7' : '#EFF6FF');
+                          const statusColor = isPoClosed ? '#137333' : (isPoPartial ? '#D97706' : '#2563EB');
+
+                          // Filter previous GRN history so when viewing a GRN, it does NOT list itself as a previous GRN!
+                          const viewingGrnNo = selectedGrnForModal?.id || selectedGrnForModal?.grnNo || editingGrnId;
+                          const filteredHistory = (poReceivingHistory || []).filter(g => {
+                            if (!isViewOnlyMode) return true;
+                            const gNo = String(g.grnNo || g.id || '').trim();
+                            const vNo = String(viewingGrnNo || '').trim();
+                            return gNo && vNo ? gNo !== vNo : true;
+                          });
 
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2914,21 +2996,61 @@ export default function GoodsReceiptNoteView(props) {
                                   borderRadius: '20px',
                                   fontSize: '10px',
                                   fontWeight: '800',
-                                  backgroundColor: totPrev + totNow >= totOrd && totOrd > 0 ? '#E6F7ED' : '#FEF3C7',
-                                  color: totPrev + totNow >= totOrd && totOrd > 0 ? '#137333' : '#D97706'
+                                  backgroundColor: statusBg,
+                                  color: statusColor
                                 }}>
-                                  {totPrev + totNow >= totOrd && totOrd > 0 ? 'CLOSED / FULLY RECEIVED' : (totPrev > 0 ? 'OPEN / PARTIALLY RECEIVED' : 'OPEN')}
+                                  {statusLabel}
                                 </span>
                               </div>
 
                               {/* Receiving Progress Bar */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: '#F8FAFC', padding: '10px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: '#F8FAFC', padding: '10px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '11px', fontWeight: '700' }}>
                                   <span style={{ color: '#475569' }}>Receiving Progress</span>
-                                  <span style={{ color: '#2563EB' }}>{totPrev + totNow} / {totOrd} Received ({pct}%)</span>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ color: '#2563EB' }}>
+                                      {projectedReceived} / {totOrd} Received ({projectedPct}%)
+                                    </span>
+                                  ) : (
+                                    <div style={{ textAlign: 'right' }}>
+                                      <span style={{ color: '#0F172A' }}>
+                                        {totPrev} / {totOrd} Received ({actualPct}%)
+                                      </span>
+                                      {totNow > 0 && (
+                                        <span style={{ fontSize: '10px', color: '#0E7490', marginLeft: '6px', fontWeight: '600' }}>
+                                          (+{totNow} in this entry will reach {projectedPct}%)
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                                <div style={{ height: '6px', width: '100%', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, backgroundColor: '#2563EB', transition: 'width 0.3s' }}></div>
+
+                                {/* Stacked Progress Bar: Confirmed received (solid blue) + Current entry (striped cyan) */}
+                                <div style={{ height: '7px', width: '100%', backgroundColor: '#E2E8F0', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
+                                  {/* Confirmed / Past Received portion */}
+                                  <div
+                                    title={`Confirmed Received: ${isViewOnlyMode ? projectedReceived : totPrev} units`}
+                                    style={{
+                                      height: '100%',
+                                      width: `${Math.min(100, totOrd > 0 ? ((isViewOnlyMode ? projectedReceived : totPrev) / totOrd) * 100 : 0)}%`,
+                                      backgroundColor: '#2563EB',
+                                      transition: 'width 0.3s'
+                                    }}
+                                  />
+                                  {/* Current Entry Draft portion (shown only in entry mode) */}
+                                  {!isViewOnlyMode && totNow > 0 && (
+                                    <div
+                                      title={`Receiving in this GRN: +${totNow} units`}
+                                      style={{
+                                        height: '100%',
+                                        width: `${Math.min(100 - (totOrd > 0 ? (totPrev / totOrd) * 100 : 0), totOrd > 0 ? (totNow / totOrd) * 100 : 0)}%`,
+                                        backgroundColor: '#06B6D4',
+                                        backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%, transparent)',
+                                        backgroundSize: '12px 12px',
+                                        transition: 'width 0.3s'
+                                      }}
+                                    />
+                                  )}
                                 </div>
                               </div>
 
@@ -2939,29 +3061,35 @@ export default function GoodsReceiptNoteView(props) {
                                   <strong style={{ fontSize: '12px', color: '#0F172A' }}>{totOrd}</strong>
                                 </div>
                                 <div style={{ backgroundColor: '#F1F5F9', padding: '6px 4px', borderRadius: '6px' }}>
-                                  <span style={{ fontSize: '9px', color: '#64748B', display: 'block', fontWeight: 'bold' }}>Previous</span>
+                                  <span style={{ fontSize: '9px', color: '#64748B', display: 'block', fontWeight: 'bold' }}>Previously Received</span>
                                   <strong style={{ fontSize: '12px', color: '#64748B' }}>{totPrev}</strong>
                                 </div>
                                 <div style={{ backgroundColor: '#EFF6FF', padding: '6px 4px', borderRadius: '6px', border: '1px solid #DBEAFE' }}>
-                                  <span style={{ fontSize: '9px', color: '#2563EB', display: 'block', fontWeight: 'bold' }}>This GRN</span>
+                                  <span style={{ fontSize: '9px', color: '#2563EB', display: 'block', fontWeight: 'bold' }}>
+                                    {isViewOnlyMode ? 'This GRN' : 'Receiving Now'}
+                                  </span>
                                   <strong style={{ fontSize: '12px', color: '#2563EB' }}>+{totNow}</strong>
                                 </div>
                                 <div style={{ backgroundColor: totRemaining === 0 ? '#E6F7ED' : '#FEF2F2', padding: '6px 4px', borderRadius: '6px' }}>
-                                  <span style={{ fontSize: '9px', color: totRemaining === 0 ? '#137333' : '#DC2626', display: 'block', fontWeight: 'bold' }}>Remaining</span>
-                                  <strong style={{ fontSize: '12px', color: totRemaining === 0 ? '#137333' : '#DC2626' }}>{totRemaining}</strong>
+                                  <span style={{ fontSize: '9px', color: totRemaining === 0 ? '#137333' : '#DC2626', display: 'block', fontWeight: 'bold' }}>
+                                    {isViewOnlyMode ? 'Remaining' : 'Pending Balance'}
+                                  </span>
+                                  <strong style={{ fontSize: '12px', color: totRemaining === 0 ? '#137333' : '#DC2626' }}>
+                                    {isViewOnlyMode ? totRemaining : Math.max(0, totOrd - totPrev)}
+                                  </strong>
                                 </div>
                               </div>
 
                               {/* Previous GRN History List */}
-                              {poReceivingHistory.length > 0 && (
+                              {filteredHistory.length > 0 && (
                                 <div style={{ marginTop: '4px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
                                   <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                                    Previous GRN History ({poReceivingHistory.length})
+                                    Previous GRN History ({filteredHistory.length})
                                   </span>
                                   <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    {poReceivingHistory.map((g, idx) => (
+                                    {filteredHistory.map((g, idx) => (
                                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
-                                        <span style={{ fontWeight: 'bold', color: '#2563EB' }}>{g.grnNo}</span>
+                                        <span style={{ fontWeight: 'bold', color: '#2563EB' }}>{g.grnNo || g.id}</span>
                                         <span style={{ color: '#64748B' }}>{g.date}</span>
                                         <span style={{ fontWeight: 'bold', color: '#137333' }}>+{g.receivedQty || 0} Qty</span>
                                       </div>
