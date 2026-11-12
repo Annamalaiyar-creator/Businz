@@ -2896,7 +2896,7 @@ export default function GoodsReceiptNoteView(props) {
                           name="createdBy"
                           aria-label="Created By"
                           type="text"
-                          value={grnCreatedBy || selectedGrnForModal?.createdBy || 'Velmurugan Rathinam'}
+                          value={(isViewOnlyMode ? (selectedGrnForModal?.createdBy || selectedGrnForModal?.created_by || grnCreatedBy) : grnCreatedBy) || getLoggedInUserName() || 'Procurement'}
                           readOnly
                           disabled
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: '600' }}
