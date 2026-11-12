@@ -1028,7 +1028,17 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const statusTypeToSave = isDraft ? 'draft' : (statusToSave === 'WAITING FOR APPROVAL' ? 'pending' : 'approved');
 
     const today = new Date();
-    const formattedDate = today.toLocaleDateString('en-GB', {
+    const formatPoDate = (rawDate) => {
+      if (!rawDate) return '';
+      try {
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return rawDate;
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      } catch (_) {
+        return rawDate;
+      }
+    };
+    const formattedDate = formatPoDate(poDate) || today.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
@@ -1090,7 +1100,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         state: (billingState || '').trim(),
         pincode: (billingPincode || '').trim()
       },
-      poDate: editIdx !== null ? poList[editIdx].poDate : formattedDate,
+      poDate: formattedDate,
+      date: formattedDate,
+      rawPoDate: poDate || (editIdx !== null && poList[editIdx]?.rawPoDate) || new Date().toISOString().split('T')[0],
       deliveryDate: formatDelivery,
       paymentTerms: paymentTerms || 'Due on Receipt',
       purchaser: purchaser || loggedInUserName,
@@ -5253,31 +5265,30 @@ Procurement Team | BUSINZ`;
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-po-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                      PO Date
+                      PO Date <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
                     <input id="purchase-orders-po-date" name="pODate" aria-label="PO Date" 
                       type="date" 
                       value={poDate} 
-                      disabled 
-                      readOnly 
+                      onChange={(e) => setPoDate(e.target.value)}
+                      required
                       style={{ 
                         height: '38px', 
                         borderRadius: '8px', 
                         border: '1px solid #cbd5e1', 
                         padding: '0 12px', 
                         fontSize: '13px', 
-                        backgroundColor: '#f8fafc', 
-                        color: '#64748b', 
-                        cursor: 'not-allowed' 
+                        backgroundColor: '#ffffff', 
+                        color: '#0f172a'
                       }} 
                      />
-                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>(Fixed to PO Creation Date)</span>
+                    <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '500' }}>(Editable • Past or Present Date)</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-expected-delivery-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Expected Delivery Date <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <input id="purchase-orders-expected-delivery-date" name="expectedDeliveryDate" aria-label="Expected Delivery Date" type="date" min={new Date().toISOString().split('T')[0]} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
+                    <input id="purchase-orders-expected-delivery-date" name="expectedDeliveryDate" aria-label="Expected Delivery Date" type="date" min={poDate || undefined} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
                   </div>
                 </div>
 
