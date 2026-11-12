@@ -2738,11 +2738,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           ] : [
             { id: 'overview', label: 'Company Overview', icon: LayoutDashboard }
           ]),
-          { id: 'crm-dashboard', label: 'Sales & Leads', icon: Users },
+          { id: 'crm-dashboard', label: 'Sales', icon: Users },
           { id: 'bom', label: 'Dispatch', icon: Truck },
-          { id: 'production', label: 'Production', icon: Factory },
-          { id: 'inventory-dashboard', label: 'Inventory', icon: Warehouse },
           { id: 'procurement', label: 'Procurement', icon: ShoppingCart },
+          { id: 'inventory-dashboard', label: 'Inventory', icon: Warehouse },
+          { id: 'production', label: 'Production', icon: Factory },
           ...(userRole !== 'HR' ? [
             { id: 'accounts', label: 'Accounts & Finance', icon: Wallet }
           ] : [])
@@ -4067,18 +4067,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           {/* Procurement Top Ribbon (BUSINZ DESIGN SYSTEM) */}
           <CeoKpiGrid kpis={[
             {
-              title: 'TOTAL PO SPEND HANDLED',
-              value: `₹ ${totalPoSpendCr} Cr`,
-              trend: `${poList.length} POs`,
-              trendUp: poList.length > 0,
-              icon: ShoppingCart,
-              iconColor: '#2563EB',
-              iconBg: '#EFF6FF',
-              bottomPrefix: 'Spend authorized ',
-              bottomHighlight: totalPoSpendFormatted,
-              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
-            },
-            {
               title: 'TOTAL POS TODAY',
               value: `${todayPoCount} PO${todayPoCount === 1 ? '' : 's'}`,
               trend: todayPoCount > 0 ? `${todayPoSpendFormatted}` : '0 Today',
@@ -4088,6 +4076,18 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#ECFEFF',
               bottomPrefix: "Today's volume ",
               bottomHighlight: todayPoCount > 0 ? `${todayPoCount} Raised (${todayPoSpendFormatted})` : '0 raised today',
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
+            },
+            {
+              title: 'TOTAL PO SPEND HANDLED',
+              value: `₹ ${totalPoSpendCr} Cr`,
+              trend: `${poList.length} POs`,
+              trendUp: poList.length > 0,
+              icon: ShoppingCart,
+              iconColor: '#2563EB',
+              iconBg: '#EFF6FF',
+              bottomPrefix: 'Spend authorized ',
+              bottomHighlight: totalPoSpendFormatted,
               onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
             },
             {
@@ -4104,18 +4104,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')
             },
             {
-              title: 'COMPLETED GRN',
-              value: `${completedGrnCount} GRNs`,
-              trend: `${completedGrnCount} Inwarded`,
-              trendUp: true,
-              icon: CheckCircle2,
-              iconColor: '#16A34A',
-              iconBg: '#F0FDF4',
-              bottomPrefix: 'Stock verified ',
-              bottomHighlight: `${completedGrnCount} Inwarded & Stock Updated`,
-              onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
-            },
-            {
               title: 'PENDING GRN',
               value: `${pendingGrnCount} Pending`,
               trend: pendingGrnCount > 0 ? `${pendingGrnCount} In Queue` : '0 Pending',
@@ -4126,6 +4114,18 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: pendingGrnCount > 0 ? '#FFFBEB' : '#F0FDF4',
               bottomPrefix: 'Inward queue ',
               bottomHighlight: pendingGrnCount > 0 ? 'Awaiting Physical Verification' : 'All Clear',
+              onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
+            },
+            {
+              title: 'COMPLETED GRN',
+              value: `${completedGrnCount} GRNs`,
+              trend: `${completedGrnCount} Inwarded`,
+              trendUp: true,
+              icon: CheckCircle2,
+              iconColor: '#16A34A',
+              iconBg: '#F0FDF4',
+              bottomPrefix: 'Stock verified ',
+              bottomHighlight: `${completedGrnCount} Inwarded & Stock Updated`,
               onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
             }
           ]} />
