@@ -132,6 +132,8 @@ export default function GoodsReceiptNoteView(props) {
 
   const [showCeoGrnModal, setShowCeoGrnModal] = useState(false);
   const [selectedGrnForModal, setSelectedGrnForModal] = useState(null);
+  const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [challanDate, setChallanDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [grnCreatedBy, setGrnCreatedBy] = useState(() => getLoggedInUserName());
   const [grnReceivedBy, setGrnReceivedBy] = useState(() => getLoggedInUserName());
   const [grnInspectorName, setGrnInspectorName] = useState('');
@@ -249,12 +251,20 @@ export default function GoodsReceiptNoteView(props) {
 
   const handleOpenViewGrn = (row) => {
     resetCreateGRNForm();
-    loadPOItems(row.poRef);
+    if (row.date) setReceiptDate(row.date);
+    if (row.challanDate) setChallanDate(row.challanDate);
+    if (row.poRef) setSelectedGRNPo(row.poRef);
+    if (row.vendor) setSelectedGRNVendor(row.vendor);
     if (row.challanNo) setGrnChallanNo(row.challanNo);
     if (row.createdBy) setGrnCreatedBy(row.createdBy);
     if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
     if (row.inspectorName) setGrnInspectorName(row.inspectorName);
     if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
+    if (row.items && Array.isArray(row.items) && row.items.length > 0) {
+      setGrnItems(row.items);
+    } else {
+      loadPOItems(row.poRef);
+    }
     if (row.documents && Array.isArray(row.documents) && row.documents.length > 0) {
       setGrnDocs(row.documents);
     } else {
@@ -280,12 +290,20 @@ export default function GoodsReceiptNoteView(props) {
       return;
     }
     resetCreateGRNForm();
-    loadPOItems(row.poRef);
+    if (row.date) setReceiptDate(row.date);
+    if (row.challanDate) setChallanDate(row.challanDate);
+    if (row.poRef) setSelectedGRNPo(row.poRef);
+    if (row.vendor) setSelectedGRNVendor(row.vendor);
     if (row.challanNo) setGrnChallanNo(row.challanNo);
     if (row.createdBy) setGrnCreatedBy(row.createdBy);
     if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
     if (row.inspectorName) setGrnInspectorName(row.inspectorName);
     if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
+    if (row.items && Array.isArray(row.items) && row.items.length > 0) {
+      setGrnItems(row.items);
+    } else {
+      loadPOItems(row.poRef);
+    }
     setEditingGrnId(row.id);
     setIsViewOnlyMode(false);
     setShowCreateGRN(true);
@@ -558,6 +576,8 @@ export default function GoodsReceiptNoteView(props) {
     setSelectedGRNPo('');
     setSelectedGRNVendor('');
     setGrnChallanNo('');
+    setReceiptDate(new Date().toISOString().split('T')[0]);
+    setChallanDate(new Date().toISOString().split('T')[0]);
     setGrnCreatedBy(getLoggedInUserName());
     setGrnReceivedBy(getLoggedInUserName());
     setGrnInspectorName('');
@@ -566,6 +586,7 @@ export default function GoodsReceiptNoteView(props) {
     setPoReceivingHistory([]);
     setIsViewOnlyMode(isAccountsUser ? true : false);
     setEditingGrnId(null);
+    setSelectedGrnForModal(null);
   };
 
   // Helper to handle push to GRN transition
@@ -2566,138 +2587,202 @@ export default function GoodsReceiptNoteView(props) {
                       <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
                     </div>
 
-                    {/* Row 1: GRN No, Receipt Date, Purchase Order */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                    {/* Row 1: GRN No & Receipt Date */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-grn-no" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>GRN No.</label>
-                        <input id="goods-receipt-note-grn-no" name="gRNNo" aria-label="GRN No." type="text" value="GRN-2026-000124" disabled style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#64748B' }}  />
-                        <span style={{ fontSize: '10px', color: '#94A3B8' }}>Auto-generated</span>
+                        <input
+                          id="goods-receipt-note-grn-no"
+                          name="gRNNo"
+                          aria-label="GRN No."
+                          type="text"
+                          value={selectedGrnForModal?.id || selectedGrnForModal?.grnNo || editingGrnId || 'Auto-generated'}
+                          disabled
+                          style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: '600' }}
+                        />
+                        <span style={{ fontSize: '10px', color: '#94A3B8' }}>{selectedGrnForModal || editingGrnId ? 'Official GRN Reference' : 'Auto-generated'}</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-receipt-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           Receipt Date <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input id="goods-receipt-note-receipt-date" name="receiptDate" aria-label="Receipt Date" type="date" defaultValue={new Date().toISOString().split('T')[0]} style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#334155' }}  />
+                        <input
+                          id="goods-receipt-note-receipt-date"
+                          name="receiptDate"
+                          aria-label="Receipt Date"
+                          type="date"
+                          value={selectedGrnForModal?.date || receiptDate}
+                          disabled={isViewOnlyMode}
+                          onChange={(e) => setReceiptDate(e.target.value)}
+                          style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}
+                        />
                       </div>
+                    </div>
+
+                    {/* Row 2: Purchase Order & Vendor */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                         <label htmlFor="goods-receipt-note-purchase-order" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           Purchase Order <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <select id="goods-receipt-note-purchase-order" name="purchaseOrder" aria-label="Purchase Order"
-                          value={selectedGRNPo}
-                          disabled={isViewOnlyMode}
-                          onChange={(e) => {
-                            const poNo = e.target.value;
-                            loadPOItems(poNo);
-                          }}
-                          style={{ height: '38px', width: '100%', maxWidth: '100%', boxSizing: 'border-box', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
-                        >
-                          {(() => {
-                            const eligiblePOs = livePOs.filter(po => {
-                              const isSelected = po.poNo === selectedGRNPo || po.id === selectedGRNPo;
-                              const s = String(po.status || '').toUpperCase();
-                              const sType = String(po.statusType || '').toLowerCase();
+                        {isViewOnlyMode ? (
+                          <input
+                            type="text"
+                            value={selectedGRNPo || selectedGrnForModal?.poRef || '—'}
+                            disabled
+                            style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: '600' }}
+                          />
+                        ) : (
+                          <select
+                            id="goods-receipt-note-purchase-order"
+                            name="purchaseOrder"
+                            aria-label="Purchase Order"
+                            value={selectedGRNPo}
+                            onChange={(e) => {
+                              const poNo = e.target.value;
+                              loadPOItems(poNo);
+                            }}
+                            style={{ height: '38px', width: '100%', maxWidth: '100%', boxSizing: 'border-box', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#334155', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                          >
+                            {(() => {
+                              const eligiblePOs = livePOs.filter(po => {
+                                const isSelected = po.poNo === selectedGRNPo || po.id === selectedGRNPo;
+                                const s = String(po.status || '').toUpperCase();
+                                const sType = String(po.statusType || '').toLowerCase();
 
-                              const isClosed = s.includes('CLOSED') || s.includes('FULLY RECEIVED') || sType === 'closed';
-                              if (isClosed && !isSelected) return false;
+                                const isClosed = s.includes('CLOSED') || s.includes('FULLY RECEIVED') || sType === 'closed';
+                                if (isClosed && !isSelected) return false;
 
-                              // Strictly only POs that reached "Proceed PO" or are already partially received in GRN
-                              const isProceedPo = s === 'PROCEED PO' || sType === 'proceed_po';
-                              const isPartiallyReceived = s.includes('PARTIALLY') || sType === 'partially_received';
+                                // Strictly only POs that reached "Proceed PO" or are already partially received in GRN
+                                const isProceedPo = s === 'PROCEED PO' || sType === 'proceed_po';
+                                const isPartiallyReceived = s.includes('PARTIALLY') || sType === 'partially_received';
 
-                              return isSelected || isProceedPo || isPartiallyReceived;
-                            });
+                                return isSelected || isProceedPo || isPartiallyReceived;
+                              });
 
-                            const hasSelected = eligiblePOs.some(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo);
-                            const matchedTarget = livePOs.find(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo);
-                            const displayList = (!hasSelected && selectedGRNPo)
-                              ? [{ poNo: selectedGRNPo, id: selectedGRNPo, vendor: selectedGRNVendor || matchedTarget?.vendor || 'Vendor', status: matchedTarget?.status || 'Proceed PO' }, ...eligiblePOs]
-                              : eligiblePOs;
+                              const hasSelected = eligiblePOs.some(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo);
+                              const matchedTarget = livePOs.find(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo);
+                              const displayList = (!hasSelected && selectedGRNPo)
+                                ? [{ poNo: selectedGRNPo, id: selectedGRNPo, vendor: selectedGRNVendor || matchedTarget?.vendor || 'Vendor', status: matchedTarget?.status || 'Proceed PO' }, ...eligiblePOs]
+                                : eligiblePOs;
 
-                            return (
-                              <>
-                                <option value="" disabled>Select Purchase Order ({displayList.length} Proceeded / Partial POs)</option>
-                                {displayList.map((po) => (
-                                  <option key={po.id || po.poNo} value={po.poNo || po.id}>
-                                    {po.poNo} — {po.vendor && po.vendor.length > 20 ? po.vendor.substring(0, 20) + '...' : (po.vendor || 'Vendor')} ({po.status})
-                                  </option>
-                                ))}
-                              </>
-                            );
-                          })()}
-                        </select>
+                              return (
+                                <>
+                                  <option value="" disabled>Select Purchase Order ({displayList.length} Proceeded / Partial POs)</option>
+                                  {displayList.map((po) => (
+                                    <option key={po.id || po.poNo} value={po.poNo || po.id}>
+                                      {po.poNo} — {po.vendor && po.vendor.length > 20 ? po.vendor.substring(0, 20) + '...' : (po.vendor || 'Vendor')} ({po.status})
+                                    </option>
+                                  ))}
+                                </>
+                              );
+                            })()}
+                          </select>
+                        )}
                       </div>
-                    </div>
-
-                    {/* Row 2: Vendor, Warehouse / Location */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-vendor" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           Vendor <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input id="goods-receipt-note-vendor" name="vendor" aria-label="Vendor"
+                        <input
+                          id="goods-receipt-note-vendor"
+                          name="vendor"
+                          aria-label="Vendor"
                           type="text"
                           readOnly
-                          value={selectedGRNVendor || ''}
+                          value={selectedGRNVendor || selectedGrnForModal?.vendor || ''}
                           placeholder="Auto-populated from PO"
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#334155', fontWeight: '600' }}
-                         />
+                        />
                       </div>
+                    </div>
+
+                    {/* Row 3: Warehouse / Location & DC NO / Invoice No. */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-warehouse-location" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           Warehouse / Location <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <select id="goods-receipt-note-warehouse-location" name="warehouseLocation" aria-label="Warehouse / Location" disabled={isViewOnlyMode} defaultValue="VRM Structures" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}>
+                        <select
+                          id="goods-receipt-note-warehouse-location"
+                          name="warehouseLocation"
+                          aria-label="Warehouse / Location"
+                          disabled={isViewOnlyMode}
+                          defaultValue="VRM Structures"
+                          style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}
+                        >
                           <option value="" disabled>Select Warehouse / Location</option>
                           <option value="VRM Structures">VRM Structures</option>
                           <option value="Stock Area">Stock Area</option>
                         </select>
                       </div>
-                    </div>
-
-                    {/* Row 3: Delivery Challan No, Challan Date, Received By, Created By */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-dc-no-invoice" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           DC NO / Invoice No. <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input id="goods-receipt-note-dc-no-invoice" name="dCNOInvoice" aria-label="DC NO / Invoice No."
+                        <input
+                          id="goods-receipt-note-dc-no-invoice"
+                          name="dCNOInvoice"
+                          aria-label="DC NO / Invoice No."
                           type="text"
                           placeholder="Enter DC NO / Invoice No."
-                          value={grnChallanNo}
+                          value={grnChallanNo || selectedGrnForModal?.challanNo || ''}
                           disabled={isViewOnlyMode}
                           onChange={(e) => setGrnChallanNo(e.target.value)}
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}
-                         />
+                        />
                       </div>
+                    </div>
+
+                    {/* Row 4: Challan Date & Received By */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-challan-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Challan Date</label>
-                        <input id="goods-receipt-note-challan-date" name="challanDate" aria-label="Challan Date" type="date" disabled={isViewOnlyMode} defaultValue={new Date().toISOString().split('T')[0]} style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}  />
+                        <input
+                          id="goods-receipt-note-challan-date"
+                          name="challanDate"
+                          aria-label="Challan Date"
+                          type="date"
+                          value={selectedGrnForModal?.challanDate || selectedGrnForModal?.date || challanDate}
+                          disabled={isViewOnlyMode}
+                          onChange={(e) => setChallanDate(e.target.value)}
+                          style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}
+                        />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-received-by" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           Received By <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input id="goods-receipt-note-received-by" name="receivedBy" aria-label="Received By"
+                        <input
+                          id="goods-receipt-note-received-by"
+                          name="receivedBy"
+                          aria-label="Received By"
                           type="text"
-                          value={grnReceivedBy}
+                          value={grnReceivedBy || selectedGrnForModal?.receivedBy || ''}
                           disabled={isViewOnlyMode}
                           placeholder="Enter receiver name"
                           onChange={(e) => setGrnReceivedBy(e.target.value)}
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}
-                         />
+                        />
                       </div>
+                    </div>
+
+                    {/* Row 5: Created By (System User) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-created-by" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           Created By (System User)
                         </label>
-                        <input id="goods-receipt-note-created-by" name="createdBy" aria-label="Created By"
+                        <input
+                          id="goods-receipt-note-created-by"
+                          name="createdBy"
+                          aria-label="Created By"
                           type="text"
-                          value={grnCreatedBy}
+                          value={grnCreatedBy || selectedGrnForModal?.createdBy || 'Velmurugan Rathinam'}
                           readOnly
                           disabled
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: '600' }}
-                         />
+                        />
                       </div>
                     </div>
                   </div>
@@ -2824,218 +2909,294 @@ export default function GoodsReceiptNoteView(props) {
                       <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
                     </div>
 
-                    <div style={{ overflowX: 'auto', flex: 1 }}>
-                      <table className="custom-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                    <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+                      <table className="custom-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '12px' }}>
                         <thead>
-                          <tr style={{ textAlign: 'left', borderBottom: '1px solid #F1F5F9' }}>
-                            <th style={{ padding: '8px 2px', color: '#64748B' }}>#</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B', width: '320px' }}>Item / Material & Description</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B', textAlign: 'center' }}>UOM</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B', textAlign: 'center' }}>Ordered Qty</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B', textAlign: 'center' }}>Previously Received</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B', textAlign: 'center' }}>Receiving Now *</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B', textAlign: 'center' }}>Accepted Qty</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B', textAlign: 'center' }}>Rejected Qty</th>
-                            <th style={{ padding: '8px 4px', color: '#64748B' }}>Reason for Rejection</th>
-                            <th style={{ padding: '8px 2px' }}></th>
+                          <tr style={{ textAlign: 'left', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
+                            <th style={{ padding: '10px 8px', color: '#64748B', width: '36px' }}>#</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', minWidth: '240px' }}>Item / Material & Description</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '70px' }}>UOM</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Ordered Qty</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '110px' }}>Previously Received</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '100px' }}>Receiving Now *</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Accepted Qty</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Rejected Qty</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', minWidth: '130px' }}>Reason for Rejection</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', minWidth: '110px' }}>Batch / Lot No</th>
+                            {!isViewOnlyMode && <th style={{ padding: '10px 4px', width: '40px' }}></th>}
                           </tr>
                         </thead>
                         <tbody>
                           {grnItems.length === 0 ? (
                             <tr>
-                              <td colSpan="11" style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
+                              <td colSpan={isViewOnlyMode ? 10 : 11} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
                                 No items loaded. Select a Purchase Order to display its line items for receipt entry.
                               </td>
                             </tr>
                           ) : (
                             grnItems.map((item, idx) => (
-                              <tr key={item.id} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                                <td style={{ padding: '10px 4px', color: '#94A3B8', verticalAlign: 'top', paddingTop: '16px' }}>{idx + 1}</td>
-                                <td style={{ padding: '10px 4px', fontWeight: '600', color: '#0F172A', minWidth: '280px', verticalAlign: 'top' }}>
-                                  <input id={`goods-receipt-note-or-item-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`orItemName_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Type or select Item Name"
-                                    type="text"
-                                    list={`grn-item-datalist-${item.id}`}
-                                    value={item.name}
-                                    disabled={isViewOnlyMode}
-                                    placeholder="Type or select Item Name..."
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      const matched = (itemsList || []).find(it => (it.name || '').toLowerCase() === val.toLowerCase());
-                                      const updated = grnItems.map(it => it.id === item.id ? {
-                                        ...it,
-                                        name: val,
-                                        uom: matched ? (matched.unit || matched.uom || it.uom) : it.uom,
-                                        desc: matched ? (matched.description || it.desc) : it.desc
-                                      } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '100%', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 10px', fontSize: '12px', fontWeight: '700', color: '#0F172A', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF' }}
-                                   />
-                                  <datalist id={`grn-item-datalist-${item.id}`}>
-                                    {(itemsList || []).map((prod, pidx) => (
-                                      <option key={pidx} value={prod.name}>
-                                        {prod.code ? `[${prod.code}] ${prod.name}` : prod.name}
-                                      </option>
-                                    ))}
-                                  </datalist>
-                                  <div style={{ marginTop: '6px' }}>
-                                    <textarea id={`goods-receipt-note-desc-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`desc_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter Item / Material Description"
-                                      value={item.desc || ''}
-                                      disabled={isViewOnlyMode}
-                                      placeholder="Enter Item / Material Description..."
+                              <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                <td style={{ padding: '12px 8px', color: '#94A3B8', verticalAlign: 'top' }}>{idx + 1}</td>
+                                <td style={{ padding: '12px 8px', verticalAlign: 'top', minWidth: '240px' }}>
+                                  {isViewOnlyMode ? (
+                                    <div>
+                                      <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>{item.name || item.itemName || 'Material Item'}</div>
+                                      {item.desc && (
+                                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', lineHeight: '1.4' }}>
+                                          {item.desc}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <input
+                                        id={`goods-receipt-note-or-item-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                        name={`orItemName_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                        aria-label="Type or select Item Name"
+                                        type="text"
+                                        list={`grn-item-datalist-${item.id}`}
+                                        value={item.name}
+                                        placeholder="Type or select Item Name..."
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          const matched = (itemsList || []).find(it => (it.name || '').toLowerCase() === val.toLowerCase());
+                                          const updated = grnItems.map(it => it.id === item.id ? {
+                                            ...it,
+                                            name: val,
+                                            uom: matched ? (matched.unit || matched.uom || it.uom) : it.uom,
+                                            desc: matched ? (matched.description || it.desc) : it.desc
+                                          } : it);
+                                          setGrnItems(updated);
+                                        }}
+                                        style={{ width: '100%', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 10px', fontSize: '12px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF' }}
+                                      />
+                                      <datalist id={`grn-item-datalist-${item.id}`}>
+                                        {(itemsList || []).map((prod, pidx) => (
+                                          <option key={pidx} value={prod.name}>
+                                            {prod.code ? `[${prod.code}] ${prod.name}` : prod.name}
+                                          </option>
+                                        ))}
+                                      </datalist>
+                                      <div style={{ marginTop: '6px' }}>
+                                        <textarea
+                                          id={`goods-receipt-note-desc-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                          name={`desc_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                          aria-label="Enter Item / Material Description"
+                                          value={item.desc || ''}
+                                          placeholder="Enter Item / Material Description..."
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            const updated = grnItems.map(it => it.id === item.id ? { ...it, desc: val } : it);
+                                            setGrnItems(updated);
+                                          }}
+                                          style={{
+                                            width: '100%',
+                                            minHeight: '54px',
+                                            border: '1px solid #CBD5E1',
+                                            borderRadius: '6px',
+                                            padding: '6px 10px',
+                                            fontSize: '11px',
+                                            color: '#334155',
+                                            resize: 'vertical',
+                                            boxSizing: 'border-box',
+                                            backgroundColor: '#F8FAFC',
+                                            lineHeight: '1.4'
+                                          }}
+                                        />
+                                      </div>
+                                    </>
+                                  )}
+                                </td>
+                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>{item.uom || 'NOS'}</span>
+                                  ) : (
+                                    <input
+                                      id={`goods-receipt-note-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      name={`uom_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      aria-label="Uom"
+                                      type="text"
+                                      value={item.uom}
                                       onChange={(e) => {
                                         const val = e.target.value;
-                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, desc: val } : it);
+                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, uom: val } : it);
                                         setGrnItems(updated);
                                       }}
-                                      style={{
-                                        width: '100%',
-                                        minHeight: '54px',
-                                        border: '1px solid #CBD5E1',
-                                        borderRadius: '6px',
-                                        padding: '6px 10px',
-                                        fontSize: '11px',
-                                        color: '#334155',
-                                        resize: 'vertical',
-                                        boxSizing: 'border-box',
-                                        backgroundColor: '#F8FAFC',
-                                        lineHeight: '1.4'
-                                      }}
-                                     />
-                                  </div>
+                                      style={{ width: '50px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', backgroundColor: '#FFFFFF' }}
+                                    />
+                                  )}
                                 </td>
-                                <td style={{ padding: '10px 4px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  <input id={`goods-receipt-note-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uom_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom"
-                                    type="text"
-                                    value={item.uom}
-                                    disabled={isViewOnlyMode}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      const updated = grnItems.map(it => it.id === item.id ? { ...it, uom: val } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '50px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF' }}
-                                   />
-                                </td>
-                                <td style={{ padding: '10px 4px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  <input id={`goods-receipt-note-ordered-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`ordered_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Ordered"
-                                    type="number"
-                                    value={item.ordered}
-                                    disabled={isViewOnlyMode}
-                                    onChange={(e) => {
-                                      const val = Number(e.target.value);
-                                      const updated = grnItems.map(it => it.id === item.id ? { ...it, ordered: val } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', fontWeight: '600', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF' }}
-                                   />
-                                </td>
-                                <td style={{ padding: '10px 4px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  <input id={`goods-receipt-note-prev-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`prev_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Prev"
-                                    type="number"
-                                    value={item.prev}
-                                    disabled={isViewOnlyMode}
-                                    onChange={(e) => {
-                                      const val = Number(e.target.value);
-                                      const updated = grnItems.map(it => it.id === item.id ? { ...it, prev: val } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF' }}
-                                   />
-                                </td>
-                                <td style={{ padding: '10px 4px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                    <input id={`goods-receipt-note-now-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`now_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Now"
+                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>{item.ordered ?? 0}</span>
+                                  ) : (
+                                    <input
+                                      id={`goods-receipt-note-ordered-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      name={`ordered_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      aria-label="Ordered"
                                       type="number"
-                                      value={item.now}
-                                      disabled={isViewOnlyMode}
+                                      value={item.ordered}
                                       onChange={(e) => {
                                         const val = Number(e.target.value);
-                                        const maxAllowed = Math.max(0, item.ordered - item.prev);
-                                        const hasErr = val > maxAllowed;
-                                        const updated = grnItems.map(it => it.id === item.id ? {
-                                          ...it,
-                                          now: val,
-                                          accepted: val - (it.rejected || 0),
-                                          error: hasErr ? `Exceeds remaining PO quantity of ${maxAllowed}` : null
-                                        } : it);
+                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, ordered: val } : it);
                                         setGrnItems(updated);
                                       }}
-                                      style={{
-                                        width: '65px',
-                                        height: '34px',
-                                        border: item.error ? '1.5px solid #DC2626' : '1px solid #CBD5E1',
-                                        borderRadius: '6px',
-                                        textAlign: 'center',
-                                        fontSize: '11px',
-                                        fontWeight: 'bold',
-                                        backgroundColor: item.error ? '#FEF2F2' : (isViewOnlyMode ? '#F8FAFC' : '#FFFFFF'),
-                                        color: item.error ? '#DC2626' : '#0F172A'
+                                      style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', fontWeight: '600', backgroundColor: '#FFFFFF' }}
+                                    />
+                                  )}
+                                </td>
+                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontSize: '12px', color: '#64748B' }}>{item.prev ?? 0}</span>
+                                  ) : (
+                                    <input
+                                      id={`goods-receipt-note-prev-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      name={`prev_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      aria-label="Prev"
+                                      type="number"
+                                      value={item.prev}
+                                      onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, prev: val } : it);
+                                        setGrnItems(updated);
                                       }}
-                                     />
-                                    {item.error && (
-                                      <span style={{ fontSize: '8px', color: '#DC2626', fontWeight: 'bold', marginTop: '2px', lineHeight: '1' }}>
-                                        Max {item.ordered - item.prev}
-                                      </span>
-                                    )}
-                                  </div>
+                                      style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', backgroundColor: '#FFFFFF' }}
+                                    />
+                                  )}
                                 </td>
-                                <td style={{ padding: '10px 4px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  <input id={`goods-receipt-note-accepted-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`accepted_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Accepted"
-                                    type="number"
-                                    value={item.accepted}
-                                    disabled={isViewOnlyMode}
-                                    onChange={(e) => {
-                                      const val = Number(e.target.value);
-                                      const updated = grnItems.map(it => it.id === item.id ? { ...it, accepted: val, rejected: it.now - val } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF' }}
-                                   />
+                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px', backgroundColor: '#ECFEFF', padding: '3px 8px', borderRadius: '6px', border: '1px solid #CFFAFE' }}>
+                                      {item.now ?? 0}
+                                    </span>
+                                  ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                      <input
+                                        id={`goods-receipt-note-now-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                        name={`now_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                        aria-label="Now"
+                                        type="number"
+                                        value={item.now}
+                                        onChange={(e) => {
+                                          const val = Number(e.target.value);
+                                          const maxAllowed = Math.max(0, item.ordered - item.prev);
+                                          const hasErr = val > maxAllowed;
+                                          const updated = grnItems.map(it => it.id === item.id ? {
+                                            ...it,
+                                            now: val,
+                                            accepted: val - (it.rejected || 0),
+                                            error: hasErr ? `Exceeds remaining PO quantity of ${maxAllowed}` : null
+                                          } : it);
+                                          setGrnItems(updated);
+                                        }}
+                                        style={{
+                                          width: '65px',
+                                          height: '34px',
+                                          border: item.error ? '1.5px solid #DC2626' : '1px solid #CBD5E1',
+                                          borderRadius: '6px',
+                                          textAlign: 'center',
+                                          fontSize: '11px',
+                                          fontWeight: 'bold',
+                                          backgroundColor: item.error ? '#FEF2F2' : '#FFFFFF',
+                                          color: item.error ? '#DC2626' : '#0F172A'
+                                        }}
+                                      />
+                                      {item.error && (
+                                        <span style={{ fontSize: '8px', color: '#DC2626', fontWeight: 'bold', marginTop: '2px', lineHeight: '1' }}>
+                                          Max {item.ordered - item.prev}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </td>
-                                <td style={{ padding: '10px 4px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  <input id={`goods-receipt-note-rejected-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rejected_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rejected"
-                                    type="number"
-                                    value={item.rejected}
-                                    disabled={isViewOnlyMode}
-                                    onChange={(e) => {
-                                      const val = Number(e.target.value);
-                                      const updated = grnItems.map(it => it.id === item.id ? { ...it, rejected: val, accepted: it.now - val } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', color: item.rejected > 0 ? '#C5221F' : '#334155', fontWeight: item.rejected > 0 ? 'bold' : 'normal', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF' }}
-                                   />
+                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontWeight: '700', color: '#16A34A', fontSize: '13px' }}>
+                                      {item.accepted ?? 0}
+                                    </span>
+                                  ) : (
+                                    <input
+                                      id={`goods-receipt-note-accepted-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      name={`accepted_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      aria-label="Accepted"
+                                      type="number"
+                                      value={item.accepted}
+                                      onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, accepted: val, rejected: it.now - val } : it);
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', backgroundColor: '#FFFFFF' }}
+                                    />
+                                  )}
                                 </td>
-                                <td style={{ padding: '10px 4px', verticalAlign: 'top' }}>
-                                  <select id={`goods-receipt-note-reason-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`reason_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Reason"
-                                    value={item.reason}
-                                    disabled={isViewOnlyMode}
-                                    onChange={(e) => {
-                                      const updated = grnItems.map(it => it.id === item.id ? { ...it, reason: e.target.value } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', fontSize: '11px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', padding: '0 6px' }}
-                                  >
-                                    <option>—</option>
-                                    <option>Damaged</option>
-                                    <option>Thread Issue</option>
-                                    <option>Wrong Specs</option>
-                                  </select>
+                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontWeight: Number(item.rejected) > 0 ? '700' : 'normal', color: Number(item.rejected) > 0 ? '#DC2626' : '#94A3B8', fontSize: '12px' }}>
+                                      {item.rejected ?? 0}
+                                    </span>
+                                  ) : (
+                                    <input
+                                      id={`goods-receipt-note-rejected-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      name={`rejected_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      aria-label="Rejected"
+                                      type="number"
+                                      value={item.rejected}
+                                      onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, rejected: val, accepted: it.now - val } : it);
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', color: item.rejected > 0 ? '#C5221F' : '#334155', fontWeight: item.rejected > 0 ? 'bold' : 'normal', backgroundColor: '#FFFFFF' }}
+                                    />
+                                  )}
                                 </td>
-                                <td style={{ padding: '10px 4px', verticalAlign: 'top' }}>
-                                  <input id={`goods-receipt-note-batch-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`batch_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Batch"
-                                    type="text"
-                                    value={item.batch}
-                                    disabled={isViewOnlyMode}
-                                    onChange={(e) => {
-                                      const updated = grnItems.map(it => it.id === item.id ? { ...it, batch: e.target.value } : it);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '90px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', fontSize: '11px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF' }}
-                                   />
+                                <td style={{ padding: '12px 8px', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontSize: '11px', color: '#64748B' }}>
+                                      {item.reason && item.reason !== '—' ? item.reason : '—'}
+                                    </span>
+                                  ) : (
+                                    <select
+                                      id={`goods-receipt-note-reason-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      name={`reason_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      aria-label="Reason"
+                                      value={item.reason}
+                                      onChange={(e) => {
+                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, reason: e.target.value } : it);
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', fontSize: '11px', backgroundColor: '#FFFFFF', padding: '0 6px' }}
+                                    >
+                                      <option>—</option>
+                                      <option>Damaged</option>
+                                      <option>Thread Issue</option>
+                                      <option>Wrong Specs</option>
+                                    </select>
+                                  )}
                                 </td>
-                                <td style={{ padding: '10px 2px', textAlign: 'center', verticalAlign: 'top', paddingTop: '14px' }}>
-                                  {!isViewOnlyMode && (
+                                <td style={{ padding: '12px 8px', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode ? (
+                                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: '500' }}>
+                                      {item.batch || '—'}
+                                    </span>
+                                  ) : (
+                                    <input
+                                      id={`goods-receipt-note-batch-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      name={`batch_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                      aria-label="Batch"
+                                      type="text"
+                                      value={item.batch}
+                                      onChange={(e) => {
+                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, batch: e.target.value } : it);
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ width: '90px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', fontSize: '11px', backgroundColor: '#FFFFFF' }}
+                                    />
+                                  )}
+                                </td>
+                                {!isViewOnlyMode && (
+                                  <td style={{ padding: '10px 2px', textAlign: 'center', verticalAlign: 'top', paddingTop: '14px' }}>
                                     <button
                                       type="button"
                                       title="Delete Item"
@@ -3056,28 +3217,28 @@ export default function GoodsReceiptNoteView(props) {
                                     >
                                       <Trash2 style={{ width: '15px', height: '15px' }} />
                                     </button>
-                                  )}
-                                </td>
+                                  </td>
+                                )}
                               </tr>
-                            )))}
-
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
 
                     {/* Anchored Footer Section with Total Row & Add Button */}
                     <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                      <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+                        <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '11px' }}>
                           <tbody>
                             <tr style={{ backgroundColor: '#F8FAFC', fontWeight: 'bold' }}>
-                              <td colSpan="3" style={{ padding: '10px 4px', fontSize: '12px' }}>Total</td>
-                              <td style={{ padding: '10px 4px', textAlign: 'center' }}>{totalOrdered}</td>
-                              <td style={{ padding: '10px 4px', textAlign: 'center', color: '#64748B' }}>{totalPrev}</td>
-                              <td style={{ padding: '10px 4px', textAlign: 'center' }}>{totalNow}</td>
-                              <td style={{ padding: '10px 4px', textAlign: 'center', color: '#137333' }}>{totalAccepted}</td>
-                              <td style={{ padding: '10px 4px', textAlign: 'center', color: '#C5221F' }}>{totalRejected}</td>
-                              <td colSpan="3"></td>
+                              <td colSpan="3" style={{ padding: '10px 8px', fontSize: '12px', color: '#0F172A' }}>Total</td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', width: '90px' }}>{totalOrdered}</td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', width: '110px', color: '#64748B' }}>{totalPrev}</td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', width: '100px', color: '#0E7490' }}>{totalNow}</td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', width: '90px', color: '#137333' }}>{totalAccepted}</td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', width: '90px', color: '#C5221F' }}>{totalRejected}</td>
+                              <td colSpan={isViewOnlyMode ? 2 : 3} style={{ padding: '10px 8px' }}></td>
                             </tr>
                           </tbody>
                         </table>
