@@ -56,7 +56,16 @@ const TARGET_BOMS = [
   'VRM-BOM-2026-99',
   'VRM-BOM-2026-32',
   'VRM-BOM-2026-27',
-  'VRM-BOM-2026-25'
+  'VRM-BOM-2026-25',
+  'VRM-BOM-2026-04',
+  'VRM-BOM-2026-03',
+  'VRM-BOM-2026-02',
+  'VRM-BOM-2026-01',
+  'BOM-665',
+  'BOM-662',
+  'BOM-661',
+  'BOM-660',
+  'BOM-659'
 ];
 
 const TARGET_PIS = [
@@ -299,3 +308,4 @@ runPurge().catch(err => {
   console.error('Fatal error during targeted purge:', err);
   process.exit(1);
 });
+
