@@ -8664,6 +8664,44 @@ app.post('/api/grns', async (req, res) => {
     console.error('Failed to update inventory stock on GRN save:', err);
   }
 
+  // ⚡ Broadcast real-time GRN event to all clients (Accounts, Stores, Procurement)
+  try {
+    const actEmp = req.headers['x-employee-code'] || newGRN.receivedBy || null;
+    const actName = req.headers['x-user-name'] || newGRN.receivedBy || 'Stores';
+    const actRole = req.headers['x-user-role'] || 'Stores';
+
+    // Notify Accounts team transparently of inwarded GRN
+    createInternalNotification({
+      recipientRole: 'Accounts Head',
+      eventType: 'GRN_RECEIVED',
+      documentType: 'GRN',
+      documentId: newGRN.grnNo,
+      title: `📦 GRN ${newGRN.grnNo} Received for PO ${newGRN.poNo}`,
+      message: `Goods Receipt Note ${newGRN.grnNo} inwarded (${currentAccepted} qty accepted). Total Received: ${totalReceivedSoFar}/${totalOrdered}. PO Status: ${calculatedStatus}.`,
+      actorEmpCode: actEmp,
+      actorName: actName,
+      actorRole: actRole,
+      targetTab: 'GRN',
+      targetRecordId: newGRN.grnNo,
+      metadata: {
+        grnNo: newGRN.grnNo,
+        poNo: newGRN.poNo,
+        vendor: newGRN.vendor,
+        receivedQty: currentAccepted,
+        status: calculatedStatus
+      },
+      dedupId: `grn_notif_acc_${newGRN.grnNo}_${Date.now()}`
+    });
+
+    const grnPayload = { grn: newGRN, poNo: newGRN.poNo, status: calculatedStatus, action: 'create' };
+    broadcastRealtimeEvent('grn_updated', grnPayload);
+    broadcastRealtimeEvent('controlroom_grn_completed', newGRN);
+    broadcastRealtimeEvent('controlroom_po_updated', { id: newGRN.poNo, status: calculatedStatus, action: 'update' });
+    broadcastRealtimeEvent('po_updated', { id: newGRN.poNo, status: calculatedStatus, action: 'update' });
+  } catch (grnNotifErr) {
+    console.warn('[GRN Notification Warning]:', grnNotifErr.message);
+  }
+
   // 4. RETURN SUCCESS TO CLIENT IMMEDIATELY!
   res.json({ success: true, grn: newGRN });
 });
@@ -8671,8 +8709,8 @@ app.post('/api/grns', async (req, res) => {
 // Endpoint for MD Approval (Draft/Pending -> MD Approved) (Native BUSINZ Store)
 app.post('/api/purchaseorders/:id/approve', async (req, res) => {
   const targetId = req.params.id;
-  const remarks = req.body.remarks || 'Approved by MD';
-  const approver = req.body.approver || 'Velmurugan Rathinam (MD)';
+  const remarks = req.body.remarks || 'Approved by CEO & Payment Authorized';
+  const approver = req.body.approver || 'Velmurugan Rathinam (CEO)';
 
   const now = new Date();
   const approvedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -8715,15 +8753,20 @@ app.post('/api/purchaseorders/:id/approve', async (req, res) => {
     console.warn('[approve] Supabase sync notice:', sbErr.message);
   }
 
-  // ⚡ Broadcast approval update and notify Procurement in real time
+  // ⚡ Broadcast approval update and notify Accounts & Procurement in real time
   try {
+    const matchedPO = matchedIdx !== -1 ? localPOs[matchedIdx] : null;
+    const vendorName = matchedPO?.vendor || 'Vendor';
+    const poAmount = matchedPO?.amount || '';
+
+    // 1. Notify Accounts team to proceed with payment release
     createInternalNotification({
-      recipientRole: 'Procurement Head',
-      eventType: 'PO_APPROVED',
+      recipientRole: 'Accounts Head',
+      eventType: 'PO_APPROVED_FOR_PAYMENT',
       documentType: 'PO',
       documentId: targetId,
-      title: `✅ PO ${targetId} Approved by MD`,
-      message: `Purchase Order ${targetId} has been approved by ${approver} (${remarks}). Moved to Payment Process.`,
+      title: `✅ PO ${targetId} Approved by CEO — Payment Authorized`,
+      message: `Purchase Order ${targetId} for ${vendorName} (${poAmount}) approved by CEO. Payment & credit clearance authorized. Ready for Accounts verification.`,
       actorEmpCode: req.headers['x-employee-code'] || null,
       actorName: approver,
       actorRole: 'CEO',
@@ -8732,19 +8775,47 @@ app.post('/api/purchaseorders/:id/approve', async (req, res) => {
       metadata: {
         poNo: targetId,
         approver,
+        vendor: vendorName,
+        amount: poAmount,
         remarks,
         filterTab: 'MD_APPROVED'
       },
-      dedupId: `po_approved_${targetId}_${Date.now()}`
+      dedupId: `po_approved_acc_${targetId}_${Date.now()}`
     });
 
-    broadcastRealtimeEvent('purchase_order_updated', { id: targetId, status: 'MD Approved' });
-    broadcastRealtimeEvent('controlroom_po_updated', { id: targetId, status: 'MD Approved' });
+    // 2. Notify Procurement Head that CEO approved
+    createInternalNotification({
+      recipientRole: 'Procurement Head',
+      eventType: 'PO_APPROVED',
+      documentType: 'PO',
+      documentId: targetId,
+      title: `✅ PO ${targetId} Approved by CEO`,
+      message: `Purchase Order ${targetId} approved by ${approver}. Payment authorized to proceed. Moved to Accounts.`,
+      actorEmpCode: req.headers['x-employee-code'] || null,
+      actorName: approver,
+      actorRole: 'CEO',
+      targetTab: 'Purchase Orders',
+      targetRecordId: targetId,
+      metadata: {
+        poNo: targetId,
+        approver,
+        vendor: vendorName,
+        amount: poAmount,
+        remarks,
+        filterTab: 'MD_APPROVED'
+      },
+      dedupId: `po_approved_proc_${targetId}_${Date.now()}`
+    });
+
+    const broadcastPayload = { id: targetId, po: matchedPO, status: 'MD Approved', action: 'update' };
+    broadcastRealtimeEvent('purchase_order_updated', broadcastPayload);
+    broadcastRealtimeEvent('controlroom_po_updated', broadcastPayload);
+    broadcastRealtimeEvent('po_updated', broadcastPayload);
   } catch (notifErr) {
     console.warn('[PO Approve Notification Warning]:', notifErr.message);
   }
 
-  res.json({ success: true, message: `PO ${targetId} approved by ${approver} and marked as MD Approved!` });
+  res.json({ success: true, message: `PO ${targetId} approved by ${approver} and payment authorized!` });
 });
 
 // Endpoint for Payment Process (MD Approved -> Payment Processed / Credit Verified) (Native BUSINZ Store)
@@ -8761,8 +8832,18 @@ app.post('/api/purchaseorders/:id/process-payment', async (req, res) => {
   const paymentDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const paymentTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
-  const paymentImage = req.body.paymentImage || null;
-  const paymentImageMeta = req.body.paymentImageMeta || null;
+  // Handle multiple payment proof images (up to 4 images)
+  const incomingImages = Array.isArray(req.body.paymentImages) ? req.body.paymentImages.slice(0, 4) : [];
+  const singleImage = req.body.paymentImage || (incomingImages[0]?.dataUrl || null);
+  const singleImageMeta = req.body.paymentImageMeta || (incomingImages[0] ? {
+    name: incomingImages[0].name || 'Payment_Proof.jpg',
+    size: incomingImages[0].size || '',
+    type: incomingImages[0].type || 'image/jpeg'
+  } : null);
+
+  const paymentImages = incomingImages.length > 0
+    ? incomingImages
+    : (singleImage ? [{ dataUrl: singleImage, ...singleImageMeta }] : []);
 
   const localPOs = loadLocalPOs();
   const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
@@ -8772,23 +8853,27 @@ app.post('/api/purchaseorders/:id/process-payment', async (req, res) => {
     const pNo = normalize(p.poNo);
     return cleanTarget && (pId === cleanTarget || pNo === cleanTarget);
   });
+
+  const paymentDetailsObj = {
+    mode: paymentMode,
+    refNo: paymentRef,
+    amount: amountPaid || (matchedIdx !== -1 ? localPOs[matchedIdx].amount : ''),
+    date: paymentDate,
+    time: paymentTime,
+    remarks,
+    isCredit,
+    creditTerms,
+    paymentImage: singleImage,
+    paymentImageMeta: singleImageMeta,
+    paymentImages: paymentImages,
+    verifiedBy: 'Accounts Team'
+  };
+
   if (matchedIdx !== -1) {
     localPOs[matchedIdx].status = 'Payment Processed';
     localPOs[matchedIdx].statusType = 'payment_processed';
     localPOs[matchedIdx].order_status = 'payment_processed';
-    localPOs[matchedIdx].paymentDetails = {
-      mode: paymentMode,
-      refNo: paymentRef,
-      amount: amountPaid || localPOs[matchedIdx].amount,
-      date: paymentDate,
-      time: paymentTime,
-      remarks,
-      isCredit,
-      creditTerms,
-      paymentImage,
-      paymentImageMeta,
-      verifiedBy: 'Accounts Team'
-    };
+    localPOs[matchedIdx].paymentDetails = paymentDetailsObj;
     saveLocalPOs(localPOs);
   } else {
     localPOs.unshift({
@@ -8796,19 +8881,7 @@ app.post('/api/purchaseorders/:id/process-payment', async (req, res) => {
       poNo: targetId,
       status: 'Payment Processed',
       statusType: 'payment_processed',
-      paymentDetails: {
-        mode: paymentMode,
-        refNo: paymentRef,
-        amount: amountPaid,
-        date: paymentDate,
-        time: paymentTime,
-        remarks,
-        isCredit,
-        creditTerms,
-        paymentImage,
-        paymentImageMeta,
-        verifiedBy: 'Accounts Team'
-      }
+      paymentDetails: paymentDetailsObj
     });
     saveLocalPOs(localPOs);
   }
@@ -8817,6 +8890,43 @@ app.post('/api/purchaseorders/:id/process-payment', async (req, res) => {
     await saveDatabaseStore('po_store', localPOs);
   } catch (sbErr) {
     console.warn('[process-payment] Supabase sync notice:', sbErr.message);
+  }
+
+  // ⚡ Real-Time Workflow Notification to Procurement Head: Payment Processed, Ready for Proceed PO!
+  try {
+    const matchedPO = matchedIdx !== -1 ? localPOs[matchedIdx] : null;
+    const vendorName = matchedPO?.vendor || 'Vendor';
+
+    createInternalNotification({
+      recipientRole: 'Procurement Head',
+      eventType: 'PO_PAYMENT_PROCESSED',
+      documentType: 'PO',
+      documentId: targetId,
+      title: `💳 Payment Processed for PO ${targetId}`,
+      message: `Accounts verified payment for PO ${targetId} (${vendorName}, ${isCredit ? 'Credit Terms' : paymentMode}). Payment proof attached. Ready to Proceed PO!`,
+      actorEmpCode: req.headers['x-employee-code'] || null,
+      actorName: req.headers['x-user-name'] || 'Accounts Team',
+      actorRole: 'Accounts',
+      targetTab: 'Purchase Orders',
+      targetRecordId: targetId,
+      metadata: {
+        poNo: targetId,
+        vendor: vendorName,
+        paymentMode,
+        paymentRef,
+        amount: amountPaid,
+        hasProof: paymentImages.length > 0,
+        filterTab: 'PAYMENT_PROCESSED'
+      },
+      dedupId: `po_paid_proc_${targetId}_${Date.now()}`
+    });
+
+    const broadcastPayload = { id: targetId, po: localPOs[matchedIdx], status: 'Payment Processed', action: 'update' };
+    broadcastRealtimeEvent('purchase_order_updated', broadcastPayload);
+    broadcastRealtimeEvent('controlroom_po_updated', broadcastPayload);
+    broadcastRealtimeEvent('po_updated', broadcastPayload);
+  } catch (notifErr) {
+    console.warn('[PO Payment Process Notification Warning]:', notifErr.message);
   }
 
   res.json({ 
@@ -8833,6 +8943,7 @@ app.post('/api/purchaseorders/:id/proceed', async (req, res) => {
   const remarks = req.body.remarks || 'Proceeded for dispatch and GRN';
   const authorizedBy = req.body.authorizedBy || 'Procurement Head';
   const incomingEmail = req.body.vendorEmail || req.body.email || '';
+  const vendorPhone = req.body.vendorPhone || req.body.phone || '';
 
   const now = new Date();
   const proceedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -8857,6 +8968,7 @@ app.post('/api/purchaseorders/:id/proceed', async (req, res) => {
     remarks,
     authorizedBy,
     vendorEmail,
+    vendorPhone,
     emailDispatched: Boolean(vendorEmail),
     emailSentAt: new Date().toISOString(),
     deliveryStatus: vendorEmail ? `Dispatched to ${vendorEmail}` : 'Authorized (Ready for GRN)'
@@ -8886,6 +8998,39 @@ app.post('/api/purchaseorders/:id/proceed', async (req, res) => {
     await saveDatabaseStore('po_store', localPOs);
   } catch (sbErr) {
     console.warn('[proceed] Supabase sync notice:', sbErr.message);
+  }
+
+  // ⚡ Real-Time Workflow Notification to Accounts, CEO, and Stores: PO Proceeded & Dispatched!
+  try {
+    const vName = matchedPO?.vendor || 'Vendor';
+
+    createInternalNotification({
+      recipientRole: 'Accounts Head',
+      eventType: 'PO_PROCEEDED_DISPATCHED',
+      documentType: 'PO',
+      documentId: targetId,
+      title: `🚀 PO ${targetId} Proceeded & Dispatched to Vendor`,
+      message: `Purchase Order ${targetId} for ${vName} has been authorized and dispatched to vendor by Procurement. Ready for GRN receiving.`,
+      actorEmpCode: req.headers['x-employee-code'] || null,
+      actorName: authorizedBy,
+      actorRole: 'Procurement',
+      targetTab: 'Purchase Orders',
+      targetRecordId: targetId,
+      metadata: {
+        poNo: targetId,
+        vendor: vName,
+        vendorEmail,
+        filterTab: 'PROCEED_PO'
+      },
+      dedupId: `po_proceed_acc_${targetId}_${Date.now()}`
+    });
+
+    const broadcastPayload = { id: targetId, po: localPOs[matchedIdx], status: 'Proceed PO', action: 'update' };
+    broadcastRealtimeEvent('purchase_order_updated', broadcastPayload);
+    broadcastRealtimeEvent('controlroom_po_updated', broadcastPayload);
+    broadcastRealtimeEvent('po_updated', broadcastPayload);
+  } catch (notifErr) {
+    console.warn('[PO Proceed Notification Warning]:', notifErr.message);
   }
 
   const message = vendorEmail

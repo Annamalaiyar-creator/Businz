@@ -160,13 +160,13 @@ export const handleIncomingRealtimeMessage = (data) => {
   }
 
   // 5. Purchase Orders & Approvals
-  else if (type === 'po_updated' || (type === 'store_updated' && payload?.key === 'po_store')) {
-    window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: payload }));
+  else if (type === 'po_updated' || type === 'purchase_order_updated' || type === 'purchase_order_created' || type === 'controlroom_po_updated' || (type === 'store_updated' && payload?.key === 'po_store')) {
+    window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: payload?.po || payload }));
   }
 
   // 6. Goods Receipt Notes (GRN)
-  else if (type === 'grn_updated' || (type === 'store_updated' && payload?.key === 'grn_store')) {
-    window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: payload }));
+  else if (type === 'grn_updated' || type === 'controlroom_grn_completed' || (type === 'store_updated' && payload?.key === 'grn_store')) {
+    window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: payload?.grn || payload }));
   }
 
   // 7. Proforma Invoices & Invoices
