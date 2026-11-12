@@ -246,8 +246,15 @@ function App() {
     return localStorage.getItem('controlroom_user_role') || '';
   });
 
-  // Active Tab State (Restores current active tab on page refresh)
+  // Active Tab State (Restores current active tab on page refresh or URL search param)
   const [activeTab, setActiveTab] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTab = urlParams.get('tab');
+        if (urlTab && urlTab.trim()) return urlTab.trim();
+      }
+    } catch (_) {}
     return localStorage.getItem('controlroom_active_tab') || 'Dashboard';
   });
 
@@ -430,7 +437,9 @@ function App() {
     setShowLoginModal(false);
   };
 
-  const handleTabChange = (tab, targetPo = null, poTabTarget = null, targetCustomer = null) => {
+  const handleTabChange = (tab, targetPo = null, poTabTarget = null, targetCustomer = null, options = {}) => {
+    const { skipPush = false } = options || {};
+
     if (targetPo) {
       if (typeof targetPo === 'object' && (targetPo.searchCustomer || targetPo.targetCustomer)) {
         setTargetCustomerCode(targetPo.searchCustomer || targetPo.targetCustomer);
@@ -459,7 +468,65 @@ function App() {
     } catch (e) {
       console.warn('Could not persist active tab to localStorage:', e);
     }
+
+    // HTML5 Browser History Integration (Back / Forward navigation)
+    if (!skipPush && typeof window !== 'undefined' && window.history && window.history.pushState) {
+      try {
+        const currentUrl = new URL(window.location.href);
+        const currentTabInUrl = currentUrl.searchParams.get('tab');
+        if (currentTabInUrl !== tab) {
+          currentUrl.searchParams.set('tab', tab);
+          window.history.pushState(
+            { tab, isBusinzNavigation: true },
+            '',
+            currentUrl.toString()
+          );
+        }
+      } catch (err) {
+        console.warn('Could not push browser history state:', err);
+      }
+    }
   };
+
+  // HTML5 History Management: Listen for Browser Back / Forward buttons
+  useEffect(() => {
+    // 1. Ensure initial history state has current tab
+    try {
+      if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+        const currentUrl = new URL(window.location.href);
+        if (!currentUrl.searchParams.has('tab')) {
+          currentUrl.searchParams.set('tab', activeTab);
+        }
+        window.history.replaceState(
+          { tab: activeTab, isBusinzNavigation: true },
+          '',
+          currentUrl.toString()
+        );
+      }
+    } catch (_) {}
+
+    // 2. Popstate listener for Back/Forward navigation
+    const handlePopState = (event) => {
+      let targetTab = event?.state?.tab;
+
+      if (!targetTab) {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          targetTab = urlParams.get('tab');
+        } catch (_) {}
+      }
+
+      if (!targetTab) {
+        targetTab = 'Dashboard';
+      }
+
+      // Smoothly navigate back to previous menu without re-pushing history
+      handleTabChange(targetTab, null, null, null, { skipPush: true });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Ensure Billing / Invoice Executive role cannot land on removed Payments or Spend pages
   useEffect(() => {
