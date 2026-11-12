@@ -124,7 +124,8 @@ export const CODE_TO_SALES_NAME = {
   'SE-010': 'Pavithra',
   'SE-009': 'KALAISELVI T',
   'SE-VRM090': 'KALAISELVI T',
-  'SE-VRM005': 'KALAISELVI T'
+  'SE-VRM005': 'KALAISELVI T',
+  'SE-1000': 'Annamalaiyar'
 };
 
 export const resolvePiSalesPersonName = (pi) => {
@@ -132,7 +133,16 @@ export const resolvePiSalesPersonName = (pi) => {
   const rawCode = String(pi?.salesPersonCode || pi?.assignedSalespersonCode || pi?.createdById || '').trim().toUpperCase();
   const canonicalCode = canonicalizeSalespersonCode(rawCode, raw);
 
-  const nonSales = ['kalpanaram', 'kalpana', 'tech support', 'ts-001', 'ts-002', 'dispatch', 'dispatch head', 'admin', 'direct / admin', 'undefined', 'null', '—', '-'];
+  const nonSales = [
+    'kalpanaram', 'kalpana', 'tech support', 'ts-001', 'ts-002',
+    'dispatch', 'dispatch head', 'admin', 'direct / admin',
+    'sales', 'sales person', 'salesperson', 'sales department', 'sales executive',
+    'undefined', 'null', '—', '-'
+  ];
+
+  if (raw.toLowerCase() === 'annamalai' || raw.toLowerCase() === 'ar.annamalaiyar' || raw.toLowerCase() === 'ar annamalaiyar') {
+    return 'Annamalaiyar';
+  }
 
   if (canonicalCode && CODE_TO_SALES_NAME[canonicalCode]) {
     if (!raw || nonSales.includes(raw.toLowerCase())) {
@@ -3784,7 +3794,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       {viewMode === 'list' && (() => {
         const uniqueStatuses = ['All', ...new Set(visiblePIList.map(pi => pi.status))];
         const uniqueSalesPersons = Array.from(new Set(
-          (visiblePIList || []).map(pi => resolvePiSalesPersonName(pi)).filter(Boolean)
+          (visiblePIList || []).map(pi => resolvePiSalesPersonName(pi)).filter(name => {
+            if (!name) return false;
+            const lower = name.toLowerCase().trim();
+            return !['sales', 'sales person', 'salesperson', 'sales department', '—', '-', 'undefined', 'null'].includes(lower);
+          })
         )).sort((a, b) => a.localeCompare(b));
 
         const matchesSelectedSalesPerson = (pi) => {

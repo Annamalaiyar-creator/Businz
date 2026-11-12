@@ -492,7 +492,8 @@ export default function BomOrdersView(props) {
     'SE-010': 'Pavithra',
     'SE-009': 'KALAISELVI T',
     'SE-VRM090': 'KALAISELVI T',
-    'SE-VRM005': 'KALAISELVI T'
+    'SE-VRM005': 'KALAISELVI T',
+    'SE-1000': 'Annamalaiyar'
   };
 
   // Helper to resolve salesperson actual human name rather than role title
@@ -503,9 +504,13 @@ export default function BomOrdersView(props) {
     const nonSalesPersons = [
       'kalpanaram', 'kalpana', 'tech support', 'ts-001', 'ts-002',
       'dispatch', 'dispatch head', 'dh-vrm001', 'dh-001', 'admin',
-      'sales executive', 'sales', 'sales department', 'salesperson', 'sales rep',
+      'sales executive', 'sales', 'sales department', 'salesperson', 'sales person', 'sales rep',
       'se', 'sls', 'user', 'undefined', 'null', 'direct / admin'
     ];
+
+    if (name.toLowerCase() === 'annamalai' || name.toLowerCase() === 'ar.annamalaiyar' || name.toLowerCase() === 'ar annamalaiyar') {
+      return 'Annamalaiyar';
+    }
 
     // If a sales code is provided that maps to a real sales executive,
     // and the record creator name is a non-sales user (e.g. KalpanaRam/Tech Support/Dispatch/Admin) or generic,
@@ -2687,9 +2692,10 @@ export default function BomOrdersView(props) {
 
   const uniqueSalesPersons = React.useMemo(() => {
     const set = new Set();
+    const excludedGeneric = ['sales', 'sales person', 'salesperson', 'sales department', '—', '-', 'undefined', 'null'];
     (pageConfig.rows || []).forEach(r => {
       const name = String(r.salesPerson || '').trim();
-      if (name && name !== '—' && name !== '-') {
+      if (name && !excludedGeneric.includes(name.toLowerCase())) {
         set.add(name);
       }
     });
