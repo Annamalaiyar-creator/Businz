@@ -957,6 +957,22 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const totalPoSpendCr = (totalPoSpendNum / 10000000).toFixed(2);
   const totalPoSpendFormatted = formatRealCurrency(totalPoSpendNum);
 
+  const todayPoList = useMemo(() => {
+    const todayGB = new Date().toLocaleDateString('en-GB'); // 'DD/MM/YYYY'
+    const todayISO = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    return allPoList.filter(po => {
+      if (matchesSelectedPeriod(po, 'Today')) return true;
+      const rawDate = String(po.date || po.poDate || po.createdAt || po.created_at || '');
+      return rawDate.includes(todayGB) || rawDate.includes(todayISO);
+    });
+  }, [allPoList]);
+
+  const todayPoCount = todayPoList.length;
+  const todayPoSpendNum = useMemo(() => {
+    return todayPoList.reduce((acc, po) => acc + parseAmt(po.amount || po.total), 0);
+  }, [todayPoList]);
+  const todayPoSpendFormatted = formatRealCurrency(todayPoSpendNum);
+
   const totalPiPipelineNum = useMemo(() => {
     return piList
       .filter(pi => !pi.cancelled && String(pi.status || '').toLowerCase() !== 'cancelled')
@@ -4056,6 +4072,18 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#EFF6FF',
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: totalPoSpendFormatted,
+              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
+            },
+            {
+              title: 'TOTAL POS TODAY',
+              value: `${todayPoCount} PO${todayPoCount === 1 ? '' : 's'}`,
+              trend: todayPoCount > 0 ? `${todayPoSpendFormatted}` : '0 Today',
+              trendUp: todayPoCount > 0,
+              icon: Calendar,
+              iconColor: '#0E7490',
+              iconBg: '#ECFEFF',
+              bottomPrefix: "Today's volume ",
+              bottomHighlight: todayPoCount > 0 ? `${todayPoCount} Raised (${todayPoSpendFormatted})` : '0 raised today',
               onClick: () => onNavigateTab && onNavigateTab('Purchase Orders')
             },
             {
