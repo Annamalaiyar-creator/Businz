@@ -255,6 +255,8 @@ export default function GoodsReceiptNoteView(props) {
 
   const handleOpenViewGrn = (row) => {
     resetCreateGRNForm();
+    if (row.id || row.grnNo) setEditingGrnId(row.id || row.grnNo);
+    setSelectedGrnForModal(row);
     if (row.date) setReceiptDate(row.date);
     if (row.challanDate) setChallanDate(row.challanDate);
     if (row.poRef) setSelectedGRNPo(row.poRef);
