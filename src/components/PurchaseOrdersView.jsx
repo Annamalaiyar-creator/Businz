@@ -300,6 +300,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [poTab, setPoTab] = useState('All');
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortDirection, setSortDirection] = useState('desc'); // 'desc' (latest PO first) or 'asc'
 
   useEffect(() => {
     const handleFilterDate = (e) => {
@@ -329,6 +330,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     setFilterEndDate('');
     setPoTab('All');
     setCurrentPage(1);
+    setSortDirection('desc');
     setKpiFilterMeta(null);
     try {
       sessionStorage.removeItem('controlroom_po_initial_date_filter');
@@ -2343,12 +2345,36 @@ Procurement Team | BUSINZ`;
         });
 
         const sortedPOList = [...filteredPOList].sort((a, b) => {
-          const parseNum = (item) => {
-            const str = String(item.poNo || item.id || '');
-            const match = str.match(/\d+/);
-            return match ? parseInt(match[0], 10) : 0;
+          const parsePoSequenceNumber = (item) => {
+            if (!item) return 0;
+            const str = String(item.poNo || item.id || item.purchaseorder_number || item.poNumber || '').trim();
+            if (!str) return 0;
+            const terminalMatch = str.match(/[-/_](\d+)$/);
+            if (terminalMatch) return parseInt(terminalMatch[1], 10);
+            const allNums = str.match(/\d+/g);
+            if (allNums && allNums.length > 0) {
+              return parseInt(allNums[allNums.length - 1], 10);
+            }
+            return 0;
           };
-          return parseNum(b) - parseNum(a);
+
+          const numA = parsePoSequenceNumber(a);
+          const numB = parsePoSequenceNumber(b);
+          if (numB !== numA) {
+            return sortDirection === 'asc' ? (numA - numB) : (numB - numA);
+          }
+
+          const dateA = new Date(a.createdAt || a.poDate || a.date || 0).getTime() || 0;
+          const dateB = new Date(b.createdAt || b.poDate || b.date || 0).getTime() || 0;
+          if (dateB !== dateA) {
+            return sortDirection === 'asc' ? (dateA - dateB) : (dateB - dateA);
+          }
+
+          const strA = String(a.poNo || a.id || '');
+          const strB = String(b.poNo || b.id || '');
+          return sortDirection === 'asc'
+            ? strA.localeCompare(strB, undefined, { numeric: true })
+            : strB.localeCompare(strA, undefined, { numeric: true });
         });
 
         const indexOfLastRow = currentPage * rowsPerPage;
@@ -2678,7 +2704,28 @@ Procurement Team | BUSINZ`;
                           style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
                          />
                       </th>
-                      <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
+                      <th
+                        onClick={() => setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc')}
+                        style={{
+                          width: '16%',
+                          minWidth: '130px',
+                          fontWeight: '700',
+                          padding: '12px 14px',
+                          color: '#0E7490',
+                          textAlign: 'left',
+                          boxSizing: 'border-box',
+                          cursor: 'pointer',
+                          userSelect: 'none'
+                        }}
+                        title="Click to toggle PO No. sort order (Descending / Ascending)"
+                      >
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <span>PO No.</span>
+                          <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '800' }}>
+                            {sortDirection === 'desc' ? '▼' : '▲'}
+                          </span>
+                        </div>
+                      </th>
                       <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Company Name</th>
                       <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO Date</th>
                       <th style={{ width: '16%', minWidth: '140px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Expected Delivery</th>
