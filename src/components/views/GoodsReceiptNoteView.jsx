@@ -42,6 +42,7 @@ const formatGrnItem = (g) => {
     status: g.status || 'OPEN / PARTIALLY RECEIVED',
     val: typeof rawVal === 'string' && rawVal.startsWith('₹') ? rawVal : `₹ ${Number(rawVal || 0).toLocaleString('en-IN')}`,
     challanNo: g.challanNo || '',
+    createdBy: g.createdBy || g.created_by || g.creator || '',
     receivedBy: g.receivedBy || '',
     inspectorName: g.inspectorName || '',
     inspectionRemarks: g.inspectionRemarks || '',
@@ -121,6 +122,7 @@ export default function GoodsReceiptNoteView(props) {
   const [deleteDocConfirmIdx, setDeleteDocConfirmIdx] = useState(null);
   const [activeDocPreviewModal, setActiveDocPreviewModal] = useState(null);
 
+  const [grnCreatedBy, setGrnCreatedBy] = useState(() => getLoggedInUserName());
   const [grnReceivedBy, setGrnReceivedBy] = useState(() => getLoggedInUserName());
   const [grnInspectorName, setGrnInspectorName] = useState('');
   const [grnInspectionRemarks, setGrnInspectionRemarks] = useState('');
@@ -239,6 +241,7 @@ export default function GoodsReceiptNoteView(props) {
     resetCreateGRNForm();
     loadPOItems(row.poRef);
     if (row.challanNo) setGrnChallanNo(row.challanNo);
+    if (row.createdBy) setGrnCreatedBy(row.createdBy);
     if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
     if (row.inspectorName) setGrnInspectorName(row.inspectorName);
     if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
@@ -264,6 +267,7 @@ export default function GoodsReceiptNoteView(props) {
     resetCreateGRNForm();
     loadPOItems(row.poRef);
     if (row.challanNo) setGrnChallanNo(row.challanNo);
+    if (row.createdBy) setGrnCreatedBy(row.createdBy);
     if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
     if (row.inspectorName) setGrnInspectorName(row.inspectorName);
     if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
@@ -539,6 +543,7 @@ export default function GoodsReceiptNoteView(props) {
     setSelectedGRNPo('');
     setSelectedGRNVendor('');
     setGrnChallanNo('');
+    setGrnCreatedBy(getLoggedInUserName());
     setGrnReceivedBy(getLoggedInUserName());
     setGrnInspectorName('');
     setGrnInspectionRemarks('');
@@ -977,6 +982,8 @@ export default function GoodsReceiptNoteView(props) {
       receivedQty: totalNow,
       acceptedQty: totalAccepted,
       rejectedQty: totalRejected,
+      createdBy: grnCreatedBy || getLoggedInUserName(),
+      created_by: grnCreatedBy || getLoggedInUserName(),
       receivedBy: grnReceivedBy || getLoggedInUserName(),
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || '',
@@ -987,6 +994,7 @@ export default function GoodsReceiptNoteView(props) {
 
     const formattedGRN = {
       id: newGRNRecord.id,
+      grnNo: newGRNRecord.grnNo,
       poRef: newGRNRecord.poRef,
       vendor: newGRNRecord.vendor,
       date: newGRNRecord.date,
@@ -994,6 +1002,7 @@ export default function GoodsReceiptNoteView(props) {
       status: newGRNRecord.status,
       val: `₹ ${totalNow * 1250}`,
       challanNo: newGRNRecord.challanNo,
+      createdBy: newGRNRecord.createdBy,
       receivedBy: newGRNRecord.receivedBy,
       documents: newGRNRecord.documents
     };
@@ -1160,6 +1169,8 @@ export default function GoodsReceiptNoteView(props) {
       receivedQty: totalAccepted,
       acceptedQty: totalAccepted,
       rejectedQty: 0,
+      createdBy: grnCreatedBy || getLoggedInUserName(),
+      created_by: grnCreatedBy || getLoggedInUserName(),
       receivedBy: grnReceivedBy || getLoggedInUserName(),
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
@@ -1182,6 +1193,8 @@ export default function GoodsReceiptNoteView(props) {
       receivedQty: totalAccepted,
       acceptedQty: totalAccepted,
       rejectedQty: 0,
+      createdBy: grnCreatedBy || getLoggedInUserName(),
+      created_by: grnCreatedBy || getLoggedInUserName(),
       receivedBy: grnReceivedBy || getLoggedInUserName(),
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
@@ -1192,6 +1205,7 @@ export default function GoodsReceiptNoteView(props) {
 
     const formattedGRN = {
       id: newGRNRecord.id,
+      grnNo: newGRNRecord.grnNo,
       poRef: newGRNRecord.poRef,
       vendor: newGRNRecord.vendor,
       date: newGRNRecord.date,
@@ -1199,6 +1213,7 @@ export default function GoodsReceiptNoteView(props) {
       status: 'CLOSED / FULLY RECEIVED',
       val: `₹ ${totalAccepted * 1250}`,
       challanNo: newGRNRecord.challanNo,
+      createdBy: newGRNRecord.createdBy,
       receivedBy: newGRNRecord.receivedBy,
       documents: newGRNRecord.documents
     };
@@ -2884,7 +2899,9 @@ export default function GoodsReceiptNoteView(props) {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap' }}>
                                     <span>PO: <strong style={{ color: '#0E7490' }}>{row.poRef || '—'}</strong></span>
                                     <span>•</span>
-                                    <span>Received By: <strong style={{ color: '#0369A1' }}>{row.receivedBy || row.createdBy || '—'}</strong></span>
+                                    <span>Created By: <strong style={{ color: '#7E22CE' }}>{row.createdBy || row.receivedBy || '—'}</strong></span>
+                                    <span>•</span>
+                                    <span>Received By: <strong style={{ color: '#0369A1' }}>{row.receivedBy || '—'}</strong></span>
                                   </div>
                                 </div>
 
@@ -2932,19 +2949,20 @@ export default function GoodsReceiptNoteView(props) {
                                   style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
                                  />
                               </th>
-                              <th style={{ width: '15%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
-                              <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
-                              <th style={{ width: '22%', minWidth: '180px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
-                              <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Received By</th>
-                              <th style={{ width: '12%', minWidth: '110px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN Date</th>
-                              <th style={{ width: '12%', minWidth: '110px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                              <th style={{ width: '11%', minWidth: '110px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                              <th style={{ width: '13%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
+                              <th style={{ width: '12%', minWidth: '115px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
+                              <th style={{ width: '18%', minWidth: '160px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
+                              <th style={{ width: '13%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Created By</th>
+                              <th style={{ width: '12%', minWidth: '115px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Received By</th>
+                              <th style={{ width: '11%', minWidth: '105px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN Date</th>
+                              <th style={{ width: '11%', minWidth: '105px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
+                              <th style={{ width: '10%', minWidth: '105px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                             </tr>
                           </thead>
                           <tbody>
                             {sortedGrns.length === 0 ? (
                               <tr>
-                                <td colSpan="8" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                                <td colSpan="9" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
                                   No Goods Receipt Notes found matching the criteria.{!isAccountsUser ? ' Click "Create GRN" to record a receipt.' : ''}
                                 </td>
                               </tr>
@@ -2974,7 +2992,7 @@ export default function GoodsReceiptNoteView(props) {
                                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                                        />
                                     </td>
-                                    <td style={{ fontWeight: '600', color: '#2563eb', textAlign: 'left', padding: '12px 16px' }}>
+                                    <td style={{ fontWeight: '600', color: '#2563eb', textAlign: 'left', padding: '12px 14px' }}>
                                       <a
                                         href="#"
                                         onClick={(e) => {
@@ -2986,13 +3004,35 @@ export default function GoodsReceiptNoteView(props) {
                                         {row.id}
                                       </a>
                                     </td>
-                                    <td style={{ padding: '12px 16px', color: '#475569', textAlign: 'left', fontWeight: '500' }}>
+                                    <td style={{ padding: '12px 14px', color: '#475569', textAlign: 'left', fontWeight: '500' }}>
                                       {row.poRef}
                                     </td>
-                                    <td style={{ padding: '12px 16px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
+                                    <td style={{ padding: '12px 14px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
                                       {row.vendor}
                                     </td>
-                                    <td style={{ padding: '12px 16px', textAlign: 'left' }}>
+                                    <td style={{ padding: '12px 14px', textAlign: 'left' }}>
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{
+                                          width: '22px',
+                                          height: '22px',
+                                          borderRadius: '50%',
+                                          backgroundColor: '#F3E8FF',
+                                          color: '#7E22CE',
+                                          fontSize: '10px',
+                                          fontWeight: '700',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          flexShrink: 0
+                                        }}>
+                                          {String(row.createdBy || row.receivedBy || 'U').trim().charAt(0).toUpperCase()}
+                                        </span>
+                                        <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: '600' }}>
+                                          {row.createdBy || row.receivedBy || '—'}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'left' }}>
                                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                                         <span style={{
                                           width: '22px',
@@ -3007,20 +3047,20 @@ export default function GoodsReceiptNoteView(props) {
                                           justifyContent: 'center',
                                           flexShrink: 0
                                         }}>
-                                          {String(row.receivedBy || row.createdBy || 'U').trim().charAt(0).toUpperCase()}
+                                          {String(row.receivedBy || 'U').trim().charAt(0).toUpperCase()}
                                         </span>
                                         <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: '600' }}>
-                                          {row.receivedBy || row.createdBy || '—'}
+                                          {row.receivedBy || '—'}
                                         </span>
                                       </div>
                                     </td>
-                                    <td style={{ padding: '12px 16px', color: '#64748b', textAlign: 'left' }}>
+                                    <td style={{ padding: '12px 14px', color: '#64748b', textAlign: 'left' }}>
                                       {row.date}
                                     </td>
-                                    <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>
+                                    <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>
                                       {row.val || '—'}
                                     </td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px' }}>
+                                    <td style={{ textAlign: 'center', padding: '12px 14px' }}>
                                       <StatusBadge status={getEffectiveGrnStatus(row)} size="sm" />
                                     </td>
                                   </tr>
@@ -3524,8 +3564,8 @@ export default function GoodsReceiptNoteView(props) {
                       </div>
                     </div>
 
-                    {/* Row 3: Delivery Challan No, Challan Date, Received By */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                    {/* Row 3: Delivery Challan No, Challan Date, Received By, Created By */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label htmlFor="goods-receipt-note-dc-no-invoice" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
                           DC NO / Invoice No. <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
@@ -3554,6 +3594,18 @@ export default function GoodsReceiptNoteView(props) {
                           placeholder="Enter receiver name"
                           onChange={(e) => setGrnReceivedBy(e.target.value)}
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: isViewOnlyMode ? '#F8FAFC' : '#FFFFFF', color: '#334155' }}
+                         />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label htmlFor="goods-receipt-note-created-by" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
+                          Created By (System User)
+                        </label>
+                        <input id="goods-receipt-note-created-by" name="createdBy" aria-label="Created By"
+                          type="text"
+                          value={grnCreatedBy}
+                          readOnly
+                          disabled
+                          style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: '600' }}
                          />
                       </div>
                     </div>
