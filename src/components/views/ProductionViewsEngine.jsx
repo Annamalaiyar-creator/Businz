@@ -69,20 +69,107 @@ export default function ProductionViewsEngine(props) {
   // Top-level state for Production Admin views to obey React Hook rules
   const [prodActiveSubTab, setProdActiveSubTab] = useState('All');
   const [prodSearchQueryText, setProdSearchQueryText] = useState('');
-  const [prodFilterDateVal, setProdFilterDateVal] = useState('');
-  const [prodFilterEndDateVal, setProdFilterEndDateVal] = useState('');
+  const [prodFilterDateVal, setProdFilterDateVal] = useState(() => {
+    if (activeTab === 'Invoice Management') {
+      try {
+        const saved = sessionStorage.getItem('controlroom_inv_initial_date_filter');
+        if (saved) return JSON.parse(saved).start || '';
+      } catch (_) {}
+    }
+    return '';
+  });
+  const [prodFilterEndDateVal, setProdFilterEndDateVal] = useState(() => {
+    if (activeTab === 'Invoice Management') {
+      try {
+        const saved = sessionStorage.getItem('controlroom_inv_initial_date_filter');
+        if (saved) return JSON.parse(saved).end || '';
+      } catch (_) {}
+    }
+    return '';
+  });
+  const [invKpiFilterMeta, setInvKpiFilterMeta] = useState(() => {
+    if (activeTab === 'Invoice Management') {
+      try {
+        const saved = sessionStorage.getItem('controlroom_inv_initial_date_filter');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.targetKeys && Array.isArray(parsed.targetKeys)) {
+            return {
+              targetKeys: new Set(parsed.targetKeys.map(k => String(k || '').trim().toLowerCase())),
+              periodLabel: parsed.periodLabel || 'Overview',
+              sourceLabel: parsed.sourceLabel || 'Company Overview',
+              count: parsed.count ?? parsed.targetKeys.length
+            };
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  });
   const [prodFilterStatusSelect, setProdFilterStatusSelect] = useState('All');
   const [prodStatusFilterText, setProdStatusFilterText] = useState('All');
+
+  const clearInvKpiFilter = useCallback(() => {
+    setInvKpiFilterMeta(null);
+    try {
+      sessionStorage.removeItem('controlroom_inv_initial_date_filter');
+    } catch (_) {}
+  }, []);
 
   useEffect(() => {
     setProdActiveSubTab('All');
     setProdSearchQueryText('');
-    setProdFilterDateVal('');
-    setProdFilterEndDateVal('');
     setProdFilterStatusSelect('All');
     setSelectedRows([]);
     setCurrentPage(1);
+
+    if (activeTab === 'Invoice Management') {
+      try {
+        const saved = sessionStorage.getItem('controlroom_inv_initial_date_filter');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setProdFilterDateVal(parsed.start || '');
+          setProdFilterEndDateVal(parsed.end || '');
+          if (parsed.targetKeys && Array.isArray(parsed.targetKeys)) {
+            setInvKpiFilterMeta({
+              targetKeys: new Set(parsed.targetKeys.map(k => String(k || '').trim().toLowerCase())),
+              periodLabel: parsed.periodLabel || 'Overview',
+              sourceLabel: parsed.sourceLabel || 'Company Overview',
+              count: parsed.count ?? parsed.targetKeys.length
+            });
+          } else {
+            setInvKpiFilterMeta(null);
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+
+    setProdFilterDateVal('');
+    setProdFilterEndDateVal('');
+    setInvKpiFilterMeta(null);
   }, [activeTab]);
+
+  useEffect(() => {
+    const handleInvFilterDate = (e) => {
+      if (e?.detail) {
+        if (e.detail.startDate !== undefined) setProdFilterDateVal(e.detail.startDate || '');
+        if (e.detail.endDate !== undefined) setProdFilterEndDateVal(e.detail.endDate || '');
+        if (e.detail.targetKeys && Array.isArray(e.detail.targetKeys)) {
+          setInvKpiFilterMeta({
+            targetKeys: new Set(e.detail.targetKeys.map(k => String(k || '').trim().toLowerCase())),
+            periodLabel: e.detail.periodLabel || 'Overview',
+            sourceLabel: e.detail.sourceLabel || 'Company Overview',
+            count: e.detail.count ?? e.detail.targetKeys.length
+          });
+          setProdActiveSubTab('All');
+        }
+        setCurrentPage(1);
+      }
+    };
+    window.addEventListener('controlroom_inv_filter_date', handleInvFilterDate);
+    return () => window.removeEventListener('controlroom_inv_filter_date', handleInvFilterDate);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1377,13 +1464,54 @@ export default function ProductionViewsEngine(props) {
     const subTab = String(prodActiveSubTab || 'All').toLowerCase();
     const cleanSub = subTab.replace(/[^a-z0-9]/g, '');
 
+    const toIsoDateStr = (raw) => {
+      if (!raw) return '';
+      const s = String(raw).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+      const dmy = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+      if (dmy) {
+        return `${dmy[3]}-${String(dmy[2]).padStart(2, '0')}-${String(dmy[1]).padStart(2, '0')}`;
+      }
+      const parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) {
+        const yr = parsed.getFullYear();
+        const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+        const da = String(parsed.getDate()).padStart(2, '0');
+        return `${yr}-${mo}-${da}`;
+      }
+      return '';
+    };
+
     const filteredByTabAndDate = (memoizedPageConfig.rows || []).filter(r => {
+      if (activeTab === 'Invoice Management' && invKpiFilterMeta && invKpiFilterMeta.targetKeys) {
+        if (invKpiFilterMeta.targetKeys.size === 0) return false;
+        const candidateKeys = [
+          r.invNo,
+          r.invoiceNo,
+          r.invoice_number,
+          r.code,
+          r.id,
+          r.bomCode,
+          r.poNo,
+          r.c3
+        ].map(k => String(k || '').trim().toLowerCase()).filter(Boolean);
+        const matchesKpi = candidateKeys.some(k => {
+          if (invKpiFilterMeta.targetKeys.has(k)) return true;
+          const norm = k.replace(/[^a-z0-9]/g, '');
+          return norm.length >= 4 && invKpiFilterMeta.targetKeys.has(norm);
+        });
+        if (!matchesKpi) return false;
+      }
+
       let matchesDate = true;
-      const rDateStr = r.salesConfirmedAt || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && /^\d{4}-\d{2}-\d{2}/.test(r.c4) ? r.c4 : null);
-      if (rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
-        const rIso = String(rDateStr).substring(0, 10);
-        if (prodFilterDateVal && rIso < prodFilterDateVal) matchesDate = false;
-        if (prodFilterEndDateVal && rIso > prodFilterEndDateVal) matchesDate = false;
+      const skipDateForKpi = activeTab === 'Invoice Management' && Boolean(invKpiFilterMeta && invKpiFilterMeta.targetKeys);
+      const rDateStr = r.salesConfirmedAt || r.invDate || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && r.c4 !== '—' ? r.c4 : null);
+      if (!skipDateForKpi && rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
+        const rIso = toIsoDateStr(rDateStr);
+        if (rIso) {
+          if (prodFilterDateVal && rIso < prodFilterDateVal) matchesDate = false;
+          if (prodFilterEndDateVal && rIso > prodFilterEndDateVal) matchesDate = false;
+        }
       }
 
       const rStatus = (typeof r.status === 'string' ? r.status : (r.status?.name || r.status?.label || '')).toLowerCase();
@@ -1467,7 +1595,7 @@ export default function ProductionViewsEngine(props) {
       (r.c4 && String(r.c4).toLowerCase().includes(qLower)) ||
       ((qTrim.startsWith('₹') || activeTab === 'Delivery Challans') && r.c5 && String(r.c5).toLowerCase().includes(qLower))
     );
-  }, [memoizedPageConfig, prodSearchQueryText, prodFilterDateVal, prodFilterEndDateVal, prodActiveSubTab, activeTab]);
+  }, [memoizedPageConfig, prodSearchQueryText, prodFilterDateVal, prodFilterEndDateVal, prodActiveSubTab, activeTab, invKpiFilterMeta]);
 
 
     return (
@@ -1928,6 +2056,8 @@ export default function ProductionViewsEngine(props) {
               bomStore={bomStore}
               canCancelBom={canCancelBom}
               handleCancelBomOrder={handleCancelBomOrder}
+              kpiFilterMeta={activeTab === 'Invoice Management' ? invKpiFilterMeta : null}
+              onClearKpiFilter={clearInvKpiFilter}
               showAlert={(msg) => alert(msg)}
               onHeaderAction={() => {
                 if (activeTab === 'BOM / Routing' || activeTab === 'BOM' || activeTab === 'BOM Orders' || pageConfig.title.includes('BOM')) {

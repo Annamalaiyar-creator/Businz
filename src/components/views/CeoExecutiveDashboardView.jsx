@@ -2269,17 +2269,20 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     if (onNavigateTab) onNavigateTab('BOM Orders');
   };
 
-  const handleNavigateWithPoFilter = (period = selectedPeriod, initialTab = 'All') => {
+  const handleNavigateWithPoFilter = (period = selectedPeriod, initialTab = 'All', customSourceLabel = null) => {
     const { start, end } = getPeriodDateRange(period);
-    const targetPOs = period === 'Today' ? todayPoList : (initialTab === 'Draft' ? pendingMdPOs : poList);
+    const targetPOs = customSourceLabel === 'Company Overview'
+      ? poList
+      : (period === 'Today' ? todayPoList : (initialTab === 'Draft' ? pendingMdPOs : poList));
     const targetKeys = (targetPOs || []).flatMap(p => [
       p.poNo,
       p.purchaseorder_number,
       p.poNumber,
+      p.po_number,
       p.id,
       p._id
     ]).map(k => String(k || '').trim().toLowerCase()).filter(Boolean);
-    const sourceLabel = period === 'Today' ? "Total POs Today" : (initialTab === 'Draft' ? "Pending MD Approvals" : "Procurement");
+    const sourceLabel = customSourceLabel || (period === 'Today' ? "Total POs Today" : (initialTab === 'Draft' ? "Pending MD Approvals" : "Procurement"));
     try {
       sessionStorage.setItem('controlroom_po_initial_date_filter', JSON.stringify({ 
         start, 
@@ -2301,6 +2304,46 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       } 
     }));
     if (onNavigateTab) onNavigateTab('Purchase Orders', null, initialTab);
+  };
+
+  const handleNavigateWithInvFilter = (period = selectedPeriod, customSourceLabel = 'Company Overview') => {
+    const { start, end } = getPeriodDateRange(period);
+    const targetInvs = period === selectedPeriod ? (invList || []) : (allInvList || []).filter(r => matchesSelectedPeriod(r, period));
+    const rawKeys = (targetInvs || []).flatMap(inv => [
+      inv.invNo,
+      inv.invoiceNo,
+      inv.invoice_number,
+      inv.code,
+      inv.id,
+      inv.bomCode,
+      inv.poNo,
+      inv.bomRef
+    ]).map(k => String(k || '').trim().toLowerCase()).filter(Boolean);
+    const normKeys = rawKeys
+      .map(k => k.replace(/[^a-z0-9]/g, ''))
+      .filter(k => k.length >= 4);
+    const targetKeys = Array.from(new Set([...rawKeys, ...normKeys]));
+    try {
+      sessionStorage.setItem('controlroom_inv_initial_date_filter', JSON.stringify({
+        start,
+        end,
+        targetKeys,
+        periodLabel: period,
+        sourceLabel: customSourceLabel,
+        count: targetInvs.length
+      }));
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent('controlroom_inv_filter_date', {
+      detail: {
+        startDate: start,
+        endDate: end,
+        targetKeys,
+        periodLabel: period,
+        sourceLabel: customSourceLabel,
+        count: targetInvs.length
+      }
+    }));
+    if (onNavigateTab) onNavigateTab('Invoice Management');
   };
 
   const handleNavigateFunnelStage = (stage) => {
@@ -2375,10 +2418,10 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       if (onNavigateTab) onNavigateTab('BOM Orders');
     } else if (activeKpiPopup === 'po') {
       setActiveKpiPopup(null);
-      if (onNavigateTab) onNavigateTab('Purchase Orders', null, pendingMdPOs.length > 0 ? 'WAITING FOR APPROVAL' : undefined);
+      handleNavigateWithPoFilter(selectedPeriod, 'All', 'Company Overview');
     } else if (activeKpiPopup === 'billing') {
       setActiveKpiPopup(null);
-      if (onNavigateTab) onNavigateTab('Invoice Management');
+      handleNavigateWithInvFilter(selectedPeriod, 'Company Overview');
     } else if (activeKpiPopup === 'dispatch') {
       setActiveKpiPopup(null);
       if (onNavigateTab) onNavigateTab('Delivery Challans');
@@ -2905,7 +2948,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               bottomPrefix: 'Spend authorized ',
               bottomHighlight: totalPoSpendFormatted,
               highlightCard: pendingMdPOs.length > 0,
-              onClick: () => onNavigateTab && onNavigateTab('Purchase Orders', null, pendingMdPOs.length > 0 ? 'WAITING FOR APPROVAL' : undefined)
+              onClick: () => handleNavigateWithPoFilter(selectedPeriod, 'All', 'Company Overview')
             },
             {
               title: 'BILLING & TAX INVOICES',
@@ -2917,7 +2960,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#FAF5FF',
               bottomPrefix: 'Total GST billed ',
               bottomHighlight: totalRevenueFormatted,
-              onClick: () => onNavigateTab && onNavigateTab('Invoice Management')
+              onClick: () => handleNavigateWithInvFilter(selectedPeriod, 'Company Overview')
             },
             ...(userRole === 'HR' ? [
               {
@@ -4383,7 +4426,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               iconBg: '#FAF5FF',
               bottomPrefix: 'GST billing ',
               bottomHighlight: totalRevenueFormatted,
-              onClick: () => onNavigateTab && onNavigateTab('Invoice Management')
+              onClick: () => handleNavigateWithInvFilter(selectedPeriod, 'Accounts & Finance')
             },
             {
               title: 'REALIZED COLLECTIONS',

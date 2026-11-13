@@ -39,6 +39,8 @@ export default function ProductionTableView({
   onEditRecord,
   onQuickPreview,
   onUploadPayment,
+  kpiFilterMeta,
+  onClearKpiFilter,
   showAlert
 }) {
   const isSuperUser = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director';
@@ -139,6 +141,7 @@ export default function ProductionTableView({
             onChange={({ startDate, endDate }) => {
               setProdFilterDateVal(startDate);
               if (setProdFilterEndDateVal) setProdFilterEndDateVal(endDate);
+              if (kpiFilterMeta && onClearKpiFilter) onClearKpiFilter();
               if (setCurrentPage) setCurrentPage(1);
             }}
           />
@@ -163,6 +166,7 @@ export default function ProductionTableView({
               setProdFilterDateVal('');
               if (setProdFilterEndDateVal) setProdFilterEndDateVal('');
               setProdFilterStatusSelect('All');
+              if (onClearKpiFilter) onClearKpiFilter();
               if (setCurrentPage) setCurrentPage(1);
             }}
             title="Clear Filters"
@@ -183,6 +187,52 @@ export default function ProductionTableView({
           </button>
         </div>
       </div>
+
+      {/* KPI FILTER ALERT BANNER (MATCHES PROFORMA PIPELINE KPI FILTER UX) */}
+      {kpiFilterMeta && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: '#ECFEFF',
+          border: '1.5px solid #0E7490',
+          borderRadius: '10px',
+          padding: '9px 16px',
+          gap: '12px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
+            <span>
+              Showing <strong>{filteredRows.length}</strong> Tax Invoices filtered from {kpiFilterMeta.sourceLabel ? `${kpiFilterMeta.sourceLabel} KPI` : 'Company Overview KPI'} ({kpiFilterMeta.periodLabel})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setProdSearchQueryText('');
+              setProdFilterDateVal('');
+              if (setProdFilterEndDateVal) setProdFilterEndDateVal('');
+              setProdFilterStatusSelect('All');
+              setProdActiveSubTab('All');
+              if (onClearKpiFilter) onClearKpiFilter();
+              if (setCurrentPage) setCurrentPage(1);
+            }}
+            style={{
+              border: 'none',
+              backgroundColor: '#0E7490',
+              color: '#FFFFFF',
+              padding: '5px 12px',
+              borderRadius: '6px',
+              fontSize: '11.5px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}
+          >
+            ✕ Show All Tax Invoices
+          </button>
+        </div>
+      )}
 
       {/* 3. STATUS SUB-TABS ROW */}
       <div style={{
