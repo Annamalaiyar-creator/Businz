@@ -1816,7 +1816,18 @@ app.use(cookieParser());
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-file-name', 'X-File-Name']
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-file-name',
+    'X-File-Name',
+    'x-session-id',
+    'X-Session-Id',
+    'x-employee-code',
+    'x-user-name',
+    'x-user-role',
+    'x-admin-key'
+  ]
 }));
 
 // 3a. Async GZIP Response Compression for JSON and text payloads > 1KB (non-blocking event loop)
@@ -3582,7 +3593,8 @@ export async function getVerifiedUserSession(req) {
         email: effectiveEmail,
         empCode: effectiveEmp,
         role: effectiveRole,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        lastActiveTimestamp: Date.now()
       };
       activeSessionsMap.set(restoredSession.id, restoredSession);
       saveActiveSessionsToDisk();
@@ -6516,7 +6528,7 @@ app.post('/api/boms', async (req, res) => {
       error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
     });
   }
-  if (!hasAnyUserRole(session.role, ['sales', 'accounts', 'dispatch', 'billing', 'production'])) {
+  if (!hasAnyUserRole(session.role, ['sales', 'tech', 'accounts', 'dispatch', 'billing', 'production'])) {
     return res.status(403).json({
       success: false,
       error: `Forbidden: Role "${session.role}" is not authorized to modify BOMs.`
@@ -11740,13 +11752,15 @@ app.supabaseMemoryStore = supabaseMemoryStore;
 if (process.env.BUSINZ_SKIP_LISTEN === 'true') {
   console.log('🛡️ [Server Startup] Module import mode: automatic app.listen() skipped.');
 } else if (isOptimizationTestMode()) {
-  app.listen(PORT, '127.0.0.1', () => {
+  const testHttpServer = app.listen(PORT, '127.0.0.1', () => {
     console.log(`🛡️ [Server Startup] BUSINZ Optimization Test Server bound exclusively to 127.0.0.1:${PORT}`);
     console.log(`🛡️ [Server Startup] External network access to port ${PORT} is strictly blocked (localhost only).`);
     console.log('🛡️ [Server Startup] WhatsApp auto-restoration disabled in optimization test mode.');
   });
+  testHttpServer.keepAliveTimeout = 65000;
+  testHttpServer.headersTimeout = 66000;
 } else {
-  app.listen(PORT, () => {
+  const prodHttpServer = app.listen(PORT, () => {
     console.log(`BUSINZ Native Server running on port ${PORT}`);
     autoRestoreAllSavedSessions({
       onMessageReceived: (msgData) => {
@@ -11760,6 +11774,8 @@ if (process.env.BUSINZ_SKIP_LISTEN === 'true') {
       }
     }).catch(() => {});
   });
+  prodHttpServer.keepAliveTimeout = 65000;
+  prodHttpServer.headersTimeout = 66000;
 }
 
 export default app;

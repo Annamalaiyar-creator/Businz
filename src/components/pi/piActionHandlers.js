@@ -1041,11 +1041,33 @@ export function createPiActionHandlers(ctx) {
       delete sanitizedPayload.deliveryAddressProofDoc;
 
       try {
-        const response = await fetch('/api/estimates', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sanitizedPayload)
-        });
+        const postEstimatePayload = JSON.stringify(sanitizedPayload);
+        let response = null;
+        let lastFetchErr = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const ctrl = new AbortController();
+            const tId = setTimeout(() => ctrl.abort(), 25000);
+            response = await fetch('/api/estimates', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: postEstimatePayload,
+              signal: ctrl.signal
+            });
+            clearTimeout(tId);
+            if (response.status !== 502 && response.status !== 503 && response.status !== 504) {
+              break;
+            }
+          } catch (netErr) {
+            lastFetchErr = netErr;
+          }
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
+        }
+        if (!response) {
+          throw lastFetchErr || new Error('Network connection interrupted while saving Proforma Invoice.');
+        }
 
         const respText = await response.text();
         let data = null;

@@ -2829,29 +2829,32 @@ export default function CreateBomFormPage(props) {
                     const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: !isDraft });
                     const endpoints = ['/api/boms'];
                     for (const url of endpoints) {
-                      try {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 1500);
-                        const sRes = await fetch(url, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: postPayload,
-                          signal: controller.signal
-                        }).catch(() => null);
-                        clearTimeout(timeoutId);
-                        if (sRes && sRes.ok) {
-                          const sData = await sRes.json().catch(() => null);
-                          if (sData && (sData.bomCode || sData.bom?.bomCode) && sData.success) {
-                            sResOk = true;
-                            finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
-                            sanitizedNewBom.bomCode = finalAssignedCode;
-                            sanitizedNewBom.code = finalAssignedCode;
-                            sanitizedNewBom.id = finalAssignedCode;
-                            break;
+                      for (let attempt = 0; attempt < 3 && !sResOk; attempt++) {
+                        try {
+                          const controller = new AbortController();
+                          const timeoutId = setTimeout(() => controller.abort(), 20000);
+                          const sRes = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: postPayload,
+                            signal: controller.signal
+                          }).catch(() => null);
+                          clearTimeout(timeoutId);
+                          if (sRes && sRes.ok) {
+                            const sData = await sRes.json().catch(() => null);
+                            if (sData && (sData.bomCode || sData.bom?.bomCode) && sData.success) {
+                              sResOk = true;
+                              finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
+                              sanitizedNewBom.bomCode = finalAssignedCode;
+                              sanitizedNewBom.code = finalAssignedCode;
+                              sanitizedNewBom.id = finalAssignedCode;
+                              break;
+                            }
                           }
+                        } catch (err) {
+                          console.warn(`Sync attempt ${attempt + 1} to ${url} failed:`, err);
                         }
-                      } catch (err) {
-                        console.warn(`Sync attempt to ${url} failed, trying next:`, err);
+                        if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
                       }
                     }
 
@@ -2910,6 +2913,31 @@ export default function CreateBomFormPage(props) {
                       } catch (_) {}
                     }
 
+                    // Atomically push created BOM order to Supabase and Node server API
+                    if (!sResOk) {
+                      saveCloudBomRow(sanitizedNewBom);
+                      try {
+                        const sesId = typeof window !== 'undefined' && window.localStorage
+                          ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+                          : null;
+                        const syncBody = JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: false });
+                        for (let attempt = 0; attempt < 3; attempt++) {
+                          const syncRes = await fetch('/api/boms', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              ...(sesId ? { 'x-session-id': sesId } : {})
+                            },
+                            body: syncBody
+                          }).catch(() => null);
+                          if (syncRes && syncRes.ok) break;
+                          if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                        }
+                      } catch (err) {
+                        console.error('Error syncing created BOM to server:', err);
+                      }
+                    }
+
                     setBomStore(prev => {
                       const current = Array.isArray(prev) ? prev : [];
                       const filtered = current.filter(item => {
@@ -2926,36 +2954,20 @@ export default function CreateBomFormPage(props) {
                       try {
                         localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
                       } catch (_) {}
-
-                      // Atomically push created BOM order to Supabase and Node server API
-                      saveCloudBomRow(sanitizedNewBom);
-                      try {
-                        const sesId = typeof window !== 'undefined' && window.localStorage
-                          ? localStorage.getItem('controlroom_device_session_id')
-                          : null;
-                        fetch('/api/boms', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            ...(sesId ? { 'x-session-id': sesId } : {})
-                          },
-                          body: JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: false })
-                        }).catch(err => console.error('Error syncing created BOM to server:', err));
-                      } catch (_) {}
-
-                      setShowBOMForm(false);
-                      setBomConfirmModal(null);
-                      setCurrentPage(1);
-                      try { localStorage.removeItem('controlroom_pending_pi_to_bom'); } catch (_) {}
-                      try {
-                        window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: sanitizedNewBom } }));
-                        window.dispatchEvent(new Event('central_inventory_updated'));
-                        window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-                        window.dispatchEvent(new Event('controlroom_storage_update'));
-                        window.dispatchEvent(new Event('storage'));
-                      } catch (e) { }
                       return updatedList;
                     });
+
+                    setShowBOMForm(false);
+                    setBomConfirmModal(null);
+                    setCurrentPage(1);
+                    try { localStorage.removeItem('controlroom_pending_pi_to_bom'); } catch (_) {}
+                    try {
+                      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: sanitizedNewBom } }));
+                      window.dispatchEvent(new Event('central_inventory_updated'));
+                      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+                      window.dispatchEvent(new Event('controlroom_storage_update'));
+                      window.dispatchEvent(new Event('storage'));
+                    } catch (e) { }
 
                     if (!isDraft) {
                       try {

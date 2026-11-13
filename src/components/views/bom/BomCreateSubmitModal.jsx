@@ -358,26 +358,31 @@ export default function BomCreateSubmitModal({ ctx }) {
                         const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: true });
                         const endpoints = ['/api/boms'];
                         for (const url of endpoints) {
-                          try {
-                            const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 1500);
-                            const sRes = await fetch(url, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: postPayload,
-                              signal: controller.signal
-                            }).catch(() => null);
-                            clearTimeout(timeoutId);
-                            if (sRes && sRes.ok) {
-                              const sData = await sRes.json().catch(() => null);
-                              if (sData && (sData.bomCode || sData.bom?.bomCode) && sData.success) {
-                                sResOk = true;
-                                finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
-                                break;
+                          for (let attempt = 0; attempt < 3 && !sResOk; attempt++) {
+                            try {
+                              const controller = new AbortController();
+                              const timeoutId = setTimeout(() => controller.abort(), 20000);
+                              const sRes = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: postPayload,
+                                signal: controller.signal
+                              }).catch(() => null);
+                              clearTimeout(timeoutId);
+                              if (sRes && sRes.ok) {
+                                const sData = await sRes.json().catch(() => null);
+                                if (sData && (sData.bomCode || sData.bom?.bomCode) && sData.success) {
+                                  sResOk = true;
+                                  finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
+                                  break;
+                                }
                               }
+                            } catch (err) {
+                              console.warn(`Sync attempt ${attempt + 1} to ${url} failed:`, err);
                             }
-                          } catch (err) {
-                            console.warn(`Sync attempt to ${url} failed, trying next:`, err);
+                            if (attempt < 2) {
+                              await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                            }
                           }
                         }
 
@@ -496,19 +501,29 @@ export default function BomCreateSubmitModal({ ctx }) {
 
                         // Atomically push created BOM order to Supabase and Node server API
                         saveCloudBomRow(sanitizedNewBom);
-                        try {
-                          const sesId = typeof window !== 'undefined' && window.localStorage
-                            ? localStorage.getItem('controlroom_device_session_id')
-                            : null;
-                          fetch('/api/boms', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              ...(sesId ? { 'x-session-id': sesId } : {})
-                            },
-                            body: JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: false })
-                          }).catch(err => console.error('Error syncing created BOM to server:', err));
-                        } catch (_) {}
+                        const hasAttachedBomDocs = (deliveryDocs.length > 0 && !sameAsBilling) || paymentDocs.length > 0;
+                        if (!sResOk || hasAttachedBomDocs) {
+                          try {
+                            const sesId = typeof window !== 'undefined' && window.localStorage
+                              ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+                              : null;
+                            const syncBody = JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: Boolean(sResOk) });
+                            for (let attempt = 0; attempt < 3; attempt++) {
+                              const syncRes = await fetch('/api/boms', {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  ...(sesId ? { 'x-session-id': sesId } : {})
+                                },
+                                body: syncBody
+                              }).catch(() => null);
+                              if (syncRes && syncRes.ok) break;
+                              if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                            }
+                          } catch (err) {
+                            console.error('Error syncing created BOM to server:', err);
+                          }
+                        }
 
                         // If converted from a Proforma Invoice, update the PI stores so PI knows its BOM number
                         if (!isDraft && sanitizedNewBom.sourcePiNo) {

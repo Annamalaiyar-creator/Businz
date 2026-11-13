@@ -270,7 +270,16 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
     }
 
     // Auto-advance sequence if NOT an edit and PI number already taken or claimed by existing BOM
-    if (!isEdit && (existingRow || isCollisionWithExistingPiOrBom)) {
+    // (Unless existingRow is an idempotent network retry of the exact same PI within 30 seconds)
+    const isIdempotentRetry = Boolean(
+      !isEdit &&
+      existingRow &&
+      !isCollisionWithExistingPiOrBom &&
+      String(existingRow.vendor || existingRow.customer_name || '').trim().toLowerCase() === String(piData.vendor || piData.customerName || '').trim().toLowerCase() &&
+      existingRow.created_at &&
+      Math.abs(Date.now() - new Date(existingRow.created_at).getTime()) < 30000
+    );
+    if (!isEdit && !isIdempotentRetry && (existingRow || isCollisionWithExistingPiOrBom)) {
       const seqInfo = await getNextDatabasePiNumber(pool);
       console.warn(`[PI Concurrency Protection] PI number "${cleanPiNo}" is already taken or claimed by existing BOM. Auto-advancing to "${seqInfo.nextPiNo}".`);
       cleanPiNo = seqInfo.nextPiNo;

@@ -73,12 +73,12 @@ if (typeof window !== 'undefined' && window.fetch) {
     try {
       const url = typeof resource === 'string' ? resource : resource?.url;
       if (url && (url.startsWith('/api') || url.includes('/api/'))) {
-        const sessionId = localStorage.getItem('controlroom_device_session_id');
+        const sessionId = localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id');
         if (sessionId) {
-          init = init || {};
+          init = { ...init };
           let headers;
           if (init.headers instanceof Headers) {
-            headers = init.headers;
+            headers = new Headers(init.headers);
           } else if (Array.isArray(init.headers)) {
             headers = new Headers(init.headers);
           } else if (init.headers && typeof init.headers === 'object') {
@@ -88,13 +88,13 @@ if (typeof window !== 'undefined' && window.fetch) {
           }
 
           if (!headers.has('x-session-id')) {
-            headers.set('x-session-id', sessionId);
+            headers.set('x-session-id', String(sessionId).trim());
             init.headers = headers;
           }
         }
       }
     } catch (_) {}
-    return originalFetch.call(this, resource, init);
+    return originalFetch.call(window, resource, init);
   };
 }
 
