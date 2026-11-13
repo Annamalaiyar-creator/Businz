@@ -6972,6 +6972,27 @@ export default function BomOrdersView(props) {
 
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <button
+                type="button"
+                onClick={() => setPrintingBomRecord(confirmingBomModal)}
+                title="Print BOM Order Sheet"
+                style={{
+                  border: '1px solid #059669',
+                  backgroundColor: '#ECFDF5',
+                  color: '#047857',
+                  height: '38px',
+                  padding: '0 16px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Printer size={14} /> Print BOM
+              </button>
+              <button
                 onClick={() => setExportFormatRecord(confirmingBomModal)}
                 title="Export BOM"
                 style={{
@@ -7667,7 +7688,17 @@ export default function BomOrdersView(props) {
                 </div>
               </div>
             </div>
-          </div>        </div>
+          </div>
+          {renderExportFormatModal()}
+          {printingBomRecord && (
+            <VRMBomPrintTemplate
+              bomData={printingBomRecord}
+              onClose={() => setPrintingBomRecord(null)}
+              userRole={props.userRole || userRole || 'CEO'}
+              isSales={true}
+            />
+          )}
+        </div>
       );
     }
 
@@ -7755,6 +7786,28 @@ export default function BomOrdersView(props) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setPrintingBomRecord(confirmingBomModal)}
+              title="Print BOM Order Sheet"
+              style={{
+                border: '1px solid #059669',
+                backgroundColor: '#ECFDF5',
+                color: '#047857',
+                height: '40px',
+                padding: '0 18px',
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <Printer size={15} style={{ color: '#059669' }} /> Print
+            </button>
             <button
               onClick={() => setExportFormatRecord(confirmingBomModal)}
               title="Export BOM (PDF, JPG, or CSV)"
@@ -11413,15 +11466,28 @@ export default function BomOrdersView(props) {
           })()}
 
           <button
+            type="button"
             onClick={() => {
               const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
-              const targetRow = codeVal
-                ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal))
-                : ((bomStore || [])[0] || (filteredRows || [])[0]);
+              const fullBom = codeVal
+                ? (bomStore || []).find(b => b && (b.bomCode === codeVal || b.code === codeVal || b.id === codeVal || b.piNo === codeVal))
+                : (bomStore || [])[0];
+              const rowRec = codeVal
+                ? (filteredRows || []).find(r => r && (r.code === codeVal || r.id === codeVal || r.bomCode === codeVal))
+                : (filteredRows || [])[0];
+              const mergedRow = (fullBom || rowRec)
+                ? {
+                    ...(fullBom || {}),
+                    ...(rowRec || {}),
+                    items: (Array.isArray(fullBom?.items) && fullBom.items.length > 0)
+                      ? fullBom.items
+                      : (rowRec?.items || [])
+                  }
+                : null;
 
               setSelectedRows([]);
-              if (targetRow) {
-                setPrintingBomRecord(targetRow);
+              if (mergedRow) {
+                setPrintingBomRecord(mergedRow);
               } else {
                 alert('Please select a BOM record to print.');
               }
@@ -11471,6 +11537,27 @@ export default function BomOrdersView(props) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '16px' }}>
               <span style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>BOM Order Preview</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPrintingBomRecord(quickPreviewRecord)}
+                  title="Print BOM Order Sheet"
+                  style={{
+                    border: '1px solid #059669',
+                    backgroundColor: '#ECFDF5',
+                    color: '#047857',
+                    padding: '6px 14px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <Printer size={14} style={{ color: '#059669' }} /> Print
+                </button>
                 <button
                   onClick={() => setExportFormatRecord(quickPreviewRecord)}
                   title="Export BOM (PDF, JPG, or CSV)"

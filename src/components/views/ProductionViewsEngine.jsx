@@ -37,8 +37,8 @@ import { getFullProductsCatalogWithStock } from '../../utils/productCatalogServi
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
 import NotificationToast from '../NotificationToast';
 import { addLiveNotification } from '../Header';
-const VRMTaxInvoicePrintTemplate = lazy(() => import('../VRMTaxInvoicePrintTemplate'));
-const VRMBomPrintTemplate = lazy(() => import('../VRMBomPrintTemplate'));
+import VRMTaxInvoicePrintTemplate from '../VRMTaxInvoicePrintTemplate';
+import VRMBomPrintTemplate from '../VRMBomPrintTemplate';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile, cleanNum, formatCurrency } from '../../utils/otherViewsShared';
 import { compareBomDescending, parseBomSequenceNumber, getNumericSearchMatchRank } from '../../utils/sequenceGenerator';
 import StatusBadge from '../StatusBadge';
@@ -2317,24 +2317,20 @@ export default function ProductionViewsEngine(props) {
 
       {/* VRM TAX INVOICE PRINT MODAL TEMPLATE */}
       {printTaxInvoiceModal && (
-        <Suspense fallback={null}>
-          <VRMTaxInvoicePrintTemplate
-            invoiceData={printTaxInvoiceModal}
-            onClose={() => setPrintTaxInvoiceModal(null)}
-          />
-        </Suspense>
+        <VRMTaxInvoicePrintTemplate
+          invoiceData={printTaxInvoiceModal}
+          onClose={() => setPrintTaxInvoiceModal(null)}
+        />
       )}
 
       {/* VRM BOM PRINT MODAL TEMPLATE */}
       {printBomModal && (
-        <Suspense fallback={null}>
-          <VRMBomPrintTemplate
-            bomData={printBomModal}
-            onClose={() => setPrintBomModal(null)}
-            userRole={props.userRole || userRole || 'Dispatch Head'}
-            isSales={false}
-          />
-        </Suspense>
+        <VRMBomPrintTemplate
+          bomData={printBomModal}
+          onClose={() => setPrintBomModal(null)}
+          userRole={props.userRole || userRole || 'Dispatch Head'}
+          isSales={false}
+        />
       )}
 
       {/* DOCUMENT PREVIEW MODAL */}

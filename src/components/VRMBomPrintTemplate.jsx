@@ -496,16 +496,39 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             }
 
             body.vrm-bom-print-active > *:not(.vrm-bom-modal-overlay),
-            body.vrm-bom-print-active #root,
-            body:has(.vrm-bom-modal-overlay) > *:not(.vrm-bom-modal-overlay),
-            body:has(.vrm-bom-modal-overlay) #root,
-            body > *:not(.vrm-bom-modal-overlay) {
+            body.vrm-bom-print-active #root {
               display: none !important;
               height: 0 !important;
               max-height: 0 !important;
               margin: 0 !important;
               padding: 0 !important;
               overflow: hidden !important;
+            }
+
+            body:has(.vrm-bom-modal-overlay) > *:not(.vrm-bom-modal-overlay),
+            body:has(.vrm-bom-modal-overlay) #root {
+              display: none !important;
+              height: 0 !important;
+              max-height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+            }
+
+            body:not(.vrm-bom-print-active) * {
+              visibility: hidden !important;
+            }
+
+            body:not(.vrm-bom-print-active) #${id},
+            body:not(.vrm-bom-print-active) #${id} * {
+              visibility: visible !important;
+            }
+
+            body:not(.vrm-bom-print-active) #${id} {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
             }
 
             .no-print,
@@ -1299,88 +1322,92 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
 }
 
 function recordBomPrintStatus(targetBom) {
-  if (!targetBom) return;
-  const bomId = String(targetBom.bomCode || targetBom.code || targetBom.id || '').trim();
-  if (!bomId) return;
-
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const dateStr = formatDateDDMMYYYY(now);
-  const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
-  const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
-  const printedByName = storedUser ? `${storedUser}${storedRole ? ` (${storedRole})` : ''}` : (storedRole || 'Team');
-
-  const prevCount = parseInt(targetBom.dispatchPrintCount, 10) || 0;
-  const newPrintCount = prevCount + 1;
-
-  const firstTime = targetBom.firstPrintTimeStr || (prevCount === 0 ? timeStr : (targetBom.dispatchPrintTimeStr || timeStr));
-  const secondTime = newPrintCount === 2 ? timeStr : (targetBom.secondPrintTimeStr || (newPrintCount > 2 ? targetBom.secondPrintTimeStr : null));
-
-  const existingHistory = Array.isArray(targetBom.dispatchPrintHistory) ? targetBom.dispatchPrintHistory : [];
-  const updatedHistory = [
-    ...existingHistory,
-    {
-      count: newPrintCount,
-      time: timeStr,
-      date: dateStr,
-      by: printedByName,
-      timestamp: now.toISOString()
-    }
-  ];
-
-  const printPayload = {
-    dispatchPrinted: true,
-    dispatchPrintedAt: now.toISOString(),
-    dispatchPrintTimeStr: timeStr,
-    dispatchPrintedDateStr: dateStr,
-    dispatchPrintedBy: printedByName,
-    dispatchPrintCount: newPrintCount,
-    firstPrintTimeStr: firstTime,
-    secondPrintTimeStr: secondTime,
-    dispatchPrintHistory: updatedHistory
-  };
-
-  // Dispatch custom browser event for live synchronization across open views
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('vrm_bom_printed', {
-      detail: { bomCode: bomId, ...printPayload }
-    }));
-  }
-
-  // Update local browser stores safely
-  if (typeof localStorage !== 'undefined') {
-    ['controlroom_bom_store', 'bom_store'].forEach(k => {
-      try {
-        const raw = localStorage.getItem(k);
-        if (raw) {
-          const list = JSON.parse(raw);
-          if (Array.isArray(list)) {
-            const updated = list.map(item => {
-              if (String(item.bomCode || item.code || item.id || '').trim() === bomId) {
-                return { ...item, ...printPayload };
-              }
-              return item;
-            });
-            localStorage.setItem(k, JSON.stringify(updated));
-          }
-        }
-      } catch (_) {}
-    });
-  }
-
-  // Non-blocking persist to backend
   try {
-    fetch(`/api/boms/${encodeURIComponent(bomId)}/print-status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ printData: printPayload })
-    }).catch(() => {});
+    if (!targetBom) return;
+    const bomId = String(targetBom.bomCode || targetBom.code || targetBom.id || '').trim();
+    if (!bomId) return;
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const dateStr = formatDateDDMMYYYY(now);
+    const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
+    const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
+    const printedByName = storedUser ? `${storedUser}${storedRole ? ` (${storedRole})` : ''}` : (storedRole || 'Team');
+
+    const prevCount = parseInt(targetBom.dispatchPrintCount, 10) || 0;
+    const newPrintCount = prevCount + 1;
+
+    const firstTime = targetBom.firstPrintTimeStr || (prevCount === 0 ? timeStr : (targetBom.dispatchPrintTimeStr || timeStr));
+    const secondTime = newPrintCount === 2 ? timeStr : (targetBom.secondPrintTimeStr || (newPrintCount > 2 ? targetBom.secondPrintTimeStr : null));
+
+    const existingHistory = Array.isArray(targetBom.dispatchPrintHistory) ? targetBom.dispatchPrintHistory : [];
+    const updatedHistory = [
+      ...existingHistory,
+      {
+        count: newPrintCount,
+        time: timeStr,
+        date: dateStr,
+        by: printedByName,
+        timestamp: now.toISOString()
+      }
+    ];
+
+    const printPayload = {
+      dispatchPrinted: true,
+      dispatchPrintedAt: now.toISOString(),
+      dispatchPrintTimeStr: timeStr,
+      dispatchPrintedDateStr: dateStr,
+      dispatchPrintedBy: printedByName,
+      dispatchPrintCount: newPrintCount,
+      firstPrintTimeStr: firstTime,
+      secondPrintTimeStr: secondTime,
+      dispatchPrintHistory: updatedHistory
+    };
+
+    // Dispatch custom browser event for live synchronization across open views
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('vrm_bom_printed', {
+        detail: { bomCode: bomId, ...printPayload }
+      }));
+    }
+
+    // Update local browser stores safely
+    if (typeof localStorage !== 'undefined') {
+      ['controlroom_bom_store', 'bom_store'].forEach(k => {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const updated = list.map(item => {
+                if (String(item.bomCode || item.code || item.id || '').trim() === bomId) {
+                  return { ...item, ...printPayload };
+                }
+                return item;
+              });
+              localStorage.setItem(k, JSON.stringify(updated));
+            }
+          }
+        } catch (_) {}
+      });
+    }
+
+    // Non-blocking persist to backend (slash-safe body payload)
+    try {
+      fetch('/api/boms/print-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bomId, printData: printPayload })
+      }).catch(() => {});
+    } catch (_) {}
   } catch (_) {}
 }
 
 export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true, userRole = '', isSales = false }) {
   const b = bomData || {};
-  const hasTrackedRef = useRef(false);
+  const autoPrintedKeyRef = useRef(null);
+  const trackedPrintKeyRef = useRef(null);
+  const currentBomKey = String(b.bomCode || b.code || b.piNo || b.id || 'bom').trim();
 
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
   const effectiveRole = userRole || storedRole || '';
@@ -1399,10 +1426,15 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   );
 
   const handlePrint = () => {
-    if (isPhysicalPrintTaker) {
-      recordBomPrintStatus(b);
+    if (typeof window !== 'undefined') {
+      try { window.focus(); } catch (_) {}
+      window.print();
     }
-    window.print();
+    if (isPhysicalPrintTaker) {
+      setTimeout(() => {
+        recordBomPrintStatus(b);
+      }, 0);
+    }
   };
 
   useEffect(() => {
@@ -1418,16 +1450,20 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   }, [bomData]);
 
   useEffect(() => {
-    if (!bomData || !autoPrint || hasTrackedRef.current) return;
-    hasTrackedRef.current = true;
-    if (isPhysicalPrintTaker) {
-      recordBomPrintStatus(bomData);
-    }
+    if (!bomData || !autoPrint || autoPrintedKeyRef.current === currentBomKey) return;
     const timer = setTimeout(() => {
-      window.print();
-    }, 400);
+      autoPrintedKeyRef.current = currentBomKey;
+      if (isPhysicalPrintTaker && trackedPrintKeyRef.current !== currentBomKey) {
+        trackedPrintKeyRef.current = currentBomKey;
+        setTimeout(() => recordBomPrintStatus(bomData), 50);
+      }
+      if (typeof window !== 'undefined') {
+        try { window.focus(); } catch (_) {}
+        window.print();
+      }
+    }, 250);
     return () => clearTimeout(timer);
-  }, [bomData, autoPrint, isPhysicalPrintTaker]);
+  }, [bomData, autoPrint, isPhysicalPrintTaker, currentBomKey]);
 
   if (!bomData) return null;
 
@@ -1491,6 +1527,7 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
+              type="button"
               onClick={handlePrint}
               style={{
                 backgroundColor: '#0E7490',
@@ -1510,6 +1547,7 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
               <Printer size={14} /> Print
             </button>
             <button
+              type="button"
               onClick={onClose}
               title="Close Preview"
               style={{

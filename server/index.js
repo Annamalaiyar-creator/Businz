@@ -6904,10 +6904,10 @@ app.post('/api/boms', async (req, res) => {
   });
 });
 
-// Dedicated POST /api/boms/:id/print-status endpoint for Dispatch print tracking
-app.post('/api/boms/:id/print-status', async (req, res) => {
+// Dedicated POST /api/boms/print-status & /api/boms/:id/print-status endpoint for Dispatch print tracking
+app.post(['/api/boms/print-status', '/api/boms/:id/print-status'], async (req, res) => {
   try {
-    const rawId = req.params.id;
+    const rawId = req.params.id || req.body?.bomId;
     const { printData } = req.body || {};
     if (!rawId || !printData) {
       return res.status(400).json({ success: false, message: 'bomId and printData required' });
@@ -11722,6 +11722,9 @@ if (fs.existsSync(distPath)) {
   }
   app.use(express.static(distPath));
   app.use((req, res, next) => {
+    if (req.method === 'GET' && req.path.startsWith('/assets/')) {
+      return res.status(404).end();
+    }
     if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');
