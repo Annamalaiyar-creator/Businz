@@ -180,6 +180,81 @@ export default function PiListDashboardSection({ ctx }) {
         const currentRows = filteredPIList.slice(indexOfFirstRow, indexOfLastRow);
         const totalPages = Math.ceil(filteredPIList.length / rowsPerPage);
 
+        const effectivePiMetrics = (() => {
+          if (!piMetrics) return null;
+          const now = new Date();
+          const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          const utcToday = now.toISOString().split('T')[0];
+          const isToday = (dStr) => {
+            if (!dStr) return false;
+            const s = String(dStr);
+            return s.startsWith(localToday) || s.startsWith(utcToday);
+          };
+          const cleanPiNum = (val) => {
+            if (typeof val === 'number') return isNaN(val) ? 0 : val;
+            if (!val) return 0;
+            const n = parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+            return isNaN(n) ? 0 : n;
+          };
+          const formatCurrencyShort = (num) => {
+            if (!num || isNaN(num)) return '₹ 0.00 L';
+            if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+            return `₹ ${(num / 100000).toFixed(2)} L`;
+          };
+
+          const hasDateOrKpiFilter = Boolean(startDate || endDate || (kpiFilterMeta && kpiFilterMeta.targetKeys));
+          const isSingleTodayFilter = Boolean(
+            (startDate === localToday && (!endDate || endDate === localToday)) ||
+            (kpiFilterMeta && String(kpiFilterMeta.periodLabel || '').trim().toLowerCase() === 'today')
+          );
+          const isNonTodayDateFilter = hasDateOrKpiFilter && !isSingleTodayFilter;
+
+          const activePis = hasDateOrKpiFilter
+            ? baseFilteredPIList
+            : baseFilteredPIList.filter(pi => pi && (isToday(pi.piDate) || isToday(pi.date) || isToday(pi.createdAt)));
+          const todayPiVal = activePis.reduce((acc, pi) => acc + cleanPiNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+          const activeConvertedPis = baseFilteredPIList.filter(pi => {
+            if (!pi) return false;
+            const currentStatus = piEffectiveStatusMap.get(pi) || '';
+            if (currentStatus !== 'Converted to BOM') return false;
+            if (hasDateOrKpiFilter) return true;
+            const matchedBoms = getConvertedBomsForPi(pi);
+            if (matchedBoms.length > 0) {
+              return matchedBoms.some(b => isToday(b.date) || isToday(b.createdAt)) || isToday(pi.convertedAt) || isToday(pi.updatedAt);
+            }
+            return isToday(pi.convertedAt) || isToday(pi.updatedAt) || isToday(pi.date);
+          });
+          const todayConvertedVal = activeConvertedPis.reduce((acc, pi) => acc + cleanPiNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+          const activeAssignedPis = baseFilteredPIList.filter(pi => {
+            if (!pi) return false;
+            const isAssigned = Boolean(
+              pi.assignedSalesperson ||
+              pi.assignedToName ||
+              pi.assignedToId ||
+              (pi.salesPerson && !pi.salesPerson.toLowerCase().includes('support') && !pi.salesPerson.toLowerCase().includes('admin') && !pi.salesPerson.toLowerCase().includes('direct'))
+            );
+            if (!isAssigned) return false;
+            if (hasDateOrKpiFilter) return true;
+            return isToday(pi.assignedAt) || isToday(pi.piDate) || isToday(pi.createdAt);
+          });
+          const todayAssignedVal = activeAssignedPis.reduce((acc, pi) => acc + cleanPiNum(pi.grandTotal || pi.amount || pi.total || 0), 0);
+
+          return {
+            todayPiCount: activePis.length,
+            todayPiValFormatted: formatCurrencyShort(todayPiVal),
+            todayConvertedCount: activeConvertedPis.length,
+            todayConvertedValFormatted: formatCurrencyShort(todayConvertedVal),
+            todayAssignedCount: activeAssignedPis.length,
+            todayAssignedValFormatted: formatCurrencyShort(todayAssignedVal),
+            conversionRate: activePis.length > 0
+              ? `${((activeConvertedPis.length / activePis.length) * 100).toFixed(0)}% Converted`
+              : '0% Converted',
+            isNonTodayDateFilter
+          };
+        })();
+
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-24)', minWidth: 0, width: '100%' }}>
             {/* Header section with Action Button */}
@@ -240,7 +315,7 @@ export default function PiListDashboardSection({ ctx }) {
             </div>
 
             {/* PI OPERATIONS & CONVERSION KPI RIBBON (TECH SUPPORT LOGIN ALONE) */}
-            {isTechSupportLogin && piMetrics && (
+            {isTechSupportLogin && effectivePiMetrics && (
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -261,7 +336,7 @@ export default function PiListDashboardSection({ ctx }) {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Total PIs Today
+                      {effectivePiMetrics.isNonTodayDateFilter ? 'Filtered Total PIs' : 'Total PIs Today'}
                     </span>
                     <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <FileText size={14} />
@@ -269,15 +344,15 @@ export default function PiListDashboardSection({ ctx }) {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '22px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px' }}>
-                      {piMetrics.todayPiCount} Orders
+                      {effectivePiMetrics.todayPiCount} Orders
                     </span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '6px' }}>
-                      {piMetrics.todayPiValFormatted}
+                      {effectivePiMetrics.todayPiValFormatted}
                     </span>
                   </div>
                   <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
                     <span>Commercial pipeline </span>
-                    <span style={{ color: '#0E7490', fontWeight: '800' }}>New PIs Authored Today</span>
+                    <span style={{ color: '#0E7490', fontWeight: '800' }}>{effectivePiMetrics.isNonTodayDateFilter ? 'Filtered PIs' : 'New PIs Authored Today'}</span>
                   </div>
                 </div>
 
@@ -294,7 +369,7 @@ export default function PiListDashboardSection({ ctx }) {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Converted to BOM Today
+                      {effectivePiMetrics.isNonTodayDateFilter ? 'Converted to BOM' : 'Converted to BOM Today'}
                     </span>
                     <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <GitBranch size={14} />
@@ -302,15 +377,15 @@ export default function PiListDashboardSection({ ctx }) {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '22px', fontWeight: '900', color: '#059669', letterSpacing: '-0.5px' }}>
-                      {piMetrics.todayConvertedCount} Orders
+                      {effectivePiMetrics.todayConvertedCount} Orders
                     </span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '6px' }}>
-                      {piMetrics.todayConvertedValFormatted}
+                      {effectivePiMetrics.todayConvertedValFormatted}
                     </span>
                   </div>
                   <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
                     <span>Production handoff </span>
-                    <span style={{ color: '#059669', fontWeight: '800' }}>{piMetrics.conversionRate}</span>
+                    <span style={{ color: '#059669', fontWeight: '800' }}>{effectivePiMetrics.conversionRate}</span>
                   </div>
                 </div>
 
@@ -327,7 +402,7 @@ export default function PiListDashboardSection({ ctx }) {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Assigned to Today
+                      {effectivePiMetrics.isNonTodayDateFilter ? 'Assigned PIs' : 'Assigned to Today'}
                     </span>
                     <div style={{ width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <UserCheck size={14} />
@@ -335,10 +410,10 @@ export default function PiListDashboardSection({ ctx }) {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '22px', fontWeight: '900', color: '#2563EB', letterSpacing: '-0.5px' }}>
-                      {piMetrics.todayAssignedCount} Orders
+                      {effectivePiMetrics.todayAssignedCount} Orders
                     </span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '6px' }}>
-                      {piMetrics.todayAssignedValFormatted}
+                      {effectivePiMetrics.todayAssignedValFormatted}
                     </span>
                   </div>
                   <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>

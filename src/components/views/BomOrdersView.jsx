@@ -1038,50 +1038,116 @@ export default function BomOrdersView(props) {
     }).sort(compareBomDescending);
   }, [bomStore, isRestrictedSalesUser, currentEmpId, currentEmpName, defaultSalesPersonName, currentLoggedEmail, props.targetBomCode, props.targetPiNo]);
 
+  const filterBySelectedSales = (b) => {
+    if (!isCeo || !filterSalesPerson || filterSalesPerson === 'All' || filterSalesPerson === 'All Sales') return true;
+    const sp = (b?.salesPerson || b?.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
+    const clean = getCleanSalesPersonName(sp, b?.salesPersonCode || b?.createdById);
+    const target = filterSalesPerson.trim().toLowerCase();
+    return clean.toLowerCase() === target || clean.toLowerCase().includes(target);
+  };
+
+  const tabSearchTrim = String(searchQueryText || '').trim();
+  const tabSearchLower = tabSearchTrim.toLowerCase();
+  const tabIsPureDigits = /^\d+$/.test(tabSearchTrim);
+
+  const tabBaseBomList = useMemo(() => {
+    return (visibleBomStore || []).filter(b => {
+      if (!b) return false;
+      if (!filterBySelectedSales(b)) return false;
+
+      const rawDateStr = b.date || b.createdAt || '';
+      const formattedDate = (() => {
+        if (!rawDateStr) return new Date().toISOString().split('T')[0];
+        const m = String(rawDateStr).match(/^\d{4}-\d{2}-\d{2}/);
+        return m ? m[0] : String(rawDateStr).slice(0, 10);
+      })();
+      const rDateStr = formattedDate || b.date || b.createdAt || b.bomDate;
+      if (rDateStr && (filterDateVal || filterEndDateVal)) {
+        const rIso = String(rDateStr).substring(0, 10);
+        if (filterDateVal && rIso < filterDateVal) return false;
+        if (filterEndDateVal && rIso > filterEndDateVal) return false;
+      }
+
+      const rawCode = b.bomCode || b.code || 'BOM-101';
+      const normalizedCode = normalizeBomCode(rawCode);
+
+      if (kpiFilterMeta && kpiFilterMeta.targetKeys) {
+        if (kpiFilterMeta.targetKeys.size === 0) return false;
+        const bKey1 = String(normalizedCode || '').trim().toLowerCase();
+        const bKey2 = String(b.code || '').trim().toLowerCase();
+        const bKey3 = String(b.id || '').trim().toLowerCase();
+        const bKey4 = String(b.bomCode || '').trim().toLowerCase();
+        if (!kpiFilterMeta.targetKeys.has(bKey1) && !kpiFilterMeta.targetKeys.has(bKey2) && !kpiFilterMeta.targetKeys.has(bKey3) && !kpiFilterMeta.targetKeys.has(bKey4)) {
+          return false;
+        }
+      }
+
+      if (tabSearchTrim) {
+        const displayName = [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim()) && !/^\d+$/.test(s.trim())) || b.companyName || b.customerName || 'Customer Order';
+        const sp = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
+        const cleanSales = getCleanSalesPersonName(sp, b.salesPersonCode || b.createdById);
+        const srcPi = b.sourcePiNo || b.piNo || '';
+        if (tabIsPureDigits) {
+          const rank = getNumericSearchMatchRank(
+            tabSearchTrim,
+            [normalizedCode, b.bomCode, rawCode, b.id, srcPi],
+            [b.customerName, displayName]
+          );
+          if (!(rank > 0)) return false;
+        } else {
+          const matchesTxt =
+            (normalizedCode && normalizedCode.toLowerCase().includes(tabSearchLower)) ||
+            (b.bomCode && String(b.bomCode).toLowerCase().includes(tabSearchLower)) ||
+            (b.id && String(b.id).toLowerCase().includes(tabSearchLower)) ||
+            (srcPi && String(srcPi).toLowerCase().includes(tabSearchLower)) ||
+            (formattedDate && formattedDate.toLowerCase().includes(tabSearchLower)) ||
+            (displayName && displayName.toLowerCase().includes(tabSearchLower)) ||
+            (b.customerName && b.customerName.toLowerCase().includes(tabSearchLower)) ||
+            (cleanSales && cleanSales.toLowerCase().includes(tabSearchLower));
+          if (!matchesTxt) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [visibleBomStore, isCeo, filterSalesPerson, filterDateVal, filterEndDateVal, kpiFilterMeta, tabSearchTrim, tabSearchLower, tabIsPureDigits]);
+
   // Operational Financial & KPI Ribbon (Visible for CEO, MD, and Sales Logins)
   const ceoMetrics = useMemo(() => {
     const isAllowedRole = isCeo || isRestrictedSalesUser || Boolean(userRole && String(userRole).toLowerCase().includes('sales'));
     if (!isAllowedRole || !Array.isArray(bomStore)) return null;
 
-    const sourceList = isRestrictedSalesUser ? visibleBomStore : bomStore;
-    const validBoms = (sourceList || []).filter(b => b && !b.cancelled && b.status !== 'Cancelled' && b.status !== 'CANCELLED');
+    const validBoms = (tabBaseBomList || []).filter(
+      b => b && !b.cancelled && b.status !== 'Cancelled' && b.status !== 'CANCELLED' && b.status !== 'Cancelled & Stock Restored'
+    );
     const totalOrderBookVal = validBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
 
     const now = new Date();
     const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const utcToday = now.toISOString().split('T')[0];
-    const isToday = (dStr) => {
-      if (!dStr) return false;
-      const s = String(dStr);
-      return s.startsWith(localToday) || s.startsWith(utcToday);
-    };
-
+    const isToday = (dStr) => Boolean(dStr && (String(dStr).startsWith(localToday) || String(dStr).startsWith(utcToday)));
     const isDispatched = (b) => {
       const s = String(b.status || '').toLowerCase();
       return Boolean(b.dispatchedAt) || s.includes('dispatched') || s === 'completed';
     };
-
     const formatCurrencyShort = (num) => {
       if (!num || isNaN(num)) return '₹ 0.00 L';
-      if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
-      return `₹ ${(num / 100000).toFixed(2)} L`;
+      return num >= 10000000 ? `₹ ${(num / 10000000).toFixed(2)} Cr` : `₹ ${(num / 100000).toFixed(2)} L`;
     };
 
-    // 1. Total Order Book
+    const hasDateOrKpiFilter = Boolean(filterDateVal || filterEndDateVal || (kpiFilterMeta && kpiFilterMeta.targetKeys));
+    const isSingleTodayFilter = Boolean(
+      (filterDateVal === localToday && (!filterEndDateVal || filterEndDateVal === localToday)) ||
+      (kpiFilterMeta && String(kpiFilterMeta.periodLabel || '').trim().toLowerCase() === 'today')
+    );
+    const isNonTodayDateFilter = hasDateOrKpiFilter && !isSingleTodayFilter;
     const totalOrderBookFormatted = formatCurrencyShort(totalOrderBookVal);
-
-    // 2. Today ALL BOM
-    const todayAllBoms = validBoms.filter(b => isToday(b.date) || isToday(b.createdAt));
+    const todayAllBoms = hasDateOrKpiFilter ? validBoms : validBoms.filter(b => isToday(b.date) || isToday(b.createdAt));
     const todayAllVal = todayAllBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
-
-    // 3. Dispatched BOM today
-    const todayDispatchedBoms = validBoms.filter(b => {
-      if (!isDispatched(b)) return false;
-      return isToday(b.dispatchedAt) || isToday(b.updatedAt) || isToday(b.date) || isToday(b.createdAt);
-    });
+    const todayDispatchedBoms = hasDateOrKpiFilter
+      ? validBoms.filter(b => isDispatched(b))
+      : validBoms.filter(b => isDispatched(b) && (isToday(b.dispatchedAt) || isToday(b.updatedAt) || isToday(b.date) || isToday(b.createdAt)));
     const todayDispatchedVal = todayDispatchedBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
-
-    // 4. Pending BOMs
     const pendingBoms = validBoms.filter(b => !isDispatched(b));
     const pendingVal = pendingBoms.reduce((acc, b) => acc + cleanNum(b.totalAmount || b.grandTotal || b.amount || 0), 0);
 
@@ -1089,17 +1155,15 @@ export default function BomOrdersView(props) {
       totalOrderBookVal,
       totalOrderBookFormatted,
       validBomsCount: validBoms.length,
-
       todayAllCount: todayAllBoms.length,
       todayAllValFormatted: formatCurrencyShort(todayAllVal),
-
       todayDispatchedCount: todayDispatchedBoms.length,
       todayDispatchedValFormatted: formatCurrencyShort(todayDispatchedVal),
-
       pendingCount: pendingBoms.length,
-      pendingValFormatted: formatCurrencyShort(pendingVal)
+      pendingValFormatted: formatCurrencyShort(pendingVal),
+      isNonTodayDateFilter
     };
-  }, [isCeo, isRestrictedSalesUser, userRole, bomStore, visibleBomStore]);
+  }, [isCeo, isRestrictedSalesUser, userRole, bomStore, tabBaseBomList, filterDateVal, filterEndDateVal, kpiFilterMeta]);
 
   const [selectedPreset, setSelectedPreset] = useState('');
   const [presetSetCount, setPresetSetCount] = useState(1);
@@ -1973,77 +2037,6 @@ export default function BomOrdersView(props) {
 
   // Config for BOM Orders Table
   const isSalesBOM = activeTab === 'Sales BOM' || userRole === 'Sales Executive' || activeTab === 'Create BOM';
-  const filterBySelectedSales = (b) => {
-    if (!isCeo || !filterSalesPerson || filterSalesPerson === 'All' || filterSalesPerson === 'All Sales') return true;
-    const sp = (b?.salesPerson || b?.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-    const clean = getCleanSalesPersonName(sp, b?.salesPersonCode || b?.createdById);
-    const target = filterSalesPerson.trim().toLowerCase();
-    return clean.toLowerCase() === target || clean.toLowerCase().includes(target);
-  };
-
-  const tabSearchTrim = String(searchQueryText || '').trim();
-  const tabSearchLower = tabSearchTrim.toLowerCase();
-  const tabIsPureDigits = /^\d+$/.test(tabSearchTrim);
-
-  const tabBaseBomList = (visibleBomStore || []).filter(b => {
-    if (!b) return false;
-    if (!filterBySelectedSales(b)) return false;
-
-    const rawDateStr = b.date || b.createdAt || '';
-    const formattedDate = (() => {
-      if (!rawDateStr) return new Date().toISOString().split('T')[0];
-      const m = String(rawDateStr).match(/^\d{4}-\d{2}-\d{2}/);
-      return m ? m[0] : String(rawDateStr).slice(0, 10);
-    })();
-    const rDateStr = formattedDate || b.date || b.createdAt || b.bomDate;
-    if (rDateStr && (filterDateVal || filterEndDateVal)) {
-      const rIso = String(rDateStr).substring(0, 10);
-      if (filterDateVal && rIso < filterDateVal) return false;
-      if (filterEndDateVal && rIso > filterEndDateVal) return false;
-    }
-
-    const rawCode = b.bomCode || b.code || 'BOM-101';
-    const normalizedCode = normalizeBomCode(rawCode);
-
-    if (kpiFilterMeta && kpiFilterMeta.targetKeys) {
-      if (kpiFilterMeta.targetKeys.size === 0) return false;
-      const bKey1 = String(normalizedCode || '').trim().toLowerCase();
-      const bKey2 = String(b.code || '').trim().toLowerCase();
-      const bKey3 = String(b.id || '').trim().toLowerCase();
-      const bKey4 = String(b.bomCode || '').trim().toLowerCase();
-      if (!kpiFilterMeta.targetKeys.has(bKey1) && !kpiFilterMeta.targetKeys.has(bKey2) && !kpiFilterMeta.targetKeys.has(bKey3) && !kpiFilterMeta.targetKeys.has(bKey4)) {
-        return false;
-      }
-    }
-
-    if (tabSearchTrim) {
-      const displayName = [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim()) && !/^\d+$/.test(s.trim())) || b.companyName || b.customerName || 'Customer Order';
-      const sp = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-      const cleanSales = getCleanSalesPersonName(sp, b.salesPersonCode || b.createdById);
-      const srcPi = b.sourcePiNo || b.piNo || '';
-      if (tabIsPureDigits) {
-        const rank = getNumericSearchMatchRank(
-          tabSearchTrim,
-          [normalizedCode, b.bomCode, rawCode, b.id, srcPi],
-          [b.customerName, displayName]
-        );
-        if (!(rank > 0)) return false;
-      } else {
-        const matchesTxt =
-          (normalizedCode && normalizedCode.toLowerCase().includes(tabSearchLower)) ||
-          (b.bomCode && String(b.bomCode).toLowerCase().includes(tabSearchLower)) ||
-          (b.id && String(b.id).toLowerCase().includes(tabSearchLower)) ||
-          (srcPi && String(srcPi).toLowerCase().includes(tabSearchLower)) ||
-          (formattedDate && formattedDate.toLowerCase().includes(tabSearchLower)) ||
-          (displayName && displayName.toLowerCase().includes(tabSearchLower)) ||
-          (b.customerName && b.customerName.toLowerCase().includes(tabSearchLower)) ||
-          (cleanSales && cleanSales.toLowerCase().includes(tabSearchLower));
-        if (!matchesTxt) return false;
-      }
-    }
-
-    return true;
-  });
 
   const pageConfig = {
     title: isCeo ? 'All Bill of Materials (BOM) — Master Register' :

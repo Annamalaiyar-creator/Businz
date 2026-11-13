@@ -128,7 +128,7 @@ export default function BomDashboardSection({ ctx }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Today ALL BOM
+                {ceoMetrics.isNonTodayDateFilter ? 'Filtered ALL BOM' : 'Today ALL BOM'}
               </span>
               <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Calendar size={13} />
@@ -143,8 +143,8 @@ export default function BomDashboardSection({ ctx }) {
               </span>
             </div>
             <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', color: '#64748B' }}>
-              <span>Registered today </span>
-              <span style={{ color: '#4F46E5', fontWeight: '800' }}>Daily Bookings</span>
+              <span>{ceoMetrics.isNonTodayDateFilter ? 'Selected filter ' : 'Registered today '}</span>
+              <span style={{ color: '#4F46E5', fontWeight: '800' }}>{ceoMetrics.isNonTodayDateFilter ? 'Filtered Bookings' : 'Daily Bookings'}</span>
             </div>
           </div>
 
@@ -161,7 +161,7 @@ export default function BomDashboardSection({ ctx }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Dispatched BOM today
+                {ceoMetrics.isNonTodayDateFilter ? 'Dispatched BOM' : 'Dispatched BOM today'}
               </span>
               <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Truck size={13} />
