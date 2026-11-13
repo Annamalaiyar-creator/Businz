@@ -14,7 +14,9 @@ function SearchablePresetSelector({
   placeholder = "Select Structure Preset...",
   accentColor = "#4F46E5",
   width = "380px",
-  style = {}
+  style = {},
+  groupTitleLabel = "Presets",
+  emptyLabel = "presets"
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -284,7 +286,7 @@ function SearchablePresetSelector({
           <div style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Presets ({totalPresetsCount})
+                {groupTitleLabel} ({totalPresetsCount})
               </span>
               {searchTerm && (
                 <span style={{ fontSize: '11px', color: accentColor, fontWeight: '700' }}>
@@ -296,7 +298,7 @@ function SearchablePresetSelector({
 
           {categorizedPresets.length === 0 ? (
             <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94A3B8', fontSize: '12px', fontWeight: '500' }}>
-              No presets matching "{searchTerm}"
+              No {emptyLabel} matching "{searchTerm}"
             </div>
           ) : (
             categorizedPresets.map((group) => (

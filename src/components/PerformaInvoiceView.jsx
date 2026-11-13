@@ -1304,7 +1304,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         });
       }
       if (missingKitPrice) {
-        showTopToast('⚠️ Preset Amt (₹) is mandatory for preset structure kits. Please click "Edit Info" to enter the amount first.', 'warning', 4500);
+        showTopToast('⚠️ Pack Amt (₹) is mandatory for pack structure kits. Please click "Edit Info" to enter the amount first.', 'warning', 4500);
         return;
       }
     }
@@ -1624,6 +1624,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [newSetUnit, setNewSetUnit] = useState('Sets');
   const [newSetPrice, setNewSetPrice] = useState('');
   const [newSetGstRate, setNewSetGstRate] = useState('18%');
+  const [showBulkItemModal, setShowBulkItemModal] = useState(false);
+  const [bulkItemSearch, setBulkItemSearch] = useState('');
+  const [selectedBulkItems, setSelectedBulkItems] = useState({});
+  const [bulkCategoryFilter, setBulkCategoryFilter] = useState('All');
   const [piConfirmModal, setPiConfirmModal] = useState(null); // 'cancel' | 'draft' | 'create'
   const [previewDocModal, setPreviewDocModal] = useState(null);
   const [copiedBankField, setCopiedBankField] = useState(null);
@@ -1999,6 +2003,71 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (resolvedCode && stockLookupMap.has(resolvedCode)) return stockLookupMap.get(resolvedCode);
     return 0;
   };
+
+  // Normalized bulk item catalog powered from already-loaded itemsList (zero extra API calls)
+  const availablePiBulkCatalog = useMemo(() => {
+    const seen = new Set();
+    return (itemsList || []).reduce((acc, it, idx) => {
+      if (!it || !it.name || !String(it.name).trim()) return acc;
+      const cleanName = String(it.name).trim();
+      const rawUom = it.uom || it.unit || 'NOS';
+      const u = String(rawUom).trim().toUpperCase();
+      let resolvedUom = 'NOS';
+      if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';
+      else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
+      else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
+      else if (['KILOGRAM', 'KILOGRAMS', 'KG', 'KGS'].includes(u)) resolvedUom = 'KG';
+      else if (['BOX', 'BOXES'].includes(u)) resolvedUom = 'BOX';
+      else if (['PACKET', 'PACKETS', 'PKT', 'PKTS'].includes(u)) resolvedUom = 'PKT';
+      else if (['PAIR', 'PAIRS'].includes(u)) resolvedUom = 'PAIR';
+      else if (['LOT', 'LOTS'].includes(u)) resolvedUom = 'LOT';
+      else if (['TON', 'TONS'].includes(u)) resolvedUom = 'TON';
+      else if (['KW', 'KWH'].includes(u)) resolvedUom = 'KW';
+      else if (u) resolvedUom = u;
+
+      const resolvedCode = String(it.code || it.sku || resolveProductCode(it) || '').trim();
+      const itemKey = String(it.code || it.sku || it.id || cleanName || idx).trim().toLowerCase();
+      if (seen.has(itemKey)) return acc;
+      seen.add(itemKey);
+
+      const pCat = it.category || it.description || 'General';
+      const pHsn = it.hsn || it.hsn_or_sac || getHsnCode({ name: cleanName, category: pCat }) || '73089090';
+      const isSolar5 = is5PctSolarProduct(cleanName, pCat, pHsn);
+      const stockRaw = it.availableStock !== undefined ? it.availableStock : (it.stock !== undefined ? it.stock : null);
+
+      acc.push({
+        itemKey,
+        code: resolvedCode,
+        name: cleanName,
+        category: pCat,
+        uom: resolvedUom,
+        rate: parseFloat(it.price ?? it.rate ?? 0) || 0,
+        gstRate: isSolar5 ? '5%' : (it.gstRate || '18%'),
+        hsn: pHsn,
+        stock: stockRaw !== null && stockRaw !== undefined ? Number(stockRaw) : null
+      });
+      return acc;
+    }, []);
+  }, [itemsList]);
+
+  const piBulkCategories = useMemo(() => {
+    const cats = Array.from(new Set(availablePiBulkCatalog.map(i => i.category).filter(Boolean))).slice(0, 6);
+    return ['All', ...cats];
+  }, [availablePiBulkCatalog]);
+
+  const filteredPiBulkCatalog = useMemo(() => {
+    const q = (bulkItemSearch || '').trim().toLowerCase();
+    return availablePiBulkCatalog.filter(it => {
+      if (bulkCategoryFilter !== 'All' && it.category !== bulkCategoryFilter) return false;
+      if (!q) return true;
+      return (
+        it.name.toLowerCase().includes(q) ||
+        it.code.toLowerCase().includes(q) ||
+        it.category.toLowerCase().includes(q) ||
+        it.hsn.toLowerCase().includes(q)
+      );
+    });
+  }, [availablePiBulkCatalog, bulkCategoryFilter, bulkItemSearch]);
 
   // Form Fields State
   const [pdfFile, setPdfFile] = useState(null);
@@ -2934,12 +3003,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const presetItems = piItems.filter(it => it.isPresetItem);
       if (presetItems.length > 0) {
         if (!presetGroups || Object.keys(presetGroups).length === 0) {
-          invalid.push('Preset Amt (₹) is mandatory: Please enter a valid Preset Amount for the configured preset kit.');
+          invalid.push('Pack Amt (₹) is mandatory: Please enter a valid Pack Amount for the configured pack kit.');
         } else {
           Object.values(presetGroups).forEach(g => {
             const kp = parseFloat(g.kitPrice) || 0;
             if (kp <= 0) {
-              invalid.push(`Preset Amt (₹) is mandatory for "${g.presetName || 'Preset Kit'}": Please enter an amount > 0`);
+              invalid.push(`Pack Amt (₹) is mandatory for "${g.presetName || 'Pack Kit'}": Please enter an amount > 0`);
             }
           });
         }
@@ -2998,8 +3067,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
       if (missingKitPrice) {
         setValidationAlert({
-          fields: ['Preset Amt (₹) is Mandatory'],
-          message: 'Preset Amt (₹) is mandatory for preset structure items. Please enter a valid amount before saving.',
+          fields: ['Pack Amt (₹) is Mandatory'],
+          message: 'Pack Amt (₹) is mandatory for pack structure items. Please enter a valid amount before saving.',
           firstTargetId: 'pi-field-items'
         });
         return;
@@ -3799,7 +3868,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           return sp === target || sp.includes(target);
         };
 
-        const filteredPIList = (visiblePIList || []).filter(pi => {
+        const piEffectiveStatusMap = new Map();
+        const baseFilteredPIList = (visiblePIList || []).filter(pi => {
           if (!pi) return false;
           const matchedBoms = getConvertedBomsForPi(pi);
           const hasSavedBom = matchedBoms.length > 0;
@@ -3834,10 +3904,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             || (statusFilter === 'Issued' && currentStatus === 'Issued')
             || (statusFilter === 'Converted to BOM' && currentStatus === 'Converted to BOM')
             || currentStatus === statusFilter;
-          const matchesTab = piTab === 'All'
-            || (piTab === 'Issued' && currentStatus === 'Issued')
-            || (piTab === 'Converted to BOM' && currentStatus === 'Converted to BOM')
-            || currentStatus === piTab;
 
           // Date Range Matching
           let matchesDateRange = true;
@@ -3874,7 +3940,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           // Sales person filter for CEO
           const matchesSalesPerson = matchesSelectedSalesPerson(pi);
 
-          return matchesSearch && matchesStatus && matchesTab && matchesDateRange && matchesSalesPerson;
+          if (!(matchesSearch && matchesStatus && matchesDateRange && matchesSalesPerson)) {
+            return false;
+          }
+
+          piEffectiveStatusMap.set(pi, currentStatus);
+          return true;
+        });
+
+        const filteredPIList = baseFilteredPIList.filter(pi => {
+          const currentStatus = piEffectiveStatusMap.get(pi) || 'Issued';
+          return piTab === 'All'
+            || (piTab === 'Issued' && currentStatus === 'Issued')
+            || (piTab === 'Converted to BOM' && currentStatus === 'Converted to BOM')
+            || currentStatus === piTab;
         });
 
         const indexOfLastRow = currentPage * rowsPerPage;
@@ -4142,6 +4221,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     onChange={({ startDate: s, endDate: e }) => {
                       setStartDate(s);
                       setEndDate(e);
+                      if (kpiFilterMeta) {
+                        setKpiFilterMeta(null);
+                        try { sessionStorage.removeItem('controlroom_pi_initial_date_filter'); } catch (_) {}
+                      }
                       setCurrentPage(1);
                     }}
                   />
@@ -4236,34 +4319,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 paddingBottom: isMobile ? '6px' : '0'
               }}>
                 {[
-                  { id: 'All', label: 'All Invoices (Total Sent)', count: visiblePIList.filter(matchesSelectedSalesPerson).length },
-                  { id: 'Issued', label: 'Issued / Active', count: visiblePIList.filter(pi => {
-                    if (pi.status === 'Draft' || pi.statusType === 'draft' || pi.status === 'Cancelled') return false;
-                    const matchedBoms = getConvertedBomsForPi(pi);
-                    const isExplicitConverted = Boolean(
-                      pi.status === 'Converted to BOM' || 
-                      pi.statusType === 'converted' || 
-                      pi.convertedToBom === true || 
-                      pi.convertedBomCode || 
-                      pi.convertedBomNo
-                    );
-                    const isConverted = matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM');
-                    return !isConverted && matchesSelectedSalesPerson(pi);
-                  }).length },
-                  { id: 'Converted to BOM', label: 'Converted to BOM', count: visiblePIList.filter(pi => {
-                    if (pi.status === 'Draft' || pi.statusType === 'draft') return false;
-                    const matchedBoms = getConvertedBomsForPi(pi);
-                    const isExplicitConverted = Boolean(
-                      pi.status === 'Converted to BOM' || 
-                      pi.statusType === 'converted' || 
-                      pi.convertedToBom === true || 
-                      pi.convertedBomCode || 
-                      pi.convertedBomNo
-                    );
-                    return matchedBoms.length > 0 && (isExplicitConverted || pi.status === 'Converted to BOM') && matchesSelectedSalesPerson(pi);
-                  }).length },
-                  { id: 'Cancelled', label: 'Cancelled', count: visiblePIList.filter(pi => pi.status === 'Cancelled' && matchesSelectedSalesPerson(pi)).length },
-                  { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => (pi.status === 'Draft' || pi.statusType === 'draft') && matchesSelectedSalesPerson(pi)).length }
+                  { id: 'All', label: 'All Invoices (Total Sent)', count: baseFilteredPIList.length },
+                  { id: 'Issued', label: 'Issued / Active', count: baseFilteredPIList.filter(pi => piEffectiveStatusMap.get(pi) === 'Issued').length },
+                  { id: 'Converted to BOM', label: 'Converted to BOM', count: baseFilteredPIList.filter(pi => piEffectiveStatusMap.get(pi) === 'Converted to BOM').length },
+                  { id: 'Cancelled', label: 'Cancelled', count: baseFilteredPIList.filter(pi => piEffectiveStatusMap.get(pi) === 'Cancelled').length },
+                  { id: 'Draft', label: 'Draft', count: baseFilteredPIList.filter(pi => piEffectiveStatusMap.get(pi) === 'Draft').length }
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -5629,12 +5689,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     {viewMode === 'edit' ? `Edit Proforma Invoice: ${piNumber}` : 'Create Proforma Invoice (PI)'}
                   </h1>
                   <p style={{ fontSize: '13px', color: '#CFFAFE', margin: '4px 0 0 0' }}>
-                    Configure customer commercial billing, structured preset kits, freight specifications & payment terms
+                    Configure customer commercial billing, structured pack kits, freight specifications & payment terms
                   </p>
                 </div>
               </div>
 
-
+              <button
+                type="button"
+                onClick={() => setPiConfirmModal('cancel')}
+                style={{
+                  border: '1px solid rgba(255, 255, 255, 0.35)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.14)',
+                  color: '#FFFFFF',
+                  padding: '9px 18px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px'
+                }}
+              >
+                <ArrowLeft size={15} />
+                Back
+              </button>
             </div>
 
             {/* SECTION 1: PI DETAILS & DATES */}
@@ -6322,19 +6401,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ORDER ITEMS & BILL OF MATERIALS</span>
                 </div>
 
-                {/* Preset Pill */}
+                {/* Pack Pill */}
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', backgroundColor: '#ECFEFF', padding: '0 16px', borderRadius: '20px', height: '40px', border: '1px solid #CFFAFE' }}>
                   <Layers style={{ width: '15px', height: '15px', color: '#0E7490' }} />
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490' }}>Preset:</span>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490' }}>Pack:</span>
                 </div>
 
-                {/* Searchable Preset Selector */}
+                {/* Searchable Pack Selector */}
                 <SearchablePresetSelector
                   value={selectedPreset}
                   activePresetsMap={activePresetsMap}
                   accentColor="#0E7490"
                   width="380px"
-                  placeholder="Pick a Preset to add..."
+                  placeholder="Pick a Pack to add..."
+                  groupTitleLabel="Packs"
+                  emptyLabel="packs"
                   style={{ height: '40px' }}
                   onChange={(val, targetPreset) => {
                     if (val && targetPreset && targetPreset.items) {
@@ -6363,10 +6444,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </button>
               </div>
 
-              {/* Active Preset Badges / Pills */}
+              {/* Active Pack Badges / Pills */}
               {Object.values(presetGroups).length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '12px 24px 0 24px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Active Presets in Order:</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Active Packs in Order:</span>
                   {Object.values(presetGroups).map(grp => (
                     <span
                       key={grp.groupId}
@@ -6427,9 +6508,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           gap: '3px',
                           marginLeft: '2px'
                         }}
-                        title={`Select a second preset to nest inside ${grp.presetName}`}
+                        title={`Select a second pack to nest inside ${grp.presetName}`}
                       >
-                        <Layers size={11} /> + Nest Sub-Preset
+                        <Layers size={11} /> + Nest Sub-Pack
                       </button>
                       <button
                         type="button"
@@ -6479,7 +6560,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
                       {hasAnyPreset && (
                         <th style={{ padding: '12px 10px', fontWeight: '700', width: '130px', minWidth: '130px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
-                          Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
+                          Pack Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                         </th>
                       )}
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px', textAlign: 'right' }}>Taxable (₹)</th>
@@ -6494,7 +6575,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
-                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>Select an engineering Preset above or click "Add Product / Item" to author PI line items</span>
+                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>Select a Pack above or click "Add Product / Item" to author PI line items</span>
                           </div>
                         </td>
                       </tr>
@@ -6515,6 +6596,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         const groupIndex = groupId ? distinctPresetGroupIds.indexOf(groupId) : -1;
                         const presetNumber = groupIndex >= 0 ? groupIndex + 1 : 1;
                         const theme = groupIndex >= 0 ? getPresetTheme(groupIndex) : PRESET_THEMES[0];
+                        const packBadge = `PACK ${presetNumber}`;
 
                         let isFirstInGroup = false;
                         let groupCount = 0;
@@ -6565,7 +6647,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         fontWeight: '800',
                                         letterSpacing: '0.5px'
                                       }}>
-                                        {theme.badge}
+                                        {packBadge}
                                       </span>
                                       <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
                                         {currentGroup?.presetName || item.presetName || 'Structure Kit'}
@@ -6610,7 +6692,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             alignItems: 'center',
                                             gap: '2px'
                                           }}
-                                          title={`Move ${theme.badge} up`}
+                                          title={`Move ${packBadge} up`}
                                         >
                                           <ChevronUp size={11} /> Move Up
                                         </button>
@@ -6632,7 +6714,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             alignItems: 'center',
                                             gap: '2px'
                                           }}
-                                          title={`Move ${theme.badge} down`}
+                                          title={`Move ${packBadge} down`}
                                         >
                                           <ChevronDown size={11} /> Move Down
                                         </button>
@@ -6654,9 +6736,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           alignItems: 'center',
                                           gap: '4px'
                                         }}
-                                        title={`Add component row to ${theme.badge}`}
+                                        title={`Add component row to ${packBadge}`}
                                       >
-                                        <Plus size={11} /> Add to {theme.badge}
+                                        <Plus size={11} /> Add to {packBadge}
                                       </button>
                                     </div>
                                   </div>
@@ -7181,7 +7263,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             }}
                                             title={currentGroup?.presetName}
                                           >
-                                            {theme.badge}: {currentGroup?.presetName}
+                                            {packBadge}: {currentGroup?.presetName}
                                           </span>
 
                                           <div style={{ position: 'relative', width: '100%' }}>
@@ -7255,7 +7337,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                 fontWeight: '800', color: theme.primary, textAlign: 'center',
                                                 padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box'
                                               }}
-                                              title={(currentGroup?.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this preset"}
+                                              title={(currentGroup?.unit || 'Sets') === 'kW' ? "Capacity in kW" : "Sets multiplier for this pack"}
                                             />
                                             <select
                                               value={currentGroup?.unit || 'Sets'}
@@ -7306,7 +7388,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                 color: theme.primary, backgroundColor: '#FFFFFF',
                                                 outline: 'none', cursor: 'pointer'
                                               }}
-                                              title="Change GST Rate for this preset"
+                                              title="Change GST Rate for this pack"
                                             >
                                               <option value="18%">18%</option>
                                               <option value="12%">12%</option>
@@ -7329,9 +7411,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                 borderRadius: '4px',
                                                 marginTop: '2px'
                                               }}
-                                              title={`Remove entire ${currentGroup?.presetName} preset`}
+                                              title={`Remove entire ${currentGroup?.presetName} pack`}
                                             >
-                                              Remove Kit
+                                              Remove Pack
                                             </button>
                                           )}
                                         </div>
@@ -7412,6 +7494,36 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <button
                   type="button"
                   onClick={() => {
+                    setBulkItemSearch('');
+                    setBulkCategoryFilter('All');
+                    setShowBulkItemModal(true);
+                  }}
+                  style={{
+                    border: '1px solid #BFDBFE',
+                    background: '#EFF6FF',
+                    color: '#1D4ED8',
+                    padding: '9px 18px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(29, 78, 216, 0.06)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#DBEAFE'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#EFF6FF'; }}
+                  title="Select multiple products/items from catalog at once"
+                >
+                  <Boxes style={{ width: '15px', height: '15px', color: '#2563EB' }} />
+                  Add Bulk Items
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
                     setNewSetName(`Custom Set ${Object.keys(presetGroups || {}).length + 1}`);
                     setNewSetCount(1);
                     setNewSetPrice('');
@@ -7435,7 +7547,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EDE9FE'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F5F3FF'; }}
-                  title="Create a custom ad-hoc Set / Kit for this PI alone (does not alter preset dropdown)"
+                  title="Create a custom ad-hoc Set / Kit for this PI alone (does not alter pack dropdown)"
                 >
                   <Layers style={{ width: '15px', height: '15px', color: '#7C3AED' }} />
                   Create Set
@@ -7594,7 +7706,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: '#F8FAFC', padding: '16px 18px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
                   {totals.kitSubtotal > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#4F46E5' }}>
-                      <span style={{ fontWeight: '600' }}>Preset Kits Subtotal:</span>
+                      <span style={{ fontWeight: '600' }}>Pack Kits Subtotal:</span>
                       <span style={{ fontWeight: '700' }}>₹{totals.kitSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                     </div>
                   )}
@@ -7661,85 +7773,122 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons in a Single Row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.6fr', gap: '10px', alignItems: 'center' }}>
+          </div>
+
+            {/* Sticky Bottom Menu Bar Following with Scroll for Create / Edit Proforma Invoice */}
+            <div
+              style={{
+                position: 'sticky',
+                bottom: 0,
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderTop: '1.5px solid #CBD5E1',
+                padding: '12px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '16px',
+                zIndex: 50,
+                boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+                borderRadius: '12px',
+                marginTop: '8px',
+                boxSizing: 'border-box'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setPiConfirmModal('cancel')}
                   style={{
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#F8FAFC',
-                    color: '#64748B',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '12px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    padding: '0 18px',
                     fontWeight: '700',
                     cursor: 'pointer',
-                    display: 'flex',
+                    fontSize: '13px',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    whiteSpace: 'nowrap',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                     transition: 'all 0.15s ease'
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#334155'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                 >
-                  Discard Changes
+                  <ArrowLeft size={15} /> Back
                 </button>
+
                 <button
                   type="button"
                   onClick={triggerDraftConfirm}
+                  disabled={isSubmittingPI}
                   style={{
-                    height: '42px',
-                    borderRadius: '10px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #0E7490',
                     backgroundColor: '#FFFFFF',
                     color: '#0E7490',
-                    border: '1.5px solid #0E7490',
-                    fontSize: '12px',
-                    fontWeight: '800',
-                    cursor: 'pointer',
-                    display: 'flex',
+                    padding: '0 18px',
+                    fontWeight: '700',
+                    cursor: isSubmittingPI ? 'not-allowed' : 'pointer',
+                    fontSize: '13px',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.15s ease'
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                    transition: 'all 0.15s ease',
+                    opacity: isSubmittingPI ? 0.6 : 1
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                  onMouseEnter={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
+                  onMouseLeave={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                 >
-                  Save as Draft
+                  <FileText size={15} /> Save as Draft
                 </button>
+
                 <button
                   type="button"
                   onClick={triggerSaveConfirm}
+                  disabled={isSubmittingPI}
                   style={{
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#10B981',
-                    color: 'white',
+                    height: '40px',
+                    borderRadius: '8px',
                     border: 'none',
-                    fontSize: '12.5px',
-                    fontWeight: '900',
-                    cursor: 'pointer',
-                    display: 'flex',
+                    backgroundColor: '#10B981',
+                    color: '#FFFFFF',
+                    padding: '0 22px',
+                    fontWeight: '800',
+                    cursor: isSubmittingPI ? 'not-allowed' : 'pointer',
+                    fontSize: '13px',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.35)',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.15s ease'
+                    gap: '7px',
+                    transition: 'all 0.15s ease',
+                    opacity: isSubmittingPI ? 0.6 : 1
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#059669'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#10B981'; }}
+                  onMouseEnter={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#059669'; }}
+                  onMouseLeave={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#10B981'; }}
                 >
+                  <CheckCircle size={16} />
                   {editIdx !== null && (piList[editIdx]?.status === 'Draft' || piList[editIdx]?.statusType === 'draft')
                     ? 'Complete & Release PI'
-                    : 'Confirm & Save Proforma Invoice'}
+                    : 'Confirm PI'}
                 </button>
               </div>
-            </div>
 
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+                <strong style={{ fontSize: '15px', color: '#0E7490', fontWeight: '800' }}>
+                  ₹{totals.grand.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
+            </div>
 
           </div>
         );
@@ -8672,7 +8821,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
             <div style={{ fontSize: '12px', color: '#475569', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
               {piConfirmModal === 'cancel' ? (
-                <span>Are you sure you want to discard this Proforma Invoice? Any configured line items, preset structures, and addresses will be erased.</span>
+                <span>Are you sure you want to discard this Proforma Invoice? Any configured line items, pack structures, and addresses will be erased.</span>
               ) : piConfirmModal === 'draft' ? (
                 <span>Save this Proforma Invoice as a <strong>Draft</strong>. It will be stored safely and can be edited, completed, or converted at any time later.</span>
               ) : (
@@ -8812,11 +8961,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         </div>
       )}
 
-      {/* ==================== FLOATING ACTION BAR: CONVERT SELECTED TO PRESET ==================== */}
+      {/* ==================== FLOATING ACTION BAR: CONVERT SELECTED TO PACK ==================== */}
       {selectedStandaloneIndexes.length > 0 && !showConvertPresetModal && (
         <div style={{
           position: 'fixed',
-          bottom: '24px',
+          bottom: (viewMode === 'create' || viewMode === 'edit') ? '84px' : '24px',
           left: '50%',
           transform: 'translateX(-50%)',
           backgroundColor: '#FFFFFF',
@@ -8842,7 +8991,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             onClick={() => { setConvertPresetName(''); setConvertPresetPrice(''); setShowConvertPresetModal(true); }}
             style={{ border: 'none', backgroundColor: '#0D9488', color: '#FFFFFF', height: '34px', padding: '0 14px', borderRadius: '20px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800 }}
           >
-            <Layers size={14} /> Convert to Preset
+            <Layers size={14} /> Convert to Pack
           </button>
           <button
             type="button"
@@ -8872,7 +9021,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             <div style={{ padding: '18px 20px', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Layers size={18} color="#0D9488" /> Convert to Preset
+                  <Layers size={18} color="#0D9488" /> Convert to Pack
                 </h3>
                 <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#0D9488' }}>
                   {selectedStandaloneIndexes.length} standalone item(s) · applies to this PI only
@@ -8884,13 +9033,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             </div>
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Preset Name</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Pack Name</label>
                 <input autoFocus type="text" value={convertPresetName} onChange={(e) => setConvertPresetName(e.target.value)} placeholder="e.g. Site A Fasteners Kit" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', boxSizing: 'border-box' }} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Preset Amount (₹)</label>
-                  <input type="number" min="0" value={convertPresetPrice} onChange={(e) => setConvertPresetPrice(e.target.value)} placeholder="Full preset price" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', boxSizing: 'border-box' }} />
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Pack Amount (₹)</label>
+                  <input type="number" min="0" value={convertPresetPrice} onChange={(e) => setConvertPresetPrice(e.target.value)} placeholder="Full pack price" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', boxSizing: 'border-box' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>GST</label>
@@ -8906,13 +9055,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             </div>
             <div style={{ padding: '14px 20px', backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button type="button" onClick={() => setShowConvertPresetModal(false)} style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>Cancel</button>
-              <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#0D9488', color: '#FFFFFF', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}>Convert to Preset</button>
+              <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#0D9488', color: '#FFFFFF', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}>Convert to Pack</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* ==================== NESTED SUB-PRESET MODAL (PRESET INSIDE PRESET) ==================== */}
+      {/* ==================== NESTED SUB-PACK MODAL (PACK INSIDE PACK) ==================== */}
       {subPresetModalGroup && (
         <div style={{
           position: 'fixed',
@@ -8948,10 +9097,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               <div>
                 <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Layers size={18} color="#0D9488" />
-                  Nest Sub-Preset Kit
+                  Nest Sub-Pack Kit
                 </h3>
                 <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#0D9488' }}>
-                  Embedding inside <strong>{presetGroups[subPresetModalGroup]?.presetName || 'Primary Preset'}</strong>
+                  Embedding inside <strong>{presetGroups[subPresetModalGroup]?.presetName || 'Primary Pack'}</strong>
                 </p>
               </div>
               <button
@@ -8967,14 +9116,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Select Secondary Preset to Nest Inside:
+                  Select Secondary Pack to Nest Inside:
                 </label>
                 <SearchablePresetSelector
                   value={nestedSubPresetVal}
                   activePresetsMap={activePresetsMap}
                   accentColor="#0D9488"
                   width="100%"
-                  placeholder="Search and pick secondary preset to nest..."
+                  placeholder="Search and pick secondary pack to nest..."
+                  groupTitleLabel="Packs"
+                  emptyLabel="packs"
                   onChange={(val) => {
                     setNestedSubPresetVal(val);
                   }}
@@ -8983,7 +9134,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Sub-Preset Multiplier (Quantity / Sets)
+                  Sub-Pack Multiplier (Quantity / Sets)
                 </label>
                 <input
                   type="number"
@@ -9053,12 +9204,419 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   boxShadow: nestedSubPresetVal ? '0 2px 6px rgba(13, 148, 136, 0.3)' : 'none'
                 }}
               >
-                Bundle Inside Preset
+                Bundle Inside Pack
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ==================== ADD ITEMS IN BULK MODAL (PI) ==================== */}
+      {showBulkItemModal && (viewMode === 'create' || viewMode === 'edit') && (() => {
+        const selectedCount = Object.keys(selectedBulkItems).length;
+        const allFilteredSelected = filteredPiBulkCatalog.length > 0 && filteredPiBulkCatalog.every(it => selectedBulkItems[it.itemKey]);
+
+        const toggleSelectAll = () => {
+          if (allFilteredSelected) {
+            setSelectedBulkItems(prev => {
+              const next = { ...prev };
+              filteredPiBulkCatalog.forEach(it => {
+                delete next[it.itemKey];
+              });
+              return next;
+            });
+          } else {
+            const next = { ...selectedBulkItems };
+            filteredPiBulkCatalog.forEach(it => {
+              if (!next[it.itemKey]) {
+                next[it.itemKey] = { item: it, qty: 1 };
+              }
+            });
+            setSelectedBulkItems(next);
+          }
+        };
+
+        const toggleSelectItem = (it) => {
+          setSelectedBulkItems(prev => {
+            const next = { ...prev };
+            if (next[it.itemKey]) {
+              delete next[it.itemKey];
+            } else {
+              next[it.itemKey] = { item: it, qty: 1 };
+            }
+            return next;
+          });
+        };
+
+        const updateItemQty = (it, newQty) => {
+          const parsed = parseFloat(newQty);
+          const validQty = !isNaN(parsed) && parsed > 0 ? parsed : 1;
+          setSelectedBulkItems(prev => ({
+            ...prev,
+            [it.itemKey]: { item: it, qty: validQty }
+          }));
+        };
+
+        const handleConfirmBulkAdd = () => {
+          const selectedKeys = Object.keys(selectedBulkItems);
+          if (selectedKeys.length === 0) return;
+
+          const itemsToAdd = selectedKeys.map(k => {
+            const entry = selectedBulkItems[k];
+            const it = entry.item;
+            const validQty = parseFloat(entry.qty) > 0 ? parseFloat(entry.qty) : 1;
+            return {
+              code: it.code || '',
+              name: it.name || '',
+              category: it.category || '',
+              uom: it.uom || 'NOS',
+              unit: it.uom || 'NOS',
+              qty: String(validQty),
+              qtyPerSet: String(validQty),
+              totalDispatchQty: validQty,
+              rate: String(it.rate ?? '0'),
+              gstRate: it.gstRate || '18%',
+              hsn: it.hsn || '73089090',
+              isPresetItem: false
+            };
+          });
+
+          setPiItems(prev => {
+            const cleanPrev = (prev || []).filter(p => p.isPresetItem || (p.name && p.name.trim() !== ''));
+            return [...cleanPrev, ...itemsToAdd];
+          });
+
+          setShowBulkItemModal(false);
+          setSelectedBulkItems({});
+          setBulkItemSearch('');
+          showTopToast(`Added ${itemsToAdd.length} item(s) to Proforma Invoice`, 'success');
+        };
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 99999,
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}>
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              width: '100%',
+              maxWidth: '780px',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+              overflow: 'hidden'
+            }}>
+              {/* Modal Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#F8FAFC'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#ECFEFF',
+                    color: '#0E7490',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Boxes size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0F172A' }}>
+                      Add Items in Bulk
+                    </h3>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                      Select multiple products or materials from your directory to insert into this Proforma Invoice
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowBulkItemModal(false)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    color: '#94A3B8',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search & Category Filter Toolbar */}
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                  <input
+                    type="text"
+                    value={bulkItemSearch}
+                    onChange={(e) => setBulkItemSearch(e.target.value)}
+                    placeholder="Search products by name, code, HSN, or category..."
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      paddingLeft: '36px',
+                      paddingRight: '32px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  {bulkItemSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setBulkItemSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#94A3B8',
+                        cursor: 'pointer',
+                        padding: '4px'
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Pills */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    {piBulkCategories.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setBulkCategoryFilter(cat)}
+                        style={{
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '11.5px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          backgroundColor: bulkCategoryFilter === cat ? '#0E7490' : '#F1F5F9',
+                          color: bulkCategoryFilter === cat ? '#FFFFFF' : '#475569',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: '#64748B' }}>
+                    Showing <strong>{filteredPiBulkCatalog.length}</strong> items
+                    {selectedCount > 0 && <span style={{ color: '#0E7490', fontWeight: '700', marginLeft: '6px' }}>({selectedCount} selected)</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Items List Table Header */}
+              <div style={{
+                padding: '8px 20px',
+                backgroundColor: '#F8FAFC',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'grid',
+                gridTemplateColumns: '40px 1fr 90px 90px 100px 100px',
+                alignItems: 'center',
+                fontSize: '11px',
+                fontWeight: '700',
+                color: '#64748B',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                <div>
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAll}
+                    style={{ cursor: 'pointer', accentColor: '#0E7490' }}
+                  />
+                </div>
+                <div>Product Name & Category</div>
+                <div>Unit</div>
+                <div style={{ textAlign: 'right' }}>Stock</div>
+                <div style={{ textAlign: 'right' }}>Rate</div>
+                <div style={{ textAlign: 'center' }}>Quantity</div>
+              </div>
+
+              {/* Scrollable Items List */}
+              <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px', padding: '0 8px' }}>
+                {filteredPiBulkCatalog.length === 0 ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94A3B8' }}>
+                    <Boxes size={32} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+                    <div style={{ fontSize: '13px', fontWeight: '600' }}>No items match your search.</div>
+                    <div style={{ fontSize: '11.5px', marginTop: '4px' }}>Try searching with a different term or clear the filter.</div>
+                  </div>
+                ) : (
+                  filteredPiBulkCatalog.map((it) => {
+                    const selEntry = selectedBulkItems[it.itemKey];
+                    const isSelected = Boolean(selEntry);
+                    return (
+                      <div
+                        key={it.itemKey}
+                        onClick={() => toggleSelectItem(it)}
+                        style={{
+                          padding: '10px 12px',
+                          margin: '4px 0',
+                          borderRadius: '8px',
+                          display: 'grid',
+                          gridTemplateColumns: '40px 1fr 90px 90px 100px 100px',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          backgroundColor: isSelected ? '#ECFEFF' : '#FFFFFF',
+                          border: isSelected ? '1px solid #A5F3FC' : '1px solid transparent',
+                          transition: 'all 0.12s ease'
+                        }}
+                      >
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectItem(it)}
+                            style={{ cursor: 'pointer', accentColor: '#0E7490' }}
+                          />
+                        </div>
+                        <div style={{ minWidth: 0, paddingRight: '10px' }}>
+                          <div style={{ fontSize: '13px', fontWeight: '600', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {it.name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                            <span>{it.category}</span>
+                            {it.code && <span style={{ color: '#0E7490', fontWeight: '600' }}>• {it.code}</span>}
+                            <span>• HSN {it.hsn}</span>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>
+                          {it.uom}
+                        </div>
+                        <div style={{ fontSize: '12px', fontWeight: '700', textAlign: 'right', color: it.stock > 0 ? '#059669' : '#94A3B8' }}>
+                          {it.stock !== null ? it.stock : '—'}
+                        </div>
+                        <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#0F172A', textAlign: 'right' }}>
+                          ₹{Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="any"
+                            value={isSelected ? selEntry.qty : ''}
+                            placeholder="1"
+                            disabled={!isSelected}
+                            onChange={(e) => updateItemQty(it, e.target.value)}
+                            style={{
+                              width: '72px',
+                              height: '30px',
+                              borderRadius: '6px',
+                              border: isSelected ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                              textAlign: 'center',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              backgroundColor: isSelected ? '#FFFFFF' : '#F8FAFC',
+                              color: isSelected ? '#0F172A' : '#94A3B8',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                padding: '14px 20px',
+                borderTop: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}>
+                <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
+                  {selectedCount > 0 ? `${selectedCount} item(s) ready to add` : 'Check one or more items above'}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkItemModal(false)}
+                    style={{
+                      height: '36px',
+                      padding: '0 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#475569',
+                      fontSize: '12.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedCount === 0}
+                    onClick={handleConfirmBulkAdd}
+                    style={{
+                      height: '36px',
+                      padding: '0 18px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: selectedCount > 0 ? '#0E7490' : '#94A3B8',
+                      color: '#FFFFFF',
+                      fontSize: '12.5px',
+                      fontWeight: '800',
+                      cursor: selectedCount > 0 ? 'pointer' : 'not-allowed',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Plus size={14} /> Add {selectedCount > 0 ? `${selectedCount} ` : ''}Selected Item{selectedCount === 1 ? '' : 's'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ==================== CREATE CUSTOM SET MODAL (THIS PI ALONE) ==================== */}
       {showCreateSetModal && (
@@ -9117,7 +9675,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             {/* Notice badge */}
             <div style={{ backgroundColor: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: '8px', padding: '10px 12px', fontSize: '11.5px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Lock size={15} style={{ color: '#64748B', flexShrink: 0 }} />
-              <span>This custom set exists <strong>only in this PI</strong> and will not be added to the master preset dropdown.</span>
+              <span>This custom set exists <strong>only in this PI</strong> and will not be added to the master pack dropdown.</span>
             </div>
 
             <form onSubmit={handleCreateCustomSet} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

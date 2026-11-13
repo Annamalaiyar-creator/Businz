@@ -4,7 +4,7 @@ import {
   FileText, Plus, Search, Eye, Share2, MessageSquare, Download, Check,
   Building2, Printer, X, DollarSign, Calendar, Tag, ChevronRight,
   RotateCcw, Edit3, Trash2, CheckCircle, Clock, AlertCircle, Layers,
-  Truck, ArrowRight, Copy, RefreshCw, Send, Mail, Boxes, User, Landmark,
+  Truck, ArrowLeft, ArrowRight, Copy, RefreshCw, Send, Mail, Boxes, User, Landmark,
   AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap,
   ChevronDown, ChevronUp, GripVertical
 } from 'lucide-react';
@@ -955,78 +955,95 @@ export default function CrmQuotationsView({
   };
 
   // Validate required quotation fields
-  const validateQuotationForm = () => {
+  const validateQuotationForm = (isDraft = false) => {
     const missing = [];
     if (!customerName || !customerName.trim()) {
       missing.push({ name: 'Customer / Company Name', targetId: 'quote-field-customerName' });
     }
-    if (!phone || !phone.trim()) {
-      missing.push({ name: 'Phone / WhatsApp Number', targetId: 'quote-field-phone' });
-    }
-    if (!billingStreet || !billingStreet.trim()) {
-      missing.push({ name: 'Billing Street Address', targetId: 'quote-field-billingStreet' });
-    }
-    if (!billingCity || !billingCity.trim()) {
-      missing.push({ name: 'Billing City', targetId: 'quote-field-billingCity' });
-    }
-    if (!billingState || !billingState.trim()) {
-      missing.push({ name: 'Billing State', targetId: 'quote-field-billingState' });
-    }
-    if (!billingPincode || !billingPincode.trim()) {
-      missing.push({ name: 'Billing Pincode', targetId: 'quote-field-billingPincode' });
-    }
-    if (!sameAsBilling) {
-      if (!deliveryStreet || !deliveryStreet.trim()) {
-        missing.push({ name: 'Delivery Street Address', targetId: 'quote-field-deliveryStreet' });
+    if (!isDraft) {
+      if (!phone || !phone.trim()) {
+        missing.push({ name: 'Phone / WhatsApp Number', targetId: 'quote-field-phone' });
       }
-      if (!deliveryCity || !deliveryCity.trim()) {
-        missing.push({ name: 'Delivery City', targetId: 'quote-field-deliveryCity' });
+      if (!billingStreet || !billingStreet.trim()) {
+        missing.push({ name: 'Billing Street Address', targetId: 'quote-field-billingStreet' });
       }
-      if (!deliveryState || !deliveryState.trim()) {
-        missing.push({ name: 'Delivery State', targetId: 'quote-field-deliveryState' });
+      if (!billingCity || !billingCity.trim()) {
+        missing.push({ name: 'Billing City', targetId: 'quote-field-billingCity' });
       }
-      if (!deliveryPincode || !deliveryPincode.trim()) {
-        missing.push({ name: 'Delivery Pincode', targetId: 'quote-field-deliveryPincode' });
+      if (!billingState || !billingState.trim()) {
+        missing.push({ name: 'Billing State', targetId: 'quote-field-billingState' });
       }
-    }
-    if (!quoteItems || quoteItems.length === 0) {
-      missing.push({ name: 'Quotation Items (Add at least 1 item or preset kit)', targetId: 'quote-field-items' });
-    } else {
-      const invalidItems = [];
-      quoteItems.forEach((it, idx) => {
-        const q = parseFloat(it.qty) || 0;
-        const r = parseFloat(it.rate) || 0;
-        const isPresetItem = Boolean(it.isPresetItem);
-        if (!it.name || !it.name.trim()) {
-          invalidItems.push(`Item #${idx + 1}: Name is required`);
-        } else if (q <= 0) {
-          invalidItems.push(`Item #${idx + 1} (${it.name}): Quantity must be > 0`);
-        } else if (!isPresetItem && r <= 0) {
-          invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be > 0`);
+      if (!billingPincode || !billingPincode.trim()) {
+        missing.push({ name: 'Billing Pincode', targetId: 'quote-field-billingPincode' });
+      }
+      if (!sameAsBilling) {
+        if (!deliveryStreet || !deliveryStreet.trim()) {
+          missing.push({ name: 'Delivery Street Address', targetId: 'quote-field-deliveryStreet' });
         }
-      });
-      const presetItems = quoteItems.filter(it => it.isPresetItem);
+        if (!deliveryCity || !deliveryCity.trim()) {
+          missing.push({ name: 'Delivery City', targetId: 'quote-field-deliveryCity' });
+        }
+        if (!deliveryState || !deliveryState.trim()) {
+          missing.push({ name: 'Delivery State', targetId: 'quote-field-deliveryState' });
+        }
+        if (!deliveryPincode || !deliveryPincode.trim()) {
+          missing.push({ name: 'Delivery Pincode', targetId: 'quote-field-deliveryPincode' });
+        }
+      }
+      if (!quoteItems || quoteItems.length === 0) {
+        missing.push({ name: 'Quotation Items (Add at least 1 item or preset kit)', targetId: 'quote-field-items' });
+      } else {
+        const invalidItems = [];
+        quoteItems.forEach((it, idx) => {
+          const q = parseFloat(it.qty) || 0;
+          const r = parseFloat(it.rate) || 0;
+          const isPresetItem = Boolean(it.isPresetItem);
+          if (!it.name || !it.name.trim()) {
+            invalidItems.push(`Item #${idx + 1}: Name is required`);
+          } else if (q <= 0) {
+            invalidItems.push(`Item #${idx + 1} (${it.name}): Quantity must be > 0`);
+          } else if (!isPresetItem && r <= 0) {
+            invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be > 0`);
+          }
+        });
+        const presetItems = quoteItems.filter(it => it.isPresetItem);
+        if (presetItems.length > 0) {
+          if (!presetGroups || Object.keys(presetGroups).length === 0) {
+            invalidItems.push('Preset Amt (₹) is mandatory: Please enter a valid Preset Amount for the configured preset kit.');
+          } else {
+            Object.values(presetGroups).forEach(g => {
+              const kp = parseFloat(g.kitPrice) || 0;
+              if (kp <= 0) {
+                invalidItems.push(`Preset Amt (₹) is mandatory for "${g.presetName || 'Kit'}": Must be greater than 0`);
+              }
+            });
+          }
+        }
+        if (invalidItems.length > 0) {
+          missing.push({ name: `Incomplete Items: ${invalidItems.join(' • ')}`, targetId: 'quote-field-items' });
+        }
+      }
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (!validUntilDate || !validUntilDate.trim()) {
+        missing.push({ name: 'Valid Until Date', targetId: 'quote-field-validUntil' });
+      } else if (validUntilDate < todayStr) {
+        missing.push({ name: 'Valid Until Date cannot be in the past or a finished date', targetId: 'quote-field-validUntil' });
+      }
+    } else {
+      const presetItems = (quoteItems || []).filter(it => it.isPresetItem);
       if (presetItems.length > 0) {
+        let missingKitPrice = false;
         if (!presetGroups || Object.keys(presetGroups).length === 0) {
-          invalidItems.push('Preset Amt (₹) is mandatory: Please enter a valid Preset Amount for the configured preset kit.');
+          missingKitPrice = true;
         } else {
           Object.values(presetGroups).forEach(g => {
-            const kp = parseFloat(g.kitPrice) || 0;
-            if (kp <= 0) {
-              invalidItems.push(`Preset Amt (₹) is mandatory for "${g.presetName || 'Kit'}": Must be greater than 0`);
-            }
+            if (!g.kitPrice || parseFloat(g.kitPrice) <= 0) missingKitPrice = true;
           });
         }
+        if (missingKitPrice) {
+          missing.push({ name: 'Preset Amt (₹) is required for preset structure items', targetId: 'quote-field-items' });
+        }
       }
-      if (invalidItems.length > 0) {
-        missing.push({ name: `Incomplete Items: ${invalidItems.join(' • ')}`, targetId: 'quote-field-items' });
-      }
-    }
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (!validUntilDate || !validUntilDate.trim()) {
-      missing.push({ name: 'Valid Until Date', targetId: 'quote-field-validUntil' });
-    } else if (validUntilDate < todayStr) {
-      missing.push({ name: 'Valid Until Date cannot be in the past or a finished date', targetId: 'quote-field-validUntil' });
     }
 
     return {
@@ -1037,7 +1054,7 @@ export default function CrmQuotationsView({
 
   // Submit / Save Quotation (with unlimited revision capability)
   const handleSaveQuotationRecord = (saveAsStatus = 'Sent') => {
-    const validation = validateQuotationForm();
+    const validation = validateQuotationForm(saveAsStatus === 'Draft');
     if (!validation.isValid) {
       setValidationAlert({
         fields: validation.missingList.map(m => typeof m === 'object' ? (m.name || m.field) : m),
@@ -2867,35 +2884,133 @@ export default function CrmQuotationsView({
                 </div>
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
-              <button
-                type="button"
-                onClick={() => setQuoteConfirmModal('cancel')}
-                style={{ border: '1px solid #CBD5E1', background: 'white', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const validation = validateQuotationForm();
-                  if (!validation.isValid) {
-                    setValidationAlert({
-                      fields: validation.missingList.map(m => typeof m === 'object' ? (m.name || m.field) : m),
-                      firstTargetId: validation.missingList[0]?.targetId
-                    });
-                    return;
-                  }
-                  setQuoteConfirmModal('create');
-                }}
-                style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
-                <CheckCircle style={{ width: '16px', height: '16px' }} />
-                <span>{editingQuoteId ? 'Save & Send Revision →' : 'Create Quotation →'}</span>
-              </button>
-            </div>
+        {/* Sticky Bottom Menu Bar Following with Scroll for Create / Edit Quotation */}
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderTop: '1.5px solid #CBD5E1',
+            padding: '12px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+            zIndex: 50,
+            boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+            borderRadius: '12px',
+            marginTop: '8px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setQuoteConfirmModal('cancel')}
+              style={{
+                height: '40px',
+                borderRadius: '8px',
+                border: '1.5px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                padding: '0 18px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontSize: '13px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+            >
+              <ArrowLeft size={15} /> Back
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const validation = validateQuotationForm(true);
+                if (!validation.isValid) {
+                  setValidationAlert({
+                    fields: validation.missingList.map(m => typeof m === 'object' ? (m.name || m.field) : m),
+                    firstTargetId: validation.missingList[0]?.targetId
+                  });
+                  return;
+                }
+                setQuoteConfirmModal('draft');
+              }}
+              style={{
+                height: '40px',
+                borderRadius: '8px',
+                border: '1.5px solid #0E7490',
+                backgroundColor: '#FFFFFF',
+                color: '#0E7490',
+                padding: '0 18px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontSize: '13px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+            >
+              <FileText size={15} /> Save as Draft
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const validation = validateQuotationForm(false);
+                if (!validation.isValid) {
+                  setValidationAlert({
+                    fields: validation.missingList.map(m => typeof m === 'object' ? (m.name || m.field) : m),
+                    firstTargetId: validation.missingList[0]?.targetId
+                  });
+                  return;
+                }
+                setQuoteConfirmModal('create');
+              }}
+              style={{
+                height: '40px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: '#10B981',
+                color: '#FFFFFF',
+                padding: '0 22px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                fontSize: '13px',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#059669'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#10B981'; }}
+            >
+              <CheckCircle style={{ width: '16px', height: '16px' }} />
+              <span>{editingQuoteId ? 'Save & Send Revision →' : 'Confirm Quotation →'}</span>
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+            <strong style={{ fontSize: '15px', color: '#0E7490', fontWeight: '800' }}>
+              ₹{totals.grand.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </strong>
           </div>
         </div>
 
@@ -2904,17 +3019,23 @@ export default function CrmQuotationsView({
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
             <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px', maxWidth: '440px', width: '90%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: quoteConfirmModal === 'cancel' ? '#FEE2E2' : '#ECFEFF', color: quoteConfirmModal === 'cancel' ? '#DC2626' : '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {quoteConfirmModal === 'cancel' ? <AlertTriangle style={{ width: '20px', height: '20px' }} /> : <Layers style={{ width: '20px', height: '20px' }} />}
+                <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: quoteConfirmModal === 'cancel' ? '#FEE2E2' : quoteConfirmModal === 'draft' ? '#FFFBEB' : '#ECFEFF', color: quoteConfirmModal === 'cancel' ? '#DC2626' : quoteConfirmModal === 'draft' ? '#D97706' : '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {quoteConfirmModal === 'cancel' ? <AlertTriangle style={{ width: '20px', height: '20px' }} /> : quoteConfirmModal === 'draft' ? <FileText style={{ width: '20px', height: '20px' }} /> : <Layers style={{ width: '20px', height: '20px' }} />}
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>
-                    {quoteConfirmModal === 'cancel' ? 'Discard Quotation?' : (editingQuoteId ? 'Confirm & Send Revision?' : 'Confirm & Create Quotation?')}
+                    {quoteConfirmModal === 'cancel'
+                      ? 'Discard Quotation?'
+                      : quoteConfirmModal === 'draft'
+                        ? 'Save Quotation as Draft?'
+                        : (editingQuoteId ? 'Confirm & Send Revision?' : 'Confirm & Create Quotation?')}
                   </h3>
                   <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B', lineHeight: '1.4' }}>
                     {quoteConfirmModal === 'cancel'
                       ? 'Are you sure you want to cancel? Any unsaved changes in this proposal form will be lost.'
-                      : `Are you sure you want to finalize and save Commercial Quotation (${quoteCode})?`}
+                      : quoteConfirmModal === 'draft'
+                        ? `Save Commercial Quotation (${quoteCode}) as a Draft? You can edit, revise, or confirm it at any time later.`
+                        : `Are you sure you want to finalize and save Commercial Quotation (${quoteCode})?`}
                   </p>
                 </div>
               </div>
@@ -2934,6 +3055,8 @@ export default function CrmQuotationsView({
                     setQuoteConfirmModal(null);
                     if (mode === 'cancel') {
                       setShowBOMQuoteForm(false);
+                    } else if (mode === 'draft') {
+                      handleSaveQuotationRecord('Draft');
                     } else if (mode === 'create') {
                       handleSaveQuotationRecord('Sent');
                     }
@@ -2949,7 +3072,7 @@ export default function CrmQuotationsView({
                     cursor: 'pointer'
                   }}
                 >
-                  {quoteConfirmModal === 'cancel' ? 'Yes, Discard' : 'Confirm & Save'}
+                  {quoteConfirmModal === 'cancel' ? 'Yes, Discard' : quoteConfirmModal === 'draft' ? 'Save Draft' : 'Confirm & Save'}
                 </button>
               </div>
             </div>

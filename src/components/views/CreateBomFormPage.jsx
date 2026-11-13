@@ -2,7 +2,7 @@ import React from "react";
 import {
   Plus, Trash2, Eye, FileText, AlertCircle, AlertTriangle, X,
   CheckCircle, Clock, FileCheck, UploadCloud, Truck, Package,
-  ShoppingCart, Upload, Layers, Image, Bell, Save, Boxes, ChevronDown, User, Paperclip
+  ShoppingCart, Upload, Layers, Image, Bell, Save, Boxes, ChevronDown, User, Paperclip, ArrowLeft
 } from "lucide-react";
 import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
@@ -2266,16 +2266,87 @@ export default function CreateBomFormPage(props) {
         })()}
       </div>
 
-      {/* BOTTOM ACTION BUTTON BAR */}
-      <div style={{ backgroundColor: 'white', padding: '18px 24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
+      {/* Sticky Bottom Menu Bar Following with Scroll for Create BOM Order */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderTop: '1.5px solid #CBD5E1',
+          padding: '12px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+          zIndex: 50,
+          boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+          borderRadius: '12px',
+          marginTop: '8px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button
+            type="button"
             onClick={() => setBomConfirmModal('cancel')}
-            style={{ border: '1px solid #CBD5E1', background: 'white', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}
+            style={{
+              height: '40px',
+              borderRadius: '8px',
+              border: '1.5px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              padding: '0 18px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              fontSize: '13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
           >
-            ← Back
+            <ArrowLeft size={15} /> Back
           </button>
 
           <button
+            type="button"
+            onClick={() => {
+              const v = validateProductionBomForm(true);
+              if (!v.isValid) {
+                alert('⚠️ Please complete required fields for Draft:\n\n• ' + v.missingList.map(m => m.message || m.field).join('\n• '));
+                return;
+              }
+              setBomConfirmModal('draft');
+            }}
+            style={{
+              height: '40px',
+              borderRadius: '8px',
+              border: '1.5px solid #0E7490',
+              backgroundColor: '#FFFFFF',
+              color: '#0E7490',
+              padding: '0 18px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              fontSize: '13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+          >
+            <FileText size={15} /> Save as Draft
+          </button>
+
+          <button
+            type="button"
             onClick={() => {
               if (!newBomProductName || !newBomProductName.trim()) {
                 alert('⚠️ Please select or enter a Customer Name before creating the BOM order.');
@@ -2330,12 +2401,37 @@ export default function CreateBomFormPage(props) {
               }
               setBomConfirmModal('create');
             }}
-            style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
+            style={{
+              height: '40px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#10B981',
+              color: '#FFFFFF',
+              padding: '0 22px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              fontSize: '13px',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#059669'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#10B981'; }}
           >
             <CheckCircle style={{ width: '16px', height: '16px' }} />
-            Complete →
+            Confirm BOM →
           </button>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+          <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+          <strong style={{ fontSize: '15px', color: '#0E7490', fontWeight: '800' }}>
+            ₹{(totals.grand || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </strong>
+        </div>
+      </div>
 
       {/* CONFIRMATION POPUP OVERLAY MODAL */}
       {bomConfirmModal && (
@@ -2389,10 +2485,12 @@ export default function CreateBomFormPage(props) {
               <div>
                 <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0F172A' }}>
                   {bomConfirmModal === 'cancel' && 'Go Back?'}
+                  {bomConfirmModal === 'draft' && 'Save BOM Order as Draft?'}
                   {bomConfirmModal === 'create' && 'Confirm BOM Order Creation?'}
                 </h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B', lineHeight: '1.4' }}>
                   {bomConfirmModal === 'cancel' && 'Are you sure you want to go back? Any unsaved changes entered in this BOM form will be lost.'}
+                  {bomConfirmModal === 'draft' && 'Save this BOM order as a Draft? You can edit and complete it later.'}
                   {bomConfirmModal === 'create' && `Are you sure you want to finalize and create BOM Order (${newBomCode})?`}
                 </p>
               </div>
@@ -2571,7 +2669,7 @@ export default function CreateBomFormPage(props) {
                       paymentProofDocs: paymentDocs,
                       paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && paymentDocs.length > 0,
                       remarks: newBomRemarks || '',
-                      status: 'Pending Confirmation',
+                      status: isDraft ? 'Draft' : 'Pending Confirmation',
                       salesConfirmed: false,
                       salesConfirmedAt: null,
                       salesPerson: effectiveSalesPersonName,
@@ -2763,7 +2861,7 @@ export default function CreateBomFormPage(props) {
 
                     // If BOM originates from a converted Proforma Invoice, mark the PI as converted to avoid double-allocation
                     const srcPi = sanitizedNewBom.sourcePiNo;
-                    if (srcPi) {
+                    if (!isDraft && srcPi) {
                       const updatePiList = (storeKey) => {
                         try {
                           const raw = localStorage.getItem(storeKey);
@@ -2920,6 +3018,7 @@ export default function CreateBomFormPage(props) {
                 }}
               >
                 {bomConfirmModal === 'cancel' && 'Yes, Go Back'}
+                {bomConfirmModal === 'draft' && 'Save Draft'}
                 {bomConfirmModal === 'create' && 'Yes, Complete Order'}
               </button>
             </div>

@@ -26,11 +26,11 @@ export function formatDateToISO(date) {
 
 // Helper to format ISO string (YYYY-MM-DD) into display label like "1 - 30 Jun 2026"
 export function formatRangeDisplay(startDateStr, endDateStr, presetLabel) {
-  if (presetLabel && presetLabel !== 'Custom range') {
-    return presetLabel;
-  }
   if (!startDateStr && !endDateStr) {
     return 'All Dates';
+  }
+  if (presetLabel && presetLabel !== 'Custom Range' && presetLabel !== 'Custom range') {
+    return presetLabel;
   }
   if (startDateStr && !endDateStr) {
     const s = new Date(startDateStr);
@@ -90,7 +90,9 @@ export default function ModernDateRangePicker({
   useEffect(() => {
     setTempStart(startDate || null);
     setTempEnd(endDate || null);
-    if (startDate) {
+    if (!startDate && !endDate) {
+      setPreset(null);
+    } else if (startDate) {
       const d = new Date(startDate);
       if (!isNaN(d.getTime())) {
         setNavYear(d.getFullYear());
@@ -147,28 +149,22 @@ export default function ModernDateRangePicker({
       start = '';
       end = '';
       label = 'All Dates';
-    } else if (key === '24H') {
+    } else if (key === 'TODAY') {
       start = formatDateToISO(today);
       end = formatDateToISO(today);
-      label = '24h';
+      label = 'Today';
     } else if (key === '7D') {
       const past = new Date(today);
       past.setDate(today.getDate() - 6);
       start = formatDateToISO(past);
       end = formatDateToISO(today);
-      label = '7 days';
-    } else if (key === '2W') {
-      const past = new Date(today);
-      past.setDate(today.getDate() - 13);
-      start = formatDateToISO(past);
-      end = formatDateToISO(today);
-      label = '2 weeks';
+      label = '7 Days';
     } else if (key === '30D') {
       const past = new Date(today);
       past.setDate(today.getDate() - 29);
       start = formatDateToISO(past);
       end = formatDateToISO(today);
-      label = '30 days';
+      label = '30 Days';
     }
 
     setPreset(label);
@@ -198,12 +194,12 @@ export default function ModernDateRangePicker({
       }
       setTempStart(newStart);
       setTempEnd(newEnd);
-      setPreset('Custom range');
+      setPreset('Custom Range');
       setIsOpen(false);
       setShowCalendar(false);
 
       if (onChange) {
-        onChange({ startDate: newStart, endDate: newEnd, label: 'Custom range' });
+        onChange({ startDate: newStart, endDate: newEnd, label: 'Custom Range' });
       }
     }
   };
@@ -367,7 +363,7 @@ export default function ModernDateRangePicker({
           </div>
 
           <div
-            onClick={() => handleSelectPreset('24H')}
+            onClick={() => handleSelectPreset('TODAY')}
             style={{
               padding: '9px 18px',
               fontSize: '14px',
@@ -379,7 +375,7 @@ export default function ModernDateRangePicker({
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            24h
+            Today
           </div>
 
           <div
@@ -395,23 +391,7 @@ export default function ModernDateRangePicker({
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            7 days
-          </div>
-
-          <div
-            onClick={() => handleSelectPreset('2W')}
-            style={{
-              padding: '9px 18px',
-              fontSize: '14px',
-              fontWeight: '600',
-              color: '#1E293B',
-              cursor: 'pointer',
-              transition: 'background 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            2 weeks
+            7 Days
           </div>
 
           <div
@@ -427,13 +407,13 @@ export default function ModernDateRangePicker({
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            30 days
+            30 Days
           </div>
 
           {/* Separator line */}
           <div style={{ height: '1px', backgroundColor: '#F1F5F9', margin: '6px 0' }} />
 
-          {/* Bottom Pill: "Custom range..." (Exact match from screenshot) */}
+          {/* Bottom Pill: "Custom Range" */}
           <div style={{ padding: '0 10px' }}>
             <button
               id="btn-open-custom-range"
@@ -458,7 +438,7 @@ export default function ModernDateRangePicker({
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#D1FAE5')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#ECFDF5')}
             >
-              Custom range...
+              Custom Range
             </button>
           </div>
         </div>
@@ -507,7 +487,7 @@ export default function ModernDateRangePicker({
             </div>
 
             <div style={{ fontSize: '15px', fontWeight: '700', color: '#1E293B', textAlign: 'center' }}>
-              Custom range
+              Custom Range
             </div>
 
             <div style={{ width: '24px' }} />
@@ -676,7 +656,7 @@ export default function ModernDateRangePicker({
             ) : (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', color: '#0E7490', fontWeight: '700' }}>
-                  {formatRangeDisplay(tempStart, tempEnd, 'Custom range')}
+                  {formatRangeDisplay(tempStart, tempEnd, 'Custom Range')}
                 </span>
                 <button
                   type="button"
