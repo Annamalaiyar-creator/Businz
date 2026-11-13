@@ -128,15 +128,32 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             return isSentToAccounts || isAccDone || isInvoiceOrLater;
           };
 
-          const isAccVerifiedOrder = (b) => {
+          const hasAnyProof = (b) => Boolean(
+            b?.paymentProofDoc || b?.payments?.proofDocObj || b?.payments?.proofDoc || b?.balancePaymentProofDoc || b?.balanceProofDoc || b?.proofDoc || (Array.isArray(b?.paymentProofDocs) && b.paymentProofDocs.length > 0)
+          );
+          const hasRemainingBalanceProof = (b) => Boolean(
+            b?.balancePaymentProofDoc || b?.balanceProofDoc || (Array.isArray(b?.balancePaymentProofDocs) && b.balancePaymentProofDocs.length > 0) ||
+            b?.payments?.balanceProofDocObj || b?.payments?.balanceProofDoc || b?.payments?.balanceUploaded || b?.payments?.balanceSettled ||
+            b?.payments?.dispatch50Uploaded || b?.creditSettled || b?.paymentSettled || b?.accountsVerification?.creditSettled ||
+            b?.accountsVerification?.paymentStatus === 'Payment Proof Attached' || b?.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales' ||
+            (b?.balanceAmount !== undefined && b?.balanceAmount !== null && Number(b.balanceAmount) <= 0 && Number(b.partialAmount) > 0 && hasAnyProof(b))
+          );
+
+          const isPaymentProofPendingOrder = (b) => {
+            if (!b) return false;
             const acc = b?.accountsVerification || {};
             const s = String(b?.status || '').toLowerCase();
+            if (acc.verified || s.includes('accounts verified') || b?.isAccountsDone || s.includes('invoice') || s.includes('dispatched') || b?.fullyCompleted) return false;
             const pType = String(b?.paymentType || b?.paymentTerms || '').toLowerCase();
-            const requiresProof = pType.includes('while dispatch') || pType.includes('before dispatch') || pType.includes('partial') || pType.includes('50%') || Boolean(b?.awaitingSalesPaymentProof);
-            const hasProof = Boolean(
-              b?.paymentProofDoc || b?.payments?.proofDocObj || b?.payments?.proofDoc || b?.balancePaymentProofDoc || b?.proofDoc || (Array.isArray(b?.paymentProofDocs) && b.paymentProofDocs.length > 0)
-            );
-            if (requiresProof && !hasProof) return false;
+            if (pType.includes('partial') || pType.includes('50%')) return !hasRemainingBalanceProof(b);
+            if (pType.includes('while dispatch') || pType.includes('before dispatch') || b?.awaitingSalesPaymentProof || s.includes('awaiting sales payment proof')) return !hasAnyProof(b);
+            return false;
+          };
+
+          const isAccVerifiedOrder = (b) => {
+            if (isPaymentProofPendingOrder(b)) return false;
+            const acc = b?.accountsVerification || {};
+            const s = String(b?.status || '').toLowerCase();
             return Boolean(
               acc.verified ||
               s.includes('accounts verified') ||
@@ -145,7 +162,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             );
           };
 
-          const pendingAccounts = boms.filter(b => isAccountsEligible(b) && !isAccVerifiedOrder(b));
+          const pendingAccounts = boms.filter(b => isAccountsEligible(b) && !isPaymentProofPendingOrder(b) && !isAccVerifiedOrder(b));
           setRealAccountsVerificationCount(pendingAccounts.length);
         }
         if (Array.isArray(pos)) {

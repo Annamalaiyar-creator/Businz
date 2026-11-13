@@ -15,7 +15,6 @@ import { notifyBomCancelledByDispatch, notifyCreditPaymentSettled } from '../../
 import { getNextSequence, compareBomDescending, normalizeBomCode, getNumericSearchMatchRank } from '../../utils/sequenceGenerator';
 import {
   formatAppliedAtDate, formatBomDateDot, getBomActiveStage, getBomStageTiming,
-  isBomMissingRequiredPaymentProof,
   getOrderLifecycle,
   canonicalizeSalespersonCode,
   CODE_TO_SALES_NAME,
@@ -2057,7 +2056,6 @@ export default function BomOrdersView(props) {
       { id: 'All', label: 'All BOMs', count: tabBaseBomList.filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
       { id: 'sales_confirmation_pending', label: 'Sales Confirmation Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Sales Confirmation Pending').length, bg: '#f1f5f9', fg: '#475569' },
       { id: 'dispatch_packing_pending', label: 'Dispatch Packing Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Dispatch Packing Pending').length, bg: '#fef3c7', fg: '#b45309' },
-      { id: 'payment_proof_pending', label: 'Payment Proof Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Payment Proof Pending' || isBomMissingRequiredPaymentProof(b)).length, bg: '#ffedd5', fg: '#c2410c' },
       { id: 'accounts_verification_pending', label: 'Accounts Verification Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Accounts Verification Pending').length, bg: '#f3e8ff', fg: '#7e22ce' },
       { id: 'invoice_pending', label: 'Invoice Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Invoice Pending').length, bg: '#dbeafe', fg: '#1d4ed8' },
       { id: 'vehicle_loading_pending', label: 'Vehicle Loading Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Vehicle Loading Pending').length, bg: '#cffafe', fg: '#0e7490' },
@@ -2065,7 +2063,6 @@ export default function BomOrdersView(props) {
     ] : [
       { id: 'All', label: 'All BOMs', count: tabBaseBomList.filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
       { id: 'Pending', label: 'Pending Sales Confirmation', count: tabBaseBomList.filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
-      { id: 'PaymentProofPending', label: 'Payment Proof Pending', count: tabBaseBomList.filter(b => isBomMissingRequiredPaymentProof(b)).length, bg: '#ffedd5', fg: '#c2410c' },
       { id: 'AddressAction', label: 'Address Proof Requested', count: tabBaseBomList.filter(b => (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && !b.cancelled).length, bg: '#fee2e2', fg: '#b91c1c' },
       { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: tabBaseBomList.filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed' && !b.cancelled).length, bg: '#dcfce7', fg: '#166534' },
       { id: 'PendingPrint', label: 'Pending Print', count: tabBaseBomList.filter(b => (!b.dispatchPrinted && !b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#fef3c7', fg: '#b45309' },
@@ -2309,8 +2306,6 @@ export default function BomOrdersView(props) {
     if (isCeo) {
       if (subTab === 'all' || subTab === 'all boms') {
         matchesTab = !isCancelled;
-      } else if (subTab === 'payment_proof_pending' || subTab === 'payment proof pending') {
-        matchesTab = (getBomActiveStage(r).name === 'Payment Proof Pending' || isBomMissingRequiredPaymentProof(r)) && !isCancelled;
       } else {
         const activeStage = getBomActiveStage(r);
         const stageNorm = activeStage.name.toLowerCase().replace(/\s+/g, '_');
@@ -2319,8 +2314,6 @@ export default function BomOrdersView(props) {
     } else {
       if (subTab === 'all' || subTab === 'all boms') {
         matchesTab = !isCancelled;
-      } else if (subTab === 'paymentproofpending' || subTab === 'payment proof pending') {
-        matchesTab = isBomMissingRequiredPaymentProof(r) && !isCancelled;
       } else if (subTab === 'pendingprint') {
         matchesTab = !isPrinted && !isCancelled && !isClosedOrDone;
       } else if (subTab === 'printed') {

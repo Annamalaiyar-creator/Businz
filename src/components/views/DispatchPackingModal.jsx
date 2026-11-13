@@ -530,19 +530,41 @@ export default function DispatchPackingModal({
   const isPartialPaid = Boolean(
     dispatchPackingModal?.paymentType === 'Partial Paid' ||
     dispatchPackingModal?.paymentType === 'Partial Payment' ||
-    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('partial')
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('partial') ||
+    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('50%')
   );
 
-  const hasPaymentProof = Boolean(
+  const hasAnyPaymentProof = Boolean(
     dispatchPackingModal?.paymentProofDoc ||
+    dispatchPackingModal?.balancePaymentProofDoc ||
+    dispatchPackingModal?.balanceProofDoc ||
     dispatchPackingModal?.payments?.proofDocObj ||
     dispatchPackingModal?.payments?.proofDoc ||
+    dispatchPackingModal?.payments?.balanceProofDocObj ||
+    dispatchPackingModal?.payments?.balanceProofDoc ||
     dispatchPackingModal?.proofDoc ||
     dispatchPackingModal?.paymentProofAttached ||
-    dispatchPackingModal?.hasPaymentProof
+    dispatchPackingModal?.hasPaymentProof ||
+    (Array.isArray(dispatchPackingModal?.paymentProofDocs) && dispatchPackingModal.paymentProofDocs.length > 0)
   );
 
-  const needsSalesPaymentProof = (isWhileDispatch || isPartialPaid) && !hasPaymentProof;
+  const hasRemainingBalanceProof = Boolean(
+    dispatchPackingModal?.balancePaymentProofDoc ||
+    dispatchPackingModal?.balanceProofDoc ||
+    (Array.isArray(dispatchPackingModal?.balancePaymentProofDocs) && dispatchPackingModal.balancePaymentProofDocs.length > 0) ||
+    dispatchPackingModal?.payments?.balanceProofDocObj ||
+    dispatchPackingModal?.payments?.balanceProofDoc ||
+    dispatchPackingModal?.payments?.balanceUploaded ||
+    dispatchPackingModal?.payments?.balanceSettled ||
+    dispatchPackingModal?.payments?.dispatch50Uploaded ||
+    dispatchPackingModal?.creditSettled ||
+    dispatchPackingModal?.paymentSettled ||
+    dispatchPackingModal?.accountsVerification?.creditSettled ||
+    dispatchPackingModal?.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+    dispatchPackingModal?.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales'
+  );
+
+  const needsSalesPaymentProof = (isWhileDispatch && !hasAnyPaymentProof) || (isPartialPaid && !hasRemainingBalanceProof);
 
   const handleSaveDraft = () => {
     if (uploadingCount > 0) {
@@ -699,19 +721,41 @@ export default function DispatchPackingModal({
     const isPartialPaid = Boolean(
       dispatchPackingModal.paymentType === 'Partial Paid' ||
       dispatchPackingModal.paymentType === 'Partial Payment' ||
-      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('partial')
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('partial') ||
+      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('50%')
     );
 
-    const hasPaymentProof = Boolean(
+    const hasAnyPaymentProof = Boolean(
       dispatchPackingModal.paymentProofDoc ||
+      dispatchPackingModal.balancePaymentProofDoc ||
+      dispatchPackingModal.balanceProofDoc ||
       dispatchPackingModal.payments?.proofDocObj ||
       dispatchPackingModal.payments?.proofDoc ||
+      dispatchPackingModal.payments?.balanceProofDocObj ||
+      dispatchPackingModal.payments?.balanceProofDoc ||
       dispatchPackingModal.proofDoc ||
       dispatchPackingModal.paymentProofAttached ||
-      dispatchPackingModal.hasPaymentProof
+      dispatchPackingModal.hasPaymentProof ||
+      (Array.isArray(dispatchPackingModal.paymentProofDocs) && dispatchPackingModal.paymentProofDocs.length > 0)
     );
 
-    const needsSalesPaymentProof = (isWhileDispatch || isPartialPaid) && !hasPaymentProof;
+    const hasRemainingBalanceProof = Boolean(
+      dispatchPackingModal.balancePaymentProofDoc ||
+      dispatchPackingModal.balanceProofDoc ||
+      (Array.isArray(dispatchPackingModal.balancePaymentProofDocs) && dispatchPackingModal.balancePaymentProofDocs.length > 0) ||
+      dispatchPackingModal.payments?.balanceProofDocObj ||
+      dispatchPackingModal.payments?.balanceProofDoc ||
+      dispatchPackingModal.payments?.balanceUploaded ||
+      dispatchPackingModal.payments?.balanceSettled ||
+      dispatchPackingModal.payments?.dispatch50Uploaded ||
+      dispatchPackingModal.creditSettled ||
+      dispatchPackingModal.paymentSettled ||
+      dispatchPackingModal.accountsVerification?.creditSettled ||
+      dispatchPackingModal.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+      dispatchPackingModal.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales'
+    );
+
+    const needsSalesPaymentProof = (isWhileDispatch && !hasAnyPaymentProof) || (isPartialPaid && !hasRemainingBalanceProof);
 
     if (sendPartialToAccounts) {
       // User confirmed partial packing

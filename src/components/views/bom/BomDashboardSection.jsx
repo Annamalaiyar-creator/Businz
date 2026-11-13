@@ -5,7 +5,6 @@ import {
 import ModernDateRangePicker from '../../ModernDateRangePicker';
 import BomOperationalModals from './BomOperationalModals';
 import BomExecutiveModals from './BomExecutiveModals';
-import { isBomMissingRequiredPaymentProof } from './bomStageHelpers';
 
 export default function BomDashboardSection({ ctx }) {
   const {
@@ -607,43 +606,23 @@ export default function BomDashboardSection({ ctx }) {
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center', width: '215px', minWidth: '190px' }}>
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                            <span style={{
-                              backgroundColor: currentStage.bg,
-                              color: currentStage.color,
-                              border: `1px solid ${currentStage.border}`,
-                              padding: '3px 10px',
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: currentStage.dot || currentStage.color }} />
-                              <span>{currentStage.name}</span>
-                            </span>
-                            {!isCancelled && currentStage.name !== 'Payment Proof Pending' && isBomMissingRequiredPaymentProof(row) && (
-                              <span style={{
-                                backgroundColor: '#FFFBEB',
-                                color: '#B45309',
-                                border: '1px solid #FDE68A',
-                                padding: '2px 8px',
-                                borderRadius: '10px',
-                                fontSize: '10px',
-                                fontWeight: '800',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                whiteSpace: 'nowrap'
-                              }}>
-                                <AlertCircle size={10} style={{ color: '#D97706' }} />
-                                <span>Payment Proof Pending</span>
-                              </span>
-                            )}
-                          </div>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', width: '200px', minWidth: '180px' }}>
+                          <span style={{
+                            backgroundColor: currentStage.bg,
+                            color: currentStage.color,
+                            border: `1px solid ${currentStage.border}`,
+                            padding: '3px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: currentStage.dot || currentStage.color }} />
+                            <span>{currentStage.name}</span>
+                          </span>
                         </td>
                       </tr>
                     );
@@ -715,10 +694,8 @@ export default function BomDashboardSection({ ctx }) {
                 const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || (row.status || '').toLowerCase().includes('cancel') || row.tabGroup === 'Cancelled');
                 const isAwaitingSalesPayment = Boolean(
                   row.awaitingSalesPaymentProof ||
-                  (typeof row.status === 'string' && row.status.toLowerCase().includes('awaiting sales payment proof')) ||
-                  getBomActiveStage(row).name === 'Payment Proof Pending'
+                  (typeof row.status === 'string' && row.status.toLowerCase().includes('awaiting sales payment proof'))
                 );
-                const isMissingPaymentProof = !isCancelled && (isAwaitingSalesPayment || isBomMissingRequiredPaymentProof(row));
                 const isSentToDispatch = Boolean(
                   row.salesConfirmed ||
                   row.salesReconfirmed ||
@@ -781,7 +758,7 @@ export default function BomDashboardSection({ ctx }) {
                           </span>
                         )}
 
-                        {!isCancelled && isMissingPaymentProof && (
+                        {!isCancelled && isAwaitingSalesPayment && (
                           <span style={{
                             backgroundColor: '#FEF3C7',
                             color: '#92400E',
@@ -789,13 +766,13 @@ export default function BomDashboardSection({ ctx }) {
                             padding: '2px 8px',
                             borderRadius: '12px',
                             fontSize: '11px',
-                            fontWeight: '800',
+                            fontWeight: '700',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px'
                           }}>
                             <AlertCircle size={11} style={{ color: '#D97706' }} />
-                            {isAwaitingSalesPayment ? 'Packed — Payment Proof Pending' : 'Payment Proof Pending'}
+                            Packed — Awaiting Sales Payment Proof
                           </span>
                         )}
 
@@ -910,8 +887,8 @@ export default function BomDashboardSection({ ctx }) {
                       </span>
                     </div>
 
-                    {/* Amber Action Alert for BOM Missing Required Sales Payment Proof */}
-                    {!isCancelled && isMissingPaymentProof && (
+                    {/* Amber Action Alert for Packed BOM Awaiting Sales Payment Proof */}
+                    {!isCancelled && isAwaitingSalesPayment && (
                       <div style={{
                         backgroundColor: '#FFFBEB',
                         border: '1px solid #FDE68A',
@@ -940,14 +917,10 @@ export default function BomDashboardSection({ ctx }) {
                             <UploadCloud size={12} style={{ color: '#FFFFFF' }} />
                           </div>
                           <span style={{ fontSize: '12px', fontWeight: '800', color: '#92400E' }}>
-                            {isAwaitingSalesPayment
-                              ? '⚠️ Action Required: Goods Packed — Payment Proof Pending'
-                              : '⚠️ Payment Proof Pending — Please Attach Payment Slip'}
+                            ⚠️ Action Required: Goods Packed — Please Attach Payment Proof
                           </span>
                           <span style={{ fontSize: '11px', color: '#B45309' }}>
-                            Terms: <strong>{row.paymentType || 'Payment While Dispatch / Partial Paid'}</strong> · {isAwaitingSalesPayment
-                              ? 'Packed by Dispatch. Held until payment slip is attached to forward to Accounts.'
-                              : 'Payment proof is not attached yet. Attach payment slip before Accounts verification.'}
+                            Terms: <strong>{row.paymentType || 'Payment While Dispatch / Partial Paid'}</strong> · Packed by Dispatch. Held until payment slip is attached to forward to Accounts.
                           </span>
                         </div>
                         <button
@@ -1082,13 +1055,13 @@ export default function BomDashboardSection({ ctx }) {
                                       gap: '5px',
                                       padding: '2px 8px',
                                       borderRadius: '6px',
-                                      border: st.isPaymentHold ? '1.5px solid #D97706' : '1.5px solid #0E7490',
-                                      backgroundColor: st.isPaymentHold ? '#FFFBEB' : '#F0FDFA',
-                                      color: st.isPaymentHold ? '#B45309' : '#0E7490',
+                                      border: '1.5px solid #0E7490',
+                                      backgroundColor: '#F0FDFA',
+                                      color: '#0E7490',
                                       flexShrink: 0
                                     }}>
-                                      {StepIcon && <StepIcon size={12} style={{ color: st.isPaymentHold ? '#D97706' : '#0E7490' }} />}
-                                      <span style={{ fontSize: '12px', fontWeight: '800', color: st.isPaymentHold ? '#B45309' : '#0E7490', whiteSpace: 'nowrap' }}>
+                                      {StepIcon && <StepIcon size={12} style={{ color: '#0E7490' }} />}
+                                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>
                                         {st.label}
                                       </span>
                                     </div>
@@ -1454,8 +1427,7 @@ export default function BomDashboardSection({ ctx }) {
             const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
             const isAwaitingProof = targetRow && (
               targetRow.awaitingSalesPaymentProof ||
-              (typeof targetRow.status === 'string' && targetRow.status.toLowerCase().includes('awaiting sales payment proof')) ||
-              isBomMissingRequiredPaymentProof(targetRow)
+              (typeof targetRow.status === 'string' && targetRow.status.toLowerCase().includes('awaiting sales payment proof'))
             );
             if (!isAwaitingProof || isCeo) return null;
             return (

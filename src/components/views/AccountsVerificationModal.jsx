@@ -398,12 +398,33 @@ export default function AccountsVerificationModal({
     accountsVerificationModal?.payments?.balanceProofDoc
   );
 
+  const hasBalancePaymentProof = Boolean(
+    accountsVerificationModal?.balancePaymentProofDoc ||
+    accountsVerificationModal?.balanceProofDoc ||
+    (Array.isArray(accountsVerificationModal?.balancePaymentProofDocs) && accountsVerificationModal.balancePaymentProofDocs.length > 0) ||
+    accountsVerificationModal?.payments?.balanceProofDocObj ||
+    accountsVerificationModal?.payments?.balanceProofDoc ||
+    accountsVerificationModal?.payments?.balanceUploaded ||
+    accountsVerificationModal?.payments?.balanceSettled ||
+    accountsVerificationModal?.payments?.dispatch50Uploaded ||
+    accountsVerificationModal?.creditSettled ||
+    accountsVerificationModal?.paymentSettled ||
+    accountsVerificationModal?.accountsVerification?.creditSettled ||
+    accountsVerificationModal?.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+    accountsVerificationModal?.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales' ||
+    (accountsVerificationModal?.balanceAmount !== undefined && accountsVerificationModal?.balanceAmount !== null && Number(accountsVerificationModal.balanceAmount) <= 0 && Number(accountsVerificationModal.partialAmount) > 0 && hasUploadedPaymentProof)
+  );
+
+  const isMissingRequiredPaymentProof = Boolean(
+    isPartialPaidTerms ? !hasBalancePaymentProof : (requiresPaymentProofForApproval && !hasUploadedPaymentProof)
+  );
+
   const isVerified = Boolean(
     currentPayStatus && 
     currentPayDate && 
     currentTotalAmount !== '' && 
     cleanNum(currentTotalAmount, 0) > 0 &&
-    !(requiresPaymentProofForApproval && !hasUploadedPaymentProof)
+    !isMissingRequiredPaymentProof
   );
   const isPartialVerified = Boolean(currentPayStatus || currentPayDate || (currentTotalAmount !== '' && cleanNum(currentTotalAmount, 0) > 0)) && !isVerified;
 
@@ -418,8 +439,8 @@ export default function AccountsVerificationModal({
   const currentPayConfig = (currentPayStatus && payStatusConfig[currentPayStatus]) || { bg: '#F1F5F9', color: '#475569', label: 'Pending Verification', icon: <Clock style={{ width: '18px', height: '18px' }} /> };
 
   const completeVerification = async () => {
-    if (requiresPaymentProofForApproval && !hasUploadedPaymentProof) {
-      alert(`⛔ CANNOT APPROVE — PAYMENT PROOF PENDING\n\nThis order has payment terms "${payType || 'Payment While Dispatch / Partial Payment'}". The payment proof slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order remains in Payment Proof Pending until the Sales person attaches the payment proof receipt.`);
+    if (isMissingRequiredPaymentProof) {
+      alert(`⛔ CANNOT APPROVE — PAYMENT PROOF PENDING\n\nThis order has payment terms "${payType || 'Payment While Dispatch / Partial Payment'}". The required ${isPartialPaidTerms ? 'remaining balance ' : ''}payment proof slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order remains in Payment Proof Pending until the Sales person attaches the payment proof receipt.`);
       return;
     }
     if (!currentPayDate) {
@@ -679,7 +700,7 @@ export default function AccountsVerificationModal({
                   Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isAlreadyCompleted ? 'Assigned' : 'Assigned upon Clearance')}</strong>
                 </span>
                 <StatusBadge
-                  status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isWhileDispatch && !hasUploadedPaymentProof ? 'AWAITING PAYMENT SLIP' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
+                  status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isMissingRequiredPaymentProof ? 'PAYMENT PROOF PENDING' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
                   size="sm"
                 />
                 {isPartialPackingOrder && (
@@ -1442,6 +1463,28 @@ export default function AccountsVerificationModal({
                         <CheckCircle size={13} color="#0E7490" /> Verified via Bank Remittance
                       </div>
                     </div>
+                    {isPartialPaidTerms && !hasBalancePaymentProof && (
+                      <div style={{
+                        width: '100%',
+                        marginTop: '10px',
+                        backgroundColor: '#FFFBEB',
+                        border: '1.5px solid #F59E0B',
+                        borderRadius: '10px',
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div style={{ fontSize: '12px', fontWeight: '700', color: '#92400E' }}>
+                          ⚠️ Initial advance proof is attached above, but <strong>Remaining Balance Payment Proof</strong> is still pending from Sales.
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#DC2626', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', padding: '4px 10px', borderRadius: '6px' }}>
+                          Payment Proof Pending
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : requiresPaymentProofForApproval ? (
                   <div style={{
@@ -2264,20 +2307,20 @@ export default function AccountsVerificationModal({
             <button
               onClick={completeVerification}
               style={{
-                border: (requiresPaymentProofForApproval && !hasUploadedPaymentProof) ? '1px solid #FECACA' : 'none',
-                background: (requiresPaymentProofForApproval && !hasUploadedPaymentProof)
+                border: isMissingRequiredPaymentProof ? '1px solid #FECACA' : 'none',
+                background: isMissingRequiredPaymentProof
                   ? '#FEF2F2'
                   : 'linear-gradient(135deg, #064E3B, #166534)',
-                color: (requiresPaymentProofForApproval && !hasUploadedPaymentProof) ? '#DC2626' : '#FFFFFF',
+                color: isMissingRequiredPaymentProof ? '#DC2626' : '#FFFFFF',
                 height: '42px', padding: '0 28px',
                 borderRadius: '10px', fontSize: '13px', fontWeight: '800',
                 cursor: 'pointer',
-                boxShadow: (requiresPaymentProofForApproval && !hasUploadedPaymentProof) ? 'none' : '0 4px 12px rgba(6,78,59,0.3)',
+                boxShadow: isMissingRequiredPaymentProof ? 'none' : '0 4px 12px rgba(6,78,59,0.3)',
                 display: 'flex', alignItems: 'center', gap: '8px'
               }}
-              title={requiresPaymentProofForApproval && !hasUploadedPaymentProof ? "Locked: Payment Proof Pending from Sales person" : ""}
+              title={isMissingRequiredPaymentProof ? "Locked: Payment Proof Pending from Sales person" : ""}
             >
-              {requiresPaymentProofForApproval && !hasUploadedPaymentProof ? (
+              {isMissingRequiredPaymentProof ? (
                 <>
                   <Clock style={{ width: '15px', height: '15px', color: '#DC2626' }} />
                   Payment Proof Pending (Locked)

@@ -1533,7 +1533,8 @@ export default function BomOperationalModals({ ctx }) {
                               packingStatus: isPackedAwaitingProof ? 'PACKING_VERIFIED' : b.packingStatus,
                               paymentProofDoc: primaryProof,
                               paymentProofDocs: allPaymentDocs,
-                              balanceProofDoc: primaryProof,
+                              balancePaymentProofDoc: newlyUploadedDocs[newlyUploadedDocs.length - 1] || primaryProof,
+                              balanceProofDoc: newlyUploadedDocs[newlyUploadedDocs.length - 1] || primaryProof,
                               balancePaymentProofDocs: allPaymentDocs,
                               uploadedDocuments: [
                                 ...(Array.isArray(b.uploadedDocuments) ? b.uploadedDocuments.filter(d => !d.category?.includes('payment') && !d.type?.includes('payment')) : []),
@@ -1543,8 +1544,9 @@ export default function BomOperationalModals({ ctx }) {
                                 ...(b.accountsVerification || {}),
                                 readyForAccounts: isPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
                                 paymentProofDoc: primaryProof,
+                                balancePaymentProofDoc: newlyUploadedDocs[newlyUploadedDocs.length - 1] || primaryProof,
                                 paymentProofDocs: allPaymentDocs,
-                                paymentStatus: 'Payment Proof Attached by Sales'
+                                paymentStatus: 'Payment Proof Attached'
                               },
                               balanceAmount: newBal,
                               paymentUpdated: true,

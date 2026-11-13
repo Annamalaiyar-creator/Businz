@@ -384,20 +384,41 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                             });
                             const settledVal = parseFloat(balancePaidInput) || currentOutstanding;
                             setBomStore(prev => {
-                              const updated = prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
-                                ...b,
-                                balancePaymentProofDoc: metadata,
-                                balanceAmountPaid: settledVal,
-                                balancePaidAt: new Date().toISOString(),
-                                status: 'Payment Completed & Verified',
-                                payments: {
-                                  ...b.payments,
-                                  balanceSettled: true,
-                                  balanceProofDoc: metadata.name,
-                                  balanceProofDocObj: metadata,
-                                  balanceAmountPaid: settledVal
-                                }
-                              } : b);
+                              const updated = prev.map(b => {
+                                if (b.bomCode !== bomCode && b.id !== bomCode) return b;
+                                const wasPackedAwaitingProof = Boolean(
+                                  b.awaitingSalesPaymentProof ||
+                                  (typeof b.status === 'string' && b.status.toLowerCase().includes('awaiting sales payment proof')) ||
+                                  b.packingStatus === 'PACKING_VERIFIED' ||
+                                  b.dispatchPackingVerified
+                                );
+                                return {
+                                  ...b,
+                                  balancePaymentProofDoc: metadata,
+                                  balanceProofDoc: metadata,
+                                  balancePaymentProofDocs: [...(b.balancePaymentProofDocs || []), metadata],
+                                  balanceAmountPaid: settledVal,
+                                  balancePaidAt: new Date().toISOString(),
+                                  status: wasPackedAwaitingProof ? 'Dispatch Packing Verified - Sent to Accounts' : (b.status || 'Pending Sales Confirmation'),
+                                  readyForAccounts: wasPackedAwaitingProof ? true : b.readyForAccounts,
+                                  awaitingSalesPaymentProof: false,
+                                  pendingSalesDispatchPayment: false,
+                                  accountsVerification: {
+                                    ...(b.accountsVerification || {}),
+                                    readyForAccounts: wasPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
+                                    balancePaymentProofDoc: metadata,
+                                    paymentStatus: 'Payment Proof Attached'
+                                  },
+                                  payments: {
+                                    ...b.payments,
+                                    balanceSettled: true,
+                                    balanceUploaded: true,
+                                    balanceProofDoc: metadata.name,
+                                    balanceProofDocObj: metadata,
+                                    balanceAmountPaid: settledVal
+                                  }
+                                };
+                              });
                               const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
                               if (targetBom) saveCloudBomRow(targetBom);
                               return updated;
@@ -476,7 +497,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                             readyForAccounts: wasPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
                             paymentProofDoc: primaryMeta,
                             paymentProofDocs: [...(b.paymentProofDocs || []), ...uploadedMetas],
-                            paymentStatus: 'Payment Proof Attached by Sales'
+                            paymentStatus: 'Payment Proof Attached'
                           },
                           payments: {
                             ...b.payments,

@@ -66,90 +66,6 @@ export const formatBomDateDot = (raw) => {
   return `${dd}.${mm}.${yyyy}`;
 };
 
-export const hasBomPaymentProofAttached = (row, matchingPi = null) => {
-  if (!row) return false;
-  const isValidDoc = (d) => {
-    if (!d) return false;
-    if (typeof d === 'string') return d.trim().length > 0;
-    if (typeof d === 'object') {
-      return Boolean(d.name || d.originalName || d.url || d.dataUrl || d.fileData || d.storagePath || d.storageBucket);
-    }
-    return false;
-  };
-  if (
-    isValidDoc(row.paymentProofDoc) ||
-    isValidDoc(row.balancePaymentProofDoc) ||
-    isValidDoc(row.balanceProofDoc) ||
-    isValidDoc(row.proofDoc) ||
-    isValidDoc(row.proofDocData) ||
-    isValidDoc(row.payments?.proofDocObj) ||
-    isValidDoc(row.payments?.proofDoc) ||
-    isValidDoc(row.payments?.balanceProofDocObj) ||
-    isValidDoc(row.payments?.balanceProofDoc) ||
-    isValidDoc(row.accountsVerification?.paymentProofDoc) ||
-    isValidDoc(row.salesPoDetails?.proofDocObj) ||
-    Boolean(row.paymentProofAttached || row.hasPaymentProof || row.creditSettled || row.paymentSettled || row.accountsVerification?.creditSettled)
-  ) {
-    return true;
-  }
-  if (Array.isArray(row.paymentProofDocs) && row.paymentProofDocs.some(isValidDoc)) return true;
-  if (Array.isArray(row.balancePaymentProofDocs) && row.balancePaymentProofDocs.some(isValidDoc)) return true;
-  if (Array.isArray(row.payments?.proofDocObjs) && row.payments.proofDocObjs.some(isValidDoc)) return true;
-  if (Array.isArray(row.payments?.proofDocs) && row.payments.proofDocs.some(isValidDoc)) return true;
-  if (Array.isArray(row.uploadedDocuments) && row.uploadedDocuments.some(d =>
-    isValidDoc(d) && (
-      String(d.category || '').toLowerCase().includes('payment') ||
-      String(d.type || '').toLowerCase().includes('payment') ||
-      String(d.name || '').toLowerCase().includes('payment')
-    )
-  )) {
-    return true;
-  }
-  if (matchingPi) {
-    if (isValidDoc(matchingPi.paymentProofDoc)) return true;
-    if (Array.isArray(matchingPi.paymentProofDocs) && matchingPi.paymentProofDocs.some(isValidDoc)) return true;
-  }
-  return false;
-};
-
-export const isBomMissingRequiredPaymentProof = (row, matchingPi = null) => {
-  if (!row) return false;
-  const statusStr = String(row.status || '').toLowerCase();
-  const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || statusStr.includes('cancel'));
-  if (isCancelled) return false;
-
-  const isDispatched = row.status === 'Dispatched' || row.status === 'Closed' || row.status === 'CLOSED' || statusStr.includes('dispatched') || Boolean(row.dispatchedAt || row.vehicleLoading?.loadedAt || row.fullyCompleted);
-  if (isDispatched) return false;
-
-  const isInvoiceGenerated = Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo || row.invoiceConfirmed) ||
-    ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status) ||
-    statusStr.includes('invoice') ||
-    Boolean(row.invoiceConfirmedAt || row.invoicedAt || row.stockDeductionDate);
-  if (isInvoiceGenerated) return false;
-
-  const isAccountsVerified = Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
-    ['Accounts Verified - Proceed Billing', 'Accounts Verified & Passed to Invoice'].includes(row.status) ||
-    (statusStr.includes('accounts verified') && !statusStr.includes('sent to accounts')) ||
-    statusStr.includes('passed to invoice') ||
-    Boolean(row.accountsVerifiedAt || row.accountsVerification?.verifiedAt);
-  if (isAccountsVerified) return false;
-
-  const hasProof = hasBomPaymentProofAttached(row, matchingPi);
-  if (hasProof) return false;
-
-  if (Boolean(row.awaitingSalesPaymentProof) || statusStr.includes('awaiting sales payment proof')) {
-    return true;
-  }
-
-  const payTerms = String(row.paymentType || row.paymentTerms || row.c5 || '').toLowerCase();
-  const isWhileDispatchOrPartial = payTerms.includes('while dispatch') ||
-    payTerms.includes('before dispatch') ||
-    payTerms.includes('partial') ||
-    payTerms.includes('50%');
-
-  return isWhileDispatchOrPartial;
-};
-
 export const getBomActiveStage = (row) => {
   if (!row) return { name: 'Unknown', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', dot: '#94A3B8' };
   const statusStr = String(row.status || '').toLowerCase();
@@ -188,9 +104,6 @@ export const getBomActiveStage = (row) => {
     Boolean(row.awaitingSalesPaymentProof) ||
     Boolean(row.packingCompletedAt || row.packedAt || row.packingVerifiedAt || row.accountsVerification?.packedAt || row.packingStatus === 'PACKING_VERIFIED');
   if (isPackingVerified) {
-    if (isBomMissingRequiredPaymentProof(row)) {
-      return { name: 'Payment Proof Pending', bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', dot: '#D97706' };
-    }
     return { name: 'Accounts Verification Pending', bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF', dot: '#9333EA' };
   }
 
@@ -326,8 +239,6 @@ export const getBomStageTiming = (b, matchingPi = null) => {
   const dispatchDuration = (dDispatch && dInvoice) ? formatDuration(dDispatch.getTime() - dInvoice.getTime()) : null;
   const totalTurnaround = (dDispatch && dConfirmed) ? formatDuration(dDispatch.getTime() - dConfirmed.getTime()) : null;
 
-  const isPaymentProofPending = Boolean(isAccountsActive && isBomMissingRequiredPaymentProof(b, matchingPi));
-
   const activeStageName = hasDispatch
     ? 'Dispatched'
     : (isDispatchActive
@@ -335,7 +246,7 @@ export const getBomStageTiming = (b, matchingPi = null) => {
         : (isInvoiceActive
             ? 'Invoice Pending'
             : (isAccountsActive
-                ? (isPaymentProofPending ? 'Payment Proof Pending' : 'Accounts Verification Pending')
+                ? 'Accounts Verification Pending'
                 : (isPackingActive
                     ? 'Dispatch Packing Pending'
                     : 'Sales Confirmation Pending'))));
@@ -364,7 +275,6 @@ export const getBomStageTiming = (b, matchingPi = null) => {
     accountsReceivedTime,
     hasAccounts,
     isAccountsActive,
-    isPaymentProofPending,
     accountsStartedTime: accountsReceivedTime,
     accountsDuration,
 
@@ -417,15 +327,13 @@ export const getOrderLifecycle = (row) => {
     statusStr.includes('sent to dispatch') ||
     statusStr.includes('credit settled');
 
-  const isPaymentHold = isPackingVerified && !isAccountsVerified && !isCancelled && isBomMissingRequiredPaymentProof(row);
-
   return {
     isCancelled,
     steps: [
       { id: 1, label: 'PI Converted', isDone: true, isActive: false, icon: FileCheck },
       { id: 2, label: 'Sales Reconfirm', isDone: isSalesConfirmed, isActive: !isSalesConfirmed && !isCancelled, icon: CheckSquare },
       { id: 3, label: 'Dispatch Packing', isDone: isPackingVerified, isActive: isSalesConfirmed && !isPackingVerified && !isCancelled, icon: PackageCheck },
-      { id: 4, label: isPaymentHold ? 'Payment Proof Pending' : 'Accounts Verify', isDone: isAccountsVerified, isActive: isPackingVerified && !isAccountsVerified && !isCancelled, isPaymentHold, icon: CreditCard },
+      { id: 4, label: 'Accounts Verify', isDone: isAccountsVerified, isActive: isPackingVerified && !isAccountsVerified && !isCancelled, icon: CreditCard },
       { id: 5, label: 'Invoice', isDone: isInvoiceGenerated, isActive: isAccountsVerified && !isInvoiceGenerated && !isCancelled, icon: Receipt },
       { id: 6, label: 'Final Dispatch', isDone: isDispatched, isActive: isInvoiceGenerated && !isDispatched && !isCancelled, icon: Truck }
     ]

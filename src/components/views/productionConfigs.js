@@ -435,7 +435,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               })
             } : undefined,
             'Accounts Verification': shouldBuild('Accounts Verification') ? (() => {
-              const hasOrderPaymentProof = (b) => {
+              const hasAnyOrderPaymentProof = (b) => {
                 if (!b) return false;
                 if (b.creditSettled || b.paymentSettled || b.accountsVerification?.creditSettled || b.paymentProofAttached || b.hasPaymentProof) return true;
                 if (Array.isArray(b.paymentProofDocs) && b.paymentProofDocs.length > 0) return true;
@@ -457,21 +457,52 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 );
               };
 
+              const hasRemainingBalanceProof = (b) => {
+                if (!b) return false;
+                if (
+                  b.balancePaymentProofDoc ||
+                  b.balanceProofDoc ||
+                  (Array.isArray(b.balancePaymentProofDocs) && b.balancePaymentProofDocs.length > 0) ||
+                  b.payments?.balanceProofDocObj ||
+                  b.payments?.balanceProofDoc ||
+                  b.payments?.balanceUploaded ||
+                  b.payments?.balanceSettled ||
+                  b.payments?.dispatch50Uploaded ||
+                  b.creditSettled ||
+                  b.paymentSettled ||
+                  b.accountsVerification?.creditSettled ||
+                  b.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+                  b.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales'
+                ) {
+                  return true;
+                }
+                if (b.balanceAmount !== undefined && b.balanceAmount !== null && Number(b.balanceAmount) <= 0 && Number(b.partialAmount) > 0 && hasAnyOrderPaymentProof(b)) {
+                  return true;
+                }
+                return false;
+              };
+
               const isAccountsEligible = (b) => {
                 if (!b) return false;
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
                 const s = String(b.status || '').toLowerCase().trim();
-                const isPackedAwaitingSalesProof = Boolean(b.awaitingSalesPaymentProof || s.includes('awaiting sales payment proof'));
-                const isSentToAccounts = Boolean(
+                const dp = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
+                const packedCount = dp.filter(p => p.packed).length;
+                const itemsCount = dp.length > 0 ? dp.length : (Array.isArray(b.items) ? b.items.length : 0);
+                const isDispatchPackingCompleted = Boolean(
+                  b.packingStatus === 'PACKING_VERIFIED' ||
+                  b.dispatchPackingVerified ||
+                  (itemsCount > 0 && packedCount >= itemsCount) ||
                   b.accountsVerification?.readyForAccounts ||
                   s.includes('sent to accounts') ||
                   s.includes('awaiting accounts') ||
                   b.pendingSalesDispatchPayment ||
-                  isPackedAwaitingSalesProof
+                  b.awaitingSalesPaymentProof ||
+                  s.includes('awaiting sales payment proof')
                 );
                 const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
                 const isInvoiceOrLater = s.includes('invoice') || s.includes('loading') || s.includes('dispatched') || s.includes('delivered') || s.includes('completed') || s.includes('closed');
-                return isSentToAccounts || isAccDone || isInvoiceOrLater;
+                return isDispatchPackingCompleted || isAccDone || isInvoiceOrLater;
               };
 
               const isPaymentProofPendingOrder = (b) => {
@@ -481,10 +512,16 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 if (acc.verified || s.includes('accounts verified') || b?.isAccountsDone || s.includes('invoice') || s.includes('dispatched') || b?.fullyCompleted) {
                   return false;
                 }
-                if (hasOrderPaymentProof(b)) return false;
-                if (b.awaitingSalesPaymentProof || s.includes('awaiting sales payment proof')) return true;
                 const pType = String(b?.paymentType || b?.paymentTerms || '').toLowerCase();
-                return pType.includes('while dispatch') || pType.includes('before dispatch') || pType.includes('partial') || pType.includes('50%');
+                const isPartialPaid = pType.includes('partial') || pType.includes('50%');
+                const isWhileDispatch = pType.includes('while dispatch') || pType.includes('before dispatch');
+                if (isPartialPaid) {
+                  return !hasRemainingBalanceProof(b);
+                }
+                if (isWhileDispatch || b.awaitingSalesPaymentProof || s.includes('awaiting sales payment proof')) {
+                  return !hasAnyOrderPaymentProof(b);
+                }
+                return false;
               };
 
               const isAccVerifiedOrder = (b) => {
@@ -502,6 +539,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               };
 
               const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort(compareBomDescending);
+              const attachedAccountsBoms = allAccountsBoms.filter(b => !isPaymentProofPendingOrder(b));
+              const paymentProofPendingBoms = allAccountsBoms.filter(b => isPaymentProofPendingOrder(b));
 
               // Helper to check if a BOM's credit has been settled (hoisted outside map)
               const isBomCreditSettled = (item) => {
@@ -544,10 +583,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 actionText: '',
                 searchPlaceholder: 'Search Accounts Verification (BOM Code, Customer Name)...',
                 tabs: [
-                  { id: 'All', label: 'All Accounts Orders', count: allAccountsBoms.length, bg: '#e2e8f0', fg: '#475569' },
-                  { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b) && !isPaymentProofPendingOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
-                  { id: 'AwaitingPaymentProof', label: 'Payment Proof Pending', count: allAccountsBoms.filter(b => isPaymentProofPendingOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
-                  { id: 'Verified', label: 'Verified', count: allAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
+                  { id: 'All', label: 'All Accounts Orders', count: attachedAccountsBoms.length, bg: '#e2e8f0', fg: '#475569' },
+                  { id: 'Pending', label: 'Pending Verification', count: attachedAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'AwaitingPaymentProof', label: 'Payment Proof Pending', count: paymentProofPendingBoms.length, bg: '#FFEDD5', fg: '#C2410C' },
+                  { id: 'Verified', label: 'Verified', count: attachedAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Document', 'Payment Type', 'Total Amount', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
@@ -555,11 +594,19 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const isVerified = isAccVerifiedOrder(b);
                   const isPayProofPending = isPaymentProofPendingOrder(b);
                   const isSettledCredit = Boolean(b.creditSettled || acc.creditSettled || (typeof b.status === 'string' && b.status.toLowerCase().includes('credit settled')));
+                  const pTypeStr = String(b.paymentType || b.paymentTerms || '').toLowerCase();
+                  const isDispatchOrPartialTerms = pTypeStr.includes('while dispatch') || pTypeStr.includes('before dispatch') || pTypeStr.includes('partial') || pTypeStr.includes('50%');
+                  const isCreditTerms = pTypeStr.includes('credit') || pTypeStr.includes('net 30');
+                  const hasProofAttachedNow = !isPayProofPending && (isDispatchOrPartialTerms || hasAnyOrderPaymentProof(b));
                   const payStatus = isSettledCredit
                     ? '100% Received (Credit Settled)'
                     : (isPayProofPending
-                        ? 'Payment Proof Pending (Sales)'
-                        : (acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification')));
+                        ? 'Payment Proof Pending'
+                        : (isCreditTerms
+                            ? 'Credit Payment'
+                            : (hasProofAttachedNow
+                                ? '✓ Payment Proof Attached'
+                                : (acc.paymentStatus || (isVerified ? '100% Received' : 'Pending Verification')))));
                   
                   const rawCode = b.bomCode || b.code || b.id || '';
                   const resolvedBomCode = rawCode;

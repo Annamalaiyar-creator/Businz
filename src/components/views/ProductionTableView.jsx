@@ -523,21 +523,26 @@ export default function ProductionTableView({
                             <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
                               {safeText(row.paymentType || row.c4, '100% Paid')}
                             </span>
-                            {(row.paymentStatusText || row.c7) && (
-                              <span style={{
-                                fontSize: '10.5px',
-                                fontWeight: '700',
-                                color: (String(row.paymentStatusText || row.c7 || '').includes('Received') || String(row.paymentStatusText || row.c7 || '').includes('Settled') || String(row.paymentStatusText || row.c7 || '').includes('100%')) ? '#15803D' : (String(row.paymentStatusText || row.c7 || '').includes('Credit') ? '#1D4ED8' : '#B45309'),
-                                backgroundColor: (String(row.paymentStatusText || row.c7 || '').includes('Received') || String(row.paymentStatusText || row.c7 || '').includes('Settled') || String(row.paymentStatusText || row.c7 || '').includes('100%')) ? '#DCFCE7' : (String(row.paymentStatusText || row.c7 || '').includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
-                                border: (String(row.paymentStatusText || row.c7 || '').includes('Received') || String(row.paymentStatusText || row.c7 || '').includes('Settled') || String(row.paymentStatusText || row.c7 || '').includes('100%')) ? '1px solid #BBF7D0' : (String(row.paymentStatusText || row.c7 || '').includes('Credit') ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                display: 'inline-block',
-                                width: 'fit-content'
-                              }}>
-                                {safeText(row.paymentStatusText || row.c7)}
-                              </span>
-                            )}
+                            {(row.paymentStatusText || row.c7) && (() => {
+                              const pTxt = String(row.paymentStatusText || row.c7 || '');
+                              const isGreenProof = pTxt.includes('Attached') || pTxt.includes('Received') || pTxt.includes('Settled') || pTxt.includes('100%');
+                              const isBlueCredit = pTxt.includes('Credit');
+                              return (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: '700',
+                                  color: isGreenProof ? '#15803D' : (isBlueCredit ? '#1D4ED8' : '#B45309'),
+                                  backgroundColor: isGreenProof ? '#DCFCE7' : (isBlueCredit ? '#EFF6FF' : '#FEF3C7'),
+                                  border: isGreenProof ? '1px solid #BBF7D0' : (isBlueCredit ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  display: 'inline-block',
+                                  width: 'fit-content'
+                                }}>
+                                  {safeText(row.paymentStatusText || row.c7)}
+                                </span>
+                              );
+                            })()}
                           </div>
                         ) : (
                           safeText(row.c4 || row.date2, '—')

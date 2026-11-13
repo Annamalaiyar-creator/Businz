@@ -1405,6 +1405,10 @@ export default function ProductionViewsEngine(props) {
         return matchesDate && cleanSub.includes('cancel');
       }
 
+      if (activeTab === 'Accounts Verification' && cleanGroup === 'awaitingpaymentproof') {
+        return matchesDate && cleanSub === 'awaitingpaymentproof';
+      }
+
       const matchesTab = cleanSub === 'all' ||
         cleanSub === 'allboms' ||
         cleanSub === 'allorders' ||
