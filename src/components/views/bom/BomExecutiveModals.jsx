@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Eye, X, Truck, CreditCard, Boxes, Receipt, Factory
+  Eye, X, Truck, CreditCard, Boxes, Receipt, Factory, Clock, AlertCircle
 } from 'lucide-react';
 import { cleanNum } from '../../../utils/otherViewsShared';
 import ExecutiveOrderDossierModal from '../ExecutiveOrderDossierModal';
@@ -48,19 +48,49 @@ export default function BomExecutiveModals({ ctx }) {
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
-        // Payment Proof Documents for CEO
-        const pDocs = (Array.isArray(bom.paymentProofDocs) && bom.paymentProofDocs.length > 0)
-          ? bom.paymentProofDocs
-          : (Array.isArray(bom.payments?.proofDocObjs) && bom.payments.proofDocObjs.length > 0)
-            ? bom.payments.proofDocObjs
-            : (bom.paymentProofDoc
-                ? (Array.isArray(bom.paymentProofDoc) ? bom.paymentProofDoc : [bom.paymentProofDoc])
-                : (bom.payments?.proofDoc
-                    ? [{ name: bom.payments.proofDoc, dataUrl: bom.payments.proofDocData }]
-                    : (matchingPi?.paymentProofDocs && matchingPi.paymentProofDocs.length > 0
-                        ? matchingPi.paymentProofDocs
-                        : (matchingPi?.paymentProofDoc ? [matchingPi.paymentProofDoc] : []))));
-        const validPDocs = (pDocs || []).filter(d => Boolean(d && (typeof d === 'string' ? d.trim() : (d.name || d.url || d.dataUrl || d.storagePath))));
+        // Payment Proof Documents for CEO (including both Advance & Balance slips)
+        const rawPDocCandidates = [
+          ...(Array.isArray(bom.paymentProofDocs) ? bom.paymentProofDocs : []),
+          ...(Array.isArray(bom.balancePaymentProofDocs) ? bom.balancePaymentProofDocs : []),
+          ...(Array.isArray(bom.payments?.proofDocObjs) ? bom.payments.proofDocObjs : []),
+          ...(bom.paymentProofDoc ? (Array.isArray(bom.paymentProofDoc) ? bom.paymentProofDoc : [bom.paymentProofDoc]) : []),
+          ...(bom.balancePaymentProofDoc ? (Array.isArray(bom.balancePaymentProofDoc) ? bom.balancePaymentProofDoc : [bom.balancePaymentProofDoc]) : []),
+          ...(bom.balanceProofDoc ? (Array.isArray(bom.balanceProofDoc) ? bom.balanceProofDoc : [bom.balanceProofDoc]) : []),
+          ...(bom.payments?.balanceProofDocObj ? [bom.payments.balanceProofDocObj] : []),
+          ...(bom.payments?.proofDoc && !bom.paymentProofDoc ? [{ name: bom.payments.proofDoc, dataUrl: bom.payments.proofDocData, uploadedAt: bom.paymentProofAttachedAt }] : []),
+          ...(matchingPi?.paymentProofDocs && Array.isArray(matchingPi.paymentProofDocs) ? matchingPi.paymentProofDocs : []),
+          ...(matchingPi?.paymentProofDoc ? [matchingPi.paymentProofDoc] : [])
+        ];
+        const seenPDocKeys = new Set();
+        const validPDocs = [];
+        rawPDocCandidates.forEach((d) => {
+          if (!d) return;
+          const isValid = typeof d === 'string' ? Boolean(d.trim()) : Boolean(d.name || d.originalName || d.url || d.dataUrl || d.storagePath);
+          if (!isValid) return;
+          const key = typeof d === 'string' ? d.trim() : String(d.storagePath || d.url || d.name || d.originalName || '').trim();
+          if (key && seenPDocKeys.has(key)) return;
+          if (key) seenPDocKeys.add(key);
+          validPDocs.push(d);
+        });
+
+        const formatPaymentAttachedTime = (docObj, idx = 0) => {
+          const rawTs = (docObj && typeof docObj === 'object' ? (docObj.uploadedAt || docObj.attachedAt || docObj.createdAt || docObj.timestamp) : null) ||
+            (idx > 0 && bom.balancePaidAt ? bom.balancePaidAt : null) ||
+            bom.paymentProofAttachedAt ||
+            bom.balancePaidAt ||
+            bom.salesConfirmedAt ||
+            bom.createdAt ||
+            matchingPi?.createdAt;
+          if (!rawTs) return null;
+          const d = new Date(rawTs);
+          if (isNaN(d.getTime())) return String(rawTs);
+          const datePart = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+          const rawStr = String(rawTs);
+          const hasTimePart = typeof rawTs === 'number' || rawStr.includes('T') || rawStr.includes(':') || /am|pm/i.test(rawStr);
+          if (!hasTimePart) return datePart;
+          const timePart = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+          return `${datePart}, ${timePart}`;
+        };
 
         // Address Proof Documents for CEO
         const aDocs = (Array.isArray(bom.deliveryAddressProofDocs) && bom.deliveryAddressProofDocs.length > 0)
@@ -78,13 +108,66 @@ export default function BomExecutiveModals({ ctx }) {
                             : (matchingPi?.deliveryProofDoc ? [matchingPi.deliveryProofDoc] : [])))));
         const validADocs = (aDocs || []).filter(d => Boolean(d && (typeof d === 'string' ? d.trim() : (d.name || d.url || d.dataUrl || d.storagePath))));
 
+        const normAddrStr = (val) => {
+          if (!val) return '';
+          if (typeof val === 'string') return val.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (typeof val === 'object') {
+            return [val.street || val.address || '', val.city || '', val.state || '', val.pincode || '']
+              .join('')
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, '');
+          }
+          return String(val).toLowerCase().replace(/[^a-z0-9]/g, '');
+        };
+        const billNorm = normAddrStr(bom.billingAddressObj || bom.billingAddress || matchingPi?.billingAddress);
+        const delivNorm = normAddrStr(bom.deliveryAddressObj || bom.deliveryAddress || matchingPi?.deliveryAddress);
+        const shouldShowAddressProof = validADocs.length > 0 ||
+          Boolean(bom.addressProofReuploadRequested) ||
+          (bom.sameAsBilling === false && (!billNorm || !delivNorm || billNorm !== delivNorm)) ||
+          (bom.sameAsBilling === undefined && Boolean(billNorm && delivNorm && billNorm !== delivNorm));
+
         const timing = getBomStageTiming(bom, matchingPi);
+
+        const pTermsLower = String(bom.paymentType || bom.paymentTerms || matchingPi?.paymentTerms || '').toLowerCase();
+        const isCreditTerms = pTermsLower.includes('credit') || pTermsLower.includes('net 30');
+        const isPartialTerms = pTermsLower.includes('partial') || pTermsLower.includes('50%');
+        const isWhileDispatchTerms = pTermsLower.includes('while dispatch') || pTermsLower.includes('before dispatch');
+        const hasRemainingBalProof = Boolean(
+          bom.balancePaymentProofDoc ||
+          bom.balanceProofDoc ||
+          (Array.isArray(bom.balancePaymentProofDocs) && bom.balancePaymentProofDocs.length > 0) ||
+          bom.payments?.balanceProofDocObj ||
+          bom.payments?.balanceProofDoc ||
+          bom.payments?.balanceUploaded ||
+          bom.payments?.balanceSettled ||
+          bom.payments?.dispatch50Uploaded ||
+          bom.creditSettled ||
+          bom.paymentSettled ||
+          bom.accountsVerification?.creditSettled ||
+          bom.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+          bom.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales' ||
+          (bom.balanceAmount !== undefined && bom.balanceAmount !== null && Number(bom.balanceAmount) <= 0 && Number(bom.partialAmount) > 0 && validPDocs.length > 0)
+        );
+        const isAlreadyClearedStage = Boolean(
+          timing?.hasAccounts ||
+          timing?.hasInvoice ||
+          timing?.hasDispatch ||
+          bom.cancelled ||
+          st.includes('cancel')
+        );
+        const isPaymentProofPending = !isAlreadyClearedStage && !isCreditTerms && (
+          isPartialTerms
+            ? !hasRemainingBalProof
+            : (isWhileDispatchTerms || Boolean(bom.awaitingSalesPaymentProof) || st.includes('awaiting sales payment proof') || validPDocs.length === 0)
+              ? validPDocs.length === 0
+              : false
+        );
 
         // 6 Lifecycle stage indicators with Real Operational Timestamps & Active Processing Stage
         const stages = [
           {
             num: 1,
-            label: 'PI Commercial',
+            label: 'PI Created',
             done: timing?.hasPi,
             active: false,
             date: timing?.piDate || '—',
@@ -117,7 +200,7 @@ export default function BomExecutiveModals({ ctx }) {
           },
           {
             num: 4,
-            label: 'Accounts Verified',
+            label: 'Accounts Verification',
             done: timing?.hasAccounts,
             active: timing?.isAccountsActive,
             date: timing?.accountsDate || (timing?.isAccountsActive ? (timing?.packingDate || timing?.confirmedDate) : '—'),
@@ -128,7 +211,7 @@ export default function BomExecutiveModals({ ctx }) {
           },
           {
             num: 5,
-            label: 'GST Invoiced',
+            label: 'Invoice',
             done: timing?.hasInvoice,
             active: timing?.isInvoiceActive,
             date: timing?.invoiceDate || (timing?.isInvoiceActive ? (timing?.accountsDate || timing?.packingDate) : '—'),
@@ -139,7 +222,7 @@ export default function BomExecutiveModals({ ctx }) {
           },
           {
             num: 6,
-            label: 'Final Dispatched',
+            label: 'Final Dispatch',
             done: timing?.hasDispatch,
             active: timing?.isDispatchActive,
             date: timing?.dispatchDate || (timing?.isDispatchActive ? (timing?.invoiceDate || timing?.accountsDate) : '—'),
@@ -452,116 +535,150 @@ export default function BomExecutiveModals({ ctx }) {
                   </div>
 
                   {/* Payment Attachment */}
-                  <div style={{ backgroundColor: validPDocs.length > 0 ? '#F0FDF4' : '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: validPDocs.length > 0 ? '1px solid #BBF7D0' : '1px solid #E2E8F0', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                      <span style={{ fontSize: '10.5px', color: validPDocs.length > 0 ? '#15803D' : '#64748B', fontWeight: '700', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <div style={{
+                    backgroundColor: isPaymentProofPending ? '#FEF2F2' : (validPDocs.length > 0 ? '#F0FDF4' : '#F8FAFC'),
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: isPaymentProofPending ? '1.5px solid #EF4444' : (validPDocs.length > 0 ? '1px solid #BBF7D0' : '1px solid #E2E8F0'),
+                    minHeight: '68px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '10.5px', color: isPaymentProofPending ? '#DC2626' : (validPDocs.length > 0 ? '#15803D' : '#64748B'), fontWeight: '800', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <CreditCard size={12} /> Payment Attachment
                       </span>
-                      {validPDocs.length > 0 && (
+                      {isPaymentProofPending ? (
+                        <span style={{ fontSize: '9px', fontWeight: '800', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 7px', borderRadius: '999px', border: '1px solid #FCA5A5', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <AlertCircle size={10} /> Payment Proof Pending
+                        </span>
+                      ) : validPDocs.length > 0 ? (
                         <span style={{ fontSize: '9px', fontWeight: '800', color: '#16A34A', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '999px', border: '1px solid #BBF7D0' }}>
                           ✓ {validPDocs.length} {validPDocs.length === 1 ? 'File' : 'Files'}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     {validPDocs.length > 0 ? (
-                      <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         {validPDocs.map((pDoc, pIdx) => {
                           const rawName = typeof pDoc === 'string' ? pDoc : (pDoc?.name || pDoc?.originalName || `Payment Slip #${pIdx + 1}`);
                           const isPdf = /\.pdf($|\?)/i.test(rawName);
+                          const attachedTimeStr = formatPaymentAttachedTime(pDoc, pIdx);
                           return (
-                            <button
-                              key={pIdx}
-                              type="button"
-                              onClick={() => setPreviewDocModal({ title: `Payment Proof #${pIdx + 1}: ${rawName}`, doc: pDoc, bomCode })}
-                              style={{
-                                border: '1px solid #BBF7D0',
-                                backgroundColor: '#FFFFFF',
-                                borderRadius: '6px',
-                                padding: '3px 6px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                                gap: '6px',
-                                width: '100%',
-                                boxSizing: 'border-box'
-                              }}
-                              title={`Click to preview ${rawName}`}
-                            >
-                              <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                {isPdf ? '📑' : '🖼️'} {rawName}
-                              </span>
-                              <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                                <Eye size={10} /> View
-                              </span>
-                            </button>
+                            <div key={pIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDocModal({ title: `Payment Proof #${pIdx + 1}: ${rawName}`, doc: pDoc, bomCode })}
+                                style={{
+                                  border: isPaymentProofPending ? '1px solid #FCA5A5' : '1px solid #BBF7D0',
+                                  backgroundColor: '#FFFFFF',
+                                  borderRadius: '6px',
+                                  padding: '3px 6px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  gap: '6px',
+                                  width: '100%',
+                                  boxSizing: 'border-box'
+                                }}
+                                title={`Click to preview ${rawName}`}
+                              >
+                                <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  {isPdf ? '📑' : '🖼️'} {rawName}
+                                </span>
+                                <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                  <Eye size={10} /> View
+                                </span>
+                              </button>
+                              {attachedTimeStr && (
+                                <span style={{ fontSize: '9.5px', color: '#475569', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '3px', paddingLeft: '2px' }}>
+                                  <Clock size={9} style={{ color: '#16A34A' }} /> Attached: {attachedTimeStr}
+                                </span>
+                              )}
+                            </div>
                           );
                         })}
+                        {isPaymentProofPending && isPartialTerms && (
+                          <div style={{ fontSize: '10.5px', fontWeight: '800', color: '#DC2626', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <AlertCircle size={11} /> Balance Payment Proof Pending
+                          </div>
+                        )}
+                      </div>
+                    ) : isPaymentProofPending ? (
+                      <div style={{ marginTop: '5px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: '800', color: '#DC2626' }}>Payment Proof Pending</div>
+                        <div style={{ fontSize: '10px', color: '#B91C1C', marginTop: '1px', fontWeight: '600' }}>
+                          {bom.paymentType || 'Payment While Dispatch'} • Not attached yet
+                        </div>
                       </div>
                     ) : (
                       <div style={{ marginTop: '4px' }}>
                         <div style={{ fontSize: '12px', fontWeight: '700', color: '#94A3B8' }}>Not Attached</div>
-                        <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '1px' }}>No payment receipt on file</div>
+                        <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '1px' }}>{isCreditTerms ? 'Credit terms — no upfront slip' : 'No payment receipt on file'}</div>
                       </div>
                     )}
                   </div>
 
-                  {/* Address Proof */}
-                  <div style={{ backgroundColor: validADocs.length > 0 ? '#F0FDFA' : '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: validADocs.length > 0 ? '1px solid #99F6E4' : '1px solid #E2E8F0', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                      <span style={{ fontSize: '10.5px', color: validADocs.length > 0 ? '#0F766E' : '#64748B', fontWeight: '700', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <Truck size={12} /> Address Proof
-                      </span>
-                      {validADocs.length > 0 && (
-                        <span style={{ fontSize: '9px', fontWeight: '800', color: '#0D9488', backgroundColor: '#CCFBF1', padding: '1px 6px', borderRadius: '999px', border: '1px solid #99F6E4' }}>
-                          ✓ {validADocs.length} {validADocs.length === 1 ? 'File' : 'Files'}
+                  {/* Address Proof — shown ONLY when delivery address is changed / needed */}
+                  {shouldShowAddressProof && (
+                    <div style={{ backgroundColor: validADocs.length > 0 ? '#F0FDFA' : '#FEF2F2', padding: '10px 12px', borderRadius: '10px', border: validADocs.length > 0 ? '1px solid #99F6E4' : '1.5px solid #FCA5A5', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                        <span style={{ fontSize: '10.5px', color: validADocs.length > 0 ? '#0F766E' : '#DC2626', fontWeight: '700', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Truck size={12} /> Address Proof
                         </span>
+                        {validADocs.length > 0 && (
+                          <span style={{ fontSize: '9px', fontWeight: '800', color: '#0D9488', backgroundColor: '#CCFBF1', padding: '1px 6px', borderRadius: '999px', border: '1px solid #99F6E4' }}>
+                            ✓ {validADocs.length} {validADocs.length === 1 ? 'File' : 'Files'}
+                          </span>
+                        )}
+                      </div>
+                      {validADocs.length > 0 ? (
+                        <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {validADocs.map((aDoc, aIdx) => {
+                            const rawName = typeof aDoc === 'string' ? aDoc : (aDoc?.name || aDoc?.originalName || `Address Proof #${aIdx + 1}`);
+                            const isPdf = /\.pdf($|\?)/i.test(rawName);
+                            return (
+                              <button
+                                key={aIdx}
+                                type="button"
+                                onClick={() => setPreviewDocModal({ title: `Address Proof #${aIdx + 1}: ${rawName}`, doc: aDoc, bomCode })}
+                                style={{
+                                  border: '1px solid #99F6E4',
+                                  backgroundColor: '#FFFFFF',
+                                  borderRadius: '6px',
+                                  padding: '3px 6px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  gap: '6px',
+                                  width: '100%',
+                                  boxSizing: 'border-box'
+                                }}
+                                title={`Click to preview ${rawName}`}
+                              >
+                                <span style={{ fontSize: '11px', color: '#0F766E', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  {isPdf ? '📑' : '📍'} {rawName}
+                                </span>
+                                <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                  <Eye size={10} /> View
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: '4px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: '800', color: '#DC2626' }}>Address Proof Pending</div>
+                          <div style={{ fontSize: '10px', color: '#B91C1C', marginTop: '1px' }}>Delivery address differs from billing</div>
+                        </div>
                       )}
                     </div>
-                    {validADocs.length > 0 ? (
-                      <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {validADocs.map((aDoc, aIdx) => {
-                          const rawName = typeof aDoc === 'string' ? aDoc : (aDoc?.name || aDoc?.originalName || `Address Proof #${aIdx + 1}`);
-                          const isPdf = /\.pdf($|\?)/i.test(rawName);
-                          return (
-                            <button
-                              key={aIdx}
-                              type="button"
-                              onClick={() => setPreviewDocModal({ title: `Address Proof #${aIdx + 1}: ${rawName}`, doc: aDoc, bomCode })}
-                              style={{
-                                border: '1px solid #99F6E4',
-                                backgroundColor: '#FFFFFF',
-                                borderRadius: '6px',
-                                padding: '3px 6px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                                gap: '6px',
-                                width: '100%',
-                                boxSizing: 'border-box'
-                              }}
-                              title={`Click to preview ${rawName}`}
-                            >
-                              <span style={{ fontSize: '11px', color: '#0F766E', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                {isPdf ? '📑' : '📍'} {rawName}
-                              </span>
-                              <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                                <Eye size={10} /> View
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div style={{ marginTop: '4px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: '700', color: '#94A3B8' }}>Not Attached</div>
-                        <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '1px' }}>No address proof on file</div>
-                      </div>
-                    )}
-                  </div>
+                  )}
 
                   <div style={{ backgroundColor: '#F0F9FF', padding: '10px 12px', borderRadius: '10px', border: '1px solid #BAE6FD', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div style={{ fontSize: '10.5px', color: '#0284C7', fontWeight: '800', textTransform: 'uppercase' }}>BOM Order Value</div>

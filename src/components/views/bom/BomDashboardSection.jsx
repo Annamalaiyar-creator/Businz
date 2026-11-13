@@ -451,9 +451,51 @@ export default function BomDashboardSection({ ctx }) {
       {/* 4. MAIN DATA DISPLAY (PIPELINE CARDS / CLASSIC TABLE) WITH INTERACTIVE ROW SELECTION */}
       <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
         {/* CEO EXCLUSIVE: EXACT PI-STYLE MASTER REGISTER DATA TABLE */}
-        {isCeo ? (
+        {isCeo ? (() => {
+          let ceoPiLookup = null;
+          const getCeoPiLookup = () => {
+            if (ceoPiLookup) return ceoPiLookup;
+            ceoPiLookup = new Map();
+            try {
+              const rawPis = JSON.parse(localStorage.getItem('controlroom_pi_store') || '[]');
+              if (Array.isArray(rawPis)) {
+                rawPis.forEach((p) => {
+                  const k1 = String(p?.piNo || '').trim().toLowerCase();
+                  const k2 = String(p?.id || '').trim().toLowerCase();
+                  const k3 = String(p?.code || '').trim().toLowerCase();
+                  if (k1) ceoPiLookup.set(k1, p);
+                  if (k2) ceoPiLookup.set(k2, p);
+                  if (k3) ceoPiLookup.set(k3, p);
+                });
+              }
+            } catch (_) {}
+            return ceoPiLookup;
+          };
+          const resolveCeoBomValue = (row) => {
+            const parseNum = (v) => {
+              if (v === null || v === undefined || v === '') return 0;
+              if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+              const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+              return Number.isFinite(n) && n > 0 ? n : 0;
+            };
+            let val = parseNum(row.grandTotal) || parseNum(row.totalAmount) || parseNum(row.amount) || parseNum(row.value) || parseNum(row.total);
+            if (!val) {
+              const linkedPi = String(row.sourcePiNo || row.piNo || row.piNumber || row.source_pi_no || '').trim().toLowerCase();
+              if (linkedPi) {
+                const matchedPi = getCeoPiLookup().get(linkedPi);
+                if (matchedPi) {
+                  val = parseNum(matchedPi.grandTotal) || parseNum(matchedPi.totalAmount) || parseNum(matchedPi.amount);
+                }
+              }
+            }
+            if (val > 0) return '₹ ' + Math.round(val).toLocaleString('en-IN');
+            if (row.c5 && row.c5 !== '—') return row.c5;
+            return '—';
+          };
+
+          return (
           <div style={{ overflowX: 'auto', width: '100%' }}>
-            <table className="custom-table" style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1120px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
               <thead>
                 <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                   <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
@@ -477,6 +519,7 @@ export default function BomDashboardSection({ ctx }) {
                   <th style={{ width: '120px', minWidth: '110px', padding: '12px 14px', boxSizing: 'border-box' }}>BOM Date</th>
                   <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Person</th>
                   <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
+                  <th style={{ width: '140px', minWidth: '125px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Value</th>
                   <th style={{ width: '200px', minWidth: '180px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Stages</th>
                 </tr>
               </thead>
@@ -499,6 +542,9 @@ export default function BomDashboardSection({ ctx }) {
                       <td style={{ padding: '12px 14px' }}>
                         <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
                       </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                        <div className="skeleton-shimmer skeleton-text" style={{ width: '85px', height: '14px', marginLeft: 'auto' }} />
+                      </td>
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <div className="skeleton-shimmer" style={{ width: '120px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
                       </td>
@@ -506,7 +552,7 @@ export default function BomDashboardSection({ ctx }) {
                   ))
                 ) : currentRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                    <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                         <Boxes size={32} style={{ color: '#CBD5E1' }} />
                         <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No BOM orders found</span>
@@ -606,6 +652,11 @@ export default function BomDashboardSection({ ctx }) {
                             )}
                           </div>
                         </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', width: '140px', minWidth: '125px', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontWeight: '800', color: isCancelled ? '#94A3B8' : '#0F172A', fontSize: '13px', textDecoration: isCancelled ? 'line-through' : 'none' }}>
+                            {resolveCeoBomValue(row)}
+                          </span>
+                        </td>
                         <td style={{ padding: '12px 14px', textAlign: 'center', width: '200px', minWidth: '180px' }}>
                           <span style={{
                             backgroundColor: currentStage.bg,
@@ -631,7 +682,8 @@ export default function BomDashboardSection({ ctx }) {
               </tbody>
             </table>
           </div>
-        ) : (
+          );
+        })() : (
           <>
         {/* VIEW MODE & BULK SELECTION TOOLBAR */}
         <div style={{

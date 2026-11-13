@@ -1523,6 +1523,7 @@ export default function BomOperationalModals({ ctx }) {
                               ? 'Dispatch Packing Verified - Sent to Accounts'
                               : (uploadPaymentModal.status || 'Pending Sales Confirmation');
 
+                            const attachedIso = new Date().toISOString();
                             const updatedList = (bomStore || []).map(b => b.bomCode === uploadPaymentModal.bomCode ? {
                               ...b,
                               status: nextStatus,
@@ -1531,6 +1532,8 @@ export default function BomOperationalModals({ ctx }) {
                               pendingSalesDispatchPayment: false,
                               dispatchPackingVerified: isPackedAwaitingProof ? true : b.dispatchPackingVerified,
                               packingStatus: isPackedAwaitingProof ? 'PACKING_VERIFIED' : b.packingStatus,
+                              paymentProofAttachedAt: attachedIso,
+                              balancePaidAt: isPartial ? attachedIso : (b.balancePaidAt || attachedIso),
                               paymentProofDoc: primaryProof,
                               paymentProofDocs: allPaymentDocs,
                               balancePaymentProofDoc: newlyUploadedDocs[newlyUploadedDocs.length - 1] || primaryProof,
