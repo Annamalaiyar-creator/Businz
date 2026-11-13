@@ -28,7 +28,7 @@ import ExecutiveOrderDossierModal from './ExecutiveOrderDossierModal';
 import LrUploadPopupModal from './LrUploadPopupModal';
 import DispatchMediaThumbnail from './DispatchMediaThumbnail';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch, notifyBomCreatedToSales, notifyBomPackedAndSentToAccounts, notifyCreditPaymentSettled } from '../../services/notificationService';
-import { getNextSequence, compareBomDescending, parseBomSequenceNumber, normalizeBomCode } from '../../utils/sequenceGenerator';
+import { getNextSequence, compareBomDescending, parseBomSequenceNumber, normalizeBomCode, getNumericSearchMatchRank } from '../../utils/sequenceGenerator';
 
 export const formatAppliedAtDate = (r) => {
   if (!r) return '—';
@@ -702,6 +702,13 @@ export default function BomOrdersView(props) {
                 mergedCleaned = mergedCleaned.map(item => {
                   const c = item?.bomCode || item?.code || item?.id;
                   const prevItem = c ? prevMap.get(c) : null;
+                  if (prevItem) {
+                    const prevCust = String(prevItem.customerName || prevItem.companyName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const itemCust = String(item.customerName || item.companyName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (prevCust && itemCust && prevCust !== itemCust && !prevCust.includes(itemCust) && !itemCust.includes(prevCust)) {
+                      return item;
+                    }
+                  }
                   if (prevItem && (prevItem.salesConfirmed || prevItem.salesReconfirmed || prevItem.status === 'Sales Confirmed - Sent to Dispatch')) {
                     const prevRank = getWorkflowRank(prevItem);
                     const itemRank = getWorkflowRank(item);
@@ -2703,16 +2710,11 @@ export default function BomOrdersView(props) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [pageConfig.rows]);
 
-  const filteredRows = (pageConfig.rows || []).filter(r => {
-    const matchesSearch = !searchQueryText ||
-      (r.code && r.code.toLowerCase().includes(searchQueryText.toLowerCase())) ||
-      (r.bomCode && String(r.bomCode).toLowerCase().includes(searchQueryText.toLowerCase())) ||
-      (r.id && String(r.id).toLowerCase().includes(searchQueryText.toLowerCase())) ||
-      (r.sourcePiNo && String(r.sourcePiNo).toLowerCase().includes(searchQueryText.toLowerCase())) ||
-      (r.c2 && r.c2.toLowerCase().includes(searchQueryText.toLowerCase())) ||
-      (r.c3 && r.c3.toLowerCase().includes(searchQueryText.toLowerCase())) ||
-      (r.customerName && r.customerName.toLowerCase().includes(searchQueryText.toLowerCase()));
+  const qTrim = String(searchQueryText || '').trim();
+  const qLower = qTrim.toLowerCase();
+  const isPureDigits = /^\d+$/.test(qTrim);
 
+  const filteredByFilters = (pageConfig.rows || []).filter(r => {
     const subTab = (activeSubTab || 'All').toLowerCase();
     const rStatus = (r.status || '').toLowerCase();
     const rTabGroup = (r.tabGroup || '').toLowerCase();
@@ -2784,8 +2786,38 @@ export default function BomOrdersView(props) {
       matchesSalesPerson = (rSp === targetSp) || rSp.includes(targetSp) || (rawSp === targetSp) || rawSp.includes(targetSp);
     }
 
-    return matchesSearch && matchesTab && matchesDate && matchesKpi && matchesSalesPerson;
+    return matchesTab && matchesDate && matchesKpi && matchesSalesPerson;
   });
+
+  const filteredRows = (() => {
+    if (!qTrim) return filteredByFilters;
+    if (isPureDigits) {
+      const rankedMatches = [];
+      for (let i = 0; i < filteredByFilters.length; i++) {
+        const r = filteredByFilters[i];
+        const rank = getNumericSearchMatchRank(
+          qTrim,
+          [r.code, r.bomCode, r.rawBomCode, r.id, r.sourcePiNo],
+          [r.customerName, r.c3]
+        );
+        if (rank > 0) {
+          rankedMatches.push({ row: r, rank, idx: i });
+        }
+      }
+      rankedMatches.sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.idx - b.idx));
+      return rankedMatches.map(entry => entry.row);
+    }
+    return filteredByFilters.filter(r =>
+      (r.code && r.code.toLowerCase().includes(qLower)) ||
+      (r.bomCode && String(r.bomCode).toLowerCase().includes(qLower)) ||
+      (r.id && String(r.id).toLowerCase().includes(qLower)) ||
+      (r.sourcePiNo && String(r.sourcePiNo).toLowerCase().includes(qLower)) ||
+      (r.c2 && r.c2.toLowerCase().includes(qLower)) ||
+      (r.c3 && r.c3.toLowerCase().includes(qLower)) ||
+      (r.customerName && r.customerName.toLowerCase().includes(qLower)) ||
+      (r.salesPerson && r.salesPerson.toLowerCase().includes(qLower))
+    );
+  })();
 
   // Calculate totals for Create BOM form
   const calculateBOMTotals = () => {
@@ -10077,7 +10109,7 @@ export default function BomOrdersView(props) {
             type="text"
             placeholder={pageConfig.searchPlaceholder}
             value={searchQueryText}
-            onChange={(e) => setSearchQueryText(e.target.value)}
+            onChange={(e) => { setSearchQueryText(e.target.value); setCurrentPage(1); }}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
            />
         </div>

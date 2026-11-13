@@ -187,29 +187,16 @@ export const PI_CODE_REGEX = /^(?:VRM-PI-\d{4}-\d+|PI-\d+|VRMS\/PI\/\d{2}-\d{2}\
  * - VRM-INV-2026-999 -> 999
  */
 /**
- * Normalizes legacy or non-standard BOM codes into official sequential format.
- * - VRM-BOM-1132 -> VRMS/BOM/26-27/556
- * - VRM-BOM-1166 -> VRMS/BOM/26-27/557
- * - VRM-BOM-1198 -> VRMS/BOM/26-27/558
- * - VRM-BOM-1227 -> VRMS/BOM/26-27/559
+ * Normalizes/trims BOM codes without overriding legacy BOM codes onto active sequence numbers.
  */
 export function normalizeBomCode(code) {
   if (!code) return '';
-  const str = String(code).trim();
-  if (str === 'VRM-BOM-1132') return 'VRMS/BOM/26-27/556';
-  if (str === 'VRM-BOM-1166') return 'VRMS/BOM/26-27/557';
-  if (str === 'VRM-BOM-1198') return 'VRMS/BOM/26-27/558';
-  if (str === 'VRM-BOM-1227') return 'VRMS/BOM/26-27/559';
-  return str;
+  return String(code).trim();
 }
 
 export function parseBomSequenceNumber(code) {
   if (!code) return 0;
   const str = String(code).trim();
-  if (str === 'VRM-BOM-1132') return 556;
-  if (str === 'VRM-BOM-1166') return 557;
-  if (str === 'VRM-BOM-1198') return 558;
-  if (str === 'VRM-BOM-1227') return 559;
   const terminalMatch = str.match(/[-/_](\d+)$/);
   if (terminalMatch) return parseInt(terminalMatch[1], 10);
   
@@ -219,6 +206,74 @@ export function parseBomSequenceNumber(code) {
   const allNums = str.match(/\d+/g);
   if (allNums && allNums.length > 0) {
     return parseInt(allNums[allNums.length - 1], 10);
+  }
+  return 0;
+}
+
+/**
+ * Extracts the terminal sequence digits from a BOM/PI/Invoice/DC code,
+ * ignoring financial-year prefixes like `26-27` when a trailing sequence number exists.
+ */
+export function extractCodeSequenceDigits(code) {
+  if (!code) return '';
+  const str = String(code).trim();
+  if (!str) return '';
+  if (/^\d+$/.test(str)) return str;
+
+  const terminalMatch = str.match(/[-/_](\d+)$/);
+  if (terminalMatch) return terminalMatch[1];
+
+  const allNums = str.match(/\d+/g);
+  if (allNums && allNums.length > 0) {
+    return allNums[allNums.length - 1];
+  }
+  return '';
+}
+
+/**
+ * Ranks a numeric-only search query against code candidates and non-monetary text candidates.
+ * Returns:
+ *   1 = exact sequence match
+ *   2 = prefix sequence match
+ *   3 = substring sequence match
+ *   4 = substring match in non-monetary text (e.g. customer name, vehicle number, phone)
+ *   0 = no match
+ */
+export function getNumericSearchMatchRank(queryDigits, codeCandidates = [], textCandidates = []) {
+  const q = String(queryDigits || '').trim();
+  if (!/^\d+$/.test(q)) return 0;
+  const qUnpadded = String(parseInt(q, 10));
+
+  let bestCodeRank = 0;
+  for (let i = 0; i < codeCandidates.length; i++) {
+    const raw = codeCandidates[i];
+    if (!raw) continue;
+    const seq = extractCodeSequenceDigits(raw);
+    if (!seq) continue;
+    const seqUnpadded = String(parseInt(seq, 10));
+
+    let rank = 0;
+    if (seq === q || seqUnpadded === qUnpadded) {
+      rank = 1;
+    } else if (seq.startsWith(q) || (q.length >= 2 && seqUnpadded.startsWith(qUnpadded))) {
+      rank = 2;
+    } else if (seq.includes(q)) {
+      rank = 3;
+    }
+
+    if (rank > 0 && (bestCodeRank === 0 || rank < bestCodeRank)) {
+      bestCodeRank = rank;
+      if (bestCodeRank === 1) return 1;
+    }
+  }
+  if (bestCodeRank > 0) return bestCodeRank;
+
+  for (let i = 0; i < textCandidates.length; i++) {
+    const val = textCandidates[i];
+    if (!val) continue;
+    if (String(val).toLowerCase().includes(q.toLowerCase())) {
+      return 4;
+    }
   }
   return 0;
 }

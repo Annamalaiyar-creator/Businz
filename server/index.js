@@ -58,7 +58,6 @@ import {
   extractMaxSequence,
   getNextSequence
 } from './sequenceService.js';
-import { renumberBoms554And555 } from '../scripts/renumber_boms_554_555.js';
 import {
   verifyPasswordVerifier,
   hashPassword,
@@ -728,18 +727,39 @@ const loadDatabaseBoms = async (forceRefresh = false) => {
       if (!error && Array.isArray(data) && data.length > 0) {
         const mapped = data.map(r => toConsumerBomServer(r)).filter(Boolean);
 
-        // Authoritative merge: NEVER discard disk data or overwrite rich dispatch packing with empty database records
+        // Authoritative merge: NEVER discard disk data or overwrite rich dispatch packing with empty database records,
+        // and prevent cross-customer pollution if disk bom_store.json had legacy entries merged under active codes.
+        const normCustId = (obj) => String(obj?.customerName || obj?.companyName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isSameOrderIdentity = (dbItem, diskItem) => {
+          const dbCust = normCustId(dbItem);
+          const diskCust = normCustId(diskItem);
+          if (dbCust && diskCust && dbCust !== diskCust && !dbCust.includes(diskCust) && !diskCust.includes(dbCust)) {
+            return false;
+          }
+          return true;
+        };
+
+        const dbByCode = new Map();
+        mapped.forEach(item => {
+          const c = item?.bomCode || item?.code || item?.id;
+          if (c) dbByCode.set(c, item);
+        });
+
         const combinedMap = new Map();
         existingDiskList.forEach(item => {
           const c = item?.bomCode || item?.code || item?.id;
-          if (c) combinedMap.set(c, item);
+          if (!c) return;
+          if (dbByCode.has(c) && !isSameOrderIdentity(dbByCode.get(c), item)) {
+            return;
+          }
+          combinedMap.set(c, item);
         });
 
         mapped.forEach(item => {
           const c = item?.bomCode || item?.code || item?.id;
           if (!c) return;
           const diskItem = combinedMap.get(c);
-          if (diskItem) {
+          if (diskItem && isSameOrderIdentity(item, diskItem)) {
             const diskRank = getWorkflowRankServer(diskItem);
             const dbRank = getWorkflowRankServer(item);
             const diskPacking = Array.isArray(diskItem.dispatchPacking) ? diskItem.dispatchPacking : [];
@@ -5564,14 +5584,12 @@ app.post('/api/boms/reserve-code', async (req, res) => {
   }
 });
 
-// Dedicated endpoint to repair legacy BOM-1132, 1166, 1198, 1227 to standard VRMS/BOM/26-27/556-559
-app.all(['/api/boms/repair-sequence-554-555', '/api/boms/repair-sequence-556-557', '/api/boms/repair-sequence-558-559'], async (req, res) => {
-  try {
-    const result = await renumberBoms554And555();
-    res.json({ success: true, result });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+// Disabled legacy endpoint: VRMS/BOM/26-27/556-559 belong to active production orders
+app.all(['/api/boms/repair-sequence-554-555', '/api/boms/repair-sequence-556-557', '/api/boms/repair-sequence-558-559'], (req, res) => {
+  return res.status(410).json({
+    success: false,
+    message: 'Disabled: VRMS/BOM/26-27/556-559 are assigned to active production orders.'
+  });
 });
 // Protection 4: /api/reset-bom-workflow-data disabled with HTTP 403
 app.post('/api/reset-bom-workflow-data', async (req, res) => {
@@ -11738,11 +11756,6 @@ if (process.env.BUSINZ_SKIP_LISTEN === 'true') {
         broadcastRealtimeEvent('whatsapp_chats_updated', { count: chatsList.length, chats: chatsList });
       }
     }).catch(() => {});
-
-    // Ensure legacy BOM numbers 1132 and 1166 are safely renumbered to standard 554 and 555
-    setTimeout(() => {
-      renumberBoms554And555().catch(e => console.warn('[BOM Auto-Renumber]:', e.message));
-    }, 2000);
   });
 }
 

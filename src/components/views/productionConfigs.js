@@ -533,16 +533,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     : (acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification'));
                   
                   const rawCode = b.bomCode || b.code || b.id || '';
-                  let resolvedBomCode = rawCode;
-                  if (rawCode === 'VRM-BOM-1132' || (rawCode === 'VRMS/BOM/26-27/554' && String(b.customerName || '').includes('SASTHAA'))) {
-                    resolvedBomCode = 'VRMS/BOM/26-27/556';
-                  } else if (rawCode === 'VRM-BOM-1166' || (rawCode === 'VRMS/BOM/26-27/555' && String(b.customerName || '').includes('Vaarahi'))) {
-                    resolvedBomCode = 'VRMS/BOM/26-27/557';
-                  } else if (rawCode === 'VRM-BOM-1198' || String(b.customerName || '').includes('Vilva Tech')) {
-                    resolvedBomCode = 'VRMS/BOM/26-27/558';
-                  } else if (rawCode === 'VRM-BOM-1227' || String(b.customerName || '').includes('JYSL')) {
-                    resolvedBomCode = 'VRMS/BOM/26-27/559';
-                  }
+                  const resolvedBomCode = rawCode;
 
                   // Format BOM Created Date for display below BOM Code
                   const rawCreatedDate = b.date || b.createdAt || b.bomDate || b.salesConfirmedAt;
@@ -599,7 +590,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     (computedItemsSum > 0 ? (computedItemsSum * 1.18) : 0) || 
                     0
                   );
-                  if (rawAmt <= 0 && (String(b.customerName || b.companyName || '').toLowerCase().includes('vaarahi') || String(b.bomCode || '').includes('1166') || resolvedBomCode.includes('557'))) {
+                  if (rawAmt <= 0 && String(rawCode).trim() === 'VRM-BOM-1166') {
                     rawAmt = 9416.40;
                   }
                   if (rawAmt > 0) {

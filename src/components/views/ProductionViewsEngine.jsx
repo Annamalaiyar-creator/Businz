@@ -40,7 +40,7 @@ import { addLiveNotification } from '../Header';
 const VRMTaxInvoicePrintTemplate = lazy(() => import('../VRMTaxInvoicePrintTemplate'));
 const VRMBomPrintTemplate = lazy(() => import('../VRMBomPrintTemplate'));
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile, cleanNum, formatCurrency } from '../../utils/otherViewsShared';
-import { compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator';
+import { compareBomDescending, parseBomSequenceNumber, getNumericSearchMatchRank } from '../../utils/sequenceGenerator';
 import StatusBadge from '../StatusBadge';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
@@ -83,6 +83,10 @@ export default function ProductionViewsEngine(props) {
     setSelectedRows([]);
     setCurrentPage(1);
   }, [activeTab]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [prodSearchQueryText, prodActiveSubTab]);
 
   const [showBOMForm, setShowBOMForm] = useState(false);
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
@@ -330,6 +334,11 @@ export default function ProductionViewsEngine(props) {
                 const k = item.bomCode || item.code || item.id;
                 const prevItem = prevMap.get(k);
                 if (!prevItem) return item;
+                const prevCust = String(prevItem.customerName || prevItem.companyName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const itemCust = String(item.customerName || item.companyName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (prevCust && itemCust && prevCust !== itemCust && !prevCust.includes(itemCust) && !itemCust.includes(prevCust)) {
+                  return item;
+                }
                 const prevRank = getWorkflowRank(prevItem);
                 const newRank = getWorkflowRank(item);
 
@@ -1362,20 +1371,13 @@ export default function ProductionViewsEngine(props) {
   }, [memoizedConfigs, activeTab, bomStore]);
 
   const memoizedFilteredRows = useMemo(() => {
-    const qLower = prodSearchQueryText ? prodSearchQueryText.toLowerCase() : '';
+    const qTrim = String(prodSearchQueryText || '').trim();
+    const qLower = qTrim.toLowerCase();
+    const isPureDigits = /^\d+$/.test(qTrim);
     const subTab = String(prodActiveSubTab || 'All').toLowerCase();
     const cleanSub = subTab.replace(/[^a-z0-9]/g, '');
 
-    return (memoizedPageConfig.rows || []).filter(r => {
-      const matchesSearch = !qLower ||
-        (r.code && String(r.code).toLowerCase().includes(qLower)) ||
-        (r.c2 && String(r.c2).toLowerCase().includes(qLower)) ||
-        (r.c3 && String(r.c3).toLowerCase().includes(qLower)) ||
-        (r.c4 && String(r.c4).toLowerCase().includes(qLower)) ||
-        (r.c5 && String(r.c5).toLowerCase().includes(qLower)) ||
-        (r.customerName && String(r.customerName).toLowerCase().includes(qLower)) ||
-        (r.salesPerson && String(r.salesPerson).toLowerCase().includes(qLower));
-
+    const filteredByTabAndDate = (memoizedPageConfig.rows || []).filter(r => {
       let matchesDate = true;
       const rDateStr = r.salesConfirmedAt || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && /^\d{4}-\d{2}-\d{2}/.test(r.c4) ? r.c4 : null);
       if (rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
@@ -1400,7 +1402,7 @@ export default function ProductionViewsEngine(props) {
       );
 
       if (isCancelledRecord) {
-        return matchesSearch && matchesDate && cleanSub.includes('cancel');
+        return matchesDate && cleanSub.includes('cancel');
       }
 
       const matchesTab = cleanSub === 'all' ||
@@ -1420,9 +1422,43 @@ export default function ProductionViewsEngine(props) {
         (cleanSub.includes('draft') && cleanStatus.includes('draft')) ||
         (cleanSub.includes('sent') && (cleanStatus.includes('sent') || cleanStatus.includes('confirm') || cleanStatus.includes('production')));
 
-      return matchesSearch && matchesDate && matchesTab;
+      return matchesDate && matchesTab;
     });
-  }, [memoizedPageConfig, prodSearchQueryText, prodFilterDateVal, prodFilterEndDateVal, prodActiveSubTab]);
+
+    if (!qTrim) {
+      return filteredByTabAndDate;
+    }
+
+    if (isPureDigits) {
+      const rankedMatches = [];
+      for (let i = 0; i < filteredByTabAndDate.length; i++) {
+        const r = filteredByTabAndDate[i];
+        const rank = getNumericSearchMatchRank(
+          qTrim,
+          [r.code, r.bomCode, r.id, r.sourcePiNo, r.invNo, r.invoiceNo, r.dcNo, activeTab === 'Invoice Management' ? r.c3 : null],
+          [r.customerName, activeTab === 'Delivery Challans' ? r.c3 : r.c2, activeTab === 'Delivery Challans' ? r.c5 : null, r.mobile, r.phone]
+        );
+        if (rank > 0) {
+          rankedMatches.push({ row: r, rank, idx: i });
+        }
+      }
+      rankedMatches.sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.idx - b.idx));
+      return rankedMatches.map(entry => entry.row);
+    }
+
+    return filteredByTabAndDate.filter(r =>
+      (r.code && String(r.code).toLowerCase().includes(qLower)) ||
+      (r.bomCode && String(r.bomCode).toLowerCase().includes(qLower)) ||
+      (r.id && String(r.id).toLowerCase().includes(qLower)) ||
+      (r.sourcePiNo && String(r.sourcePiNo).toLowerCase().includes(qLower)) ||
+      (r.customerName && String(r.customerName).toLowerCase().includes(qLower)) ||
+      (r.salesPerson && String(r.salesPerson).toLowerCase().includes(qLower)) ||
+      (r.c2 && String(r.c2).toLowerCase().includes(qLower)) ||
+      (r.c3 && String(r.c3).toLowerCase().includes(qLower)) ||
+      (r.c4 && String(r.c4).toLowerCase().includes(qLower)) ||
+      ((qTrim.startsWith('₹') || activeTab === 'Delivery Challans') && r.c5 && String(r.c5).toLowerCase().includes(qLower))
+    );
+  }, [memoizedPageConfig, prodSearchQueryText, prodFilterDateVal, prodFilterEndDateVal, prodActiveSubTab, activeTab]);
 
 
     return (

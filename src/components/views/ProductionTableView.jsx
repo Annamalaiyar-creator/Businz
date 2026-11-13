@@ -127,7 +127,7 @@ export default function ProductionTableView({
             type="text"
             placeholder={pageConfig.searchPlaceholder}
             value={prodSearchQueryText}
-            onChange={(e) => setProdSearchQueryText(e.target.value)}
+            onChange={(e) => { setProdSearchQueryText(e.target.value); if (setCurrentPage) setCurrentPage(1); }}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
            />
         </div>
@@ -199,7 +199,7 @@ export default function ProductionTableView({
         {pageConfig.tabs.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setProdActiveSubTab(tab.id)}
+            onClick={() => { setProdActiveSubTab(tab.id); if (setCurrentPage) setCurrentPage(1); }}
             style={{
               border: 'none',
               background: 'transparent',
