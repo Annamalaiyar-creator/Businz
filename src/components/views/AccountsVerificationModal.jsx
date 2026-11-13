@@ -368,7 +368,15 @@ export default function AccountsVerificationModal({
     : (isAlreadyCompleted ? (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || '')) : '');
 
   const payType = accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3 || '';
-  const isWhileDispatch = payType === 'Payment While Dispatch' || String(payType).includes('While Dispatch');
+  const payTypeLower = String(payType).toLowerCase();
+  const isWhileDispatch = payType === 'Payment While Dispatch' || payTypeLower.includes('while dispatch') || payTypeLower.includes('before dispatch');
+  const isPartialPaidTerms = payTypeLower.includes('partial') || payTypeLower.includes('50%');
+  const requiresPaymentProofForApproval = Boolean(
+    isWhileDispatch ||
+    isPartialPaidTerms ||
+    accountsVerificationModal?.awaitingSalesPaymentProof ||
+    String(accountsVerificationModal?.status || '').toLowerCase().includes('awaiting sales payment proof')
+  );
 
   const rawProofForCheck = accountsVerificationModal?.paymentProofDoc ||
     accountsVerificationModal?.payments?.proofDocObj ||
@@ -395,7 +403,7 @@ export default function AccountsVerificationModal({
     currentPayDate && 
     currentTotalAmount !== '' && 
     cleanNum(currentTotalAmount, 0) > 0 &&
-    !(isWhileDispatch && !hasUploadedPaymentProof)
+    !(requiresPaymentProofForApproval && !hasUploadedPaymentProof)
   );
   const isPartialVerified = Boolean(currentPayStatus || currentPayDate || (currentTotalAmount !== '' && cleanNum(currentTotalAmount, 0) > 0)) && !isVerified;
 
@@ -410,8 +418,8 @@ export default function AccountsVerificationModal({
   const currentPayConfig = (currentPayStatus && payStatusConfig[currentPayStatus]) || { bg: '#F1F5F9', color: '#475569', label: 'Pending Verification', icon: <Clock style={{ width: '18px', height: '18px' }} /> };
 
   const completeVerification = async () => {
-    if (isWhileDispatch && !hasUploadedPaymentProof) {
-      alert('⛔ CANNOT APPROVE — PAYMENT ATTACHMENT REQUIRED\n\nThis order has payment terms "Payment While Dispatch". The payment proof image/slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order must remain on HOLD in the Accounts team until the Sales person attaches the payment proof receipt.');
+    if (requiresPaymentProofForApproval && !hasUploadedPaymentProof) {
+      alert(`⛔ CANNOT APPROVE — PAYMENT PROOF PENDING\n\nThis order has payment terms "${payType || 'Payment While Dispatch / Partial Payment'}". The payment proof slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order remains in Payment Proof Pending until the Sales person attaches the payment proof receipt.`);
       return;
     }
     if (!currentPayDate) {
@@ -1435,6 +1443,47 @@ export default function AccountsVerificationModal({
                       </div>
                     </div>
                   </div>
+                ) : requiresPaymentProofForApproval ? (
+                  <div style={{
+                    backgroundColor: '#FFFBEB',
+                    border: '1.5px solid #F59E0B',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
+                        <AlertTriangle size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span>Payment Proof Pending — Not Attached by Sales</span>
+                          <span style={{ fontSize: '10px', color: '#B45309', backgroundColor: '#FEF3C7', border: '1px solid #FCD34D', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>Action Required (Sales)</span>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '2px' }}>
+                          Payment Terms: <strong>{payType || 'Payment While Dispatch / Partial Payment'}</strong>. Accounts verification is locked until Sales attaches the payment proof receipt.
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      color: '#DC2626',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <Clock size={13} color="#DC2626" /> Payment Proof Pending
+                    </div>
+                  </div>
                 ) : (
                   <div style={{
                     backgroundColor: '#F8FAFC',
@@ -2215,23 +2264,23 @@ export default function AccountsVerificationModal({
             <button
               onClick={completeVerification}
               style={{
-                border: (isWhileDispatch && !hasUploadedPaymentProof) ? '1px solid #FECACA' : 'none',
-                background: (isWhileDispatch && !hasUploadedPaymentProof)
+                border: (requiresPaymentProofForApproval && !hasUploadedPaymentProof) ? '1px solid #FECACA' : 'none',
+                background: (requiresPaymentProofForApproval && !hasUploadedPaymentProof)
                   ? '#FEF2F2'
                   : 'linear-gradient(135deg, #064E3B, #166534)',
-                color: (isWhileDispatch && !hasUploadedPaymentProof) ? '#DC2626' : '#FFFFFF',
+                color: (requiresPaymentProofForApproval && !hasUploadedPaymentProof) ? '#DC2626' : '#FFFFFF',
                 height: '42px', padding: '0 28px',
                 borderRadius: '10px', fontSize: '13px', fontWeight: '800',
                 cursor: 'pointer',
-                boxShadow: (isWhileDispatch && !hasUploadedPaymentProof) ? 'none' : '0 4px 12px rgba(6,78,59,0.3)',
+                boxShadow: (requiresPaymentProofForApproval && !hasUploadedPaymentProof) ? 'none' : '0 4px 12px rgba(6,78,59,0.3)',
                 display: 'flex', alignItems: 'center', gap: '8px'
               }}
-              title={isWhileDispatch && !hasUploadedPaymentProof ? "Locked: Awaiting payment proof upload from Sales person" : ""}
+              title={requiresPaymentProofForApproval && !hasUploadedPaymentProof ? "Locked: Payment Proof Pending from Sales person" : ""}
             >
-              {isWhileDispatch && !hasUploadedPaymentProof ? (
+              {requiresPaymentProofForApproval && !hasUploadedPaymentProof ? (
                 <>
                   <Clock style={{ width: '15px', height: '15px', color: '#DC2626' }} />
-                  Locked: Awaiting Payment Slip from Sales
+                  Payment Proof Pending (Locked)
                 </>
               ) : (
                 <>

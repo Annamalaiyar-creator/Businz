@@ -454,25 +454,43 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                     }
                     const primaryMeta = uploadedMetas[0] || null;
                     setBomStore(prev => {
-                      const updated = prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
-                        ...b,
-                        status: 'Payment Uploaded & Verified',
-                        paymentProofDoc: primaryMeta,
-                        paymentProofDocs: [...(b.paymentProofDocs || []), ...uploadedMetas],
-                        paymentDocs: [...(b.paymentDocs || []), ...uploadedMetas],
-                        pendingSalesDispatchPayment: false,
-                        payments: {
-                          ...b.payments,
-                          proofDoc: primaryMeta?.name,
-                          proofDocObj: primaryMeta,
-                          paymentProofDocs: [...(b.payments?.paymentProofDocs || []), ...uploadedMetas],
-                          dispatchPaymentUploaded: paymentStageType === 'Payment While Dispatch' || b.payments?.dispatchPaymentUploaded,
-                          advance100Uploaded: paymentStageType === '100% Paid' || paymentStageType === '100% Advance',
-                          advance50Uploaded: paymentStageType === '50% Advance' || paymentStageType === 'Partial Advance' || b.payments?.advance50Uploaded,
-                          dispatch50Uploaded: paymentStageType === '50% Dispatch' || paymentStageType === 'Balance Payment' || paymentStageType === 'Payment While Dispatch' || b.payments?.dispatch50Uploaded,
-                          net30Uploaded: paymentStageType === 'Credit Payment' || paymentStageType === 'Net 30 Days'
-                        }
-                      } : b);
+                      const updated = prev.map(b => {
+                        if (b.bomCode !== bomCode && b.id !== bomCode) return b;
+                        const wasPackedAwaitingProof = Boolean(
+                          b.awaitingSalesPaymentProof ||
+                          (typeof b.status === 'string' && b.status.toLowerCase().includes('awaiting sales payment proof')) ||
+                          b.packingStatus === 'PACKING_VERIFIED' ||
+                          b.dispatchPackingVerified
+                        );
+                        return {
+                          ...b,
+                          status: wasPackedAwaitingProof ? 'Dispatch Packing Verified - Sent to Accounts' : (b.status || 'Pending Sales Confirmation'),
+                          readyForAccounts: wasPackedAwaitingProof ? true : b.readyForAccounts,
+                          awaitingSalesPaymentProof: false,
+                          pendingSalesDispatchPayment: false,
+                          paymentProofDoc: primaryMeta,
+                          paymentProofDocs: [...(b.paymentProofDocs || []), ...uploadedMetas],
+                          paymentDocs: [...(b.paymentDocs || []), ...uploadedMetas],
+                          accountsVerification: {
+                            ...(b.accountsVerification || {}),
+                            readyForAccounts: wasPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
+                            paymentProofDoc: primaryMeta,
+                            paymentProofDocs: [...(b.paymentProofDocs || []), ...uploadedMetas],
+                            paymentStatus: 'Payment Proof Attached by Sales'
+                          },
+                          payments: {
+                            ...b.payments,
+                            proofDoc: primaryMeta?.name,
+                            proofDocObj: primaryMeta,
+                            paymentProofDocs: [...(b.payments?.paymentProofDocs || []), ...uploadedMetas],
+                            dispatchPaymentUploaded: paymentStageType === 'Payment While Dispatch' || b.payments?.dispatchPaymentUploaded,
+                            advance100Uploaded: paymentStageType === '100% Paid' || paymentStageType === '100% Advance',
+                            advance50Uploaded: paymentStageType === '50% Advance' || paymentStageType === 'Partial Advance' || b.payments?.advance50Uploaded,
+                            dispatch50Uploaded: paymentStageType === '50% Dispatch' || paymentStageType === 'Balance Payment' || paymentStageType === 'Payment While Dispatch' || b.payments?.dispatch50Uploaded,
+                            net30Uploaded: paymentStageType === 'Credit Payment' || paymentStageType === 'Net 30 Days'
+                          }
+                        };
+                      });
                       const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
                       if (targetBom) saveCloudBomRow(targetBom);
                       return updated;

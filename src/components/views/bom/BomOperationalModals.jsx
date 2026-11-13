@@ -1521,7 +1521,7 @@ export default function BomOperationalModals({ ctx }) {
 
                             const nextStatus = isPackedAwaitingProof
                               ? 'Dispatch Packing Verified - Sent to Accounts'
-                              : (isPartial ? (newBal <= 0 ? 'Payment Uploaded & Verified' : uploadPaymentModal.status) : 'Payment Uploaded & Verified');
+                              : (uploadPaymentModal.status || 'Pending Sales Confirmation');
 
                             const updatedList = (bomStore || []).map(b => b.bomCode === uploadPaymentModal.bomCode ? {
                               ...b,

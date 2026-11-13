@@ -435,39 +435,64 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               })
             } : undefined,
             'Accounts Verification': shouldBuild('Accounts Verification') ? (() => {
+              const hasOrderPaymentProof = (b) => {
+                if (!b) return false;
+                if (b.creditSettled || b.paymentSettled || b.accountsVerification?.creditSettled || b.paymentProofAttached || b.hasPaymentProof) return true;
+                if (Array.isArray(b.paymentProofDocs) && b.paymentProofDocs.length > 0) return true;
+                if (Array.isArray(b.balancePaymentProofDocs) && b.balancePaymentProofDocs.length > 0) return true;
+                if (Array.isArray(b.uploadedDocuments) && b.uploadedDocuments.some(d =>
+                  String(d?.category || '').toLowerCase().includes('payment') ||
+                  String(d?.type || '').toLowerCase().includes('payment')
+                )) return true;
+                return Boolean(
+                  b.paymentProofDoc ||
+                  b.payments?.proofDocObj ||
+                  b.payments?.proofDoc ||
+                  b.balancePaymentProofDoc ||
+                  b.balanceProofDoc ||
+                  b.payments?.balanceProofDocObj ||
+                  b.payments?.balanceProofDoc ||
+                  b.proofDoc ||
+                  b.proofDocData
+                );
+              };
+
               const isAccountsEligible = (b) => {
                 if (!b) return false;
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
-                if (b.awaitingSalesPaymentProof || (typeof b.status === 'string' && b.status.toLowerCase().includes('awaiting sales payment proof'))) return false;
                 const s = String(b.status || '').toLowerCase().trim();
+                const isPackedAwaitingSalesProof = Boolean(b.awaitingSalesPaymentProof || s.includes('awaiting sales payment proof'));
                 const isSentToAccounts = Boolean(
                   b.accountsVerification?.readyForAccounts ||
                   s.includes('sent to accounts') ||
                   s.includes('awaiting accounts') ||
-                  b.pendingSalesDispatchPayment
+                  b.pendingSalesDispatchPayment ||
+                  isPackedAwaitingSalesProof
                 );
                 const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
                 const isInvoiceOrLater = s.includes('invoice') || s.includes('loading') || s.includes('dispatched') || s.includes('delivered') || s.includes('completed') || s.includes('closed');
                 return isSentToAccounts || isAccDone || isInvoiceOrLater;
               };
 
-              const isAccVerifiedOrder = (b) => {
+              const isPaymentProofPendingOrder = (b) => {
+                if (!b) return false;
                 const acc = b?.accountsVerification || {};
                 const s = String(b?.status || '').toLowerCase();
-                const isWhileDisp = b?.paymentType === 'Payment While Dispatch' || String(b?.paymentType || '').includes('While Dispatch');
-                const hasProof = Boolean(
-                  b?.paymentProofDoc || 
-                  b?.payments?.proofDocObj || 
-                  b?.payments?.proofDoc || 
-                  b?.balancePaymentProofDoc ||
-                  b?.payments?.balanceProofDocObj ||
-                  b?.payments?.balanceProofDoc ||
-                  b?.proofDoc ||
-                  b?.proofDocData
-                );
-                if (isWhileDisp && !hasProof) {
+                if (acc.verified || s.includes('accounts verified') || b?.isAccountsDone || s.includes('invoice') || s.includes('dispatched') || b?.fullyCompleted) {
                   return false;
                 }
+                if (hasOrderPaymentProof(b)) return false;
+                if (b.awaitingSalesPaymentProof || s.includes('awaiting sales payment proof')) return true;
+                const pType = String(b?.paymentType || b?.paymentTerms || '').toLowerCase();
+                return pType.includes('while dispatch') || pType.includes('before dispatch') || pType.includes('partial') || pType.includes('50%');
+              };
+
+              const isAccVerifiedOrder = (b) => {
+                if (isPaymentProofPendingOrder(b)) {
+                  return false;
+                }
+                const acc = b?.accountsVerification || {};
+                const s = String(b?.status || '').toLowerCase();
                 return Boolean(
                   acc.verified ||
                   s.includes('accounts verified') ||
@@ -520,17 +545,21 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 searchPlaceholder: 'Search Accounts Verification (BOM Code, Customer Name)...',
                 tabs: [
                   { id: 'All', label: 'All Accounts Orders', count: allAccountsBoms.length, bg: '#e2e8f0', fg: '#475569' },
-                  { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b) && !isPaymentProofPendingOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'AwaitingPaymentProof', label: 'Payment Proof Pending', count: allAccountsBoms.filter(b => isPaymentProofPendingOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
                   { id: 'Verified', label: 'Verified', count: allAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Document', 'Payment Type', 'Total Amount', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
+                  const isPayProofPending = isPaymentProofPendingOrder(b);
                   const isSettledCredit = Boolean(b.creditSettled || acc.creditSettled || (typeof b.status === 'string' && b.status.toLowerCase().includes('credit settled')));
                   const payStatus = isSettledCredit
                     ? '100% Received (Credit Settled)'
-                    : (acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification'));
+                    : (isPayProofPending
+                        ? 'Payment Proof Pending (Sales)'
+                        : (acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification')));
                   
                   const rawCode = b.bomCode || b.code || b.id || '';
                   const resolvedBomCode = rawCode;
@@ -649,18 +678,15 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     creditAmtFormatted = '₹ 0.00 (Nil)';
                   }
 
-                  const isWhileDispPendingProof = (b.paymentType === 'Payment While Dispatch' || String(b.paymentType || '').includes('While Dispatch')) && !Boolean(
-                    b.paymentProofDoc || b.payments?.proofDocObj || b.payments?.proofDoc || b.balancePaymentProofDoc || b.proofDoc || b.proofDocData
-                  );
                   const statusText = isVerified 
                     ? 'ACCOUNTS VERIFIED' 
-                    : isWhileDispPendingProof 
-                      ? 'AWAITING PAYMENT PROOF' 
+                    : isPayProofPending 
+                      ? 'PAYMENT PROOF PENDING' 
                       : 'PENDING VERIFICATION';
-                  const stBg = isVerified ? '#DCFCE7' : isWhileDispPendingProof ? '#FEF2F2' : '#FEF3C7';
-                  const stFg = isVerified ? '#166534' : isWhileDispPendingProof ? '#DC2626' : '#B45309';
-                  const stBorder = isVerified ? '1px solid #BBF7D0' : isWhileDispPendingProof ? '1px solid #FECACA' : '1px solid #FDE68A';
-                  const tabGroup = isVerified ? 'Verified' : 'Pending';
+                  const stBg = isVerified ? '#DCFCE7' : isPayProofPending ? '#FFFBEB' : '#FEF3C7';
+                  const stFg = isVerified ? '#166534' : isPayProofPending ? '#B45309' : '#B45309';
+                  const stBorder = isVerified ? '1px solid #BBF7D0' : isPayProofPending ? '1.5px solid #F59E0B' : '1px solid #FDE68A';
+                  const tabGroup = isVerified ? 'Verified' : (isPayProofPending ? 'AwaitingPaymentProof' : 'Pending');
 
                   const isDc = b.docType === 'DC' || b.documentType === 'DC' || b.invoiceType === 'DC' || String(b.docType || '').toUpperCase() === 'DC';
                   const docTypeVal = isDc ? 'DC' : 'Invoice';

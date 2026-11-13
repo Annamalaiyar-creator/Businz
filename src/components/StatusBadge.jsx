@@ -90,10 +90,12 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
     raw === 'packed — awaiting sales payment proof' ||
     raw === 'packed - awaiting sales payment proof' ||
     raw === 'partially packed — awaiting sales payment proof' ||
-    raw.includes('awaiting sales payment proof')
+    raw.includes('awaiting sales payment proof') ||
+    raw === 'payment proof pending' ||
+    raw === 'awaiting payment proof'
   ) {
     return {
-      label: customLabel || 'Packed — Awaiting Sales Payment Proof',
+      label: customLabel || (raw === 'payment proof pending' || raw === 'awaiting payment proof' ? 'Payment Proof Pending' : 'Packed — Awaiting Sales Payment Proof'),
       bg: '#fef3c7',
       color: '#b45309',
       border: '1.5px solid #f59e0b',

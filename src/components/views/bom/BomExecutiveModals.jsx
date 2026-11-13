@@ -117,14 +117,16 @@ export default function BomExecutiveModals({ ctx }) {
           },
           {
             num: 4,
-            label: 'Accounts Verified',
+            label: timing?.isPaymentProofPending ? 'Payment Proof Pending' : 'Accounts Verified',
             done: timing?.hasAccounts,
             active: timing?.isAccountsActive,
             date: timing?.accountsDate || (timing?.isAccountsActive ? (timing?.packingDate || timing?.confirmedDate) : '—'),
             completedTime: timing?.accountsCompletedTime,
             receivedTime: timing?.accountsReceivedTime,
             duration: timing?.accountsDuration,
-            subtext: timing?.hasAccounts ? 'Accounts Verified' : 'Awaiting Accounts'
+            subtext: timing?.hasAccounts
+              ? 'Accounts Verified'
+              : (timing?.isPaymentProofPending ? 'Awaiting Sales Payment Proof' : 'Awaiting Accounts')
           },
           {
             num: 5,

@@ -319,7 +319,7 @@ export async function getNotificationsForUser(options = {}) {
 
   try {
     const values = [normalizedEmp, normalizedRole, normalizedUser];
-    const isManagerRole = /ceo|director|admin|technical|support|sales head|sales manager/i.test(normalizedRole);
+    const isManagerRole = /\b(ceo|md|managing director|technical administrator|technical admin|tech support|technical support|sales head|sales manager)\b/i.test(normalizedRole);
     const leadManagerClause = isManagerRole ? `OR recipient_role IN ('lead_managers', 'management', 'admin', 'ceo')` : '';
 
     let query = `
@@ -343,13 +343,14 @@ export async function getNotificationsForUser(options = {}) {
           (recipient_emp_code IS NULL OR recipient_emp_code = '' OR recipient_emp_code = 'ALL')
           AND (metadata->>'recipientUserName' IS NULL OR metadata->>'recipientUserName' = '' OR LOWER(metadata->>'recipientUserName') IN ('all', 'sales executive', 'sales', 'system'))
           AND (metadata->>'salesPerson' IS NULL OR metadata->>'salesPerson' = '' OR LOWER(metadata->>'salesPerson') IN ('all', 'sales executive', 'sales', 'system'))
-          AND recipient_role IS NOT NULL AND (
+          AND recipient_role IS NOT NULL AND recipient_role != '' AND $2 != '' AND (
             $2 ILIKE '%' || recipient_role || '%' 
             OR recipient_role ILIKE '%' || $2 || '%'
             OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
             OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
             OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
             OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+            OR ($2 ILIKE '%procurement%' AND recipient_role ILIKE '%procurement%')
           )
         )
       )
@@ -388,13 +389,14 @@ export async function getNotificationsForUser(options = {}) {
           (recipient_emp_code IS NULL OR recipient_emp_code = '' OR recipient_emp_code = 'ALL')
           AND (metadata->>'recipientUserName' IS NULL OR metadata->>'recipientUserName' = '' OR LOWER(metadata->>'recipientUserName') IN ('all', 'sales executive', 'sales', 'system'))
           AND (metadata->>'salesPerson' IS NULL OR metadata->>'salesPerson' = '' OR LOWER(metadata->>'salesPerson') IN ('all', 'sales executive', 'sales', 'system'))
-          AND recipient_role IS NOT NULL AND (
+          AND recipient_role IS NOT NULL AND recipient_role != '' AND $2 != '' AND (
             $2 ILIKE '%' || recipient_role || '%' 
             OR recipient_role ILIKE '%' || $2 || '%'
             OR ($2 ILIKE '%dispatch%' AND recipient_role ILIKE '%dispatch%')
             OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
             OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
             OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+            OR ($2 ILIKE '%procurement%' AND recipient_role ILIKE '%procurement%')
           )
         )
       );

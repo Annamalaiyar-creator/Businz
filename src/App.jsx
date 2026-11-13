@@ -363,7 +363,15 @@ function App() {
     setIsAuthenticated(true);
     const defaultTab = 'Dashboard';
     setActiveTab(defaultTab);
-    localStorage.setItem('controlroom_active_tab', defaultTab);
+    try {
+      localStorage.setItem('controlroom_active_tab', defaultTab);
+      localStorage.removeItem('controlroom_sidebar_active_item');
+      if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('tab', defaultTab);
+        window.history.replaceState({ tab: defaultTab, isBusinzNavigation: true }, '', currentUrl.toString());
+      }
+    } catch (_) {}
     try {
       realtimeNotificationService.start(true);
     } catch (_) {}
@@ -414,7 +422,15 @@ function App() {
 
     const defaultTab = 'Dashboard';
     setActiveTab(defaultTab);
-    localStorage.setItem('controlroom_active_tab', defaultTab);
+    try {
+      localStorage.setItem('controlroom_active_tab', defaultTab);
+      localStorage.removeItem('controlroom_sidebar_active_item');
+      if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('tab', defaultTab);
+        window.history.replaceState({ tab: defaultTab, isBusinzNavigation: true }, '', currentUrl.toString());
+      }
+    } catch (_) {}
   };
 
   const handleSignOut = () => {
@@ -432,6 +448,14 @@ function App() {
     localStorage.removeItem('controlroom_device_session_id');
     localStorage.removeItem('controlroom_session_start_time');
     localStorage.removeItem('controlroom_active_tab');
+    localStorage.removeItem('controlroom_sidebar_active_item');
+    try {
+      if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete('tab');
+        window.history.replaceState({}, '', currentUrl.toString());
+      }
+    } catch (_) {}
     setIsAuthenticated(false);
     setActiveTab('Dashboard');
     setShowLoginModal(false);
@@ -547,6 +571,16 @@ function App() {
     const isDispatchRole = userRole === 'Dispatch Head' || userRole === 'Dispatch' || userRole === 'Dispatch Executive' || String(userRole || '').toLowerCase().includes('dispatch');
     if (isDispatchRole && activeTab === 'Delivery Challans') {
       handleTabChange('Dispatch Dashboard');
+    }
+
+    const isProcurementRole = userRole === 'Procurement' || userRole === 'Procurement Head' || userRole === 'Procurement Admin' || userRole === 'Procurement Executive' || String(userRole || '').toLowerCase().includes('procurement');
+    const forbiddenProcurementTabs = [
+      'Dispatch Orders', 'Dispatch Dashboard', 'BOM Orders', 'Sales BOM', 'BOM', 'BOM / Routing', 'Create BOM',
+      'Accounts Verification', 'Invoice Management', 'Proforma Invoice', 'Performa Invoice',
+      'Sales Dashboard', 'Leads', 'Quotations', 'Work Orders'
+    ];
+    if (isProcurementRole && forbiddenProcurementTabs.includes(activeTab)) {
+      handleTabChange('Dashboard');
     }
   }, [userRole, activeTab]);
 

@@ -1413,7 +1413,12 @@ export default function ProductionViewsEngine(props) {
         (cleanSub === 'printed' && Boolean(r.dispatchPrinted || r.isPrinted)) ||
         cleanGroup === cleanSub ||
         rTabGroup === subTab ||
-        (cleanSub.includes('pending') && cleanSub !== 'pendingprint' && (cleanStatus.includes('pending') || cleanGroup.includes('pending') || cleanStatus.includes('draft'))) ||
+        (cleanSub === 'awaitingpaymentproof' && cleanGroup === 'awaitingpaymentproof') ||
+        (cleanSub.includes('pending') && cleanSub !== 'pendingprint' && cleanSub !== 'awaitingpaymentproof' && (
+          activeTab === 'Accounts Verification'
+            ? cleanGroup === 'pending'
+            : (cleanStatus.includes('pending') || cleanGroup.includes('pending') || cleanStatus.includes('draft'))
+        )) ||
         (cleanSub.includes('partially') && (cleanStatus.includes('partial') || cleanGroup.includes('partial'))) ||
         (cleanSub.includes('packed') && (cleanStatus.includes('packed') || cleanGroup.includes('packed') || cleanStatus.includes('verified'))) ||
         (cleanSub.includes('loading') && (cleanStatus.includes('loading') || cleanGroup.includes('loading'))) ||

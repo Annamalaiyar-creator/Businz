@@ -119,7 +119,9 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
               b.accountsVerification?.readyForAccounts ||
               s.includes('sent to accounts') ||
               s.includes('awaiting accounts') ||
-              b.pendingSalesDispatchPayment
+              b.pendingSalesDispatchPayment ||
+              b.awaitingSalesPaymentProof ||
+              s.includes('awaiting sales payment proof')
             );
             const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
             const isInvoiceOrLater = s.includes('invoice') || s.includes('loading') || s.includes('dispatched') || s.includes('delivered') || s.includes('completed') || s.includes('closed');
@@ -129,11 +131,12 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           const isAccVerifiedOrder = (b) => {
             const acc = b?.accountsVerification || {};
             const s = String(b?.status || '').toLowerCase();
-            const isWhileDisp = b?.paymentType === 'Payment While Dispatch' || String(b?.paymentType || '').includes('While Dispatch');
+            const pType = String(b?.paymentType || b?.paymentTerms || '').toLowerCase();
+            const requiresProof = pType.includes('while dispatch') || pType.includes('before dispatch') || pType.includes('partial') || pType.includes('50%') || Boolean(b?.awaitingSalesPaymentProof);
             const hasProof = Boolean(
-              b?.paymentProofDoc || b?.payments?.proofDocObj || b?.payments?.proofDoc || b?.balancePaymentProofDoc || b?.proofDoc
+              b?.paymentProofDoc || b?.payments?.proofDocObj || b?.payments?.proofDoc || b?.balancePaymentProofDoc || b?.proofDoc || (Array.isArray(b?.paymentProofDocs) && b.paymentProofDocs.length > 0)
             );
-            if (isWhileDisp && !hasProof) return false;
+            if (requiresProof && !hasProof) return false;
             return Boolean(
               acc.verified ||
               s.includes('accounts verified') ||
@@ -882,9 +885,17 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
               {(collapsed || isCategoryOpen) && sec.items.map((item, iIdx) => {
                 const ItemIcon = item.icon;
                 const actualTarget = item.targetTab || item.label;
-                const isActive = activeItemLabel 
+                const matchesActiveTab = normalizeTab(item.label) === normalizeTab(activeTab) || normalizeTab(actualTarget) === normalizeTab(activeTab);
+                const hasValidActiveLabel = Boolean(
+                  activeItemLabel &&
+                  filteredSections.some(s => (s.items || []).some(it =>
+                    it.label === activeItemLabel &&
+                    (normalizeTab(it.label) === normalizeTab(activeTab) || normalizeTab(it.targetTab || it.label) === normalizeTab(activeTab))
+                  ))
+                );
+                const isActive = hasValidActiveLabel
                   ? (item.label === activeItemLabel)
-                  : (normalizeTab(item.label) === normalizeTab(activeTab) || normalizeTab(actualTarget) === normalizeTab(activeTab));
+                  : matchesActiveTab;
 
                 return (
                   <div 
