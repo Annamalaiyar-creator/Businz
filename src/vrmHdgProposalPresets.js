@@ -112,58 +112,82 @@ const buildActivePresets = () => {
 /**
  * Synchronize custom presets with server and Supabase cloud store across all systems and devices
  */
-export async function syncPresetsWithCloud() {
-  try {
-    let serverRes = null;
-    let cloudPresets = null;
-    try {
-      const res = await fetch('/api/store/presets_store');
-      if (res.ok) serverRes = await res.json();
-    } catch (_) {}
+let inFlightPresetsSync = null;
+let lastPresetsSyncAt = 0;
+const PRESETS_FOCUS_COOLDOWN_MS = 5 * 60 * 1000;
 
-    if (!serverRes || !serverRes.data) {
-      cloudPresets = await fetchCloudStore('presets_store', {}).catch(() => ({}));
-    }
-
-    let incomingMap = {};
-    if (serverRes && serverRes.data && typeof serverRes.data === 'object') {
-      const sData = serverRes.data;
-      if (Array.isArray(sData)) {
-        sData.forEach(p => { if (p && p.id && (p.isCustom || !basePresetsMap[p.id])) incomingMap[p.id] = p; });
-      } else {
-        Object.entries(sData).forEach(([k, v]) => {
-          if (v && (v.isCustom || !basePresetsMap[k])) incomingMap[k] = v;
-        });
-      }
-    }
-
-    if (cloudPresets && typeof cloudPresets === 'object') {
-      if (Array.isArray(cloudPresets)) {
-        cloudPresets.forEach(p => { if (p && p.id && (p.isCustom || !basePresetsMap[p.id])) incomingMap[p.id] = p; });
-      } else {
-        Object.entries(cloudPresets).forEach(([k, v]) => {
-          if (v && (v.isCustom || !basePresetsMap[k])) incomingMap[k] = v;
-        });
-      }
-    }
-
-    if (Object.keys(incomingMap).length > 0) {
-      customPresetsCache = { ...customPresetsCache, ...incomingMap };
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
-        } catch (_) {}
-      }
-      const normalized = buildActivePresets();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
-      }
-      return normalized;
-    }
-  } catch (err) {
-    console.warn("Could not sync presets with cloud:", err);
+export async function syncPresetsWithCloud({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && lastPresetsSyncAt > 0 && (now - lastPresetsSyncAt < PRESETS_FOCUS_COOLDOWN_MS)) {
+    return getAllActivePresets();
   }
-  return getAllActivePresets();
+  if (inFlightPresetsSync) {
+    return inFlightPresetsSync;
+  }
+
+  inFlightPresetsSync = (async () => {
+    try {
+      let serverRes = null;
+      let cloudPresets = null;
+      try {
+        const res = await fetch('/api/store/presets_store');
+        if (res.ok) serverRes = await res.json();
+      } catch (_) {}
+
+      if (!serverRes || !serverRes.data) {
+        cloudPresets = await fetchCloudStore('presets_store', {}).catch(() => ({}));
+      }
+
+      let incomingMap = {};
+      if (serverRes && serverRes.data && typeof serverRes.data === 'object') {
+        const sData = serverRes.data;
+        if (Array.isArray(sData)) {
+          sData.forEach(p => { if (p && p.id && (p.isCustom || !basePresetsMap[p.id])) incomingMap[p.id] = p; });
+        } else {
+          Object.entries(sData).forEach(([k, v]) => {
+            if (v && (v.isCustom || !basePresetsMap[k])) incomingMap[k] = v;
+          });
+        }
+      }
+
+      if (cloudPresets && typeof cloudPresets === 'object') {
+        if (Array.isArray(cloudPresets)) {
+          cloudPresets.forEach(p => { if (p && p.id && (p.isCustom || !basePresetsMap[p.id])) incomingMap[p.id] = p; });
+        } else {
+          Object.entries(cloudPresets).forEach(([k, v]) => {
+            if (v && (v.isCustom || !basePresetsMap[k])) incomingMap[k] = v;
+          });
+        }
+      }
+
+      lastPresetsSyncAt = Date.now();
+
+      if (Object.keys(incomingMap).length > 0) {
+        const mergedCustom = { ...customPresetsCache, ...incomingMap };
+        const hasChanges = JSON.stringify(customPresetsCache) !== JSON.stringify(mergedCustom);
+        if (hasChanges) {
+          customPresetsCache = mergedCustom;
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
+            } catch (_) {}
+          }
+          const normalized = buildActivePresets();
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+          }
+          return normalized;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not sync presets with cloud:", err);
+    }
+    return getAllActivePresets();
+  })().finally(() => {
+    inFlightPresetsSync = null;
+  });
+
+  return inFlightPresetsSync;
 }
 
 /**

@@ -2,7 +2,8 @@ import { prodModuleEngine, isLegacyWoId } from '../../utils/productionModuleEngi
 import { formatCurrency } from '../../utils/otherViewsShared.js';
 import { compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator.js';
 
-export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [] }) {
+export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [], activeTab = null }) {
+  const shouldBuild = (tabName) => !activeTab || activeTab === tabName;
   const isLegacyMockBom = (b) => {
     if (!b) return true;
     const code = String(b.bomCode || b.code || b.id || '').trim();
@@ -12,6 +13,53 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
   };
   const bomStore = (rawBomStore || []).filter(b => !isLegacyMockBom(b));
   const visibleBomStore = (passedVisibleBom || bomStore || []).filter(b => !isLegacyMockBom(b));
+
+  const safeStringVal = (val, fallback = '') => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'string') return val.trim();
+    if (typeof val === 'number') return String(val);
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    if (typeof val === 'object') {
+      const candidate = val.name || val.customerName || val.companyName || val.title || val.label || val.code || val.invNo || val.status || val.pay;
+      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      return fallback;
+    }
+    return String(val);
+  };
+
+  const cleanDateStr = (rawDate) => {
+    if (!rawDate) return '-';
+    if (typeof rawDate === 'object') {
+      const innerDate = rawDate.date || rawDate.formatted || rawDate.val || rawDate.dateStr;
+      if (typeof innerDate === 'string' && innerDate.trim()) return cleanDateStr(innerDate);
+      return '-';
+    }
+    const s = String(rawDate).trim();
+    if (s.includes('T')) {
+      const parts = s.split('T')[0].split('-');
+      if (parts.length === 3) {
+        const [y, m, d] = parts;
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const mIdx = parseInt(m, 10) - 1;
+        if (mIdx >= 0 && mIdx < 12) {
+          return `${d} ${months[mIdx]} ${y}`;
+        }
+      }
+    }
+    return s;
+  };
+
+  const cleanAmtNum = (amt) => {
+    if (typeof amt === 'number' && !isNaN(amt) && amt > 0) return amt;
+    if (!amt) return 0;
+    const n = parseFloat(String(amt).replace(/[^0-9.]/g, ''));
+    return (isNaN(n) || n <= 0) ? 0 : n;
+  };
+
+  let findMatchingBom = () => null;
+  let allInvoicesUnified = [];
+
+  if (shouldBuild('Invoice Management')) {
           // Dynamically compute unified invoices list ensuring packed and Accounts-Verified BOMs show up in Invoice Management seamlessly
           const isInvoiceEligibleBom = (b) => {
             if (!b) return false;
@@ -105,69 +153,47 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               };
             });
 
-          const safeStringVal = (val, fallback = '') => {
-            if (val === null || val === undefined) return fallback;
-            if (typeof val === 'string') return val.trim();
-            if (typeof val === 'number') return String(val);
-            if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-            if (typeof val === 'object') {
-              const candidate = val.name || val.customerName || val.companyName || val.title || val.label || val.code || val.invNo || val.status || val.pay;
-              if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
-              return fallback;
+          // O(1) BOM lookup maps preserving exact first-match priority of Array.prototype.find
+          const bomByCodeIdxMap = new Map();
+          const bomBySoIdxMap = new Map();
+          const bomByInvIdxMap = new Map();
+          const bomByNormInvIdxMap = new Map();
+          for (let i = 0; i < bomStore.length; i++) {
+            const b = bomStore[i];
+            if (!b) continue;
+            const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
+            const soNo = (b.salesOrderNo || '').toLowerCase().trim();
+            const bInv = (b.invoiceNo || '').toLowerCase().trim();
+            if (bCode && !bomByCodeIdxMap.has(bCode)) bomByCodeIdxMap.set(bCode, i);
+            if (soNo && !bomBySoIdxMap.has(soNo)) bomBySoIdxMap.set(soNo, i);
+            if (bInv && bInv !== 'pending confirmation' && !bInv.includes('pending')) {
+              if (!bomByInvIdxMap.has(bInv)) bomByInvIdxMap.set(bInv, i);
+              const normInv = bInv.replace(/[^a-z0-9]/gi, '');
+              if (normInv && !bomByNormInvIdxMap.has(normInv)) bomByNormInvIdxMap.set(normInv, i);
             }
-            return String(val);
-          };
+          }
 
-          const cleanDateStr = (rawDate) => {
-            if (!rawDate) return '-';
-            if (typeof rawDate === 'object') {
-              const innerDate = rawDate.date || rawDate.formatted || rawDate.val || rawDate.dateStr;
-              if (typeof innerDate === 'string' && innerDate.trim()) return cleanDateStr(innerDate);
-              return '-';
-            }
-            const s = String(rawDate).trim();
-            if (s.includes('T')) {
-              const parts = s.split('T')[0].split('-');
-              if (parts.length === 3) {
-                const [y, m, d] = parts;
-                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                const mIdx = parseInt(m, 10) - 1;
-                if (mIdx >= 0 && mIdx < 12) {
-                  return `${d} ${months[mIdx]} ${y}`;
-                }
-              }
-            }
-            return s;
-          };
-
-          const cleanAmtNum = (amt) => {
-            if (typeof amt === 'number' && !isNaN(amt) && amt > 0) return amt;
-            if (!amt) return 0;
-            const n = parseFloat(String(amt).replace(/[^0-9.]/g, ''));
-            return (isNaN(n) || n <= 0) ? 0 : n;
-          };
-
-          const findMatchingBom = (inv) => {
+          findMatchingBom = (inv) => {
             if (!inv) return null;
             const directRef = (inv.poNo || inv.bomCode || '').toLowerCase().trim();
             const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
             const invNum = (inv.invNo || inv.code || inv.id || '').toLowerCase().trim();
 
-            return (bomStore || []).find(b => {
-              if (!b) return false;
-              const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
-              const soNo = (b.salesOrderNo || '').toLowerCase().trim();
-              const bInv = (b.invoiceNo || '').toLowerCase().trim();
-
-              // 1. Direct match on BOM code or SO
-              if (bCode && (bCode === directRef || bCode === fromNotes)) return true;
-              if (soNo && (soNo === directRef || soNo === fromNotes)) return true;
-
-              // 2. Direct match on Invoice No
-              if (bInv && invNum && bInv !== 'pending confirmation' && !bInv.includes('pending') && (bInv === invNum || bInv.replace(/[^a-z0-9]/gi, '') === invNum.replace(/[^a-z0-9]/gi, ''))) return true;
-
-              return false;
-            });
+            let bestIdx = Infinity;
+            if (directRef) {
+              if (bomByCodeIdxMap.has(directRef)) bestIdx = Math.min(bestIdx, bomByCodeIdxMap.get(directRef));
+              if (bomBySoIdxMap.has(directRef)) bestIdx = Math.min(bestIdx, bomBySoIdxMap.get(directRef));
+            }
+            if (fromNotes) {
+              if (bomByCodeIdxMap.has(fromNotes)) bestIdx = Math.min(bestIdx, bomByCodeIdxMap.get(fromNotes));
+              if (bomBySoIdxMap.has(fromNotes)) bestIdx = Math.min(bestIdx, bomBySoIdxMap.get(fromNotes));
+            }
+            if (invNum) {
+              if (bomByInvIdxMap.has(invNum)) bestIdx = Math.min(bestIdx, bomByInvIdxMap.get(invNum));
+              const normInv = invNum.replace(/[^a-z0-9]/gi, '');
+              if (normInv && bomByNormInvIdxMap.has(normInv)) bestIdx = Math.min(bestIdx, bomByNormInvIdxMap.get(normInv));
+            }
+            return bestIdx < bomStore.length ? bomStore[bestIdx] : null;
           };
 
           const mergedInvoices = (invoiceList || []).filter(inv => {
@@ -344,7 +370,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
             dedupedInvoices.push(item);
           });
 
-          const allInvoicesUnified = dedupedInvoices.sort((a, b) => {
+          allInvoicesUnified = dedupedInvoices.sort((a, b) => {
             const seqA = parseBomSequenceNumber(a.poNo || a.bomCode || a.invNo || a.code || '');
             const seqB = parseBomSequenceNumber(b.poNo || b.bomCode || b.invNo || b.code || '');
             if (seqA !== seqB) return seqB - seqA;
@@ -352,10 +378,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
             const dateB = new Date(b.date || b.createdAt || 0).getTime() || 0;
             return dateB - dateA;
           });
+  }
 
           // Domain-specific Page Configs for all Production Admin views using the Purchase Orders 5-part layout template
           const configs = {
-            'Invoice Management': {
+            'Invoice Management': shouldBuild('Invoice Management') ? {
               title: 'Invoice Ledger & 3-Way Matching',
               subtitle: 'Verified Invoices, 3-Way Matching against BOM/PO/GRN, and payment ledger tracking',
               actionText: '',
@@ -406,8 +433,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 delete rowObj.dateTimeObj;
                 return rowObj;
               })
-            },
-            'Accounts Verification': (() => {
+            } : undefined,
+            'Accounts Verification': shouldBuild('Accounts Verification') ? (() => {
               const isAccountsEligible = (b) => {
                 if (!b) return false;
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
@@ -450,6 +477,41 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               };
 
               const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort(compareBomDescending);
+
+              // Helper to check if a BOM's credit has been settled (hoisted outside map)
+              const isBomCreditSettled = (item) => {
+                if (!item) return true;
+                if (item.creditSettled || item.paymentSettled || item.paymentUpdated) return true;
+                const s = String(item.status || '').toLowerCase();
+                if (s.includes('credit settled') || s.includes('payment settled') || s.includes('payment uploaded & settled')) return true;
+                const accItem = item.accountsVerification || {};
+                if (accItem.creditSettled || accItem.paymentStatus === 'Credit Settled (100% Paid)') return true;
+                return false;
+              };
+              const normCust = (name) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+
+              // Pre-filter unsettled credit BOMs once so credit aggregation is O(M_credit) instead of O(N^2)
+              const unsettledCreditBoms = [];
+              for (let i = 0; i < bomStore.length; i++) {
+                const other = bomStore[i];
+                if (!other) continue;
+                const otherCode = other.bomCode || other.code || other.id;
+                if (!otherCode) continue;
+                if (other.cancelled || other.status === 'Cancelled' || other.status === 'Cancelled & Stock Restored' || (typeof other.status === 'string' && other.status.toLowerCase().includes('cancel'))) continue;
+                const otherPType = String(other.paymentType || other.paymentTerms || other.accountsVerification?.paymentStatus || '').toLowerCase();
+                const otherCDays = Number(other.creditDays || 0);
+                const isOtherCredit = otherPType.includes('credit') || otherPType.includes('net 30') || otherCDays > 0;
+                if (!isOtherCredit || isBomCreditSettled(other)) continue;
+                const otherAmt = Number(other.accountsVerification?.totalAmount || other.grandTotal || other.subTotal || other.totalAmount || 0);
+                if (otherAmt > 0) {
+                  unsettledCreditBoms.push({
+                    otherCode,
+                    otherCustNorm: normCust(other.customerName || other.companyName || other.c2 || other.vendor || other.clientName),
+                    otherGstNorm: String(other.gstNo || other.customerGst || other.c3 || '').toUpperCase().trim(),
+                    otherAmt
+                  });
+                }
+              }
 
               return {
                 title: 'Accounts Verification & Document Control',
@@ -549,19 +611,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const cDays = Number(b.creditDays || 0);
                   const baseOrderVal = rawAmt > 0 ? rawAmt : Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
 
-                  // Helper to check if a BOM's credit has been settled
-                  const isBomCreditSettled = (item) => {
-                    if (!item) return true;
-                    if (item.creditSettled || item.paymentSettled || item.paymentUpdated) return true;
-                    const s = String(item.status || '').toLowerCase();
-                    if (s.includes('credit settled') || s.includes('payment settled') || s.includes('payment uploaded & settled')) return true;
-                    const accItem = item.accountsVerification || {};
-                    if (accItem.creditSettled || accItem.paymentStatus === 'Credit Settled (100% Paid)') return true;
-                    return false;
-                  };
-
                   // Customer matching for cumulative credit tracking
-                  const normCust = (name) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
                   const bCustNorm = normCust(b.customerName || b.companyName || b.c2 || b.vendor || b.clientName);
                   const bGstNorm = String(b.gstNo || b.customerGst || b.c3 || '').toUpperCase().trim();
                   const bCode = b.bomCode || b.code || b.id;
@@ -569,30 +619,15 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   // 1. Calculate previous unsettled credit for this customer from prior orders
                   let prevUnsettledCredit = 0;
                   if (bCustNorm.length >= 2 || bGstNorm.length >= 5) {
-                    (bomStore || []).forEach(other => {
-                      const otherCode = other.bomCode || other.code || other.id;
-                      if (!otherCode || otherCode === bCode) return;
-                      if (other.cancelled || other.status === 'Cancelled' || other.status === 'Cancelled & Stock Restored' || (typeof other.status === 'string' && other.status.toLowerCase().includes('cancel'))) return;
-
-                      // Check customer match
-                      const otherCustNorm = normCust(other.customerName || other.companyName || other.c2 || other.vendor || other.clientName);
-                      const otherGstNorm = String(other.gstNo || other.customerGst || other.c3 || '').toUpperCase().trim();
-                      const isMatch = (bGstNorm && otherGstNorm && bGstNorm === otherGstNorm) ||
-                        (bCustNorm && otherCustNorm && (bCustNorm === otherCustNorm || bCustNorm.includes(otherCustNorm) || otherCustNorm.includes(bCustNorm)));
-                      if (!isMatch) return;
-
-                      // Check if other order was credit and is not settled
-                      const otherPType = String(other.paymentType || other.paymentTerms || other.accountsVerification?.paymentStatus || '').toLowerCase();
-                      const otherCDays = Number(other.creditDays || 0);
-                      const isOtherCredit = otherPType.includes('credit') || otherPType.includes('net 30') || otherCDays > 0;
-
-                      if (isOtherCredit && !isBomCreditSettled(other)) {
-                        const otherAmt = Number(other.accountsVerification?.totalAmount || other.grandTotal || other.subTotal || other.totalAmount || 0);
-                        if (otherAmt > 0) {
-                          prevUnsettledCredit += otherAmt;
-                        }
+                    for (let u = 0; u < unsettledCreditBoms.length; u++) {
+                      const other = unsettledCreditBoms[u];
+                      if (other.otherCode === bCode) continue;
+                      const isMatch = (bGstNorm && other.otherGstNorm && bGstNorm === other.otherGstNorm) ||
+                        (bCustNorm && other.otherCustNorm && (bCustNorm === other.otherCustNorm || bCustNorm.includes(other.otherCustNorm) || other.otherCustNorm.includes(bCustNorm)));
+                      if (isMatch) {
+                        prevUnsettledCredit += other.otherAmt;
                       }
-                    });
+                    }
                   }
 
                   // 2. Current order credit
@@ -661,8 +696,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   };
                 })
               };
-            })(),
-            'Dispatch Orders': (() => {
+            })() : undefined,
+            'Dispatch Orders': shouldBuild('Dispatch Orders') ? (() => {
               const isPackedOrder = (b) => {
                 if (!b) return false;
                 const s = String(b.status || '').toLowerCase().trim();
@@ -808,6 +843,29 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
               const allDispatchBoms = (bomStore || []).filter(isDispatchEligible);
 
+              // Hoist PI localStorage read & JSON.parse once per config build (prevents N x JSON.parse main-thread freeze)
+              const piByNumMap = new Map();
+              const piByBomCodeMap = new Map();
+              let parsedPis = [];
+              try {
+                const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
+                if (rawPi) {
+                  const pis = JSON.parse(rawPi);
+                  if (Array.isArray(pis)) {
+                    parsedPis = pis;
+                    for (let idx = 0; idx < pis.length; idx++) {
+                      const p = pis[idx];
+                      if (!p) continue;
+                      if (p.piNo && !piByNumMap.has(p.piNo)) piByNumMap.set(p.piNo, idx);
+                      if (p.id && !piByNumMap.has(p.id)) piByNumMap.set(p.id, idx);
+                      if (p.estimate_number && !piByNumMap.has(p.estimate_number)) piByNumMap.set(p.estimate_number, idx);
+                      if (p.convertedBomCode && !piByBomCodeMap.has(p.convertedBomCode)) piByBomCodeMap.set(p.convertedBomCode, idx);
+                      if (p.convertedBomNo && !piByBomCodeMap.has(p.convertedBomNo)) piByBomCodeMap.set(p.convertedBomNo, idx);
+                    }
+                  }
+                }
+              } catch (_) {}
+
               return {
                 title: 'Dispatch & Packing Fulfillment Center',
                 subtitle: 'Verify goods packing, track dispatch progress, and release shipments for approved Sales BOM orders',
@@ -827,22 +885,13 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Dispatch Packing Status'],
                 rows: allDispatchBoms.sort(compareBomDescending).map(b => {
-                  // Resolve source PI for fallback data if BOM has missing fields
-                  let matchedPi = null;
-                  try {
-                    const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
-                    const bCode = b.bomCode || b.code || b.id;
-                    const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
-                    if (rawPi) {
-                      const pis = JSON.parse(rawPi);
-                      if (Array.isArray(pis)) {
-                        matchedPi = pis.find(p => p && (
-                          (piNum && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum)) ||
-                          (bCode && (p.convertedBomCode === bCode || p.convertedBomNo === bCode))
-                        )) || null;
-                      }
-                    }
-                  } catch (_) {}
+                  // Resolve source PI for fallback data in O(1) via pre-indexed Maps
+                  const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
+                  const bCode = b.bomCode || b.code || b.id;
+                  let bestPiIdx = Infinity;
+                  if (piNum && piByNumMap.has(piNum)) bestPiIdx = Math.min(bestPiIdx, piByNumMap.get(piNum));
+                  if (bCode && piByBomCodeMap.has(bCode)) bestPiIdx = Math.min(bestPiIdx, piByBomCodeMap.get(bCode));
+                  const matchedPi = bestPiIdx < parsedPis.length ? parsedPis[bestPiIdx] : null;
 
                   let itemsArray = (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
                     ? b.dispatchPacking
@@ -1187,11 +1236,11 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   return rowObj;
                 })
             };
-          })(),
-          'Delivery Challans': (() => {
+          })() : undefined,
+          'Delivery Challans': shouldBuild('Delivery Challans') ? (() => {
               let storedDcs = [];
               try {
-                const rawDc = localStorage.getItem('controlroom_dc_store');
+                const rawDc = (typeof localStorage !== 'undefined') && localStorage.getItem('controlroom_dc_store');
                 if (rawDc) {
                   const parsed = JSON.parse(rawDc);
                   if (Array.isArray(parsed)) {
@@ -1200,9 +1249,6 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                       !(d.dcNo === 'DC-2026-0001' && d.customerName === 'Tata Power Solar Systems Ltd') &&
                       !(d.dcNo === 'DC-2026-0002' && d.customerName === 'Adani Solar Energy')
                     );
-                    if (storedDcs.length !== parsed.length) {
-                      localStorage.setItem('controlroom_dc_store', JSON.stringify(storedDcs));
-                    }
                   }
                 }
               } catch (_) {}
@@ -1242,7 +1288,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   };
                 })
               };
-            })(),
+            })() : undefined,
             'Production Orders': {
               title: 'Production Orders (PO)',
               subtitle: 'Generate, tracking and dispatch management of corporate Production Orders',
@@ -1266,20 +1312,22 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { code: 'PO-2026-076', c2: 'Waaree Energies Ltd', c3: '2026-08-10', c4: '2026-08-25', c5: '1,200 Nos (₹ 69,62,000.00)', status: 'OPEN', stBg: '#f0fdf4', stFg: '#15803d', stBorder: '1px solid #bbf7d0', tabGroup: 'Open' }
               ]
             },
-            'Work Orders': {
+            'Work Orders': shouldBuild('Work Orders') ? (() => {
+              const workOrdersList = (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo));
+              return {
               title: 'Work Orders & Shop Floor Execution',
               subtitle: 'Central Inventory synced manufacturing work orders and shop floor dispatch',
               actionText: '+ Create Work Order',
               searchPlaceholder: 'Search Work Orders (WO No, Product Name, Material)...',
               tabs: [
-                { id: 'All', label: 'All Work Orders', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo)).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Pending', label: 'Draft / Pending', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'Draft' || w.status === 'Pending')).length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'InProgress', label: 'In Progress', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'In Progress' || w.status === 'RUNNING')).length, bg: '#fef3c7', fg: '#b45309' },
-                { id: 'Ready', label: 'Material Ready', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'Material Ready' || w.status === 'COMPLETED')).length, bg: '#dcfce7', fg: '#166534' },
-                { id: 'Overdue', label: 'Overdue Jobs', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'OVERDUE' || w.status === 'Overdue')).length, bg: '#fee2e2', fg: '#dc2626' }
+                { id: 'All', label: 'All Work Orders', count: workOrdersList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Pending', label: 'Draft / Pending', count: workOrdersList.filter(w => w.status === 'Draft' || w.status === 'Pending').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'InProgress', label: 'In Progress', count: workOrdersList.filter(w => w.status === 'In Progress' || w.status === 'RUNNING').length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Ready', label: 'Material Ready', count: workOrdersList.filter(w => w.status === 'Material Ready' || w.status === 'COMPLETED').length, bg: '#dcfce7', fg: '#166534' },
+                { id: 'Overdue', label: 'Overdue Jobs', count: workOrdersList.filter(w => w.status === 'OVERDUE' || w.status === 'Overdue').length, bg: '#fee2e2', fg: '#dc2626' }
               ],
               headers: ['Work Order No.', 'Product Name', 'Raw Material Required', 'Planned Qty', 'Completed Qty', 'Warehouse Store', 'Status'],
-              rows: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo)).map(w => {
+              rows: workOrdersList.map(w => {
                 const isOverdue = w.status === 'OVERDUE' || w.status === 'Overdue';
                 const isInProgress = w.status === 'In Progress' || w.status === 'RUNNING';
                 const isReady = w.status === 'Material Ready' || w.status === 'COMPLETED' || w.status === 'Closed';
@@ -1299,7 +1347,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   tabGroup: isOverdue ? 'Overdue' : (isInProgress ? 'InProgress' : (isReady ? 'Ready' : 'Pending'))
                 };
               })
-            },
+            };
+            })() : undefined,
             'Planning & Scheduling': {
               title: 'Production Planning & Shift Scheduling',
               subtitle: 'Master production schedule, shift allocation, and capacity planning',
@@ -1393,7 +1442,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { code: 'RM-FST-035', c2: 'Alu Fastener Rod 35mm', c3: '8.5 Tons', c4: '4.0 Tons', c5: '₹ 1,85,000 / Ton', c6: 'RM Store #1', status: 'SUFFICIENT', stBg: '#dcfce7', stFg: '#166534', stBorder: '1px solid #bbf7d0', tabGroup: 'Sufficient' }
               ]
             },
-            'Sales BOM': {
+            'Sales BOM': shouldBuild('Sales BOM') ? {
               title: 'Sales Bill of Materials (BOM)',
               subtitle: 'Customer order BOMs, product specifications and sales quotations',
               actionText: '+ Create BOM',
@@ -1417,8 +1466,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
                 tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
-            },
-            'BOM': {
+            } : undefined,
+            'BOM': shouldBuild('BOM') ? {
               title: 'Bill of Materials (BOM)',
               subtitle: 'Standard raw material consumption lists and component requirements',
               actionText: '+ Create BOM',
@@ -1442,8 +1491,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
                 tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
-            },
-            'BOM Orders': {
+            } : undefined,
+            'BOM Orders': shouldBuild('BOM Orders') ? {
               title: 'BOM Orders & Client Specifications',
               subtitle: 'Create and manage customer order BOMs, product specifications, and payment terms',
               actionText: '+ Create BOM',
@@ -1467,8 +1516,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
                 tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
-            },
-            'Customer Management': {
+            } : undefined,
+            'Customer Management': shouldBuild('Customer Management') ? {
               title: 'Customer Directory & Management',
               subtitle: 'Manage client directory, contact details, billing addresses, and order history',
               actionText: '+ Add New Customer',
@@ -1487,8 +1536,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 c4: c.c4 || c.mobile || '—',
                 c5: c.c5 || c.email || '—'
               }))
-            },
-            'BOM / Routing': {
+            } : undefined,
+            'BOM / Routing': shouldBuild('BOM / Routing') ? {
               title: 'Bill of Materials (BOM)',
               subtitle: 'Standard raw material consumption lists and component requirements',
               actionText: '+ Create BOM',
@@ -1512,7 +1561,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 stBorder: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? '1px solid #fde68a' : '1px solid #bbf7d0',
                 tabGroup: (!b.status || b.status.includes('Pending') || b.status === 'Draft') ? 'Pending' : 'Sent'
               }))
-            },
+            } : undefined,
             'Production Reports': {
               title: 'Production Reports & Shift Compilation',
               subtitle: 'Generate and export plant output, shift logs, and operational spreadsheets',

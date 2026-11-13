@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, UserCheck, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock, GitBranch, Receipt } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
 import ModernDateRangePicker from './ModernDateRangePicker';
-import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
+const VRMProformaInvoicePrintTemplate = lazy(() => import('./VRMProformaInvoicePrintTemplate'));
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS, stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
@@ -22,17 +22,8 @@ const defaultSalesPIs = [];
 
 const defaultProcurementPIs = [];
 
-export const PRESET_THEMES = [
-  { primary: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC', tagBg: '#CFFAFE', tagText: '#155E75', badge: 'PRESET 1', dot: '#0891B2' },
-  { primary: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE', tagBg: '#E0E7FF', tagText: '#3730A3', badge: 'PRESET 2', dot: '#4F46E5' },
-  { primary: '#D97706', bg: '#FFFBEB', border: '#FDE68A', tagBg: '#FEF3C7', tagText: '#92400E', badge: 'PRESET 3', dot: '#B45309' },
-  { primary: '#059669', bg: '#ECFDF5', border: '#A7F3D0', tagBg: '#D1FAE5', tagText: '#065F46', badge: 'PRESET 4', dot: '#047857' },
-  { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', tagBg: '#EDE9FE', tagText: '#5B21B6', badge: 'PRESET 5', dot: '#6D28D9' },
-];
-
-export const getPresetTheme = (groupIndex) => {
-  return PRESET_THEMES[groupIndex % PRESET_THEMES.length] || PRESET_THEMES[0];
-};
+import { PRESET_THEMES, getPresetTheme } from '../utils/presetThemes';
+export { PRESET_THEMES, getPresetTheme };
 
 const normalizePiRecord = (item) => {
   if (!item) return item;
@@ -9562,14 +9553,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       {/* ==================== OFFICIAL PROFORMA INVOICE PRINT & PDF TEMPLATE ==================== */}
       {printModalPi && (
-        <VRMProformaInvoicePrintTemplate
-          piData={printModalPi}
-          onClose={() => setPrintModalPi(null)}
-          onSavePi={handlePrintTemplatePiUpdate}
-          userRole={userRole}
-          isCeo={isCeo}
-          readOnly={isCeo}
-        />
+        <Suspense fallback={null}>
+          <VRMProformaInvoicePrintTemplate
+            piData={printModalPi}
+            onClose={() => setPrintModalPi(null)}
+            onSavePi={handlePrintTemplatePiUpdate}
+            userRole={userRole}
+            isCeo={isCeo}
+            readOnly={isCeo}
+          />
+        </Suspense>
       )}
 
     </div>

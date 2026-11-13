@@ -1348,7 +1348,7 @@ const CLOUD_STORE_DEDUP_TTL_MS = 3500;
 let inFlightBomsPromise = null;
 let bomsCache = null;
 let bomsCacheTimestamp = 0;
-const BOMS_CACHE_TTL_MS = 15000;
+const BOMS_CACHE_TTL_MS = 60000;
 
 export async function fetchBomsCached({ force = false } = {}) {
   const now = Date.now();
@@ -1375,12 +1375,21 @@ export async function fetchBomsCached({ force = false } = {}) {
       }
     } catch (_) {}
 
+    // Direct query fallback: SELECT ONLY REQUIRED SUMMARY COLUMNS (avoids circular call to fetchCloudStore)
     try {
-      const fallback = await fetchCloudStore('bom_store', []);
-      if (Array.isArray(fallback) && fallback.length > 0) {
-        bomsCache = fallback;
-        bomsCacheTimestamp = Date.now();
-        return bomsCache;
+      const { data: dbBoms, error: bomErr } = await supabase
+        .from('bom_orders')
+        .select(BOM_SUMMARY_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (!bomErr && Array.isArray(dbBoms) && dbBoms.length > 0) {
+        const fallback = dbBoms.map(b => toConsumerBom(b)).filter(Boolean);
+        if (fallback.length > 0) {
+          bomsCache = fallback;
+          bomsCacheTimestamp = Date.now();
+          return bomsCache;
+        }
       }
     } catch (_) {}
 
@@ -1390,6 +1399,40 @@ export async function fetchBomsCached({ force = false } = {}) {
   });
 
   return inFlightBomsPromise;
+}
+
+export function upsertBomInMemoryCache(bom) {
+  if (!bom || typeof bom !== 'object' || !Array.isArray(bomsCache)) return;
+  const k = String(bom.bomCode || bom.code || bom.id || '').trim();
+  if (!k) return;
+  const idx = bomsCache.findIndex(b => b && String(b.bomCode || b.code || b.id || '').trim() === k);
+  if (idx >= 0) {
+    const next = bomsCache.slice();
+    next[idx] = { ...next[idx], ...bom };
+    bomsCache = next;
+  } else {
+    bomsCache = [bom, ...bomsCache];
+  }
+  bomsCacheTimestamp = Date.now();
+}
+
+export function removeBomFromMemoryCache(targetId) {
+  if (!targetId || !Array.isArray(bomsCache)) return;
+  const cleanTarget = String(targetId).trim();
+  bomsCache = bomsCache.filter(b => b && b.id !== cleanTarget && b.bomCode !== cleanTarget && b.code !== cleanTarget);
+  bomsCacheTimestamp = Date.now();
+}
+
+export function patchBomPrintInMemoryCache(bomCode, printPayload) {
+  if (!bomCode || !printPayload || !Array.isArray(bomsCache)) return;
+  const target = String(bomCode).trim().toLowerCase();
+  const idx = bomsCache.findIndex(b => b && String(b.bomCode || b.code || b.id || '').trim().toLowerCase() === target);
+  if (idx >= 0) {
+    const next = bomsCache.slice();
+    next[idx] = { ...next[idx], ...printPayload };
+    bomsCache = next;
+    bomsCacheTimestamp = Date.now();
+  }
 }
 
 export function invalidateBomsCache() {
@@ -1494,34 +1537,9 @@ async function executeFetchCloudStore(storeKey, fallbackData = []) {
     } catch (_) {}
   }
 
-  // CANONICAL BOM READ PATH: Query via local backend proxy first (Zero PostgREST egress)
+  // CANONICAL BOM READ PATH: Unified cached + deduplicated path via fetchBomsCached()
   if (storeKey === 'bom_store' || storeKey === 'BOM_STORE') {
-    // 1. Try local server memory cache first (Zero Supabase PostgREST egress)
-    try {
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch('/api/boms', { signal: controller.signal }).catch(() => null);
-      clearTimeout(tId);
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        if (json && Array.isArray(json.data) && json.data.length > 0) {
-          return json.data;
-        }
-      }
-    } catch (_) {}
-
-    // 2. Direct query fallback: SELECT ONLY REQUIRED SUMMARY COLUMNS (Lazy load heavy attachments/items)
-    try {
-      const { data: dbBoms, error: bomErr } = await supabase
-        .from('bom_orders')
-        .select(BOM_SUMMARY_COLUMNS)
-        .order('created_at', { ascending: false })
-        .limit(200);
-
-      if (!bomErr && Array.isArray(dbBoms) && dbBoms.length > 0) {
-        return dbBoms.map(b => toConsumerBom(b)).filter(Boolean);
-      }
-    } catch (_) {}
+    return await fetchBomsCached();
   }
 
   // CANONICAL INVOICE READ PATH: Query via local backend proxy first (Zero PostgREST egress)

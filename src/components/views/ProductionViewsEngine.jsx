@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense, lazy } from 'react';
 import {
   Plus, Check, Trash2, Eye, FileText, Search, PlusCircle, AlertCircle, AlertTriangle, X,
   TrendingUp, Users, CheckCircle, Clock, ShieldAlert, Award,
@@ -9,27 +9,27 @@ import {
   ShieldCheck, Layers, Factory, Cpu, Receipt, IndianRupee, Smartphone, Camera, Image, RefreshCw,
   CreditCard, Bell, Video, Play, Pause, Film, Sparkles, MoreHorizontal, Copy, Hourglass, Boxes, Save
 } from 'lucide-react';
-import CreateWorkOrderPage from '../CreateWorkOrderPage';
-import RawMaterialInventoryView from './RawMaterialInventoryView';
-import WorkOrdersView from './WorkOrdersView';
-import InvoiceDetailModal from './InvoiceDetailModal';
-import ConfirmingBomModal from './ConfirmingBomModal';
-import DispatchPackingModal from './DispatchPackingModal';
-import AccountsVerificationModal from './AccountsVerificationModal';
+const CreateWorkOrderPage = lazy(() => import('../CreateWorkOrderPage'));
+const RawMaterialInventoryView = lazy(() => import('./RawMaterialInventoryView'));
+const WorkOrdersView = lazy(() => import('./WorkOrdersView'));
+const InvoiceDetailModal = lazy(() => import('./InvoiceDetailModal'));
+const ConfirmingBomModal = lazy(() => import('./ConfirmingBomModal'));
+const DispatchPackingModal = lazy(() => import('./DispatchPackingModal'));
+const AccountsVerificationModal = lazy(() => import('./AccountsVerificationModal'));
 import DocPreviewModal from './DocPreviewModal';
-import CustomerProfileView from './CustomerProfileView';
-import CustomerFormView from './CustomerFormView';
-import CreateBomFormPage from './CreateBomFormPage';
-import VehicleLoadingModal from './VehicleLoadingModal';
+const CustomerProfileView = lazy(() => import('./CustomerProfileView'));
+const CustomerFormView = lazy(() => import('./CustomerFormView'));
+const CreateBomFormPage = lazy(() => import('./CreateBomFormPage'));
+const VehicleLoadingModal = lazy(() => import('./VehicleLoadingModal'));
 import LrUploadPopupModal from './LrUploadPopupModal';
-import DeliveryChallanModal from './DeliveryChallanModal';
+const DeliveryChallanModal = lazy(() => import('./DeliveryChallanModal'));
 import QuickPreviewDrawer from './QuickPreviewDrawer';
 import ProductionTableView from './ProductionTableView';
 import { UploadPaymentModal, UpdatePaymentModal, ReuploadAddressProofModal } from './PaymentAndProofModals';
 import { CompletedBomSummaryModal, ActiveMediaPreviewModal, PreviewAddressProofModal, DispatchChecklistPreviewModal, ViewingProofDocModal, BomCancelPromptModal } from './DispatchAndPreviewModals';
 import { buildProductionConfigs } from './productionConfigs';
 import { CloseInvoiceReasonModal, ConfirmInvoiceSuccessModal } from './InvoiceModals';
-import { fetchCloudStore, fetchBomsCached, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, getWorkflowRank } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, fetchBomsCached, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, getWorkflowRank, patchBomPrintInMemoryCache } from '../../utils/supabaseDataSync';
 import { getItems, getVendors } from '../../services/businzDataService';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
@@ -37,15 +37,13 @@ import { getFullProductsCatalogWithStock } from '../../utils/productCatalogServi
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
 import NotificationToast from '../NotificationToast';
 import { addLiveNotification } from '../Header';
-import VRMTaxInvoicePrintTemplate from '../VRMTaxInvoicePrintTemplate';
-import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
-import * as XLSX from 'xlsx';
+const VRMTaxInvoicePrintTemplate = lazy(() => import('../VRMTaxInvoicePrintTemplate'));
+const VRMBomPrintTemplate = lazy(() => import('../VRMBomPrintTemplate'));
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile, cleanNum, formatCurrency } from '../../utils/otherViewsShared';
 import { compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator';
 import StatusBadge from '../StatusBadge';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
-import { is5PctSolarProduct } from '../PerformaInvoiceView';
 import {
   notifyBomSentToDispatch,
   notifyBomPackedAndSentToAccounts,
@@ -258,15 +256,55 @@ export default function ProductionViewsEngine(props) {
   const hasInitialSyncedRef = useRef(false);
   const isSyncingCloudRef = useRef(false);
   const hasFetchedCustomersRef = useRef(false);
+  const lastCloudSyncAtRef = useRef(0);
 
-  // Keep local convenience cache updated without cloud egress
-  useEffect(() => {
-    if (bomStore && Array.isArray(bomStore) && bomStore.length > 0) {
-      try {
-        const sanitized = bomStore.map(stripDataUrlsFromRecord);
-        localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized));
-      } catch (_) {}
+  // Fast O(N) equivalence check to avoid multi-MB JSON.stringify on main thread during cloud sync
+  const areBomListsEquivalent = (prev, next) => {
+    if (!Array.isArray(prev) || !Array.isArray(next) || prev.length !== next.length) return false;
+    for (let i = 0; i < prev.length; i++) {
+      const a = prev[i];
+      const b = next[i];
+      if (a === b) continue;
+      if (!a || !b) return false;
+      if ((a.bomCode || a.code || a.id) !== (b.bomCode || b.code || b.id)) return false;
+      if (a.status !== b.status || a.packingStatus !== b.packingStatus) return false;
+      if ((a.updated_at || a.updatedAt) !== (b.updated_at || b.updatedAt)) return false;
+      if (Boolean(a.dispatchPrinted) !== Boolean(b.dispatchPrinted)) return false;
+      if ((a.dispatchPrintCount || 0) !== (b.dispatchPrintCount || 0)) return false;
+      if (Boolean(a.accountsVerification?.verified) !== Boolean(b.accountsVerification?.verified)) return false;
+      if (Boolean(a.invoiceConfirmed) !== Boolean(b.invoiceConfirmed) || a.invoiceNo !== b.invoiceNo) return false;
+      if (Boolean(a.fullyCompleted) !== Boolean(b.fullyCompleted)) return false;
+      if ((a.dispatchPacking?.length || 0) !== (b.dispatchPacking?.length || 0)) return false;
+      if ((a.lrNo || '') !== (b.lrNo || '') || (a.lrCopyDoc?.name || '') !== (b.lrCopyDoc?.name || '')) return false;
+      if ((a.dispatchPackingMedia?.photos?.length || 0) !== (b.dispatchPackingMedia?.photos?.length || 0)) return false;
+      if ((a.dispatchPackingMedia?.videos?.length || 0) !== (b.dispatchPackingMedia?.videos?.length || 0)) return false;
     }
+    return true;
+  };
+
+  // Debounced background convenience cache write (never blocks UI frames)
+  useEffect(() => {
+    if (!bomStore || !Array.isArray(bomStore) || bomStore.length === 0) return;
+    let idleId = null;
+    const timerId = setTimeout(() => {
+      const persistCache = () => {
+        try {
+          const sanitized = bomStore.map(stripDataUrlsFromRecord);
+          localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized));
+        } catch (_) {}
+      };
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        idleId = window.requestIdleCallback(persistCache, { timeout: 2000 });
+      } else {
+        persistCache();
+      }
+    }, 1500);
+    return () => {
+      clearTimeout(timerId);
+      if (idleId !== null && typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleId);
+      }
+    };
   }, [bomStore]);
 
   useEffect(() => {
@@ -278,6 +316,7 @@ export default function ProductionViewsEngine(props) {
         if (data === null || !Array.isArray(data)) {
           data = await fetchCloudStore('bom_store', []);
         }
+        lastCloudSyncAtRef.current = Date.now();
 
         if (data && Array.isArray(data)) {
           if (data.length === 0) {
@@ -347,12 +386,8 @@ export default function ProductionViewsEngine(props) {
 
               const sorted = mergedList.sort(compareBomDescending);
               const nextList = sorted.map(stripDataUrlsFromRecord);
-              if (Array.isArray(prev) && prev.length === nextList.length) {
-                try {
-                  if (JSON.stringify(prev) === JSON.stringify(nextList)) {
-                    return prev;
-                  }
-                } catch (_) {}
+              if (areBomListsEquivalent(prev, nextList)) {
+                return prev;
               }
               return nextList;
             });
@@ -416,7 +451,9 @@ export default function ProductionViewsEngine(props) {
 
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
-        syncFromCloud();
+        if (Date.now() - lastCloudSyncAtRef.current > 60000) {
+          syncFromCloud();
+        }
       }
     };
 
@@ -448,6 +485,7 @@ export default function ProductionViewsEngine(props) {
     const handleBomPrinted = (e) => {
       const { bomCode, ...printPayload } = e.detail || {};
       if (!bomCode) return;
+      patchBomPrintInMemoryCache(bomCode, printPayload);
       setBomStore(prev => (prev || []).map(b => {
         if (String(b.bomCode || b.code || b.id || '').trim().toLowerCase() === String(bomCode).trim().toLowerCase()) {
           return { ...b, ...printPayload };
@@ -1142,27 +1180,19 @@ export default function ProductionViewsEngine(props) {
     }
   });
 
-  // Keep local convenience cache updated without cloud egress
+  // Debounced background convenience cache update for invoices (never blocks UI frames)
   useEffect(() => {
-    if (invoiceList && invoiceList.length > 0) {
+    if (!invoiceList || invoiceList.length === 0) return;
+    const timerId = setTimeout(() => {
       try {
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(invoiceList.map(stripDataUrlsFromRecord)));
       } catch (_) {}
-    }
+    }, 1000);
+    return () => clearTimeout(timerId);
   }, [invoiceList]);
 
-  // Initial cloud fetch for invoices & listen for local update events
+  // Initial cloud fetch for invoices & listen for local update events (single deduplicated call via fetchCloudStore)
   useEffect(() => {
-    // Fetch live invoices from backend
-    fetch('/api/invoices')
-      .then(res => res.json())
-      .then(data => {
-        if (data && Array.isArray(data) && data.length > 0) {
-          setInvoiceList(prev => deduplicateInvoices([...data, ...(prev || [])]));
-        }
-      })
-      .catch(() => {});
-
     fetchCloudStore('invoice_store', []).then(data => {
       if (data && Array.isArray(data) && data.length > 0) {
         setInvoiceList(prev => deduplicateInvoices([...data, ...(prev || [])]));
@@ -1260,6 +1290,140 @@ export default function ProductionViewsEngine(props) {
     return () => clearInterval(interval);
   }, []);
 
+  // Memoized per-active-tab config builder & row filter (eliminates multi-MB main-thread re-computation on every render/click)
+  const memoizedConfigs = useMemo(() => {
+    return buildProductionConfigs({ bomStore, visibleBomStore, invoiceList, customerList, activeTab });
+  }, [bomStore, visibleBomStore, invoiceList, customerList, activeTab]);
+
+  const memoizedPageConfig = useMemo(() => {
+    if (memoizedConfigs[activeTab]) return memoizedConfigs[activeTab];
+    return {
+      title: activeTab,
+      subtitle: `Management and control for ${activeTab}`,
+      actionText: `+ Create ${String(activeTab || '').replace(/s$/, '')}`,
+      searchPlaceholder: `Search ${activeTab}...`,
+      tabs: [
+        { id: 'All', label: 'All Entries', count: (bomStore || []).length, bg: '#e2e8f0', fg: '#475569' }
+      ],
+      headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status'],
+      rows: (bomStore || []).filter(b => {
+        if (activeTab === 'Dispatch Orders') {
+          if (!b) return false;
+          const s = String(b?.status || '').toLowerCase().trim();
+          const isDraftOrPending = Boolean(
+            (b.status === 'Draft' || s === 'draft' ||
+             b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
+             s === 'pending sales confirmation') &&
+            !b.isSentToDispatch &&
+            !s.includes('sent to dispatch') &&
+            !s.includes('packed') &&
+            !s.includes('completed')
+          );
+          if (isDraftOrPending) return false;
+          return Boolean(
+            b.salesConfirmed ||
+            b.isSentToDispatch ||
+            s.includes('dispatch') ||
+            s.includes('production') ||
+            s.includes('confirmed') ||
+            s.includes('packed') ||
+            s.includes('accounts') ||
+            s.includes('invoice') ||
+            s.includes('loading') ||
+            s.includes('completed') ||
+            s.includes('closed')
+          );
+        }
+        return true;
+      }).map(b => {
+        let dispStatus = b.status || 'ACTIVE';
+        if (activeTab === 'Dispatch Orders') {
+          if (['Sent to Production', 'Confirmed', 'In Production'].includes(b.status) || !b.status) {
+            dispStatus = 'Pending Packing';
+          }
+        }
+        const rowObj = {
+          ...b,
+          code: b.bomCode || 'REF-001',
+          c2: b.customerName || 'Customer',
+          c3: b.paymentType || '-',
+          c4: b.date || '2026-08-17',
+          c5: `₹ ${parseFloat(b.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+          status: dispStatus,
+          stBg: dispStatus === 'Pending Packing' ? '#fff7ed' : '#eff6ff',
+          stFg: dispStatus === 'Pending Packing' ? '#c2410c' : '#2563eb',
+          stBorder: dispStatus === 'Pending Packing' ? '1px solid #fed7aa' : '1px solid #bfdbfe',
+          tabGroup: 'All'
+        };
+        delete rowObj.c6;
+        return rowObj;
+      })
+    };
+  }, [memoizedConfigs, activeTab, bomStore]);
+
+  const memoizedFilteredRows = useMemo(() => {
+    const qLower = prodSearchQueryText ? prodSearchQueryText.toLowerCase() : '';
+    const subTab = String(prodActiveSubTab || 'All').toLowerCase();
+    const cleanSub = subTab.replace(/[^a-z0-9]/g, '');
+
+    return (memoizedPageConfig.rows || []).filter(r => {
+      const matchesSearch = !qLower ||
+        (r.code && String(r.code).toLowerCase().includes(qLower)) ||
+        (r.c2 && String(r.c2).toLowerCase().includes(qLower)) ||
+        (r.c3 && String(r.c3).toLowerCase().includes(qLower)) ||
+        (r.c4 && String(r.c4).toLowerCase().includes(qLower)) ||
+        (r.c5 && String(r.c5).toLowerCase().includes(qLower)) ||
+        (r.customerName && String(r.customerName).toLowerCase().includes(qLower)) ||
+        (r.salesPerson && String(r.salesPerson).toLowerCase().includes(qLower));
+
+      let matchesDate = true;
+      const rDateStr = r.salesConfirmedAt || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && /^\d{4}-\d{2}-\d{2}/.test(r.c4) ? r.c4 : null);
+      if (rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
+        const rIso = String(rDateStr).substring(0, 10);
+        if (prodFilterDateVal && rIso < prodFilterDateVal) matchesDate = false;
+        if (prodFilterEndDateVal && rIso > prodFilterEndDateVal) matchesDate = false;
+      }
+
+      const rStatus = (typeof r.status === 'string' ? r.status : (r.status?.name || r.status?.label || '')).toLowerCase();
+      const rTabGroup = (typeof r.tabGroup === 'string' ? r.tabGroup : '').toLowerCase();
+
+      const cleanStatus = rStatus.replace(/[^a-z0-9]/g, '');
+      const cleanGroup = rTabGroup.replace(/[^a-z0-9]/g, '');
+
+      const isCancelledRecord = Boolean(
+        r.cancelled ||
+        r.status === 'CANCELLED' ||
+        r.status === 'Cancelled' ||
+        r.status === 'Cancelled & Stock Restored' ||
+        cleanStatus.includes('cancel') ||
+        cleanGroup.includes('cancel')
+      );
+
+      if (isCancelledRecord) {
+        return matchesSearch && matchesDate && cleanSub.includes('cancel');
+      }
+
+      const matchesTab = cleanSub === 'all' ||
+        cleanSub === 'allboms' ||
+        cleanSub === 'allorders' ||
+        cleanSub === 'allaccountsorders' ||
+        (cleanSub === 'pendingprint' && (!r.dispatchPrinted && !r.isPrinted)) ||
+        (cleanSub === 'printed' && Boolean(r.dispatchPrinted || r.isPrinted)) ||
+        cleanGroup === cleanSub ||
+        rTabGroup === subTab ||
+        (cleanSub.includes('pending') && cleanSub !== 'pendingprint' && (cleanStatus.includes('pending') || cleanGroup.includes('pending') || cleanStatus.includes('draft'))) ||
+        (cleanSub.includes('partially') && (cleanStatus.includes('partial') || cleanGroup.includes('partial'))) ||
+        (cleanSub.includes('packed') && (cleanStatus.includes('packed') || cleanGroup.includes('packed') || cleanStatus.includes('verified'))) ||
+        (cleanSub.includes('loading') && (cleanStatus.includes('loading') || cleanGroup.includes('loading'))) ||
+        (cleanSub.includes('lr') && (cleanStatus.includes('lr') || cleanGroup.includes('lr'))) ||
+        ((cleanSub.includes('closed') || cleanSub.includes('dispatched')) && (cleanStatus.includes('closed') || cleanStatus.includes('dispatched') || cleanStatus.includes('completed') || cleanGroup.includes('closed') || r.fullyCompleted)) ||
+        (cleanSub.includes('draft') && cleanStatus.includes('draft')) ||
+        (cleanSub.includes('sent') && (cleanStatus.includes('sent') || cleanStatus.includes('confirm') || cleanStatus.includes('production')));
+
+      return matchesSearch && matchesDate && matchesTab;
+    });
+  }, [memoizedPageConfig, prodSearchQueryText, prodFilterDateVal, prodFilterEndDateVal, prodActiveSubTab]);
+
 
     return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
@@ -1277,50 +1441,52 @@ export default function ProductionViewsEngine(props) {
           // If viewing an individual Invoice in full screen
           if (activeTab === 'Invoice Management' && viewingInvoiceModal) {
             return (
-              <InvoiceDetailModal
-                viewingInvoiceModal={viewingInvoiceModal}
-                setViewingInvoiceModal={setViewingInvoiceModal}
-                isEditingInvoice={isEditingInvoice}
-                setIsEditingInvoice={setIsEditingInvoice}
-                invoiceEditForm={invoiceEditForm}
-                setInvoiceEditForm={setInvoiceEditForm}
-                invoiceModalActiveTab={invoiceModalActiveTab}
-                setInvoiceModalActiveTab={setInvoiceModalActiveTab}
-                bomStore={bomStore}
-                setBomStore={setBomStore}
-                invoices={invoiceList}
-                setInvoices={setInvoiceList}
-                invoiceList={invoiceList}
-                setInvoiceList={setInvoiceList}
-                setPrintTaxInvoiceModal={setPrintTaxInvoiceModal}
-                setPreviewDocModal={setPreviewDocModal}
-                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
-                setPendingDcModal={setPendingDcModal}
-                setDispatchChecklistPreviewModal={setDispatchChecklistPreviewModal}
-                showCustomAlert={showCustomAlert}
-                newBomDocType={newBomDocType}
-                setNewBomDocType={setNewBomDocType}
-                validateProductionBomForm={validateProductionBomForm}
-              />
+              <Suspense fallback={null}>
+                <InvoiceDetailModal
+                  viewingInvoiceModal={viewingInvoiceModal}
+                  setViewingInvoiceModal={setViewingInvoiceModal}
+                  isEditingInvoice={isEditingInvoice}
+                  setIsEditingInvoice={setIsEditingInvoice}
+                  invoiceEditForm={invoiceEditForm}
+                  setInvoiceEditForm={setInvoiceEditForm}
+                  invoiceModalActiveTab={invoiceModalActiveTab}
+                  setInvoiceModalActiveTab={setInvoiceModalActiveTab}
+                  bomStore={bomStore}
+                  setBomStore={setBomStore}
+                  invoices={invoiceList}
+                  setInvoices={setInvoiceList}
+                  invoiceList={invoiceList}
+                  setInvoiceList={setInvoiceList}
+                  setPrintTaxInvoiceModal={setPrintTaxInvoiceModal}
+                  setPreviewDocModal={setPreviewDocModal}
+                  setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                  setPendingDcModal={setPendingDcModal}
+                  setDispatchChecklistPreviewModal={setDispatchChecklistPreviewModal}
+                  showCustomAlert={showCustomAlert}
+                  newBomDocType={newBomDocType}
+                  setNewBomDocType={setNewBomDocType}
+                  validateProductionBomForm={validateProductionBomForm}
+                />
+              </Suspense>
             );
           }
-
-          const configs = buildProductionConfigs({ bomStore, visibleBomStore, invoiceList, customerList });
 
           // RawMaterialInventoryView extracted to ./RawMaterialInventoryView.jsx
 
           // Dedicated Custom Renderer for Inventory & Raw Material Directory matching User UI Design
           if (activeTab === 'Raw Material Directory' || activeTab === 'Inventory (Raw Material)' || activeTab === 'Inventory' || (activeTab && activeTab.toLowerCase().includes('inventory')) || (activeTab && activeTab.toLowerCase().includes('raw material'))) {
             return (
-              <RawMaterialInventoryView
-                showAddStockForm={showAddStockForm}
-                setShowAddStockForm={setShowAddStockForm}
-                userRole={userRole}
-                activeTab={activeTab}
-                itemsLoading={itemsLoading}
-                showCustomAlert={showCustomAlert}
-                itemsList={props.itemsList || []}
-              />
+              <Suspense fallback={null}>
+                <RawMaterialInventoryView
+                  showAddStockForm={showAddStockForm}
+                  setShowAddStockForm={setShowAddStockForm}
+                  userRole={userRole}
+                  activeTab={activeTab}
+                  itemsLoading={itemsLoading}
+                  showCustomAlert={showCustomAlert}
+                  itemsList={props.itemsList || []}
+                />
+              </Suspense>
             );
           }
 
@@ -1339,37 +1505,43 @@ export default function ProductionViewsEngine(props) {
           if (activeTab === 'Work Orders') {
             if (showWorkOrderForm) {
               return (
-                <CreateWorkOrderPage
-                  onBack={() => setShowWorkOrderForm(false)}
-                  onWorkOrderCreated={(newWO) => {
-                    setShowWorkOrderForm(false);
-                    showCustomAlert(`Work Order ${newWO?.id || ''} created & issued successfully! Raw Material Required: ${newWO?.rawMaterialPhysicalToIssue || ''} ${newWO?.rawMaterialUnit || ''}`, `Work Order ${newWO?.id || ''} Issued Successfully!`, 'success');
-                  }}
-                />
+                <Suspense fallback={null}>
+                  <CreateWorkOrderPage
+                    onBack={() => setShowWorkOrderForm(false)}
+                    onWorkOrderCreated={(newWO) => {
+                      setShowWorkOrderForm(false);
+                      showCustomAlert(`Work Order ${newWO?.id || ''} created & issued successfully! Raw Material Required: ${newWO?.rawMaterialPhysicalToIssue || ''} ${newWO?.rawMaterialUnit || ''}`, `Work Order ${newWO?.id || ''} Issued Successfully!`, 'success');
+                    }}
+                  />
+                </Suspense>
               );
             }
 
             return (
-              <WorkOrdersView
-                userRole={userRole}
-                setShowWorkOrderForm={setShowWorkOrderForm}
-                prodSearchQueryText={prodSearchQueryText}
-                setProdSearchQueryText={setProdSearchQueryText}
-                prodStatusFilterText={prodStatusFilterText}
-                setProdStatusFilterText={setProdStatusFilterText}
-              />
+              <Suspense fallback={null}>
+                <WorkOrdersView
+                  userRole={userRole}
+                  setShowWorkOrderForm={setShowWorkOrderForm}
+                  prodSearchQueryText={prodSearchQueryText}
+                  setProdSearchQueryText={setProdSearchQueryText}
+                  prodStatusFilterText={prodStatusFilterText}
+                  setProdStatusFilterText={setProdStatusFilterText}
+                />
+              </Suspense>
             );
           }
 
           // Render Send Confirm (Editable Mode) or View BOM Details (100% Read-Only Mode)
           if (confirmingBomModal) {
             return (
-              <ConfirmingBomModal
-                confirmingBomModal={confirmingBomModal}
-                setConfirmingBomModal={setConfirmingBomModal}
-                setBomStore={setBomStore}
-                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
-              />
+              <Suspense fallback={null}>
+                <ConfirmingBomModal
+                  confirmingBomModal={confirmingBomModal}
+                  setConfirmingBomModal={setConfirmingBomModal}
+                  setBomStore={setBomStore}
+                  setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                />
+              </Suspense>
             );
           }
 
@@ -1377,18 +1549,20 @@ export default function ProductionViewsEngine(props) {
           if (dispatchPackingModal) {
             return (
               <>
-                <DispatchPackingModal
-                  dispatchPackingModal={dispatchPackingModal}
-                  setDispatchPackingModal={setDispatchPackingModal}
-                  bomStore={bomStore}
-                  setBomStore={setBomStore}
-                  setInvoiceList={setInvoiceList}
-                  canCancelBom={canCancelBom}
-                  handleCancelBomOrder={handleCancelBomOrder}
-                  setActiveMediaPreviewModal={setActiveMediaPreviewModal}
-                  setVehicleLoadingModal={setVehicleLoadingModal}
-                  userRole={userRole}
-                />
+                <Suspense fallback={null}>
+                  <DispatchPackingModal
+                    dispatchPackingModal={dispatchPackingModal}
+                    setDispatchPackingModal={setDispatchPackingModal}
+                    bomStore={bomStore}
+                    setBomStore={setBomStore}
+                    setInvoiceList={setInvoiceList}
+                    canCancelBom={canCancelBom}
+                    handleCancelBomOrder={handleCancelBomOrder}
+                    setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                    setVehicleLoadingModal={setVehicleLoadingModal}
+                    userRole={userRole}
+                  />
+                </Suspense>
                 {bomCancelPromptModal && (
                   <BomCancelPromptModal
                     bomCancelPromptModal={bomCancelPromptModal}
@@ -1403,14 +1577,16 @@ export default function ProductionViewsEngine(props) {
           // Render Vehicle Loading Verification Screen (Full Size Page like DispatchPackingModal)
           if (vehicleLoadingModal) {
             return (
-              <VehicleLoadingModal
-                vehicleLoadingModal={vehicleLoadingModal}
-                onClose={() => setVehicleLoadingModal(null)}
-                setBomStore={setBomStore}
-                setCompletedBomSummaryModal={setCompletedBomSummaryModal}
-                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
-                setInvoiceList={setInvoiceList}
-              />
+              <Suspense fallback={null}>
+                <VehicleLoadingModal
+                  vehicleLoadingModal={vehicleLoadingModal}
+                  onClose={() => setVehicleLoadingModal(null)}
+                  setBomStore={setBomStore}
+                  setCompletedBomSummaryModal={setCompletedBomSummaryModal}
+                  setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                  setInvoiceList={setInvoiceList}
+                />
+              </Suspense>
             );
           }
 
@@ -1418,21 +1594,23 @@ export default function ProductionViewsEngine(props) {
           if (accountsVerificationModal) {
             return (
               <>
-                <AccountsVerificationModal
-                  accountsVerificationModal={accountsVerificationModal}
-                  setAccountsVerificationModal={setAccountsVerificationModal}
-                  isAccountsViewOnly={isAccountsViewOnly}
-                  setIsAccountsViewOnly={setIsAccountsViewOnly}
-                  bomStore={bomStore}
-                  setBomStore={setBomStore}
-                  userRole={userRole}
-                  setPreviewDocModal={setPreviewDocModal}
-                  canCancelBom={canCancelBom}
-                  handleCancelBomOrder={handleCancelBomOrder}
-                  invoiceList={invoiceList}
-                  setInvoiceList={setInvoiceList}
-                  showCustomAlert={showCustomAlert}
-                />
+                <Suspense fallback={null}>
+                  <AccountsVerificationModal
+                    accountsVerificationModal={accountsVerificationModal}
+                    setAccountsVerificationModal={setAccountsVerificationModal}
+                    isAccountsViewOnly={isAccountsViewOnly}
+                    setIsAccountsViewOnly={setIsAccountsViewOnly}
+                    bomStore={bomStore}
+                    setBomStore={setBomStore}
+                    userRole={userRole}
+                    setPreviewDocModal={setPreviewDocModal}
+                    canCancelBom={canCancelBom}
+                    handleCancelBomOrder={handleCancelBomOrder}
+                    invoiceList={invoiceList}
+                    setInvoiceList={setInvoiceList}
+                    showCustomAlert={showCustomAlert}
+                  />
+                </Suspense>
                 {bomCancelPromptModal && (
                   <BomCancelPromptModal
                     bomCancelPromptModal={bomCancelPromptModal}
@@ -1488,309 +1666,193 @@ export default function ProductionViewsEngine(props) {
           // Render Customer Profile View (when viewingCustomer is set)
           if (viewingCustomer) {
             return (
-              <CustomerProfileView
-                viewingCustomer={viewingCustomer}
-                setViewingCustomer={setViewingCustomer}
-                setEditingCustomer={setEditingCustomer}
-                setShowCustomerForm={setShowCustomerForm}
-                setCustFormName={setCustFormName}
-                setCustFormCompany={setCustFormCompany}
-                setCustFormGstNo={setCustFormGstNo}
-                setCustFormMobile={setCustFormMobile}
-                setCustFormEmail={setCustFormEmail}
-                setCustFormBillingAddress={setCustFormBillingAddress}
-                setCustFormBillingCity={setCustFormBillingCity}
-                setCustFormBillingState={setCustFormBillingState}
-                setCustFormBillingPincode={setCustFormBillingPincode}
-                setCustFormDeliveryAddress={setCustFormDeliveryAddress}
-                setCustFormDeliveryCity={setCustFormDeliveryCity}
-                setCustFormDeliveryState={setCustFormDeliveryState}
-                setCustFormDeliveryPincode={setCustFormDeliveryPincode}
-                setCustFormSameAsBilling={setCustFormSameAsBilling}
-              />
+              <Suspense fallback={null}>
+                <CustomerProfileView
+                  viewingCustomer={viewingCustomer}
+                  setViewingCustomer={setViewingCustomer}
+                  setEditingCustomer={setEditingCustomer}
+                  setShowCustomerForm={setShowCustomerForm}
+                  setCustFormName={setCustFormName}
+                  setCustFormCompany={setCustFormCompany}
+                  setCustFormGstNo={setCustFormGstNo}
+                  setCustFormMobile={setCustFormMobile}
+                  setCustFormEmail={setCustFormEmail}
+                  setCustFormBillingAddress={setCustFormBillingAddress}
+                  setCustFormBillingCity={setCustFormBillingCity}
+                  setCustFormBillingState={setCustFormBillingState}
+                  setCustFormBillingPincode={setCustFormBillingPincode}
+                  setCustFormDeliveryAddress={setCustFormDeliveryAddress}
+                  setCustFormDeliveryCity={setCustFormDeliveryCity}
+                  setCustFormDeliveryState={setCustFormDeliveryState}
+                  setCustFormDeliveryPincode={setCustFormDeliveryPincode}
+                  setCustFormSameAsBilling={setCustFormSameAsBilling}
+                />
+              </Suspense>
             );
           }
 
           // Render Create/Edit Customer Form if active or open
           if (showCustomerForm || editingCustomer) {
             return (
-              <CustomerFormView
-                showCustomerForm={showCustomerForm}
-                setShowCustomerForm={setShowCustomerForm}
-                editingCustomer={editingCustomer}
-                setEditingCustomer={setEditingCustomer}
-                custFormName={custFormName}
-                setCustFormName={setCustFormName}
-                custFormCompany={custFormCompany}
-                setCustFormCompany={setCustFormCompany}
-                custFormGstNo={custFormGstNo}
-                setCustFormGstNo={setCustFormGstNo}
-                custFormMobile={custFormMobile}
-                setCustFormMobile={setCustFormMobile}
-                custFormAltPhone={custFormAltPhone}
-                setCustFormAltPhone={setCustFormAltPhone}
-                custFormEmail={custFormEmail}
-                setCustFormEmail={setCustFormEmail}
-                custFormBillingAddress1={custFormBillingAddress1}
-                setCustFormBillingAddress1={setCustFormBillingAddress1}
-                custFormBillingAddress2={custFormBillingAddress2}
-                setCustFormBillingAddress2={setCustFormBillingAddress2}
-                custFormBillingAddress={custFormBillingAddress}
-                setCustFormBillingAddress={setCustFormBillingAddress}
-                custFormBillingCity={custFormBillingCity}
-                setCustFormBillingCity={setCustFormBillingCity}
-                custFormBillingState={custFormBillingState}
-                setCustFormBillingState={setCustFormBillingState}
-                custFormBillingPincode={custFormBillingPincode}
-                setCustFormBillingPincode={setCustFormBillingPincode}
-                custFormDeliveryAddress1={custFormDeliveryAddress1}
-                setCustFormDeliveryAddress1={setCustFormDeliveryAddress1}
-                custFormDeliveryAddress2={custFormDeliveryAddress2}
-                setCustFormDeliveryAddress2={setCustFormDeliveryAddress2}
-                custFormDeliveryAddress={custFormDeliveryAddress}
-                setCustFormDeliveryAddress={setCustFormDeliveryAddress}
-                custFormDeliveryCity={custFormDeliveryCity}
-                setCustFormDeliveryCity={setCustFormDeliveryCity}
-                custFormDeliveryState={custFormDeliveryState}
-                setCustFormDeliveryState={setCustFormDeliveryState}
-                custFormDeliveryPincode={custFormDeliveryPincode}
-                setCustFormDeliveryPincode={setCustFormDeliveryPincode}
-                custFormSameAsBilling={custFormSameAsBilling}
-                setCustFormSameAsBilling={setCustFormSameAsBilling}
-                customerList={customerList}
-                setCustomerList={setCustomerList}
-                setNewBomCustomer={setNewBomCustomer}
-                setNewBomProductName={setNewBomProductName}
-                setNewBomDeliveryAddress={setNewBomDeliveryAddress}
-                setSameAsBilling={setSameAsBilling}
-              />
+              <Suspense fallback={null}>
+                <CustomerFormView
+                  showCustomerForm={showCustomerForm}
+                  setShowCustomerForm={setShowCustomerForm}
+                  editingCustomer={editingCustomer}
+                  setEditingCustomer={setEditingCustomer}
+                  custFormName={custFormName}
+                  setCustFormName={setCustFormName}
+                  custFormCompany={custFormCompany}
+                  setCustFormCompany={setCustFormCompany}
+                  custFormGstNo={custFormGstNo}
+                  setCustFormGstNo={setCustFormGstNo}
+                  custFormMobile={custFormMobile}
+                  setCustFormMobile={setCustFormMobile}
+                  custFormAltPhone={custFormAltPhone}
+                  setCustFormAltPhone={setCustFormAltPhone}
+                  custFormEmail={custFormEmail}
+                  setCustFormEmail={setCustFormEmail}
+                  custFormBillingAddress1={custFormBillingAddress1}
+                  setCustFormBillingAddress1={setCustFormBillingAddress1}
+                  custFormBillingAddress2={custFormBillingAddress2}
+                  setCustFormBillingAddress2={setCustFormBillingAddress2}
+                  custFormBillingAddress={custFormBillingAddress}
+                  setCustFormBillingAddress={setCustFormBillingAddress}
+                  custFormBillingCity={custFormBillingCity}
+                  setCustFormBillingCity={setCustFormBillingCity}
+                  custFormBillingState={custFormBillingState}
+                  setCustFormBillingState={setCustFormBillingState}
+                  custFormBillingPincode={custFormBillingPincode}
+                  setCustFormBillingPincode={setCustFormBillingPincode}
+                  custFormDeliveryAddress1={custFormDeliveryAddress1}
+                  setCustFormDeliveryAddress1={setCustFormDeliveryAddress1}
+                  custFormDeliveryAddress2={custFormDeliveryAddress2}
+                  setCustFormDeliveryAddress2={setCustFormDeliveryAddress2}
+                  custFormDeliveryAddress={custFormDeliveryAddress}
+                  setCustFormDeliveryAddress={setCustFormDeliveryAddress}
+                  custFormDeliveryCity={custFormDeliveryCity}
+                  setCustFormDeliveryCity={setCustFormDeliveryCity}
+                  custFormDeliveryState={custFormDeliveryState}
+                  setCustFormDeliveryState={setCustFormDeliveryState}
+                  custFormDeliveryPincode={custFormDeliveryPincode}
+                  setCustFormDeliveryPincode={setCustFormDeliveryPincode}
+                  custFormSameAsBilling={custFormSameAsBilling}
+                  setCustFormSameAsBilling={setCustFormSameAsBilling}
+                  customerList={customerList}
+                  setCustomerList={setCustomerList}
+                  setNewBomCustomer={setNewBomCustomer}
+                  setNewBomProductName={setNewBomProductName}
+                  setNewBomDeliveryAddress={setNewBomDeliveryAddress}
+                  setSameAsBilling={setSameAsBilling}
+                />
+              </Suspense>
             );
           }
 
           // Render Create BOM Form matching exact user reference screenshot design system
           if (showBOMForm) {
             return (
-              <CreateBomFormPage
-                showBOMForm={showBOMForm}
-                setShowBOMForm={setShowBOMForm}
-                setShowCustomerForm={setShowCustomerForm}
-                customerList={customerList}
-                itemsList={props.itemsList || []}
-                sourcePiNo={props.sourcePiNo || props.newBomSourcePiNo || null}
-                newBomSourcePiNo={props.newBomSourcePiNo || props.sourcePiNo || null}
-                setBomStore={setBomStore}
-                newBomCode={newBomCode}
-                setNewBomCode={setNewBomCode}
-                newBomDeliveryDate={newBomDeliveryDate}
-                setNewBomDeliveryDate={setNewBomDeliveryDate}
-                newBomProductName={newBomProductName}
-                setNewBomProductName={setNewBomProductName}
-                bomFormErrors={bomFormErrors}
-                setBomFormErrors={setBomFormErrors}
-                newBomBillingStreet={newBomBillingStreet}
-                setNewBomBillingStreet={setNewBomBillingStreet}
-                newBomBillingCity={newBomBillingCity}
-                setNewBomBillingCity={setNewBomBillingCity}
-                newBomBillingState={newBomBillingState}
-                setNewBomBillingState={setNewBomBillingState}
-                newBomBillingPincode={newBomBillingPincode}
-                setNewBomBillingPincode={setNewBomBillingPincode}
-                newBomDeliveryAddress={newBomDeliveryAddress}
-                newBomDeliveryStreet={newBomDeliveryStreet}
-                setNewBomDeliveryStreet={setNewBomDeliveryStreet}
-                newBomDeliveryCity={newBomDeliveryCity}
-                setNewBomDeliveryCity={setNewBomDeliveryCity}
-                newBomDeliveryState={newBomDeliveryState}
-                setNewBomDeliveryState={setNewBomDeliveryState}
-                newBomDeliveryPincode={newBomDeliveryPincode}
-                setNewBomDeliveryPincode={setNewBomDeliveryPincode}
-                newBomPaymentType={newBomPaymentType}
-                setNewBomPaymentType={setNewBomPaymentType}
-                newBomCreditDays={newBomCreditDays}
-                setNewBomCreditDays={setNewBomCreditDays}
-                sameAsBilling={sameAsBilling}
-                setSameAsBilling={setSameAsBilling}
-                newBomDeliveryProofDoc={newBomDeliveryProofDoc}
-                setNewBomDeliveryProofDoc={setNewBomDeliveryProofDoc}
-                newBomPaymentProofDoc={newBomPaymentProofDoc}
-                setNewBomPaymentProofDoc={setNewBomPaymentProofDoc}
-                newBomRemarks={newBomRemarks}
-                setNewBomRemarks={setNewBomRemarks}
-                newBomTransportMode={newBomTransportMode}
-                setNewBomTransportMode={setNewBomTransportMode}
-                newBomTransporterName={newBomTransporterName}
-                setNewBomTransporterName={setNewBomTransporterName}
-                newBomDestination={newBomDestination}
-                setNewBomDestination={setNewBomDestination}
-                newBomVehicleNo={newBomVehicleNo}
-                setNewBomVehicleNo={setNewBomVehicleNo}
-                newBomLrNo={newBomLrNo}
-                setNewBomLrNo={setNewBomLrNo}
-                newBomGstRate={newBomGstRate}
-                setNewBomGstRate={setNewBomGstRate}
-                activePresetsMap={activePresetsMap}
-                selectedPreset={selectedPreset}
-                setSelectedPreset={setSelectedPreset}
-                presetSetCount={presetSetCount}
-                setPresetSetCount={setPresetSetCount}
-                presetKitPrice={presetKitPrice}
-                setPresetKitPrice={setPresetKitPrice}
-                setPreviewDocModal={setPreviewDocModal}
-                selectedBomItemIndexes={selectedBomItemIndexes}
-                setSelectedBomItemIndexes={setSelectedBomItemIndexes}
-                showClearConfirmModal={showClearConfirmModal}
-                setShowClearConfirmModal={setShowClearConfirmModal}
-                bomConfirmModal={bomConfirmModal}
-                setBomConfirmModal={setBomConfirmModal}
-                showCustomAlert={showCustomAlert}
-                newBomDocType={newBomDocType}
-                setNewBomDocType={setNewBomDocType}
-                validateProductionBomForm={validateProductionBomForm}
-              />
+              <Suspense fallback={null}>
+                <CreateBomFormPage
+                  showBOMForm={showBOMForm}
+                  setShowBOMForm={setShowBOMForm}
+                  setShowCustomerForm={setShowCustomerForm}
+                  customerList={customerList}
+                  itemsList={props.itemsList || []}
+                  sourcePiNo={props.sourcePiNo || props.newBomSourcePiNo || null}
+                  newBomSourcePiNo={props.newBomSourcePiNo || props.sourcePiNo || null}
+                  setBomStore={setBomStore}
+                  newBomCode={newBomCode}
+                  setNewBomCode={setNewBomCode}
+                  newBomDeliveryDate={newBomDeliveryDate}
+                  setNewBomDeliveryDate={setNewBomDeliveryDate}
+                  newBomProductName={newBomProductName}
+                  setNewBomProductName={setNewBomProductName}
+                  bomFormErrors={bomFormErrors}
+                  setBomFormErrors={setBomFormErrors}
+                  newBomBillingStreet={newBomBillingStreet}
+                  setNewBomBillingStreet={setNewBomBillingStreet}
+                  newBomBillingCity={newBomBillingCity}
+                  setNewBomBillingCity={setNewBomBillingCity}
+                  newBomBillingState={newBomBillingState}
+                  setNewBomBillingState={setNewBomBillingState}
+                  newBomBillingPincode={newBomBillingPincode}
+                  setNewBomBillingPincode={setNewBomBillingPincode}
+                  newBomDeliveryAddress={newBomDeliveryAddress}
+                  newBomDeliveryStreet={newBomDeliveryStreet}
+                  setNewBomDeliveryStreet={setNewBomDeliveryStreet}
+                  newBomDeliveryCity={newBomDeliveryCity}
+                  setNewBomDeliveryCity={setNewBomDeliveryCity}
+                  newBomDeliveryState={newBomDeliveryState}
+                  setNewBomDeliveryState={setNewBomDeliveryState}
+                  newBomDeliveryPincode={newBomDeliveryPincode}
+                  setNewBomDeliveryPincode={setNewBomDeliveryPincode}
+                  newBomPaymentType={newBomPaymentType}
+                  setNewBomPaymentType={setNewBomPaymentType}
+                  newBomCreditDays={newBomCreditDays}
+                  setNewBomCreditDays={setNewBomCreditDays}
+                  sameAsBilling={sameAsBilling}
+                  setSameAsBilling={setSameAsBilling}
+                  newBomDeliveryProofDoc={newBomDeliveryProofDoc}
+                  setNewBomDeliveryProofDoc={setNewBomDeliveryProofDoc}
+                  newBomPaymentProofDoc={newBomPaymentProofDoc}
+                  setNewBomPaymentProofDoc={setNewBomPaymentProofDoc}
+                  newBomRemarks={newBomRemarks}
+                  setNewBomRemarks={setNewBomRemarks}
+                  newBomTransportMode={newBomTransportMode}
+                  setNewBomTransportMode={setNewBomTransportMode}
+                  newBomTransporterName={newBomTransporterName}
+                  setNewBomTransporterName={setNewBomTransporterName}
+                  newBomDestination={newBomDestination}
+                  setNewBomDestination={setNewBomDestination}
+                  newBomVehicleNo={newBomVehicleNo}
+                  setNewBomVehicleNo={setNewBomVehicleNo}
+                  newBomLrNo={newBomLrNo}
+                  setNewBomLrNo={setNewBomLrNo}
+                  newBomGstRate={newBomGstRate}
+                  setNewBomGstRate={setNewBomGstRate}
+                  activePresetsMap={activePresetsMap}
+                  selectedPreset={selectedPreset}
+                  setSelectedPreset={setSelectedPreset}
+                  presetSetCount={presetSetCount}
+                  setPresetSetCount={setPresetSetCount}
+                  presetKitPrice={presetKitPrice}
+                  setPresetKitPrice={setPresetKitPrice}
+                  setPreviewDocModal={setPreviewDocModal}
+                  selectedBomItemIndexes={selectedBomItemIndexes}
+                  setSelectedBomItemIndexes={setSelectedBomItemIndexes}
+                  showClearConfirmModal={showClearConfirmModal}
+                  setShowClearConfirmModal={setShowClearConfirmModal}
+                  bomConfirmModal={bomConfirmModal}
+                  setBomConfirmModal={setBomConfirmModal}
+                  showCustomAlert={showCustomAlert}
+                  newBomDocType={newBomDocType}
+                  setNewBomDocType={setNewBomDocType}
+                  validateProductionBomForm={validateProductionBomForm}
+                />
+              </Suspense>
             );
           }
 
           // Render Create / View Delivery Challan Page matching PO & PI design inline (sidebar visible)
           if (pendingDcModal) {
             return (
-              <DeliveryChallanModal
-                pendingDcModal={pendingDcModal}
-                onClose={() => setPendingDcModal(null)}
-                bomStore={bomStore}
-                setBomStore={setBomStore}
-                invoiceList={invoiceList}
-                setInvoiceList={setInvoiceList}
-                userRole={userRole}
-              />
+              <Suspense fallback={null}>
+                <DeliveryChallanModal
+                  pendingDcModal={pendingDcModal}
+                  onClose={() => setPendingDcModal(null)}
+                  bomStore={bomStore}
+                  setBomStore={setBomStore}
+                  invoiceList={invoiceList}
+                  setInvoiceList={setInvoiceList}
+                  userRole={userRole}
+                />
+              </Suspense>
             );
           }
 
-          // Generic Renderer for other Production views
-          const defaultConfig = {
-            title: activeTab,
-            subtitle: `Management and control for ${activeTab}`,
-            actionText: `+ Create ${activeTab.replace(/s$/, '')}`,
-            searchPlaceholder: `Search ${activeTab}...`,
-            tabs: [
-              { id: 'All', label: 'All Entries', count: (bomStore || []).length, bg: '#e2e8f0', fg: '#475569' }
-            ],
-            headers: ['Reference Code', 'Customer / Item', 'Details', 'Date', 'Value', 'Status'],
-            rows: (bomStore || []).filter(b => {
-              if (activeTab === 'Dispatch Orders') {
-                if (!b) return false;
-                const s = String(b?.status || '').toLowerCase().trim();
-                const isDraftOrPending = Boolean(
-                  (b.status === 'Draft' || s === 'draft' ||
-                   b.status === 'Pending Confirmation' || s.includes('pending confirmation') ||
-                   s === 'pending sales confirmation') &&
-                  !b.isSentToDispatch &&
-                  !s.includes('sent to dispatch') &&
-                  !s.includes('packed') &&
-                  !s.includes('completed')
-                );
-                if (isDraftOrPending) return false;
-                return Boolean(
-                  b.salesConfirmed ||
-                  b.isSentToDispatch ||
-                  s.includes('dispatch') ||
-                  s.includes('production') ||
-                  s.includes('confirmed') ||
-                  s.includes('packed') ||
-                  s.includes('accounts') ||
-                  s.includes('invoice') ||
-                  s.includes('loading') ||
-                  s.includes('completed') ||
-                  s.includes('closed')
-                );
-              }
-              return true;
-            }).map(b => {
-              let dispStatus = b.status || 'ACTIVE';
-              if (activeTab === 'Dispatch Orders') {
-                if (['Sent to Production', 'Confirmed', 'In Production'].includes(b.status) || !b.status) {
-                  dispStatus = 'Pending Packing';
-                }
-              }
-              const rowObj = {
-                ...b,
-                code: b.bomCode || 'REF-001',
-                c2: b.customerName || 'Customer',
-                c3: b.paymentType || '-',
-                c4: b.date || '2026-08-17',
-                c5: `₹ ${parseFloat(b.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-                status: dispStatus,
-                stBg: dispStatus === 'Pending Packing' ? '#fff7ed' : '#eff6ff',
-                stFg: dispStatus === 'Pending Packing' ? '#c2410c' : '#2563eb',
-                stBorder: dispStatus === 'Pending Packing' ? '1px solid #fed7aa' : '1px solid #bfdbfe',
-                tabGroup: 'All'
-              };
-              delete rowObj.c6;
-              return rowObj;
-            })
-          };
-
-          const pageConfig = configs[activeTab] || defaultConfig;
-
-          const filteredRows = (pageConfig.rows || []).filter(r => {
-            const matchesSearch = !prodSearchQueryText ||
-              (r.code && String(r.code).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.c2 && String(r.c2).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.c3 && String(r.c3).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.c4 && String(r.c4).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.c5 && String(r.c5).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.customerName && String(r.customerName).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.salesPerson && String(r.salesPerson).toLowerCase().includes(prodSearchQueryText.toLowerCase()));
-
-            // Date range filter matching
-            let matchesDate = true;
-            const rDateStr = r.salesConfirmedAt || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && /^\d{4}-\d{2}-\d{2}/.test(r.c4) ? r.c4 : null);
-            if (rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
-              const rIso = String(rDateStr).substring(0, 10);
-              if (prodFilterDateVal && rIso < prodFilterDateVal) matchesDate = false;
-              if (prodFilterEndDateVal && rIso > prodFilterEndDateVal) matchesDate = false;
-            }
-
-            const subTab = String(prodActiveSubTab || 'All').toLowerCase();
-            const rStatus = (typeof r.status === 'string' ? r.status : (r.status?.name || r.status?.label || '')).toLowerCase();
-            const rTabGroup = (typeof r.tabGroup === 'string' ? r.tabGroup : '').toLowerCase();
-
-            const cleanSub = subTab.replace(/[^a-z0-9]/g, '');
-            const cleanStatus = rStatus.replace(/[^a-z0-9]/g, '');
-            const cleanGroup = rTabGroup.replace(/[^a-z0-9]/g, '');
-
-            const isCancelledRecord = Boolean(
-              r.cancelled ||
-              r.status === 'CANCELLED' ||
-              r.status === 'Cancelled' ||
-              r.status === 'Cancelled & Stock Restored' ||
-              cleanStatus.includes('cancel') ||
-              cleanGroup.includes('cancel')
-            );
-
-            // User mandate: Cancelled BOMs must NEVER appear in "All Orders" or other active queues; strictly appear in "Cancelled" tab alone
-            if (isCancelledRecord) {
-              return matchesSearch && matchesDate && cleanSub.includes('cancel');
-            }
-
-            const matchesTab = cleanSub === 'all' ||
-              cleanSub === 'allboms' ||
-              cleanSub === 'allorders' ||
-              cleanSub === 'allaccountsorders' ||
-              (cleanSub === 'pendingprint' && (!r.dispatchPrinted && !r.isPrinted)) ||
-              (cleanSub === 'printed' && Boolean(r.dispatchPrinted || r.isPrinted)) ||
-              cleanGroup === cleanSub ||
-              rTabGroup === subTab ||
-              (cleanSub.includes('pending') && cleanSub !== 'pendingprint' && (cleanStatus.includes('pending') || cleanGroup.includes('pending') || cleanStatus.includes('draft'))) ||
-              (cleanSub.includes('partially') && (cleanStatus.includes('partial') || cleanGroup.includes('partial'))) ||
-              (cleanSub.includes('packed') && (cleanStatus.includes('packed') || cleanGroup.includes('packed') || cleanStatus.includes('verified'))) ||
-              (cleanSub.includes('loading') && (cleanStatus.includes('loading') || cleanGroup.includes('loading'))) ||
-              (cleanSub.includes('lr') && (cleanStatus.includes('lr') || cleanGroup.includes('lr'))) ||
-              ((cleanSub.includes('closed') || cleanSub.includes('dispatched')) && (cleanStatus.includes('closed') || cleanStatus.includes('dispatched') || cleanStatus.includes('completed') || cleanGroup.includes('closed') || r.fullyCompleted)) ||
-              (cleanSub.includes('draft') && cleanStatus.includes('draft')) ||
-              (cleanSub.includes('sent') && (cleanStatus.includes('sent') || cleanStatus.includes('confirm') || cleanStatus.includes('production')));
-
-            return matchesSearch && matchesDate && matchesTab;
-          });
+          const pageConfig = memoizedPageConfig;
+          const filteredRows = memoizedFilteredRows;
 
           return (
             <ProductionTableView
@@ -2219,20 +2281,24 @@ export default function ProductionViewsEngine(props) {
 
       {/* VRM TAX INVOICE PRINT MODAL TEMPLATE */}
       {printTaxInvoiceModal && (
-        <VRMTaxInvoicePrintTemplate
-          invoiceData={printTaxInvoiceModal}
-          onClose={() => setPrintTaxInvoiceModal(null)}
-        />
+        <Suspense fallback={null}>
+          <VRMTaxInvoicePrintTemplate
+            invoiceData={printTaxInvoiceModal}
+            onClose={() => setPrintTaxInvoiceModal(null)}
+          />
+        </Suspense>
       )}
 
       {/* VRM BOM PRINT MODAL TEMPLATE */}
       {printBomModal && (
-        <VRMBomPrintTemplate
-          bomData={printBomModal}
-          onClose={() => setPrintBomModal(null)}
-          userRole={props.userRole || userRole || 'Dispatch Head'}
-          isSales={false}
-        />
+        <Suspense fallback={null}>
+          <VRMBomPrintTemplate
+            bomData={printBomModal}
+            onClose={() => setPrintBomModal(null)}
+            userRole={props.userRole || userRole || 'Dispatch Head'}
+            isSales={false}
+          />
+        </Suspense>
       )}
 
       {/* DOCUMENT PREVIEW MODAL */}

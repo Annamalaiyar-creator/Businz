@@ -1,0 +1,1 @@
+function e(e=``,t=``,n=``){let r=String(e||``).trim();if(r.length>=2){let e=r.substring(0,2);if(e===`33`)return!0;if(!isNaN(parseInt(e,10))&&parseInt(e,10)>0)return!1}let i=String(t||``).trim().toLowerCase(),a=String(n||``).trim().toLowerCase(),o=i||a;return!!(!o||o===`—`||o===`-`||o.includes(`tamil nadu`)||o===`tn`||o===`33`||o.includes(`tamilnadu`))}export{e as t};

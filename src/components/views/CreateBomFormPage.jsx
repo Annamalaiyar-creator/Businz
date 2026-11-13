@@ -18,7 +18,8 @@ import TypeableProductSelect from "../TypeableProductSelect";
 import { getNextSequence } from "../../utils/sequenceGenerator";
 import { isFixedQuantityPreset, VRM_HDG_PRESETS } from "../../vrmHdgProposalPresets";
 import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
-import { is5PctSolarProduct, PRESET_THEMES, getPresetTheme } from "../PerformaInvoiceView";
+import { is5PctSolarProduct } from "../../utils/hsnCodeService";
+import { PRESET_THEMES, getPresetTheme } from "../../utils/presetThemes";
 
 export default function CreateBomFormPage(props) {
   const {

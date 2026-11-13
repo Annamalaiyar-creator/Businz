@@ -8,6 +8,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import zlib from 'zlib';
+import crypto from 'crypto';
+import { promisify } from 'util';
+
+const gzipAsync = promisify(zlib.gzip);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -690,6 +694,7 @@ const loadLocalLeads = () => {
 // ==========================================
 
 let cachedBomsResult = null;
+let cachedBomsWirePayload = null;
 let lastBomFetchTimestamp = 0;
 
 const loadDatabaseBoms = async (forceRefresh = false) => {
@@ -1794,14 +1799,17 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-file-name', 'X-File-Name']
 }));
 
-// 3a. Native GZIP Response Compression for JSON and text payloads > 1KB (Massive speedup for low-end devices & slow networks)
+// 3a. Async GZIP Response Compression for JSON and text payloads > 1KB (non-blocking event loop)
 app.use((req, res, next) => {
   const acceptEncoding = req.headers['accept-encoding'] || '';
   if (!acceptEncoding.includes('gzip')) return next();
-  if (req.path === '/api/realtime-events') return next(); // Never buffer SSE streams
+  if (req.path === '/api/realtime-events' || req.path.startsWith('/assets/')) return next(); // Never buffer SSE streams; static assets use pre-cached gzip
 
   const origSend = res.send;
   res.send = function (body) {
+    if (res.getHeader('content-encoding') || res.headersSent) {
+      return origSend.call(this, body);
+    }
     let payload = body;
     if (typeof body === 'object' && !(body instanceof Buffer)) {
       payload = JSON.stringify(body);
@@ -1810,15 +1818,18 @@ app.use((req, res, next) => {
       }
     }
     if (typeof payload === 'string' && payload.length > 1024) {
-      try {
-        const compressed = zlib.gzipSync(Buffer.from(payload, 'utf-8'));
+      const rawBuf = Buffer.from(payload, 'utf-8');
+      zlib.gzip(rawBuf, { level: zlib.constants.Z_BEST_SPEED }, (err, compressed) => {
+        if (res.headersSent) return;
+        if (err || !compressed) {
+          return origSend.call(this, payload);
+        }
         res.setHeader('Content-Encoding', 'gzip');
         res.setHeader('Vary', 'Accept-Encoding');
         res.setHeader('Content-Length', compressed.length);
         return origSend.call(this, compressed);
-      } catch (_) {
-        return origSend.call(this, payload);
-      }
+      });
+      return this;
     }
     return origSend.call(this, body);
   };
@@ -6114,8 +6125,50 @@ app.get('/api/boms', async (req, res) => {
       lastBomFetchTimestamp = Date.now();
     }
 
-    // Strip bulky inline documents unless client explicitly asks for them
-    const resultList = includeDocs ? finalBoms : finalBoms.map(stripHeavyDocsFromBom);
+    // Strip bulky inline documents & serve pre-serialized, pre-gzipped wire cache + ETag on cache hits
+    if (!includeDocs) {
+      if (!cachedBomsWirePayload || cachedBomsWirePayload.sourceRef !== finalBoms) {
+        const strippedList = finalBoms.map(stripHeavyDocsFromBom);
+        const jsonStr = JSON.stringify({ success: true, data: strippedList, total: strippedList.length });
+        const gzipBuf = await gzipAsync(Buffer.from(jsonStr, 'utf-8'), { level: zlib.constants.Z_BEST_SPEED });
+        const etag = `W/"boms-${strippedList.length}-${crypto.createHash('sha1').update(jsonStr).digest('hex').slice(0, 16)}"`;
+        cachedBomsWirePayload = { sourceRef: finalBoms, strippedList, jsonStr, gzipBuf, etag };
+      }
+
+      if (pageParam === null) {
+        res.setHeader('ETag', cachedBomsWirePayload.etag);
+        res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+        if (req.headers['if-none-match'] === cachedBomsWirePayload.etag) {
+          return res.status(304).end();
+        }
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        if ((req.headers['accept-encoding'] || '').includes('gzip')) {
+          res.setHeader('Content-Encoding', 'gzip');
+          res.setHeader('Vary', 'Accept-Encoding');
+          res.setHeader('Content-Length', cachedBomsWirePayload.gzipBuf.length);
+          return res.end(cachedBomsWirePayload.gzipBuf);
+        }
+        return res.end(cachedBomsWirePayload.jsonStr);
+      }
+
+      const resultList = cachedBomsWirePayload.strippedList;
+      const page = Math.max(1, pageParam);
+      const limit = Math.max(1, limitParam || 50);
+      const total = resultList.length;
+      const startIndex = (page - 1) * limit;
+      const pagedBoms = resultList.slice(startIndex, startIndex + limit);
+      return res.json({
+        success: true,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+        data: pagedBoms
+      });
+    }
+
+    const resultList = finalBoms;
 
     // Server-side pagination if page query param provided
     if (pageParam !== null) {
@@ -6843,17 +6896,17 @@ app.post('/api/boms/:id/print-status', async (req, res) => {
     }
     const cleanId = String(rawId).trim().toLowerCase();
 
-    // 1. Update in-memory / disk store
+    // 1. Update in-memory store without blocking the event loop with synchronous multi-MB disk reads
     const diskPath = getStoreFilePath('bom_store.json');
-    let fullList = [];
-    if (fs.existsSync(diskPath)) {
+    let fullList = (Array.isArray(cachedBomsResult) && cachedBomsResult.length > 0)
+      ? cachedBomsResult
+      : (Array.isArray(supabaseMemoryStore.bom_store) ? supabaseMemoryStore.bom_store : []);
+    if (fullList.length === 0 && fs.existsSync(diskPath)) {
       try {
-        fullList = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+        fullList = JSON.parse(await fs.promises.readFile(diskPath, 'utf8'));
       } catch (_) {}
     }
-    if (!Array.isArray(fullList) || fullList.length === 0) {
-      fullList = Array.isArray(supabaseMemoryStore.bom_store) ? supabaseMemoryStore.bom_store : [];
-    }
+    if (!Array.isArray(fullList)) fullList = [];
 
     let updatedBom = null;
     fullList = fullList.map(item => {
@@ -6877,10 +6930,29 @@ app.post('/api/boms/:id/print-status', async (req, res) => {
       cachedBomsResult = fullList;
       lastBomFetchTimestamp = Date.now();
 
-      // 2. Targeted 1-row DB update if connected
+      // 2. Single atomic 1-row DB update on public.bom_orders + non-blocking legacy store mirror
       if (isDbConnected()) {
         try {
           await query(`
+            UPDATE public.bom_orders
+            SET accounts_verification = jsonb_set(
+                  COALESCE(accounts_verification, '{}'::jsonb),
+                  '{_extra_data}',
+                  COALESCE(accounts_verification->'_extra_data', '{}'::jsonb) || $2::jsonb
+                ),
+                dispatch_printed = true,
+                dispatch_printed_at = NOW(),
+                dispatch_print_time_str = $3,
+                dispatch_printed_date_str = $4,
+                dispatch_printed_by = $5,
+                dispatch_print_count = $6,
+                updated_at = NOW()
+            WHERE LOWER(TRIM(bom_code)) = $1 OR LOWER(TRIM(id)) = $1 OR LOWER(TRIM(code)) = $1
+          `, [cleanId, JSON.stringify(printData), printData.dispatchPrintTimeStr || '', printData.dispatchPrintedDateStr || '', printData.dispatchPrintedBy || '', printData.dispatchPrintCount || 1]);
+        } catch (_) {}
+
+        setImmediate(() => {
+          query(`
             UPDATE public.controlroom_store
             SET data = (
               SELECT jsonb_agg(
@@ -6894,36 +6966,8 @@ app.post('/api/boms/:id/print-status', async (req, res) => {
             ),
             updated_at = NOW()
             WHERE key IN ('controlroom_bom_store', 'bom_store')
-          `, [cleanId, JSON.stringify(printData)]);
-        } catch (_) {}
-
-        // Persist print tracking directly into public.bom_orders accounts_verification._extra_data
-        try {
-          await query(`
-            UPDATE public.bom_orders
-            SET accounts_verification = jsonb_set(
-              COALESCE(accounts_verification, '{}'::jsonb),
-              '{_extra_data}',
-              COALESCE(accounts_verification->'_extra_data', '{}'::jsonb) || $2::jsonb
-            ),
-            updated_at = NOW()
-            WHERE LOWER(TRIM(bom_code)) = $1 OR LOWER(TRIM(id)) = $1 OR LOWER(TRIM(code)) = $1
-          `, [cleanId, JSON.stringify(printData)]);
-        } catch (_) {}
-
-        // Also update direct public.bom_orders print tracking columns
-        try {
-          await query(`
-            UPDATE public.bom_orders
-            SET dispatch_printed = true,
-                dispatch_printed_at = NOW(),
-                dispatch_print_time_str = $2,
-                dispatch_printed_date_str = $3,
-                dispatch_printed_by = $4,
-                dispatch_print_count = $5
-            WHERE LOWER(TRIM(bom_code)) = $1 OR LOWER(TRIM(id)) = $1 OR LOWER(TRIM(code)) = $1
-          `, [cleanId, printData.dispatchPrintTimeStr || '', printData.dispatchPrintedDateStr || '', printData.dispatchPrintedBy || '', printData.dispatchPrintCount || 1]);
-        } catch (_) {}
+          `, [cleanId, JSON.stringify(printData)]).catch(() => {});
+        });
       }
 
       // 3. Broadcast real-time SSE event to ALL connected clients (Sales, Dispatch, Production, Admin)
@@ -11573,10 +11617,90 @@ const distPath = fs.existsSync(path.resolve(__dirname, '../dist'))
   : path.resolve(process.cwd(), 'dist');
 
 if (fs.existsSync(distPath)) {
-  app.use('/assets', express.static(path.join(distPath, 'assets')));
+  const distAssetsDir = path.join(distPath, 'assets');
   const rootAssets = path.resolve(__dirname, '../assets');
-  if (fs.existsSync(rootAssets)) {
-    app.use('/assets', express.static(rootAssets));
+  const hasRootAssets = fs.existsSync(rootAssets);
+  const staticGzipCache = new Map();
+  const MAX_STATIC_GZIP_ENTRIES = 250;
+  const STATIC_MIME_MAP = {
+    '.js': 'application/javascript; charset=utf-8',
+    '.mjs': 'application/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.json': 'application/json; charset=utf-8'
+  };
+
+  app.use('/assets', async (req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    let relPath = '';
+    try {
+      relPath = decodeURIComponent(req.path || '').replace(/^\/+/, '');
+    } catch (_) {
+      return next();
+    }
+    if (!relPath) return next();
+
+    const isHashed = /\-[A-Za-z0-9_-]{6,}\.[a-z0-9]+$/i.test(relPath);
+    if (isHashed) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+
+    const ext = path.extname(relPath).toLowerCase();
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    if (!acceptEncoding.includes('gzip') || !STATIC_MIME_MAP[ext]) {
+      return next();
+    }
+
+    const baseDirs = hasRootAssets ? [distAssetsDir, rootAssets] : [distAssetsDir];
+    let resolvedPath = null;
+    let stat = null;
+    for (const baseDir of baseDirs) {
+      const candidate = path.resolve(baseDir, relPath);
+      if (!candidate.startsWith(baseDir + path.sep)) continue;
+      try {
+        const s = await fs.promises.stat(candidate);
+        if (s.isFile()) {
+          resolvedPath = candidate;
+          stat = s;
+          break;
+        }
+      } catch (_) {}
+    }
+    if (!resolvedPath || !stat) return next();
+
+    const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+    res.setHeader('ETag', etag);
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    let entry = staticGzipCache.get(resolvedPath);
+    if (!entry || entry.mtimeMs !== stat.mtimeMs || entry.size !== stat.size) {
+      try {
+        const raw = await fs.promises.readFile(resolvedPath);
+        const gzipBuf = await gzipAsync(raw, { level: zlib.constants.Z_BEST_SPEED });
+        if (staticGzipCache.size >= MAX_STATIC_GZIP_ENTRIES) {
+          const oldestKey = staticGzipCache.keys().next().value;
+          if (oldestKey) staticGzipCache.delete(oldestKey);
+        }
+        entry = { mtimeMs: stat.mtimeMs, size: stat.size, gzipBuf };
+        staticGzipCache.set(resolvedPath, entry);
+      } catch (_) {
+        return next();
+      }
+    }
+
+    res.setHeader('Content-Type', STATIC_MIME_MAP[ext]);
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.setHeader('Content-Length', entry.gzipBuf.length);
+    if (req.method === 'HEAD') return res.status(200).end();
+    return res.end(entry.gzipBuf);
+  });
+
+  app.use('/assets', express.static(distAssetsDir, { maxAge: '1y', immutable: true }));
+  if (hasRootAssets) {
+    app.use('/assets', express.static(rootAssets, { maxAge: '1y', immutable: true }));
   }
   app.use(express.static(distPath));
   app.use((req, res, next) => {

@@ -1,3 +1,9 @@
+import {
+  upsertBomInMemoryCache,
+  removeBomFromMemoryCache,
+  patchBomPrintInMemoryCache
+} from '../utils/supabaseDataSync';
+
 // ⚡ Real-Time Instant Data Synchronization Service (WhatsApp-Style Sub-Second Push)
 // Connects to /api/realtime-events using Native Server-Sent Events (SSE)
 let activeEventSource = null;
@@ -112,42 +118,33 @@ export const handleIncomingRealtimeMessage = (data) => {
   // 3. BOM Orders & Routing
   else if (type === 'bom_updated' || (type === 'store_updated' && payload?.key === 'bom_store')) {
     if (payload?.printData?.bomCode) {
+      patchBomPrintInMemoryCache(payload.printData.bomCode, payload.printData);
       window.dispatchEvent(new CustomEvent('vrm_bom_printed', { detail: payload.printData }));
     } else if (payload?.bom?.dispatchPrinted && (payload?.bom?.bomCode || payload?.bom?.id)) {
+      const printPatch = {
+        bomCode: payload.bom.bomCode || payload.bom.code || payload.bom.id,
+        dispatchPrinted: true,
+        dispatchPrintedAt: payload.bom.dispatchPrintedAt,
+        dispatchPrintTimeStr: payload.bom.dispatchPrintTimeStr,
+        dispatchPrintedDateStr: payload.bom.dispatchPrintedDateStr,
+        dispatchPrintedBy: payload.bom.dispatchPrintedBy,
+        dispatchPrintCount: payload.bom.dispatchPrintCount,
+        firstPrintTimeStr: payload.bom.firstPrintTimeStr,
+        secondPrintTimeStr: payload.bom.secondPrintTimeStr,
+        dispatchPrintHistory: payload.bom.dispatchPrintHistory
+      };
+      patchBomPrintInMemoryCache(printPatch.bomCode, printPatch);
       window.dispatchEvent(new CustomEvent('vrm_bom_printed', {
-        detail: {
-          bomCode: payload.bom.bomCode || payload.bom.code || payload.bom.id,
-          dispatchPrinted: true,
-          dispatchPrintedAt: payload.bom.dispatchPrintedAt,
-          dispatchPrintTimeStr: payload.bom.dispatchPrintTimeStr,
-          dispatchPrintedDateStr: payload.bom.dispatchPrintedDateStr,
-          dispatchPrintedBy: payload.bom.dispatchPrintedBy,
-          dispatchPrintCount: payload.bom.dispatchPrintCount,
-          firstPrintTimeStr: payload.bom.firstPrintTimeStr,
-          secondPrintTimeStr: payload.bom.secondPrintTimeStr,
-          dispatchPrintHistory: payload.bom.dispatchPrintHistory
-        }
+        detail: printPatch
       }));
     }
 
-    // Direct targeted single BOM delta update into local cache
+    // Update in-memory BOM cache immediately so future reads don't re-fetch 5+ MB
     if (payload?.bom && typeof payload.bom === 'object') {
-      try {
-        const existingBoms = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
-        const single = payload.bom;
-        const k = single.bomCode || single.code || single.id;
-        if (k) {
-          const filtered = existingBoms.filter(b => b && b.bomCode !== k && b.code !== k && b.id !== k);
-          localStorage.setItem('controlroom_bom_store', JSON.stringify([single, ...filtered]));
-        }
-      } catch (_) {}
+      upsertBomInMemoryCache(payload.bom);
     } else if ((action === 'delete' || payload?.action === 'delete') && (recordId || payload?.id)) {
-      try {
-        const targetId = recordId || payload?.id;
-        const existingBoms = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
-        const remaining = existingBoms.filter(b => b && b.id !== targetId && b.bomCode !== targetId && b.code !== targetId);
-        localStorage.setItem('controlroom_bom_store', JSON.stringify(remaining));
-      } catch (_) {}
+      const targetId = recordId || payload?.id;
+      removeBomFromMemoryCache(targetId);
     }
 
     window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: payload }));
