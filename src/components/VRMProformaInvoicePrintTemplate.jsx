@@ -1269,8 +1269,6 @@ export function VRMProformaInvoicePrintSheet({
         }
       });
 
-      const customOnlyRows = commercialRows.filter(r => r.kind === 'custom');
-
       // Pack Component Schedules onto pages cleanly (Page 2..N)
       const schedulePages = [];
       if (presetGroupSchedules.length > 0) {
@@ -1302,7 +1300,6 @@ export function VRMProformaInvoicePrintSheet({
         });
       }
 
-      const lastSchedulePageNum = schedulePages.length > 0 ? (schedulePages.length + 1) : null;
       const totalPages = 1 + schedulePages.length;
 
       // Helper to render the common top document header on schedule pages
@@ -1610,7 +1607,7 @@ export function VRMProformaInvoicePrintSheet({
                   const halfGstAmt = row.gstAmt / 2;
                   const schedRef = row.kind === 'preset'
                     ? `Schedule p.${row.scheduleEntry.pageNum} | `
-                    : (lastSchedulePageNum ? `Schedule p.${lastSchedulePageNum} | ` : '');
+                    : '';
                   const gstSubText = isIntra
                     ? `CGST / SGST: ${halfRate}% each | ₹${fmtMoney(halfGstAmt)} each`
                     : `IGST: ${row.gRate}% | ₹${fmtMoney(row.gstAmt)}`;
@@ -1643,7 +1640,7 @@ export function VRMProformaInvoicePrintSheet({
 
             {/* 4. GST SUMMARY TABLE */}
             {gstTiers && gstTiers.length > 0 && (
-              <div className="print-avoid-break" style={{ marginBottom: '12px' }}>
+              <div className="print-avoid-break" style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '5px' }}>
                   GST SUMMARY
                 </div>
@@ -1686,10 +1683,7 @@ export function VRMProformaInvoicePrintSheet({
                 </table>
               </div>
             )}
-          </div>
 
-          {/* PINNED BOTTOM SECTION: PAYMENT DETAILS, TERMS, TOTALS, GRAND TOTAL, WORDS, SIGNATORY & FOOTER */}
-          <div style={{ marginTop: 'auto', paddingTop: '14px' }}>
             {/* 5. BOTTOM GRID: PAYMENT DETAILS & TERMS (LEFT) | TOTALS, GRAND TOTAL, WORDS & STAMP (RIGHT) */}
             <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '52% 48%', columnGap: '26px', marginTop: '6px', fontSize: '9.2px' }}>
               <div>
@@ -1789,20 +1783,19 @@ export function VRMProformaInvoicePrintSheet({
                 </div>
               </div>
             </div>
-
-            {renderFooterBar('Commercial summary', 1)}
           </div>
+
+          {renderFooterBar('Commercial summary', 1)}
         </div>
 
         {/* ==================== PAGES 2..N: COMPONENT SCHEDULES ==================== */}
-        {schedulePages.map((sp, spIdx) => {
-          const isLastSchedulePage = spIdx === schedulePages.length - 1;
+        {schedulePages.map((sp) => {
           const headerLabel = sp.groups.length === 1
             ? sp.groups[0].name.toUpperCase()
             : 'KITS & ACCESSORIES';
           const footerLabel = sp.groups.length === 1
             ? `${sp.groups[0].name} schedule`
-            : (isLastSchedulePage ? 'Kit schedules and customer acceptance' : 'Component schedules');
+            : 'Component schedules';
 
           // Use 2-column grid when multiple compact schedules share a page (like 3/4/5 on p.4)
           const useTwoColGrid = sp.groups.length >= 2 && sp.groups.every(g => g.items.length <= 24);
@@ -1834,57 +1827,6 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                 ) : (
                   <div>{sp.groups.map(renderScheduleBlock)}</div>
-                )}
-
-                {/* Additional standalone items block on last schedule page */}
-                {isLastSchedulePage && customOnlyRows.length > 0 && (
-                  <div className="print-avoid-break" style={{ marginTop: '6px', marginBottom: '12px' }}>
-                    <div style={{
-                      backgroundColor: '#0B3B60',
-                      color: '#FFFFFF',
-                      padding: '6px 12px',
-                      fontSize: '10px',
-                      fontWeight: '800',
-                      letterSpacing: '0.3px',
-                      textTransform: 'uppercase',
-                      marginBottom: '4px'
-                    }}>
-                      ADDITIONAL ITEMS
-                    </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
-                      <tbody>
-                        {customOnlyRows.map((cRow) => (
-                          <tr key={cRow.key} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                            <td style={{ padding: '5px 8px', color: '#0F172A' }}>{cRow.name}</td>
-                            <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>{cRow.qtyText}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Customer Acceptance box on last schedule page */}
-                {isLastSchedulePage && (
-                  <div
-                    className="print-avoid-break"
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: '4px',
-                      padding: '10px 14px',
-                      marginTop: '10px'
-                    }}
-                  >
-                    <div style={{ fontSize: '9px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px' }}>
-                      CUSTOMER ACCEPTANCE
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', fontSize: '9px', color: '#334155' }}>
-                      <div>Name / Signature: ___________________________</div>
-                      <div>Date: __________________</div>
-                      <div>PO Ref: _______________________</div>
-                    </div>
-                  </div>
                 )}
               </div>
 
