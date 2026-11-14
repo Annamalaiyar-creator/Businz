@@ -467,11 +467,11 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                     return (
                       <React.Fragment key={row.key}>
                         {isFirstInSet && grp && (
-                          <tr style={{ backgroundColor: '#EFF6FF', borderBottom: '1px solid #BFDBFE' }}>
-                            <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '800', color: '#0F3D6E', fontSize: '9.5px' }}>
+                          <tr style={{ backgroundColor: '#EFF6FF', borderTop: '1.5px solid #93C5FD', borderBottom: '1px solid #BFDBFE' }}>
+                            <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: '800', color: '#0F3D6E', fontSize: '11.5px' }}>
                               {setNumber}
                             </td>
-                            <td colSpan="7" style={{ padding: '7px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '9.8px' }}>
+                            <td colSpan="7" style={{ padding: '8px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '11.5px', letterSpacing: '0.2px' }}>
                               {grp.presetName || row.presetName}
                             </td>
                           </tr>
