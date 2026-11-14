@@ -1407,7 +1407,7 @@ export function VRMProformaInvoicePrintSheet({
               letterSpacing: '0.3px',
               textTransform: 'uppercase'
             }}>
-              {numLabel} {sched.name} | {fmtQtyNum(sched.setCount)} {sched.unitLabel}
+              {numLabel}. {sched.name} | {fmtQtyNum(sched.setCount)} {sched.unitLabel}
             </div>
             <div style={{ fontSize: '8.5px', color: '#64748B', padding: '5px 2px 6px 2px' }}>
               {sched.items.length} components | Unit: {unitWord}
@@ -1790,14 +1790,16 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
-                  <div style={{ fontSize: '8.5px', color: '#64748B' }}>Authorized Signatory</div>
-                  <img
-                    src={getSafePrintImageUrl(cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')), VRM_OFFICIAL_STAMP)}
-                    alt="Authorized Signatory Stamp"
-                    style={{ height: '64px', width: '64px', objectFit: 'contain' }}
-                    onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_STAMP; }}
-                  />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <img
+                      src={getSafePrintImageUrl(cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')), VRM_OFFICIAL_STAMP)}
+                      alt="Authorized Signatory Stamp"
+                      style={{ height: '78px', width: 'auto', maxWidth: '150px', objectFit: 'contain', display: 'block' }}
+                      onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_STAMP; }}
+                    />
+                    <div style={{ fontSize: '9px', fontWeight: '600', color: '#475569' }}>Authorized Signatory</div>
+                  </div>
                 </div>
               </div>
             </div>
