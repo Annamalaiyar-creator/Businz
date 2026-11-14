@@ -1009,7 +1009,7 @@ export default function BomDashboardSection({ ctx }) {
                             <UploadCloud size={12} style={{ color: '#FFFFFF' }} />
                           </div>
                           <span style={{ fontSize: '12px', fontWeight: '800', color: '#92400E' }}>
-                            ⚠️ Action Required: Goods Packed — Please Attach Payment Proof
+                            Action Required: Goods Packed — Please Attach Payment Proof
                           </span>
                           <span style={{ fontSize: '11px', color: '#B45309' }}>
                             Terms: <strong>{row.paymentType || 'Payment While Dispatch / Partial Paid'}</strong> · Packed by Dispatch. Held until payment slip is attached to forward to Accounts.

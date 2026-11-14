@@ -656,7 +656,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                     GST_STATE_MAP[gstNo.trim().substring(0, 2)].toLowerCase() !== billingState.trim().toLowerCase()
                   ) && (
                     <div style={{ marginTop: '6px', fontSize: '11px', color: '#B91C1C', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', padding: '6px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span>⚠️ GST code ({gstNo.trim().substring(0, 2)}) is for <strong>{GST_STATE_MAP[gstNo.trim().substring(0, 2)]}</strong>, but Billing State is <strong>{billingState}</strong>.</span>
+                      <span>GST code ({gstNo.trim().substring(0, 2)}) is for <strong>{GST_STATE_MAP[gstNo.trim().substring(0, 2)]}</strong>, but Billing State is <strong>{billingState}</strong>.</span>
                       <button
                         type="button"
                         onClick={() => {

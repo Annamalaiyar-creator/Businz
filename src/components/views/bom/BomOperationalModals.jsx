@@ -1995,7 +1995,7 @@ export default function BomOperationalModals({ ctx }) {
                 color: '#991B1B',
                 lineHeight: 1.5
               }}>
-                <strong>⚠️ Why are you cancelling this BOM?</strong>
+                <strong>Why are you cancelling this BOM?</strong>
                 <br />
                 The Sales Person (<strong>{(bomCancelPromptModal.salesPerson || bomCancelPromptModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong>) who raised this order will be immediately notified with your reason, and reserved stock will be returned to raw inventory.
               </div>

@@ -420,7 +420,7 @@ export default function CreateBomFormPage(props) {
               const validation = validateProductionBomForm(false);
               if (!validation.isValid) {
                 showCustomAlert({
-                  title: `⚠️ Missing Required Details (${validation.missingList.length} field${validation.missingList.length > 1 ? 's' : ''})`,
+                  title: `Missing Required Details (${validation.missingList.length} field${validation.missingList.length > 1 ? 's' : ''})`,
                   message: 'Please complete the highlighted details before creating this BOM order:',
                   type: 'warning',
                   details: validation.missingList,
@@ -487,7 +487,7 @@ export default function CreateBomFormPage(props) {
              />
             {bomFormErrors.deliveryDate && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                ⚠️ {bomFormErrors.deliveryDate}
+                {bomFormErrors.deliveryDate}
               </div>
             )}
           </div>
@@ -527,7 +527,7 @@ export default function CreateBomFormPage(props) {
             </select>
             {bomFormErrors.docType && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                ⚠️ {bomFormErrors.docType}
+                {bomFormErrors.docType}
               </div>
             )}
           </div>
@@ -751,7 +751,7 @@ export default function CreateBomFormPage(props) {
             </div>
             {bomFormErrors.customerName && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                ⚠️ {bomFormErrors.customerName}
+                {bomFormErrors.customerName}
               </div>
             )}
           </div>
@@ -1716,7 +1716,7 @@ export default function CreateBomFormPage(props) {
             </select>
             {!newBomTransportMode?.trim() && bomFormErrors?.transportMode && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                ⚠️ {bomFormErrors.transportMode}
+                {bomFormErrors.transportMode}
               </div>
             )}
           </div>
@@ -1751,7 +1751,7 @@ export default function CreateBomFormPage(props) {
              />
             {!newBomTransporterName?.trim() && bomFormErrors?.transporterName && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                ⚠️ {bomFormErrors.transporterName}
+                {bomFormErrors.transporterName}
               </div>
             )}
           </div>
@@ -1786,7 +1786,7 @@ export default function CreateBomFormPage(props) {
              />
             {!newBomDestination?.trim() && bomFormErrors?.destination && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                ⚠️ {bomFormErrors.destination}
+                {bomFormErrors.destination}
               </div>
             )}
           </div>
@@ -1965,7 +1965,7 @@ export default function CreateBomFormPage(props) {
                   </div>
                 ) : (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}>
-                    ⚠️ Payment slip attachment pending in bottom section
+                    Payment slip attachment pending in bottom section
                   </div>
                 )}
               </div>

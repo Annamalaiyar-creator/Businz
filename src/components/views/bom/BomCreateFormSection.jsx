@@ -1746,7 +1746,7 @@ export default function BomCreateFormSection({ ctx }) {
               </select>
               {!newBomTransportMode?.trim() && formErrors?.transportMode && (
                 <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                  ⚠️ {formErrors.transportMode}
+                  {formErrors.transportMode}
                 </div>
               )}
             </div>
@@ -1780,7 +1780,7 @@ export default function BomCreateFormSection({ ctx }) {
                />
               {!newBomTransporterName?.trim() && formErrors?.transporterName && (
                 <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                  ⚠️ {formErrors.transporterName}
+                  {formErrors.transporterName}
                 </div>
               )}
             </div>
@@ -1814,7 +1814,7 @@ export default function BomCreateFormSection({ ctx }) {
                />
               {!newBomDestination?.trim() && formErrors?.destination && (
                 <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                  ⚠️ {formErrors.destination}
+                  {formErrors.destination}
                 </div>
               )}
             </div>
@@ -1851,7 +1851,7 @@ export default function BomCreateFormSection({ ctx }) {
               </select>
               {!newBomTransportScope?.trim() && formErrors?.transportScope && (
                 <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
-                  ⚠️ {formErrors.transportScope}
+                  {formErrors.transportScope}
                 </div>
               )}
             </div>
@@ -2020,7 +2020,7 @@ export default function BomCreateFormSection({ ctx }) {
                       href="#field-newBomPaymentProofDoc"
                       style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}
                     >
-                      ⚠️ Attach slip in Section 6 ↓
+                      Attach slip in Section 6 ↓
                     </a>
                   )}
                 </div>
@@ -2345,7 +2345,7 @@ export default function BomCreateFormSection({ ctx }) {
                       </span>
                       {formErrors?.paymentProof && paymentDocs.length === 0 && (
                         <span style={{ color: '#EF4444', fontSize: '11.5px', fontWeight: '700' }}>
-                          ⚠️ Payment slip is mandatory for {newBomPaymentType} orders!
+                          Payment slip is mandatory for {newBomPaymentType} orders!
                         </span>
                       )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
