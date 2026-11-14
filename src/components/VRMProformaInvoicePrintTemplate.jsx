@@ -1302,6 +1302,23 @@ export function VRMProformaInvoicePrintSheet({
 
       const totalPages = 1 + schedulePages.length;
 
+      // Top two-tone accent bar rendered at the top edge of every PI page
+      const renderTopAccentBar = () => (
+        <div
+          style={{
+            display: 'flex',
+            width: '100%',
+            height: '7px',
+            flexShrink: 0,
+            printColorAdjust: 'exact',
+            WebkitPrintColorAdjust: 'exact'
+          }}
+        >
+          <div style={{ width: '82%', height: '100%', backgroundColor: '#003A70' }} />
+          <div style={{ width: '18%', height: '100%', backgroundColor: '#FF9900' }} />
+        </div>
+      );
+
       // Helper to render the common top document header on schedule pages
       const renderSchedulePageHeader = (subtitleLeft) => (
         <>
@@ -1467,14 +1484,15 @@ export function VRMProformaInvoicePrintSheet({
           className="pdf-page-sheet"
           style={{
             backgroundColor: '#FFFFFF',
-            padding: '22px 26px',
+            padding: 0,
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
             minHeight: '272mm',
             boxSizing: 'border-box'
           }}
         >
+          {renderTopAccentBar()}
+          <div style={{ flex: 1, padding: '16px 26px 22px 26px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
             {/* 1. TOP HEADER */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
@@ -1786,6 +1804,7 @@ export function VRMProformaInvoicePrintSheet({
           </div>
 
           {renderFooterBar('Commercial summary', 1)}
+          </div>
         </div>
 
         {/* ==================== PAGES 2..N: COMPONENT SCHEDULES ==================== */}
@@ -1808,15 +1827,16 @@ export function VRMProformaInvoicePrintSheet({
               className="pdf-page-sheet page-break"
               style={{
                 backgroundColor: '#FFFFFF',
-                padding: '22px 26px',
+                padding: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'space-between',
                 minHeight: '272mm',
                 boxSizing: 'border-box',
                 borderTop: '1px dashed #E2E8F0'
               }}
             >
+              {renderTopAccentBar()}
+              <div style={{ flex: 1, padding: '16px 26px 22px 26px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <div>
                 {renderSchedulePageHeader(headerLabel)}
 
@@ -1831,6 +1851,7 @@ export function VRMProformaInvoicePrintSheet({
               </div>
 
               {renderFooterBar(footerLabel, sp.pageNum)}
+              </div>
             </div>
           );
         })}
