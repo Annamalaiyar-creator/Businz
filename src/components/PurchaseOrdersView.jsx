@@ -13,6 +13,7 @@ import CreateProductModal from './views/CreateProductModal';
 import TypeableProductSelect from './TypeableProductSelect';
 import TypeableVendorSelect from './TypeableVendorSelect';
 import VRMPurchaseOrderPrintTemplate from './VRMPurchaseOrderPrintTemplate';
+import { getHsnCode } from '../utils/hsnCodeService';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -1159,7 +1160,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     let effectiveItems = validItems.map(it => ({
       name: String(it.name || it.itemName || '').trim(),
       description: String(it.description || it.desc || '').trim(),
-      hsn: it.hsn || it.hsn_or_sac || '',
+      hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || (it.name ? getHsnCode(it) : '') || '').trim(),
       account: it.account || 'Cost of Goods Sold',
       qty: Number(it.qty || 1),
       unit: it.unit || 'NOS',
@@ -5609,7 +5610,7 @@ Procurement Team | BUSINZ`;
                       distinctSetGroupIds.push(it.presetGroupId);
                     }
                   });
-                  const colCount = hasAnySet ? 10 : 8;
+                  const colCount = hasAnySet ? 9 : 8;
                   return (
                 <div style={{ overflowX: 'auto', width: '100%' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
@@ -5622,10 +5623,7 @@ Procurement Team | BUSINZ`;
                           <th style={{ padding: '10px 12px', textAlign: 'left', width: '150px' }}>Account</th>
                         )}
                         <th style={{ padding: '10px 8px', textAlign: 'center', width: '85px' }}>{hasAnySet ? 'UOM' : 'Unit'}</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', width: '85px' }}>{hasAnySet ? 'Qty / Set *' : 'Qty *'}</th>
-                        {hasAnySet && (
-                          <th style={{ padding: '10px 8px', textAlign: 'center', width: '100px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Qty</th>
-                        )}
+                        <th style={{ padding: '10px 8px', textAlign: 'center', width: '85px' }}>Qty *</th>
                         <th style={{ padding: '10px 10px', textAlign: 'right', width: '110px' }}>{hasAnySet ? 'Price (₹) *' : 'Rate (₹) *'}</th>
                         <th style={{ padding: '10px 8px', textAlign: 'center', width: '85px' }}>GST (%)</th>
                         {hasAnySet && (
@@ -5655,7 +5653,6 @@ Procurement Team | BUSINZ`;
                           const packIndex = isSetItem ? (distinctSetGroupIds.indexOf(groupId) + 1) : 0;
                           const setCount = grp ? (Number(grp.setCount) || 1) : 1;
                           const rowQty = Number(item.qty || 0);
-                          const totalDispatchQty = isSetItem ? (rowQty * setCount) : rowQty;
                           const total = isSetItem ? 0 : (rowQty * (item.rate || 0));
 
                           return (
@@ -5721,9 +5718,7 @@ Procurement Team | BUSINZ`;
                                           if (found.unit || found.uom) {
                                             next.unit = (found.unit || found.uom || 'NOS').toUpperCase();
                                           }
-                                          if (found.hsn || found.hsn_or_sac) {
-                                            next.hsn = found.hsn || found.hsn_or_sac;
-                                          }
+                                          next.hsn = found.hsn || found.hsn_or_sac || found.hsnCode || getHsnCode(found || val);
                                           if (found.account) {
                                             next.account = found.account;
                                           }
@@ -5733,6 +5728,8 @@ Procurement Team | BUSINZ`;
                                           if (found.description && !it.description) {
                                             next.description = found.description;
                                           }
+                                        } else if (val) {
+                                          next.hsn = getHsnCode(val);
                                         }
                                         return next;
                                       }));
@@ -5751,9 +5748,9 @@ Procurement Team | BUSINZ`;
                                 <td style={{ padding: '8px 8px' }}>
                                   <input
                                     type="text"
-                                    value={item.hsn || ''}
+                                    value={item.hsn !== undefined && item.hsn !== '' ? item.hsn : (item.name ? getHsnCode(item) : '')}
                                     onChange={(e) => handleItemChange(idx, 'hsn', e.target.value)}
-                                    placeholder="HSN"
+                                    placeholder={item.name ? getHsnCode(item) : 'HSN'}
                                     style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px', textAlign: 'center', backgroundColor: '#FFFFFF' }}
                                   />
                                 </td>
@@ -5783,11 +5780,6 @@ Procurement Team | BUSINZ`;
                               <td style={{ padding: '8px 8px' }}>
                                 <input id={`purchase-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty" type="number" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px', textAlign: 'center' }}  />
                               </td>
-                              {hasAnySet && (
-                                <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
-                                  {totalDispatchQty} {item.unit || 'NOS'}
-                                </td>
-                              )}
                               <td style={{ padding: '8px 8px' }}>
                                 {isSetItem ? (
                                   <div style={{ textAlign: 'right', fontSize: '11px', fontWeight: '600', color: '#64748B', paddingRight: '6px' }}>

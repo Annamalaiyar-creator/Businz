@@ -488,7 +488,7 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                             </div>
                           </td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A', fontWeight: '600' }}>
-                            {fmtQty(row.isPresetItem ? row.qty * grpSetCount : row.qty)}
+                            {fmtQty(row.qty)}
                           </td>
                           <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#475569' }}>
                             {row.unit}
