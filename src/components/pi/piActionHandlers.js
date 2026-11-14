@@ -15,6 +15,7 @@ export function createPiActionHandlers(ctx) {
     setViewMode,
     setPrintModalPi,
     setValidationAlert,
+    setPiFormErrors,
     showTopToast,
     bomList,
     piList,
@@ -814,12 +815,25 @@ export function createPiActionHandlers(ctx) {
     if (e) e.preventDefault();
     const validation = validatePiForm(false);
     if (!validation.isValid) {
+      const errMap = {};
+      validation.missingList.forEach((m) => {
+        if (m?.targetId) errMap[m.targetId] = true;
+      });
+      if (setPiFormErrors) setPiFormErrors(errMap);
+      const firstId = validation.missingList[0]?.targetId;
+      if (firstId && typeof document !== 'undefined') {
+        const el = document.getElementById(firstId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
       setValidationAlert({
         fields: validation.missingList.map(m => typeof m === 'object' ? m.field : m),
-        firstTargetId: validation.missingList[0]?.targetId
+        firstTargetId: firstId
       });
       return;
     }
+    if (setPiFormErrors) setPiFormErrors({});
     setPiConfirmModal('create');
   };
 
@@ -827,12 +841,14 @@ export function createPiActionHandlers(ctx) {
   const triggerDraftConfirm = (e) => {
     if (e) e.preventDefault();
     if (!vendorName || !vendorName.trim()) {
+      if (setPiFormErrors) setPiFormErrors({ 'pi-field-vendorName': true });
       setValidationAlert({
         fields: ['Company Name'],
         firstTargetId: 'pi-field-vendorName'
       });
       return;
     }
+    if (setPiFormErrors) setPiFormErrors({});
     // Check if preset items exist without Preset Amt
     const presetItems = (piItems || []).filter(it => it.isPresetItem);
     if (presetItems.length > 0) {

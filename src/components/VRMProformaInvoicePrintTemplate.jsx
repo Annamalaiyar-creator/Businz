@@ -1685,7 +1685,7 @@ export function VRMProformaInvoicePrintSheet({
             )}
 
             {/* 5. BOTTOM GRID: PAYMENT DETAILS & TERMS (LEFT) | TOTALS, GRAND TOTAL, WORDS & STAMP (RIGHT) */}
-            <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '52% 48%', columnGap: '26px', marginTop: '6px', fontSize: '9.2px' }}>
+            <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 52fr) minmax(0, 48fr)', columnGap: '24px', marginTop: '6px', fontSize: '9.2px', width: '100%', boxSizing: 'border-box' }}>
               <div>
                 <div style={{ marginBottom: '14px' }}>
                   <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '5px' }}>

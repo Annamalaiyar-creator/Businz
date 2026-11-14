@@ -1058,7 +1058,7 @@ export default function CreateBomFormPage(props) {
       </div>
 
       {/* SECTION 3: ORDER ITEMS */}
-      <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div id="create-bom-field-materials" style={{ backgroundColor: bomFormErrors?.materials ? '#FEF2F2' : 'white', padding: '24px', borderRadius: '16px', border: bomFormErrors?.materials ? '2px solid #EF4444' : '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#4F46E5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
@@ -1681,37 +1681,79 @@ export default function CreateBomFormPage(props) {
             <label htmlFor="create-bom-form-mode-of-transport" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Mode of Transport <span style={{ color: '#EF4444' }}>*</span>
             </label>
-            <input id="create-bom-form-mode-of-transport" name="modeOfTransport" aria-label="Mode of Transport"
-              type="text"
-              list="transport-mode-suggestions"
-              value={newBomTransportMode}
-              onChange={(e) => setNewBomTransportMode(e.target.value)}
-              placeholder="Type/Select (Transport, Lorry, Courier...)"
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-             />
-            <datalist id="transport-mode-suggestions">
-              <option value="Transport" />
-              <option value="Lorry" />
-              <option value="Courier" />
-              <option value="Tempo / Mini Truck" />
-              <option value="Air Cargo" />
-              <option value="Train / Rail Cargo" />
-              <option value="Customer Pickup / Self" />
-              <option value="Dedicated Container" />
-            </datalist>
+            <select id="create-bom-form-mode-of-transport" name="modeOfTransport" aria-label="Mode of Transport"
+              required
+              value={newBomTransportMode || ''}
+              onChange={(e) => {
+                setNewBomTransportMode(e.target.value);
+                if (bomFormErrors?.transportMode) {
+                  setBomFormErrors(prev => ({ ...prev, transportMode: null }));
+                }
+              }}
+              style={{
+                width: '100%',
+                height: '42px',
+                borderRadius: '10px',
+                border: (!newBomTransportMode?.trim() && bomFormErrors?.transportMode) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                padding: '0 14px',
+                fontSize: '13px',
+                color: newBomTransportMode ? '#0F172A' : '#64748B',
+                backgroundColor: (!newBomTransportMode?.trim() && bomFormErrors?.transportMode) ? '#FEF2F2' : 'white',
+                boxSizing: 'border-box',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="">-- Select Transport Mode --</option>
+              <option value="Transport">Transport</option>
+              <option value="Lorry">Lorry</option>
+              <option value="Courier">Courier</option>
+              <option value="Tempo / Mini Truck">Tempo / Mini Truck</option>
+              <option value="Air Cargo">Air Cargo</option>
+              <option value="Train / Rail Cargo">Train / Rail Cargo</option>
+              <option value="Customer Pickup / Self">Customer Pickup / Self</option>
+              <option value="Dedicated Container">Dedicated Container</option>
+            </select>
+            {!newBomTransportMode?.trim() && bomFormErrors?.transportMode && (
+              <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                ⚠️ {bomFormErrors.transportMode}
+              </div>
+            )}
           </div>
 
           <div>
             <label htmlFor="create-bom-form-transport-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Transport Name
+              Transport Name <span style={{ color: '#EF4444' }}>*</span>
             </label>
             <input id="create-bom-form-transport-name" name="transportName" aria-label="Transport Name"
               type="text"
+              required
               value={newBomTransporterName}
-              onChange={(e) => setNewBomTransporterName(e.target.value)}
+              onChange={(e) => {
+                setNewBomTransporterName(e.target.value);
+                if (bomFormErrors?.transporterName) {
+                  setBomFormErrors(prev => ({ ...prev, transporterName: null }));
+                }
+              }}
               placeholder="e.g. VRL Logistics / TCI Freight / Local Transport"
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
+              style={{
+                width: '100%',
+                height: '42px',
+                borderRadius: '10px',
+                border: (!newBomTransporterName?.trim() && bomFormErrors?.transporterName) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                padding: '0 14px',
+                fontSize: '13px',
+                color: '#0F172A',
+                backgroundColor: (!newBomTransporterName?.trim() && bomFormErrors?.transporterName) ? '#FEF2F2' : 'white',
+                boxSizing: 'border-box',
+                outline: 'none'
+              }}
              />
+            {!newBomTransporterName?.trim() && bomFormErrors?.transporterName && (
+              <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                ⚠️ {bomFormErrors.transporterName}
+              </div>
+            )}
           </div>
 
           <div>
@@ -1722,10 +1764,31 @@ export default function CreateBomFormPage(props) {
               type="text"
               required
               value={newBomDestination || ''}
-              onChange={(e) => setNewBomDestination && setNewBomDestination(e.target.value)}
+              onChange={(e) => {
+                if (setNewBomDestination) setNewBomDestination(e.target.value);
+                if (bomFormErrors?.destination) {
+                  setBomFormErrors(prev => ({ ...prev, destination: null }));
+                }
+              }}
               placeholder="e.g. Coimbatore, Hyderabad, Site Location..."
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: (!newBomDestination?.trim() && (bomFormErrors?.destination || false)) ? '1.5px solid #EF4444' : '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
+              style={{
+                width: '100%',
+                height: '42px',
+                borderRadius: '10px',
+                border: (!newBomDestination?.trim() && bomFormErrors?.destination) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                padding: '0 14px',
+                fontSize: '13px',
+                color: '#0F172A',
+                backgroundColor: (!newBomDestination?.trim() && bomFormErrors?.destination) ? '#FEF2F2' : 'white',
+                boxSizing: 'border-box',
+                outline: 'none'
+              }}
              />
+            {!newBomDestination?.trim() && bomFormErrors?.destination && (
+              <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                ⚠️ {bomFormErrors.destination}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2348,39 +2411,53 @@ export default function CreateBomFormPage(props) {
           <button
             type="button"
             onClick={() => {
+              const nextErrors = {};
+              const alertLines = [];
+              let firstTargetId = null;
+              const pushErr = (key, msg, targetId) => {
+                nextErrors[key] = msg;
+                alertLines.push(msg);
+                if (!firstTargetId && targetId) firstTargetId = targetId;
+              };
+
               if (!newBomProductName || !newBomProductName.trim()) {
-                alert('⚠️ Please select or enter a Customer Name before creating the BOM order.');
-                return;
+                pushErr('customerName', 'Please select or enter a Customer Name.', 'prod-field-newBomProductName');
               }
               if (!newBomDocType || !newBomDocType.trim()) {
-                alert('⚠️ Please select Document Type (DC or Invoice) before creating the BOM order.');
-                return;
+                pushErr('docType', 'Please select Document Type (DC or Invoice).', 'prod-field-newBomDocType');
               }
               if (!bomMaterialsList || bomMaterialsList.length === 0) {
-                alert('⚠️ Please add at least one Product / Item to the BOM materials list.');
-                return;
-              }
-              const invalidItems = [];
-              bomMaterialsList.forEach((it, idx) => {
-                const qty = parseFloat(it.qty) || 0;
-                const r = parseFloat(it.rate) || 0;
-                const isPreset = selectedPreset && (it.isPresetItem || parseFloat(it.rate || 0) === 0);
-                if (!it.name || !it.name.trim()) {
-                  invalidItems.push(`Item #${idx + 1}: Product name is required`);
-                } else if (qty <= 0) {
-                  invalidItems.push(`Item #${idx + 1} (${it.name}): Quantity must be greater than 0`);
-                } else if (!isPreset && r <= 0) {
-                  invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be greater than 0`);
+                pushErr('materials', 'Please add at least one Product / Item to the BOM materials list.', 'create-bom-field-materials');
+              } else {
+                const invalidItems = [];
+                bomMaterialsList.forEach((it, idx) => {
+                  const qty = parseFloat(it.qty) || 0;
+                  const r = parseFloat(it.rate) || 0;
+                  const isPreset = selectedPreset && (it.isPresetItem || parseFloat(it.rate || 0) === 0);
+                  if (!it.name || !it.name.trim()) {
+                    invalidItems.push(`Item #${idx + 1}: Product name is required`);
+                  } else if (qty <= 0) {
+                    invalidItems.push(`Item #${idx + 1} (${it.name}): Quantity must be greater than 0`);
+                  } else if (!isPreset && r <= 0) {
+                    invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be greater than 0`);
+                  }
+                });
+                if (selectedPreset && parseFloat(presetFullPrice || 0) <= 0) {
+                  invalidItems.push(`Preset Kit (${selectedPreset}): Preset Full Price (₹) is required and must be greater than 0`);
                 }
-              });
-              if (selectedPreset && parseFloat(presetFullPrice || 0) <= 0) {
-                invalidItems.push(`Preset Kit (${selectedPreset}): Preset Full Price (₹) is required and must be greater than 0`);
+                if (invalidItems.length > 0) {
+                  pushErr('materials', invalidItems.join(' • '), 'create-bom-field-materials');
+                }
               }
-              if (invalidItems.length > 0) {
-                alert(`⚠️ Incomplete Item Details:\n\n• ${invalidItems.join('\n• ')}`);
-                return;
+              if (!newBomTransportMode || !newBomTransportMode.trim()) {
+                pushErr('transportMode', 'Please select Mode of Transport.', 'create-bom-form-mode-of-transport');
               }
-              {/* Validate mandatory payment attachment */}
+              if (!newBomTransporterName || !newBomTransporterName.trim()) {
+                pushErr('transporterName', 'Please enter Transport Name.', 'create-bom-form-transport-name');
+              }
+              if (!newBomDestination || !newBomDestination.trim()) {
+                pushErr('destination', 'Please enter Destination.', 'create-bom-form-destination');
+              }
               const isPaidOrder = (
                 newBomPaymentType === '100% Paid' ||
                 newBomPaymentType === '100% Advance' ||
@@ -2396,9 +2473,19 @@ export default function CreateBomFormPage(props) {
                 String(newBomDocType || '').toUpperCase().includes('CHALLAN')
               );
               if (!isDcOrder && isPaidOrder && paymentDocs.length === 0) {
-                alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${newBomPaymentType}" orders. Please attach the payment proof slip in the Document Attachments section below.`);
+                pushErr('paymentProof', `Payment Attachment / Slip is mandatory for "${newBomPaymentType}" orders.`, null);
+              }
+
+              if (alertLines.length > 0) {
+                setBomFormErrors(nextErrors);
+                if (firstTargetId && typeof document !== 'undefined') {
+                  const el = document.getElementById(firstTargetId);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                alert(`⚠️ Please complete the highlighted required fields:\n\n• ${alertLines.join('\n• ')}`);
                 return;
               }
+              setBomFormErrors({});
               setBomConfirmModal('create');
             }}
             style={{
@@ -2655,7 +2742,7 @@ export default function CreateBomFormPage(props) {
                       deliveryAddressObj: deliveryObj,
                       deliveryAddressProofDoc: sameAsBilling ? null : (deliveryDocs[0] || null),
                       deliveryAddressProofDocs: sameAsBilling ? [] : deliveryDocs,
-                      transportMode: newBomTransportMode || 'Transport',
+                      transportMode: newBomTransportMode || '',
                       transporterName: newBomTransporterName || '',
                       destination: (newBomDestination || '').trim(),
                       vehicleNo: newBomVehicleNo || '',

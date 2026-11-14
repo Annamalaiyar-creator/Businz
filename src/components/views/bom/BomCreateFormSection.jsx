@@ -108,7 +108,8 @@ export default function BomCreateFormSection({ ctx }) {
     setBomConfirmModal,
     bomMaterialsList,
     setBomMaterialsList,
-    totals
+    totals,
+    editingBomRecord
   } = ctx;
 
     const handleAddMaterialRow = () => {
@@ -262,9 +263,14 @@ export default function BomCreateFormSection({ ctx }) {
                 if (isSubmittingBom) return;
                 const validation = validateBomForm(false);
                 if (!validation.isValid) {
+                  const firstTarget = validation.missingList[0]?.targetId;
+                  if (firstTarget && typeof document !== 'undefined') {
+                    const el = document.getElementById(firstTarget);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
                   setValidationErrorModal({
                     fields: validation.missingList.map(m => typeof m === 'object' ? m.field : m),
-                    firstTargetId: validation.missingList[0]?.targetId
+                    firstTargetId: firstTarget
                   });
                   return;
                 }
@@ -1711,24 +1717,74 @@ export default function BomCreateFormSection({ ctx }) {
                 Mode of Transport <span style={{ color: '#EF4444' }}>*</span>
               </label>
               <select id="bom-orders-mode-of-transport" name="modeOfTransport" aria-label="Mode of Transport"
-                value={newBomTransportMode}
-                onChange={(e) => setNewBomTransportMode(e.target.value)}
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
+                required
+                value={newBomTransportMode || ''}
+                onChange={(e) => {
+                  setNewBomTransportMode(e.target.value);
+                  if (formErrors?.transportMode) {
+                    setFormErrors(prev => ({ ...prev, transportMode: null }));
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  height: '42px',
+                  borderRadius: '10px',
+                  border: (!newBomTransportMode?.trim() && formErrors?.transportMode) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                  padding: '0 14px',
+                  fontSize: '13px',
+                  color: newBomTransportMode ? '#0F172A' : '#64748B',
+                  backgroundColor: (!newBomTransportMode?.trim() && formErrors?.transportMode) ? '#FEF2F2' : 'white',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
               >
+                <option value="">-- Select Transport Mode --</option>
                 <option value="Transport">Transport</option>
                 <option value="Own Vehicle">Own Vehicle</option>
                 <option value="Porter">Porter</option>
+                <option value="Courier">Courier</option>
+                <option value="Customer Pickup / Self">Customer Pickup / Self</option>
               </select>
+              {!newBomTransportMode?.trim() && formErrors?.transportMode && (
+                <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                  ⚠️ {formErrors.transportMode}
+                </div>
+              )}
             </div>
             <div>
-              <label htmlFor="bom-orders-transport-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Transport Name</label>
+              <label htmlFor="bom-orders-transport-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Transport Name <span style={{ color: '#EF4444' }}>*</span>
+              </label>
               <input id="bom-orders-transport-name" name="transportName" aria-label="Transport Name"
                 type="text"
+                required
                 value={newBomTransporterName}
-                onChange={(e) => setNewBomTransporterName(e.target.value)}
+                onChange={(e) => {
+                  setNewBomTransporterName(e.target.value);
+                  if (formErrors?.transporterName) {
+                    setFormErrors(prev => ({ ...prev, transporterName: null }));
+                  }
+                }}
                 placeholder="e.g. VRL Logistics / TCI Freight / Local Transport"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
+                style={{
+                  width: '100%',
+                  height: '42px',
+                  borderRadius: '10px',
+                  border: (!newBomTransporterName?.trim() && formErrors?.transporterName) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                  padding: '0 14px',
+                  fontSize: '13px',
+                  color: '#0F172A',
+                  backgroundColor: (!newBomTransporterName?.trim() && formErrors?.transporterName) ? '#FEF2F2' : 'white',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
                />
+              {!newBomTransporterName?.trim() && formErrors?.transporterName && (
+                <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                  ⚠️ {formErrors.transporterName}
+                </div>
+              )}
             </div>
             <div>
               <label htmlFor="bom-orders-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
@@ -1736,11 +1792,33 @@ export default function BomCreateFormSection({ ctx }) {
               </label>
               <input id="bom-orders-destination" name="destination" aria-label="Destination"
                 type="text"
+                required
                 value={newBomDestination}
-                onChange={(e) => setNewBomDestination(e.target.value)}
+                onChange={(e) => {
+                  setNewBomDestination(e.target.value);
+                  if (formErrors?.destination) {
+                    setFormErrors(prev => ({ ...prev, destination: null }));
+                  }
+                }}
                 placeholder="e.g. Chennai / Coimbatore / Site Location"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: (!newBomDestination?.trim() && (formErrors?.destination || false)) ? '1.5px solid #EF4444' : '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
+                style={{
+                  width: '100%',
+                  height: '42px',
+                  borderRadius: '10px',
+                  border: (!newBomDestination?.trim() && formErrors?.destination) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                  padding: '0 14px',
+                  fontSize: '13px',
+                  color: '#0F172A',
+                  backgroundColor: (!newBomDestination?.trim() && formErrors?.destination) ? '#FEF2F2' : 'white',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
                />
+              {!newBomDestination?.trim() && formErrors?.destination && (
+                <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                  ⚠️ {formErrors.destination}
+                </div>
+              )}
             </div>
             <div>
               <label htmlFor="bom-orders-vehicle-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Vehicle Number</label>
@@ -2377,9 +2455,14 @@ export default function BomCreateFormSection({ ctx }) {
                 if (isSubmittingBom) return;
                 const validation = validateBomForm(false);
                 if (!validation.isValid) {
+                  const firstTarget = validation.missingList[0]?.targetId;
+                  if (firstTarget && typeof document !== 'undefined') {
+                    const el = document.getElementById(firstTarget);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
                   setValidationErrorModal({
                     fields: validation.missingList.map(m => typeof m === 'object' ? m.field : m),
-                    firstTargetId: validation.missingList[0]?.targetId
+                    firstTargetId: firstTarget
                   });
                   return;
                 }
@@ -2405,7 +2488,7 @@ export default function BomCreateFormSection({ ctx }) {
               onMouseEnter={(e) => { if (!isSubmittingBom) e.currentTarget.style.backgroundColor = '#075985'; }}
               onMouseLeave={(e) => { if (!isSubmittingBom) e.currentTarget.style.backgroundColor = '#0E7490'; }}
             >
-              <Check style={{ width: '16px', height: '16px' }} /> Confirm BOM →
+              <Check style={{ width: '16px', height: '16px' }} /> {editingBomRecord ? 'Save Edited BOM →' : 'Confirm BOM →'}
             </button>
           </div>
 

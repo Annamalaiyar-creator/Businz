@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt
+  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt, Edit3
 } from 'lucide-react';
 import { saveCloudBomRow } from '../../../utils/supabaseDataSync';
 import { isRailPreset, isKwPreset, calculateTotalDispatchQty } from '../../../utils/vrmProductsData';
@@ -33,6 +33,7 @@ export default function BomConfirmAuditSection({ ctx }) {
     isCeo,
     confirmingBomModal,
     setConfirmingBomModal,
+    handleStartEditBom,
     setUploadPaymentModal,
     setPreviewDocModal,
     sameAsBilling,
@@ -256,6 +257,16 @@ export default function BomConfirmAuditSection({ ctx }) {
                   CANCELLED • VIEW ONLY
                 </span>
               )}
+              {(confirmingBomModal.isEdited || (Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0)) && (
+                <span style={{
+                  backgroundColor: '#FEF3C7', color: '#B45309',
+                  fontSize: '11px', fontWeight: '800', padding: '3px 10px',
+                  borderRadius: '12px', border: '1px solid #FDE68A',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  Edited{confirmingBomModal.lastEditedBy ? ` • ${confirmingBomModal.lastEditedBy}` : ''}{confirmingBomModal.lastEditedAt ? ` (${new Date(confirmingBomModal.lastEditedAt).toLocaleString('en-IN')})` : ''}
+                </span>
+              )}
               {isCeo && (
                 <span style={{
                   backgroundColor: '#ECFEFF', color: '#0E7490',
@@ -321,6 +332,30 @@ export default function BomConfirmAuditSection({ ctx }) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {!isCeo && !isCancelled && !confirmingBomModal.dispatchPackingVerified && !['Packed & Ready for Dispatch', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed', 'Dispatched', 'Closed', 'CLOSED'].includes(confirmingBomModal.status) && handleStartEditBom && (
+              <button
+                type="button"
+                onClick={() => handleStartEditBom(confirmingBomModal)}
+                title="Edit BOM Details"
+                style={{
+                  border: '1px solid #F59E0B',
+                  backgroundColor: '#FFFBEB',
+                  color: '#B45309',
+                  height: '40px',
+                  padding: '0 18px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+              >
+                <Edit3 size={15} style={{ color: '#D97706' }} /> Edit BOM
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPrintingBomRecord(confirmingBomModal)}
@@ -676,6 +711,43 @@ export default function BomConfirmAuditSection({ ctx }) {
                 <span>•</span>
                 <span><strong>Sales Person Notified:</strong> {(confirmingBomModal.salesPerson || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim()}</span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0 && (
+          <div style={{
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                ✏️ Edited BOM History ({confirmingBomModal.editHistory.length})
+              </span>
+              {confirmingBomModal.lastEditedAt && (
+                <span style={{ fontSize: '11.5px', color: '#B45309', fontWeight: '600' }}>
+                  Last edited by {confirmingBomModal.lastEditedBy || 'Sales'} on {new Date(confirmingBomModal.lastEditedAt).toLocaleString('en-IN')}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+              {[...confirmingBomModal.editHistory].reverse().map((entry, idx) => (
+                <div key={idx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #FDE68A', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A', marginBottom: '4px' }}>
+                    {entry.editedBy || 'Sales'}{entry.editedByRole ? ` (${entry.editedByRole})` : ''} • {entry.editedAt ? new Date(entry.editedAt).toLocaleString('en-IN') : ''}
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {(Array.isArray(entry.changes) ? entry.changes : ['BOM details updated']).map((chg, cIdx) => (
+                      <li key={cIdx}>{chg}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
         )}

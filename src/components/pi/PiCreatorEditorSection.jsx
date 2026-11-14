@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Plus, Check, Trash2, FileText, X, CheckCircle, ArrowLeft, Edit, Layers, Building2, Truck, Boxes, User, Landmark, ShieldCheck, FileCheck, Copy, ChevronDown, ChevronUp, GripVertical
 } from 'lucide-react';
@@ -85,14 +85,10 @@ export default function PiCreatorEditorSection({ ctx }) {
     setDraggedItemIndex,
     dragOverItemIndex,
     setDragOverItemIndex,
-    transportMode,
-    setTransportMode,
-    transporterName,
-    setTransporterName,
-    destination,
-    setDestination,
     transportScope,
     setTransportScope,
+    piFormErrors,
+    setPiFormErrors,
     paymentTerms,
     setPaymentTerms,
     isCustomerDropdownOpen,
@@ -113,6 +109,41 @@ export default function PiCreatorEditorSection({ ctx }) {
     triggerSaveConfirm,
     triggerDraftConfirm
   } = ctx;
+
+  // Smooth viewport auto-scroll while dragging a product row near top/bottom edges
+  useEffect(() => {
+    if (draggedItemIndex === null || draggedItemIndex === undefined) return;
+    let rafId = null;
+    let scrollSpeed = 0;
+
+    const tick = () => {
+      if (scrollSpeed !== 0) {
+        window.scrollBy(0, scrollSpeed);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+
+    const handleWindowDragOver = (e) => {
+      const edgeThreshold = 110;
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (e.clientY < edgeThreshold) {
+        const ratio = Math.max(0.25, (edgeThreshold - e.clientY) / edgeThreshold);
+        scrollSpeed = -Math.round(14 * ratio);
+      } else if (e.clientY > vh - edgeThreshold) {
+        const ratio = Math.max(0.25, (e.clientY - (vh - edgeThreshold)) / edgeThreshold);
+        scrollSpeed = Math.round(14 * ratio);
+      } else {
+        scrollSpeed = 0;
+      }
+    };
+
+    window.addEventListener('dragover', handleWindowDragOver, { passive: true });
+    return () => {
+      window.removeEventListener('dragover', handleWindowDragOver);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [draggedItemIndex]);
 
   return (
     <>
@@ -341,46 +372,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                   </select>
                 </div>
 
-                <div>
-                  <label htmlFor="performa-invoice-transport-mode" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Transport Mode
-                  </label>
-                  <select id="performa-invoice-transport-mode" name="transportMode" aria-label="Transport Mode"
-                    value={transportMode}
-                    onChange={(e) => setTransportMode(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
-                  >
-                    <option value="Transport">Transport</option>
-                    <option value="Own Vehicle">Own Vehicle</option>
-                    <option value="Porter">Porter</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="performa-invoice-transporter-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Transporter Name
-                  </label>
-                  <input id="performa-invoice-transporter-name" name="transporterName" aria-label="Transporter Name"
-                    type="text"
-                    value={transporterName}
-                    placeholder="e.g. VRL Logistics, SafeXpress..."
-                    onChange={(e) => setTransporterName(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                   />
-                </div>
-
-                <div>
-                  <label htmlFor="performa-invoice-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Destination
-                  </label>
-                  <input id="performa-invoice-destination" name="destination" aria-label="Destination"
-                    type="text"
-                    value={destination}
-                    placeholder="e.g. Coimbatore, Hyderabad, Site Location (Optional)..."
-                    onChange={(e) => setDestination(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                   />
-                </div>
               </div>
             </div>
 
@@ -453,14 +444,14 @@ export default function PiCreatorEditorSection({ ctx }) {
                         width: '100%',
                         height: '42px',
                         borderRadius: '10px',
-                        border: isCustomerDropdownOpen ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                        border: (!vendorName?.trim() && piFormErrors?.['pi-field-vendorName']) ? '1.5px solid #EF4444' : (isCustomerDropdownOpen ? '1.5px solid #0E7490' : '1px solid #E2E8F0'),
                         padding: '0 36px 0 14px',
                         fontSize: '13px',
                         fontWeight: '600',
                         color: '#0F172A',
                         outline: 'none',
                         boxSizing: 'border-box',
-                        backgroundColor: '#FFFFFF',
+                        backgroundColor: (!vendorName?.trim() && piFormErrors?.['pi-field-vendorName']) ? '#FEF2F2' : '#FFFFFF',
                         boxShadow: isCustomerDropdownOpen ? '0 0 0 3px rgba(14, 116, 144, 0.1)' : 'none'
                       }}
                      />
@@ -621,7 +612,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                     placeholder="+91 98765 43210"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: (!phone?.trim() && piFormErrors?.['pi-field-phone']) ? '1.5px solid #EF4444' : '1px solid #E2E8F0', backgroundColor: (!phone?.trim() && piFormErrors?.['pi-field-phone']) ? '#FEF2F2' : 'white', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
                    />
                 </div>
 
@@ -727,7 +718,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                           setBillingStreet(e.target.value);
                           if (sameAsBilling) setDeliveryStreet(e.target.value);
                         }}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: (!billingStreet?.trim() && piFormErrors?.['pi-field-billingStreet']) ? '1.5px solid #EF4444' : '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: (!billingStreet?.trim() && piFormErrors?.['pi-field-billingStreet']) ? '#FEF2F2' : 'white' }}
                        />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: '10px' }}>
@@ -742,7 +733,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                             setBillingCity(e.target.value);
                             if (sameAsBilling) setDeliveryCity(e.target.value);
                           }}
-                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
+                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: (!billingCity?.trim() && piFormErrors?.['pi-field-billingCity']) ? '1.5px solid #EF4444' : '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: (!billingCity?.trim() && piFormErrors?.['pi-field-billingCity']) ? '#FEF2F2' : 'white' }}
                          />
                       </div>
                       <div>
@@ -755,8 +746,11 @@ export default function PiCreatorEditorSection({ ctx }) {
                           onChange={(e) => {
                             setBillingState(e.target.value);
                             if (sameAsBilling) setDeliveryState(e.target.value);
+                            if (setPiFormErrors && piFormErrors?.['pi-field-billingState']) {
+                              setPiFormErrors(prev => ({ ...prev, 'pi-field-billingState': false }));
+                            }
                           }}
-                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
+                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: piFormErrors?.['pi-field-billingState'] ? '1.5px solid #EF4444' : '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: piFormErrors?.['pi-field-billingState'] ? '#FEF2F2' : 'white' }}
                          />
                       </div>
                       <div>
@@ -770,7 +764,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                             setBillingPincode(e.target.value);
                             if (sameAsBilling) setDeliveryPincode(e.target.value);
                           }}
-                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
+                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: (!billingPincode?.trim() && piFormErrors?.['pi-field-billingPincode']) ? '1.5px solid #EF4444' : '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: (!billingPincode?.trim() && piFormErrors?.['pi-field-billingPincode']) ? '#FEF2F2' : 'white' }}
                          />
                       </div>
                     </div>
@@ -819,7 +813,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                         placeholder="Solar Project Site, Survey No, Village..."
                         value={sameAsBilling ? billingStreet : deliveryStreet}
                         onChange={(e) => setDeliveryStreet(e.target.value)}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : 'white', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: (!sameAsBilling && !deliveryStreet?.trim() && piFormErrors?.['pi-field-deliveryStreet']) ? '1.5px solid #EF4444' : '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : ((!deliveryStreet?.trim() && piFormErrors?.['pi-field-deliveryStreet']) ? '#FEF2F2' : 'white'), cursor: sameAsBilling ? 'not-allowed' : 'text' }}
                        />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: '10px' }}>
@@ -832,7 +826,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                           placeholder="City"
                           value={sameAsBilling ? billingCity : deliveryCity}
                           onChange={(e) => setDeliveryCity(e.target.value)}
-                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : 'white', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
+                          style={{ width: '100%', height: '38px', borderRadius: '8px', border: (!sameAsBilling && !deliveryCity?.trim() && piFormErrors?.['pi-field-deliveryCity']) ? '1.5px solid #EF4444' : '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : ((!deliveryCity?.trim() && piFormErrors?.['pi-field-deliveryCity']) ? '#FEF2F2' : 'white'), cursor: sameAsBilling ? 'not-allowed' : 'text' }}
                          />
                       </div>
                       <div>
@@ -864,7 +858,7 @@ export default function PiCreatorEditorSection({ ctx }) {
             </div>
 
             {/* SECTION 3: ORDER ITEMS & BILL OF MATERIALS */}
-            <div id="pi-field-items" style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' }}>
+            <div id="pi-field-items" style={{ backgroundColor: (piFormErrors?.['pi-field-items'] && piItems.length === 0) ? '#FEF2F2' : 'white', borderRadius: '16px', border: piFormErrors?.['pi-field-items'] ? '2px solid #EF4444' : '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' }}>
               {/* Section 3 Header — Clean Single Row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '18px 24px', gap: '20px', flexWrap: 'wrap', borderBottom: '1px solid #F1F5F9' }}>
                 {/* Left: Badge + Title */}
@@ -1331,6 +1325,26 @@ export default function PiCreatorEditorSection({ ctx }) {
                                       <ChevronDown size={11} />
                                     </button>
                                   </div>
+                                  {i > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleReorderPiItem(i, 0); }}
+                                      style={{
+                                        border: '1px solid #CBD5E1',
+                                        borderRadius: '4px',
+                                        background: '#F8FAFC',
+                                        cursor: 'pointer',
+                                        padding: '1px 4px',
+                                        fontSize: '9px',
+                                        fontWeight: '700',
+                                        color: '#0E7490',
+                                        lineHeight: 1.2
+                                      }}
+                                      title="Move directly to #1 (Top)"
+                                    >
+                                      ↑1
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                               <td style={{
@@ -2293,7 +2307,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                 >
-                  <ArrowLeft size={15} /> Back
+                  Back
                 </button>
 
                 <button
@@ -2320,7 +2334,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                   onMouseEnter={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
                   onMouseLeave={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                 >
-                  <FileText size={15} /> Save as Draft
+                  Save as Draft
                 </button>
 
                 <button
@@ -2347,7 +2361,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                   onMouseEnter={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#059669'; }}
                   onMouseLeave={(e) => { if (!isSubmittingPI) e.currentTarget.style.backgroundColor = '#10B981'; }}
                 >
-                  <CheckCircle size={16} />
                   {editIdx !== null && (piList[editIdx]?.status === 'Draft' || piList[editIdx]?.statusType === 'draft')
                     ? 'Complete & Release PI'
                     : 'Confirm PI'}

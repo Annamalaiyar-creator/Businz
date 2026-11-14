@@ -60,6 +60,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [printModalPi, setPrintModalPi] = useState(null); // For official Print & PDF template
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
   const [validationAlert, setValidationAlert] = useState(null); // Interactive Missing Fields popup modal
+  const [piFormErrors, setPiFormErrors] = useState({});
   const [topToast, setTopToast] = useState(null);
   const toastTimeoutRef = useRef(null);
   const [filterSalesPerson, setFilterSalesPerson] = useState('All Sales');
@@ -2351,6 +2352,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setShowFloatingMenu,
     validationAlert,
     setValidationAlert,
+    piFormErrors,
+    setPiFormErrors,
     topToast,
     setTopToast,
     toastTimeoutRef,

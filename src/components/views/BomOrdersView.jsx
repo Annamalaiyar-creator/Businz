@@ -412,6 +412,7 @@ export default function BomOrdersView(props) {
 
   // Form & Modals State
   const [showBOMForm, setShowBOMForm] = useState(false);
+  const [editingBomRecord, setEditingBomRecord] = useState(null);
   const bomCustSearchTimerRef = useRef(null);
 
   // Lazy-load initial 60 customers only when Create BOM Form is opened (Phase B4: ~34 KB instead of 4.42 MB)
@@ -557,7 +558,7 @@ export default function BomOrdersView(props) {
   const [newBomDeliveryProofDoc, setNewBomDeliveryProofDoc] = useState(null);
   const [newBomPaymentProofDoc, setNewBomPaymentProofDoc] = useState(null);
   const [newBomRemarks, setNewBomRemarks] = useState('');
-  const [newBomTransportMode, setNewBomTransportMode] = useState('Transport');
+  const [newBomTransportMode, setNewBomTransportMode] = useState('');
   const [newBomTransporterName, setNewBomTransporterName] = useState('');
   const [newBomDestination, setNewBomDestination] = useState('');
   const [newBomVehicleNo, setNewBomVehicleNo] = useState('');
@@ -763,7 +764,23 @@ export default function BomOrdersView(props) {
       }
     }
 
-    // 4b. Mandatory Destination
+    // 4b. Mandatory Transport & Logistics Details
+    if (!isDraft && (!newBomTransportMode || !newBomTransportMode.trim())) {
+      errors.transportMode = 'Mode of Transport is required';
+      missingList.push({
+        field: 'Mode of Transport *',
+        message: 'Please select a Mode of Transport.',
+        targetId: 'bom-orders-mode-of-transport'
+      });
+    }
+    if (!isDraft && (!newBomTransporterName || !newBomTransporterName.trim())) {
+      errors.transporterName = 'Transport Name is required';
+      missingList.push({
+        field: 'Transport Name *',
+        message: 'Please enter the Transport / Logistics Name.',
+        targetId: 'bom-orders-transport-name'
+      });
+    }
     if (!isDraft && (!newBomDestination || !newBomDestination.trim())) {
       errors.destination = 'Destination is required';
       missingList.push({
@@ -1759,7 +1776,7 @@ export default function BomOrdersView(props) {
       setNewBomPaymentProofDoc(piPayProof ? (Array.isArray(piPayProof) ? piPayProof : [piPayProof]) : null);
       const piDelProof = pendingPi.deliveryProofDocs || pendingPi.deliveryAddressProofDoc || pendingPi.deliveryProofDoc || null;
       setNewBomDeliveryProofDoc(piDelProof ? (Array.isArray(piDelProof) ? piDelProof : [piDelProof]) : null);
-      setNewBomTransportMode(pendingPi.transportMode || 'Transport');
+      setNewBomTransportMode(pendingPi.transportMode || '');
       setNewBomTransporterName(pendingPi.transporterName || pendingPi.transporter || '');
       setNewBomDestination(pendingPi.destination || pendingPi.deliveryCity || pendingPi.city || '');
       setNewBomVehicleNo(pendingPi.vehicleNo || '');
@@ -2680,6 +2697,92 @@ export default function BomOrdersView(props) {
   const currentRows = filteredRows.slice(indexOfFirstRow, indexOfLastRow);
 
 
+  const handleStartEditBom = (rawTarget) => {
+    if (isCeo || !rawTarget) return;
+    const codeKey = rawTarget.bomCode || rawTarget.code || rawTarget.id;
+    const sourceBom = (bomStore || []).find(b => b && (b.bomCode === codeKey || b.code === codeKey || b.id === codeKey)) || rawTarget;
+    const isCancelled = Boolean(
+      sourceBom.cancelled ||
+      sourceBom.status === 'Cancelled & Stock Restored' ||
+      String(sourceBom.status || '').toLowerCase().includes('cancel')
+    );
+    const isPackedOrLater = Boolean(
+      sourceBom.dispatchPackingVerified ||
+      ['Packed & Ready for Dispatch', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed', 'Dispatched', 'Closed', 'CLOSED'].includes(sourceBom.status)
+    );
+    if (isCancelled || isPackedOrLater) {
+      alert('This BOM cannot be edited because it is already cancelled or Dispatch Packing has been completed.');
+      return;
+    }
+
+    const bObj = sourceBom.billingAddressObj || {};
+    const dObj = sourceBom.deliveryAddressObj || {};
+    const bStr = bObj.address || sourceBom.billingAddress || '';
+    const dStr = dObj.address || sourceBom.deliveryAddress || '';
+    const isSame = Boolean(!dStr || (bStr && dStr === bStr && (bObj.city || '') === (dObj.city || '') && (bObj.pincode || '') === (dObj.pincode || '')));
+
+    setNewBomCode(sourceBom.bomCode || sourceBom.code || '');
+    setNewBomProductName(sourceBom.customerName || sourceBom.companyName || '');
+    setNewBomDocType(sourceBom.docType || 'Invoice');
+    setNewBomDeliveryDate(sourceBom.deliveryDate || sourceBom.date || new Date().toISOString().split('T')[0]);
+    setNewBomBillingStreet(bObj.address || '');
+    setNewBomBillingCity(bObj.city || '');
+    setNewBomBillingState(bObj.state || '');
+    setNewBomBillingPincode(bObj.pincode || '');
+    setNewBomDeliveryStreet(dObj.address || '');
+    setNewBomDeliveryCity(dObj.city || '');
+    setNewBomDeliveryState(dObj.state || '');
+    setNewBomDeliveryPincode(dObj.pincode || '');
+    setSameAsBilling(isSame);
+    setNewBomTransportMode(sourceBom.transportMode || '');
+    setNewBomTransporterName(sourceBom.transporterName || '');
+    setNewBomDestination(sourceBom.destination || '');
+    setNewBomVehicleNo(sourceBom.vehicleNo || '');
+    setNewBomTransportScope(sourceBom.transportScope || 'VRM Structures');
+    setNewBomPaymentType(sourceBom.paymentType || '100% Paid');
+    setNewBomPartialAmount(sourceBom.partialAmount != null ? String(sourceBom.partialAmount) : '');
+    setNewBomCreditDays(sourceBom.creditDays || 7);
+    setNewBomRemarks(sourceBom.remarks || '');
+    setNewBomSourcePiNo(sourceBom.sourcePiNo || '');
+
+    const pDocs = Array.isArray(sourceBom.paymentProofDocs) && sourceBom.paymentProofDocs.length > 0
+      ? sourceBom.paymentProofDocs
+      : (sourceBom.paymentProofDoc ? [sourceBom.paymentProofDoc] : []);
+    setNewBomPaymentProofDoc(pDocs.length > 0 ? pDocs : null);
+
+    const delDocs = Array.isArray(sourceBom.deliveryAddressProofDocs) && sourceBom.deliveryAddressProofDocs.length > 0
+      ? sourceBom.deliveryAddressProofDocs
+      : (sourceBom.deliveryAddressProofDoc ? [sourceBom.deliveryAddressProofDoc] : []);
+    setNewBomDeliveryProofDoc(delDocs.length > 0 ? delDocs : null);
+
+    const existingItems = Array.isArray(sourceBom.items) ? sourceBom.items : [];
+    setBomMaterialsList(existingItems.map(it => ({ ...it })));
+
+    if (Array.isArray(sourceBom.presetGroups) && sourceBom.presetGroups.length > 0) {
+      const grpObj = {};
+      sourceBom.presetGroups.forEach((g, idx) => {
+        const gid = g.groupId || `grp_${idx}`;
+        grpObj[gid] = { ...g, groupId: gid };
+      });
+      setPresetGroups(grpObj);
+      setSelectedPreset(sourceBom.presetGroups[0]?.presetName || '');
+      setPresetSetCount(sourceBom.presetGroups[0]?.setCount || 1);
+      setPresetUnit(sourceBom.presetGroups[0]?.unit || 'Sets');
+      setPresetKitPrice(sourceBom.presetGroups[0]?.kitPrice != null ? String(sourceBom.presetGroups[0].kitPrice) : '');
+    } else {
+      setPresetGroups({});
+      setSelectedPreset(sourceBom.presetName || '');
+      setPresetSetCount(sourceBom.presetSetCount || 1);
+      setPresetUnit(sourceBom.presetUnit || 'Sets');
+      setPresetKitPrice(sourceBom.presetKitPrice != null ? String(sourceBom.presetKitPrice) : '');
+    }
+
+    setFormErrors({});
+    setConfirmingBomModal(null);
+    setEditingBomRecord(sourceBom);
+    setShowBOMForm(true);
+  };
+
   const bomCtx = {};
   Object.assign(bomCtx, {
     props,
@@ -2753,6 +2856,9 @@ export default function BomOrdersView(props) {
     setExecutiveDossierOrder,
     showBOMForm,
     setShowBOMForm,
+    editingBomRecord,
+    setEditingBomRecord,
+    handleStartEditBom,
     bomCustSearchTimerRef,
     confirmingBomModal,
     setConfirmingBomModal,

@@ -47,6 +47,15 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                 }}>
                   CEO EXECUTIVE VIEW
                 </span>
+                {(confirmingBomModal.isEdited || (Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0)) && (
+                  <span style={{
+                    backgroundColor: '#FEF3C7', color: '#B45309',
+                    fontSize: '11px', fontWeight: '800', padding: '3px 10px',
+                    borderRadius: '12px', border: '1px solid #FDE68A'
+                  }}>
+                    Edited{confirmingBomModal.lastEditedBy ? ` • ${confirmingBomModal.lastEditedBy}` : ''}
+                  </span>
+                )}
                 <span style={{
                   backgroundColor: confirmingBomModal.status === 'Cancelled' ? '#FEE2E2' : '#F0FDF4',
                   color: confirmingBomModal.status === 'Cancelled' ? '#DC2626' : '#166534',
@@ -121,6 +130,43 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
               </button>
             </div>
           </div>
+
+          {Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0 && (
+            <div style={{
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              borderRadius: '12px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  ✏️ Edited BOM History ({confirmingBomModal.editHistory.length})
+                </span>
+                {confirmingBomModal.lastEditedAt && (
+                  <span style={{ fontSize: '11.5px', color: '#B45309', fontWeight: '600' }}>
+                    Last edited by {confirmingBomModal.lastEditedBy || 'Sales'} on {new Date(confirmingBomModal.lastEditedAt).toLocaleString('en-IN')}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                {[...confirmingBomModal.editHistory].reverse().map((entry, idx) => (
+                  <div key={idx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #FDE68A', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A', marginBottom: '4px' }}>
+                      {entry.editedBy || 'Sales'}{entry.editedByRole ? ` (${entry.editedByRole})` : ''} • {entry.editedAt ? new Date(entry.editedAt).toLocaleString('en-IN') : ''}
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {(Array.isArray(entry.changes) ? entry.changes : ['BOM details updated']).map((chg, cIdx) => (
+                        <li key={cIdx}>{chg}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 1. TOP SECTION: ALL STAGES WITH ACTUAL TIME & STAGE PROCESSING AUDIT */}
           <div style={{

@@ -6,6 +6,64 @@ import { uploadBomDocumentFile } from '../../../utils/bomStorageClient';
 import { notifyBomCreatedToSales } from '../../../services/notificationService';
 import { getNextSequence } from '../../../utils/sequenceGenerator';
 
+function buildBomEditChanges(oldBom, nextBom) {
+  if (!oldBom || !nextBom) return ['BOM details updated'];
+  const changes = [];
+  const norm = (v) => String(v == null ? '' : v).trim();
+  const checkStr = (label, a, b) => {
+    const sA = norm(a);
+    const sB = norm(b);
+    if (sA !== sB) changes.push(`${label}: "${sA || '—'}" → "${sB || '—'}"`);
+  };
+  checkStr('Customer', oldBom.customerName || oldBom.companyName, nextBom.customerName || nextBom.companyName);
+  checkStr('Doc Type', oldBom.docType, nextBom.docType);
+  checkStr('Delivery Date', oldBom.deliveryDate, nextBom.deliveryDate);
+  checkStr('Mode of Transport', oldBom.transportMode, nextBom.transportMode);
+  checkStr('Transport Name', oldBom.transporterName, nextBom.transporterName);
+  checkStr('Destination', oldBom.destination, nextBom.destination);
+  checkStr('Payment Terms', oldBom.paymentType, nextBom.paymentType);
+  if (Number(oldBom.partialAmount || 0) !== Number(nextBom.partialAmount || 0)) {
+    changes.push(`Partial Amount: ₹${Number(oldBom.partialAmount || 0).toLocaleString('en-IN')} → ₹${Number(nextBom.partialAmount || 0).toLocaleString('en-IN')}`);
+  }
+  checkStr('Billing Address', oldBom.billingAddress, nextBom.billingAddress);
+  checkStr('Delivery Address', oldBom.deliveryAddress, nextBom.deliveryAddress);
+  checkStr('Remarks', oldBom.remarks, nextBom.remarks);
+
+  const oldItemsMap = new Map();
+  (Array.isArray(oldBom.items) ? oldBom.items : []).forEach((it) => {
+    const k = norm(it?.name || it?.code).toLowerCase();
+    if (k) oldItemsMap.set(k, it);
+  });
+  const nextItemsMap = new Map();
+  (Array.isArray(nextBom.items) ? nextBom.items : []).forEach((it) => {
+    const k = norm(it?.name || it?.code).toLowerCase();
+    if (k) nextItemsMap.set(k, it);
+  });
+  nextItemsMap.forEach((nIt, k) => {
+    const oIt = oldItemsMap.get(k);
+    if (!oIt) {
+      changes.push(`Added Item: ${nIt.name} (Qty ${nIt.qty})`);
+    } else {
+      if (Number(oIt.qty || 0) !== Number(nIt.qty || 0)) {
+        changes.push(`Item Qty (${nIt.name}): ${oIt.qty} → ${nIt.qty}`);
+      }
+      if (Number(oIt.rate || 0) !== Number(nIt.rate || 0)) {
+        changes.push(`Item Rate (${nIt.name}): ₹${Number(oIt.rate || 0).toLocaleString('en-IN')} → ₹${Number(nIt.rate || 0).toLocaleString('en-IN')}`);
+      }
+    }
+  });
+  oldItemsMap.forEach((oIt, k) => {
+    if (!nextItemsMap.has(k)) {
+      changes.push(`Removed Item: ${oIt.name} (Qty ${oIt.qty})`);
+    }
+  });
+
+  if (Math.round(Number(oldBom.grandTotal || 0)) !== Math.round(Number(nextBom.grandTotal || 0))) {
+    changes.push(`Grand Total: ₹${Number(oldBom.grandTotal || 0).toLocaleString('en-IN')} → ₹${Number(nextBom.grandTotal || 0).toLocaleString('en-IN')}`);
+  }
+  return changes.length > 0 ? changes : ['BOM details updated'];
+}
+
 export default function BomCreateSubmitModal({ ctx }) {
   const {
     safeSaveBomStoreToLocal,
@@ -98,7 +156,10 @@ export default function BomCreateSubmitModal({ ctx }) {
     bomMaterialsList,
     setBomMaterialsList,
     alert,
-    totals
+    totals,
+    editingBomRecord,
+    setEditingBomRecord,
+    userRole
   } = ctx;
 
   return (
@@ -149,11 +210,12 @@ export default function BomCreateSubmitModal({ ctx }) {
                     if (bomConfirmModal === 'cancel') {
                       setShowBOMForm(false);
                       setBomConfirmModal(null);
+                      if (setEditingBomRecord) setEditingBomRecord(null);
                       setSelectedPreset('');
                       setPresetKitPrice('');
                       setPresetSetCount(1);
                       setPresetGroups({});
-                      setNewBomTransportMode('Transport');
+                      setNewBomTransportMode('');
                       setNewBomTransporterName('');
                       setNewBomDestination('');
                       setNewBomVehicleNo('');
@@ -259,7 +321,7 @@ export default function BomCreateSubmitModal({ ctx }) {
                           deliveryAddressObj: deliveryObj,
                           deliveryAddressProofDoc: sameAsBilling ? null : (deliveryDocs[0] || null),
                           deliveryAddressProofDocs: sameAsBilling ? [] : deliveryDocs,
-                          transportMode: newBomTransportMode || 'Transport',
+                          transportMode: newBomTransportMode || '',
                           transportScope: newBomTransportScope || 'VRM Structures',
                           transporterName: newBomTransporterName || '',
                           destination: (newBomDestination || '').trim(),
@@ -347,15 +409,54 @@ export default function BomCreateSubmitModal({ ctx }) {
                           grandTotal: cleanNum(totals.grand, 0)
                         };
 
-                        const sanitizedNewBom = stripDataUrlsFromRecord(newBomRecord);
+                        let sanitizedNewBom = stripDataUrlsFromRecord(newBomRecord);
+                        const isEditingExisting = Boolean(editingBomRecord && (editingBomRecord.bomCode || editingBomRecord.code || editingBomRecord.id));
+                        if (isEditingExisting) {
+                          const nowIso = new Date().toISOString();
+                          const existingCode = editingBomRecord.bomCode || editingBomRecord.code || editingBomRecord.id;
+                          const diffList = buildBomEditChanges(editingBomRecord, sanitizedNewBom);
+                          sanitizedNewBom = {
+                            ...editingBomRecord,
+                            ...sanitizedNewBom,
+                            id: existingCode,
+                            bomCode: existingCode,
+                            code: existingCode,
+                            createdAt: editingBomRecord.createdAt || sanitizedNewBom.createdAt,
+                            sourcePiNo: editingBomRecord.sourcePiNo || sanitizedNewBom.sourcePiNo || null,
+                            salesPerson: editingBomRecord.salesPerson || sanitizedNewBom.salesPerson,
+                            salesPersonCode: editingBomRecord.salesPersonCode || sanitizedNewBom.salesPersonCode,
+                            createdBy: editingBomRecord.createdBy || sanitizedNewBom.createdBy,
+                            createdById: editingBomRecord.createdById || sanitizedNewBom.createdById,
+                            status: (editingBomRecord.status === 'Draft' && !isDraft) ? 'Pending Confirmation' : (editingBomRecord.status || sanitizedNewBom.status),
+                            salesConfirmed: Boolean(editingBomRecord.salesConfirmed),
+                            salesConfirmedAt: editingBomRecord.salesConfirmedAt || null,
+                            accountsVerification: editingBomRecord.accountsVerification || sanitizedNewBom.accountsVerification,
+                            invoiceConfirmed: Boolean(editingBomRecord.invoiceConfirmed),
+                            invoiceDeducted: Boolean(editingBomRecord.invoiceDeducted),
+                            isEdited: true,
+                            editCount: (Number(editingBomRecord.editCount) || 0) + 1,
+                            lastEditedAt: nowIso,
+                            lastEditedBy: loggedInOperatorName,
+                            lastEditedByRole: userRole || 'Sales',
+                            editHistory: [
+                              ...(Array.isArray(editingBomRecord.editHistory) ? editingBomRecord.editHistory : []),
+                              {
+                                editedAt: nowIso,
+                                editedBy: loggedInOperatorName,
+                                editedByRole: userRole || 'Sales',
+                                changes: diffList
+                              }
+                            ]
+                          };
+                        }
 
                         // Stage: Assigning sequential code
                         setBomSubmitStage('assigning');
 
-                        // 1. Synchronize with server backend & assign atomic sequential BOM code
-                        let finalAssignedCode = null;
+                        // 1. Synchronize with server backend & assign atomic sequential BOM code (or update existing when editing)
+                        let finalAssignedCode = isEditingExisting ? (editingBomRecord.bomCode || editingBomRecord.code || editingBomRecord.id) : null;
                         let sResOk = false;
-                        const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: true });
+                        const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: !isEditingExisting, isUpdate: isEditingExisting });
                         const endpoints = ['/api/boms'];
                         for (const url of endpoints) {
                           for (let attempt = 0; attempt < 3 && !sResOk; attempt++) {
@@ -371,9 +472,11 @@ export default function BomCreateSubmitModal({ ctx }) {
                               clearTimeout(timeoutId);
                               if (sRes && sRes.ok) {
                                 const sData = await sRes.json().catch(() => null);
-                                if (sData && (sData.bomCode || sData.bom?.bomCode) && sData.success) {
+                                if (sData && (sData.bomCode || sData.bom?.bomCode || isEditingExisting) && sData.success !== false) {
                                   sResOk = true;
-                                  finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
+                                  if (!isEditingExisting) {
+                                    finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
+                                  }
                                   break;
                                 }
                               }
@@ -388,7 +491,7 @@ export default function BomCreateSubmitModal({ ctx }) {
 
                         // 2. Offline / Direct fallback to atomic Supabase Sequence
                         const isValidBomCode = (c) => Boolean(c && (c.startsWith('VRMS/BOM/') || c.startsWith('VRM-BOM-') || /^BOM-\d+$/i.test(c)));
-                        if (!finalAssignedCode || !isValidBomCode(finalAssignedCode)) {
+                        if (!isEditingExisting && (!finalAssignedCode || !isValidBomCode(finalAssignedCode))) {
                           try {
                             const reservedCode = await getAndReserveNextBomCode(true);
                             if (reservedCode && isValidBomCode(reservedCode)) {
@@ -613,7 +716,8 @@ export default function BomCreateSubmitModal({ ctx }) {
                         setNewBomPaymentProofDoc(null);
                         setNewBomDeliveryProofDoc(null);
                         setNewBomRemarks('');
-                        setNewBomTransportMode('Transport');
+                        setNewBomTransportMode('');
+                        if (setEditingBomRecord) setEditingBomRecord(null);
                         setNewBomTransporterName('');
                         setNewBomDestination('');
                         setNewBomVehicleNo('');

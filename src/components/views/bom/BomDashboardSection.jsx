@@ -41,6 +41,7 @@ export default function BomDashboardSection({ ctx }) {
     tableLoading,
     isCeo,
     setConfirmingBomModal,
+    handleStartEditBom,
     setUploadPaymentModal,
     setSettleCreditModal,
     setQuickPreviewRecord,
@@ -603,8 +604,28 @@ export default function BomDashboardSection({ ctx }) {
                           />
                         </td>
                         <td style={{ padding: '12px 14px', width: '150px', minWidth: '130px' }}>
-                          <div style={{ fontWeight: 'bold', color: isCancelled ? '#DC2626' : '#2563EB', fontSize: '13px' }}>
-                            {row.code}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 'bold', color: isCancelled ? '#DC2626' : '#2563EB', fontSize: '13px' }}>
+                              {row.code}
+                            </span>
+                            {(row.isEdited || (Array.isArray(row.editHistory) && row.editHistory.length > 0)) && (
+                              <span
+                                title={row.lastEditedBy ? `Edited by ${row.lastEditedBy} on ${new Date(row.lastEditedAt || Date.now()).toLocaleString('en-IN')}` : 'This BOM was edited'}
+                                style={{
+                                  backgroundColor: '#FEF3C7',
+                                  color: '#B45309',
+                                  border: '1px solid #FDE68A',
+                                  padding: '1px 7px',
+                                  borderRadius: '10px',
+                                  fontSize: '10px',
+                                  fontWeight: '800',
+                                  letterSpacing: '0.2px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                Edited
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td style={{ padding: '12px 14px', color: '#64748B', width: '120px', minWidth: '110px', whiteSpace: 'nowrap' }}>
@@ -791,6 +812,26 @@ export default function BomDashboardSection({ ctx }) {
                         >
                           {row.c3 || row.customerName || 'Customer'}
                         </span>
+
+                        {(row.isEdited || (Array.isArray(row.editHistory) && row.editHistory.length > 0)) && (
+                          <span
+                            title={row.lastEditedBy ? `Edited by ${row.lastEditedBy} on ${new Date(row.lastEditedAt || Date.now()).toLocaleString('en-IN')}` : 'This BOM was edited'}
+                            style={{
+                              backgroundColor: '#FEF3C7',
+                              color: '#B45309',
+                              border: '1px solid #FDE68A',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            Edited
+                          </span>
+                        )}
 
                         {isCancelled && (
                           <span style={{
@@ -1402,7 +1443,13 @@ export default function BomDashboardSection({ ctx }) {
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
             const isOnlyEditable = (selectedRows || []).every(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return r && (!r.status || ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Pending'].includes(r.status));
+              if (!r) return false;
+              const isCanc = Boolean(r.cancelled || r.status === 'Cancelled & Stock Restored' || String(r.status || '').toLowerCase().includes('cancel'));
+              const isPackedOrLater = Boolean(
+                r.dispatchPackingVerified ||
+                ['Packed & Ready for Dispatch', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed', 'Dispatched', 'Closed', 'CLOSED'].includes(r.status)
+              );
+              return !isCanc && !isPackedOrLater;
             });
             if (!isOnlyEditable) return null;
 
@@ -1413,9 +1460,13 @@ export default function BomDashboardSection({ ctx }) {
                     alert('You cannot edit multiple items at once.');
                   } else if (selectedRows.length === 1) {
                     const codeVal = selectedRows[0];
-                    const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal };
+                    const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal) || { code: codeVal };
                     setSelectedRows([]);
-                    setConfirmingBomModal({ ...targetRow, isEditMode: true });
+                    if (handleStartEditBom) {
+                      handleStartEditBom(targetRow);
+                    } else {
+                      setConfirmingBomModal({ ...targetRow, isEditMode: true });
+                    }
                   }
                 }}
                 style={{
@@ -1435,7 +1486,7 @@ export default function BomDashboardSection({ ctx }) {
                   boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                 }}
               >
-                <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
+                <Edit3 size={14} style={{ color: '#0E7490' }} /> Edit BOM
               </button>
             );
           })()}
