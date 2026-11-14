@@ -4374,27 +4374,64 @@ Procurement Team | BUSINZ`;
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', color: '#1e293b' }}>
 
           {/* Title Bar */}
-          <div className="po-no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
-                  {viewMode === 'view' ? 'View Purchase Order' : viewMode === 'edit' ? 'Edit Purchase Order' : 'Create Purchase Order'}
-                </h2>
-                {viewMode === 'view' && viewingPoStatus && (
-                  renderStatusBadge(
-                    (viewingPoStatus.includes('CLOSED') || viewingPoStatus.includes('FULLY RECEIVED')) ? 'closed' :
-                    (viewingPoStatus.includes('PARTIALLY')) ? 'partially_received' :
-                    (viewingPoStatus === 'Proceed PO') ? 'proceed_po' :
-                    (viewingPoStatus === 'Payment Processed') ? 'payment_processed' :
-                    (viewingPoStatus === 'MD Approved' || viewingPoStatus === 'OPEN' || viewingPoStatus === 'Approved') ? 'approved' :
-                    (viewingPoStatus === 'REJECTED') ? 'rejected' : 'pending',
-                    viewingPoStatus
-                  )
-                )}
+          <div
+            className="po-no-print"
+            style={
+              viewMode === 'view'
+                ? { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
+                : {
+                    background: 'linear-gradient(135deg, #075985 0%, #0E7490 50%, #0891B2 100%)',
+                    borderRadius: '18px',
+                    padding: '24px 28px',
+                    color: '#FFFFFF',
+                    boxShadow: '0 10px 25px -5px rgba(14, 116, 144, 0.4)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '16px'
+                  }
+            }
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: viewMode === 'view' ? '0' : '16px' }}>
+              {viewMode !== 'view' && (
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '14px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                    backdropFilter: 'blur(6px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <FileCheck style={{ width: '24px', height: '24px', color: '#FFFFFF' }} />
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h2 style={{ fontSize: viewMode === 'view' ? '20px' : '22px', fontWeight: viewMode === 'view' ? 'bold' : '900', color: viewMode === 'view' ? '#0f172a' : '#FFFFFF', margin: 0, letterSpacing: viewMode === 'view' ? 'normal' : '-0.3px' }}>
+                    {viewMode === 'view' ? 'View Purchase Order' : viewMode === 'edit' ? 'Edit Purchase Order' : 'Create Purchase Order'}
+                  </h2>
+                  {viewMode === 'view' && viewingPoStatus && (
+                    renderStatusBadge(
+                      (viewingPoStatus.includes('CLOSED') || viewingPoStatus.includes('FULLY RECEIVED')) ? 'closed' :
+                      (viewingPoStatus.includes('PARTIALLY')) ? 'partially_received' :
+                      (viewingPoStatus === 'Proceed PO') ? 'proceed_po' :
+                      (viewingPoStatus === 'Payment Processed') ? 'payment_processed' :
+                      (viewingPoStatus === 'MD Approved' || viewingPoStatus === 'OPEN' || viewingPoStatus === 'Approved') ? 'approved' :
+                      (viewingPoStatus === 'REJECTED') ? 'rejected' : 'pending',
+                      viewingPoStatus
+                    )
+                  )}
+                </div>
+                <span style={{ fontSize: '13px', color: viewMode === 'view' ? '#64748b' : '#CFFAFE', marginTop: '4px' }}>
+                  {viewMode === 'view' ? `Details of purchase order ${poNumber}.` : 'Fill in the details below to create a new purchase order.'}
+                </span>
               </div>
-              <span style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-                {viewMode === 'view' ? `Details of purchase order ${poNumber}.` : 'Fill in the details below to create a new purchase order.'}
-              </span>
             </div>
 
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -4836,8 +4873,15 @@ Procurement Team | BUSINZ`;
               })()}
 
               {/* 1. Vendor Information */}
-              <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <strong style={{ fontSize: '14px', color: '#2563eb', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>1. Vendor Information</strong>
+              <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                    1
+                  </div>
+                  <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    VENDOR INFORMATION
+                  </h3>
+                </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -5274,8 +5318,15 @@ Procurement Team | BUSINZ`;
               </div>
 
               {/* 2. Purchase Order Information */}
-              <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <strong style={{ fontSize: '14px', color: '#2563eb', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>2. Purchase Order Information</strong>
+              <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                    2
+                  </div>
+                  <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    PURCHASE ORDER INFORMATION
+                  </h3>
+                </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -5404,8 +5455,15 @@ Procurement Team | BUSINZ`;
               </div>
 
               {/* 3. Items Table */}
-              <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px 0' }}>
-                <strong style={{ fontSize: '14px', color: '#2563eb', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px', margin: '0 20px' }}>3. Line Items</strong>
+              <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px 0', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px', margin: '0 24px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                    3
+                  </div>
+                  <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    LINE ITEMS
+                  </h3>
+                </div>
 
                 <div style={{ overflowX: 'auto', width: '100%' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
@@ -5678,8 +5736,15 @@ Procurement Team | BUSINZ`;
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '24px' }}>
 
                 {/* Notes & Terms */}
-                <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <strong style={{ fontSize: '14px', color: '#2563eb', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>Notes & Terms</strong>
+                <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                      4
+                    </div>
+                    <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      NOTES &amp; TERMS
+                    </h3>
+                  </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-notes-remarks" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes & Remarks</label>
@@ -5750,8 +5815,15 @@ Procurement Team | BUSINZ`;
                 </div>
 
                 {/* Calculations Summary */}
-                <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#f8fafc' }}>
-                  <strong style={{ fontSize: '14px', color: '#2563eb', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>Summary Details</strong>
+                <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                      5
+                    </div>
+                    <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      SUMMARY DETAILS
+                    </h3>
+                  </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                     <span style={{ color: '#64748b' }}>Subtotal</span>
