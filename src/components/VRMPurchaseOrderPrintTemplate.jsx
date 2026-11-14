@@ -77,9 +77,10 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
   const vendorGst = po.gstNo || po.gstin || '';
 
   const deliveryAddress = po.deliveryAddress || compProfile.address;
-  const billingAddress = po.billingAddress || deliveryAddress;
+  const billingAddress = po.billingAddress || '';
 
   const items = Array.isArray(po.items) ? po.items : [];
+  const presetGroups = (po.presetGroups && typeof po.presetGroups === 'object') ? po.presetGroups : {};
   const discountPct = Number(po.discountPct || 0);
   const shippingCharges = Number(po.shippingCharges || 0);
   const otherCharges = Number(po.otherCharges || 0);
@@ -97,22 +98,26 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
     const qty = Number(item.qty ?? item.quantity ?? 0);
     const rate = Number(item.rate ?? item.unitPrice ?? 0);
     const gRate = (item.tax !== undefined && item.tax !== '' && !isNaN(Number(item.tax))) ? Number(item.tax) : 18;
-    const lineTotal = qty * rate;
+    const isPresetItem = Boolean(item.isPresetItem && item.presetGroupId);
+    const lineTotal = isPresetItem ? 0 : (qty * rate);
     const discountedTaxable = lineTotal * (1 - discountPct / 100);
     const gstAmt = discountedTaxable * (gRate / 100);
     const inclGst = discountedTaxable + gstAmt;
 
     rawSubTotal += lineTotal;
-    const existing = gstMap.get(gRate) || { rate: gRate, taxable: 0, gstAmt: 0 };
-    existing.taxable += discountedTaxable;
-    existing.gstAmt += gstAmt;
-    gstMap.set(gRate, existing);
+    if (!isPresetItem) {
+      const existing = gstMap.get(gRate) || { rate: gRate, taxable: 0, gstAmt: 0 };
+      existing.taxable += discountedTaxable;
+      existing.gstAmt += gstAmt;
+      gstMap.set(gRate, existing);
+    }
 
     return {
       key: item.id || `${idx}-${item.name || 'item'}`,
       index: idx + 1,
       name: item.name || item.itemName || 'Item',
       description: item.description || '',
+      hsn: item.hsn || item.hsn_or_sac || '',
       account: item.account || '',
       qty,
       unit: item.unit || 'NOS',
@@ -120,8 +125,27 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
       gRate,
       taxable: discountedTaxable,
       gstAmt,
-      inclGst
+      inclGst,
+      isPresetItem,
+      presetGroupId: item.presetGroupId || '',
+      presetName: item.presetName || ''
     };
+  });
+
+  // Include Pack / Set totals in rawSubTotal & gstMap when presetGroups exist
+  const activeGroupIds = new Set(normalizedItems.filter(r => r.isPresetItem).map(r => r.presetGroupId));
+  activeGroupIds.forEach((gid) => {
+    const grp = presetGroups[gid];
+    if (!grp) return;
+    const packTotal = Number(grp.kitPrice || 0) * (Number(grp.setCount) || 1);
+    const discountedPack = packTotal * (1 - discountPct / 100);
+    const grpRate = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+    const grpGstAmt = discountedPack * (grpRate / 100);
+    rawSubTotal += packTotal;
+    const existing = gstMap.get(grpRate) || { rate: grpRate, taxable: 0, gstAmt: 0 };
+    existing.taxable += discountedPack;
+    existing.gstAmt += grpGstAmt;
+    gstMap.set(grpRate, existing);
   });
 
   const discountAmt = rawSubTotal * (discountPct / 100);
@@ -354,7 +378,7 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
             {/* GOLD DIVIDER */}
             <div style={{ height: '2px', backgroundColor: '#D97706', margin: '10px 0 14px 0', width: '100%' }} />
 
-            {/* 2. VENDOR & DELIVERY/BILLING CARDS */}
+            {/* 2. VENDOR & DELIVERY ADDRESS CARDS */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '14px', marginBottom: '16px', fontSize: '9.5px', lineHeight: '1.45' }}>
               <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '4px', padding: '10px 14px' }}>
                 <div style={{ fontSize: '9px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
@@ -366,6 +390,12 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                 {contactPerson && <div style={{ color: '#334155' }}>Attn: {contactPerson}</div>}
                 {contactNo && contactNo !== '—' && <div style={{ color: '#334155' }}>Phone: {contactNo}</div>}
                 {vendorEmail && vendorEmail !== '—' && <div style={{ color: '#334155' }}>Email: {vendorEmail}</div>}
+                {billingAddress && (
+                  <div style={{ marginTop: '4px', color: '#334155' }}>
+                    <strong style={{ color: '#0F172A' }}>Billing Address: </strong>
+                    <span>{billingAddress}</span>
+                  </div>
+                )}
                 {vendorGst && (
                   <div style={{ marginTop: '4px' }}>
                     <strong style={{ color: '#0F172A' }}>GSTIN: </strong>
@@ -374,19 +404,14 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                 )}
               </div>
 
-              <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '4px', padding: '10px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '9px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>
-                    DELIVERY ADDRESS
-                  </div>
-                  <div style={{ color: '#334155' }}>{deliveryAddress}</div>
+              <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '4px', padding: '10px 14px' }}>
+                <div style={{ fontSize: '9px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+                  DELIVERY ADDRESS
                 </div>
-                <div>
-                  <div style={{ fontSize: '9px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>
-                    BILLING ADDRESS
-                  </div>
-                  <div style={{ color: '#334155' }}>{billingAddress}</div>
+                <div style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  {compProfile.name}
                 </div>
+                <div style={{ color: '#334155' }}>{deliveryAddress}</div>
               </div>
             </div>
 
@@ -414,45 +439,71 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                     </td>
                   </tr>
                 ) : (
-                  normalizedItems.map((row) => {
+                  normalizedItems.map((row, idx) => {
                     const halfRate = (row.gRate / 2).toFixed(1).replace(/\.0$/, '');
                     const halfGstAmt = row.gstAmt / 2;
                     const gstSubText = isIntra
                       ? `CGST / SGST: ${halfRate}% each | ₹${fmtMoney(halfGstAmt)} each`
                       : `IGST: ${row.gRate}% | ₹${fmtMoney(row.gstAmt)}`;
 
+                    const isFirstInSet = row.isPresetItem && normalizedItems.findIndex(r => r.presetGroupId === row.presetGroupId) === idx;
+                    const grp = row.isPresetItem ? presetGroups[row.presetGroupId] : null;
+                    const grpSetCount = grp ? (Number(grp.setCount) || 1) : 1;
+                    const grpRate = grp ? (Number(grp.kitPrice) || 0) : 0;
+                    const grpTaxable = (grpRate * grpSetCount) * (1 - discountPct / 100);
+                    const grpGstPct = grp ? (parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18) : 18;
+                    const grpInclGst = grpTaxable + grpTaxable * (grpGstPct / 100);
+
                     return (
-                      <tr key={row.key} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                        <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#64748B', fontWeight: '600' }}>
-                          {row.index}
-                        </td>
-                        <td style={{ padding: '7px 10px', verticalAlign: 'top' }}>
-                          <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '9.8px' }}>{row.name}</div>
-                          {row.description ? (
-                            <div style={{ color: '#475569', fontSize: '8.3px', marginTop: '2px', lineHeight: '1.35', whiteSpace: 'pre-wrap' }}>
-                              {row.description}
+                      <React.Fragment key={row.key}>
+                        {isFirstInSet && grp && (
+                          <tr style={{ backgroundColor: '#EFF6FF', borderBottom: '1px solid #BFDBFE' }}>
+                            <td colSpan="4" style={{ padding: '7px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '9.5px' }}>
+                              SET / PACK: {grp.presetName || row.presetName} ({fmtQty(grpSetCount)} {grp.unit === 'kW' ? 'kW' : (grpSetCount > 1 ? 'Sets' : 'Set')})
+                            </td>
+                            <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', color: '#0F3D6E' }}>
+                              {fmtMoney(grpRate)}
+                            </td>
+                            <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', color: '#0F3D6E' }}>
+                              {fmtMoney(grpTaxable)}
+                            </td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0F3D6E' }}>
+                              {fmtMoney(grpInclGst)}
+                            </td>
+                          </tr>
+                        )}
+                        <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                          <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#64748B', fontWeight: '600' }}>
+                            {row.index}
+                          </td>
+                          <td style={{ padding: '7px 10px', verticalAlign: 'top' }}>
+                            <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '9.8px' }}>{row.name}</div>
+                            {row.description ? (
+                              <div style={{ color: '#475569', fontSize: '8.3px', marginTop: '2px', lineHeight: '1.35', whiteSpace: 'pre-wrap' }}>
+                                {row.description}
+                              </div>
+                            ) : null}
+                            <div style={{ color: '#64748B', fontSize: '8px', marginTop: '2px' }}>
+                              {row.hsn ? `HSN: ${row.hsn} | ` : ''}{row.account ? `${row.account} | ` : ''}{row.isPresetItem ? 'Included in Set' : gstSubText}
                             </div>
-                          ) : null}
-                          <div style={{ color: '#64748B', fontSize: '8px', marginTop: '2px' }}>
-                            {row.account ? `${row.account} | ` : ''}{gstSubText}
-                          </div>
-                        </td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A', fontWeight: '600' }}>
-                          {fmtQty(row.qty)}
-                        </td>
-                        <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#475569' }}>
-                          {row.unit}
-                        </td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
-                          {fmtMoney(row.rate)}
-                        </td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
-                          {fmtMoney(row.taxable)}
-                        </td>
-                        <td style={{ padding: '7px 10px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
-                          {fmtMoney(row.inclGst)}
-                        </td>
-                      </tr>
+                          </td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A', fontWeight: '600' }}>
+                            {fmtQty(row.isPresetItem ? row.qty * grpSetCount : row.qty)}
+                          </td>
+                          <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#475569' }}>
+                            {row.unit}
+                          </td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: row.isPresetItem ? '#94A3B8' : '#0F172A' }}>
+                            {row.isPresetItem ? 'In Pack' : fmtMoney(row.rate)}
+                          </td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: row.isPresetItem ? '#94A3B8' : '#0F172A' }}>
+                            {row.isPresetItem ? '—' : fmtMoney(row.taxable)}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: row.isPresetItem ? '#94A3B8' : '#0F172A' }}>
+                            {row.isPresetItem ? '—' : fmtMoney(row.inclGst)}
+                          </td>
+                        </tr>
+                      </React.Fragment>
                     );
                   })
                 )}

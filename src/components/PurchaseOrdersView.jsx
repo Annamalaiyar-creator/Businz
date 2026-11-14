@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart, Building2, MapPin, Ban, Package, Download, Maximize2, MessageSquare, Phone, ShieldCheck, Printer } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink, ShoppingCart, Building2, MapPin, Ban, Package, Download, Maximize2, MessageSquare, Phone, ShieldCheck, Printer, Layers } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
 import StatusBadge from './StatusBadge';
@@ -778,6 +778,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [otherCharges, setOtherCharges] = useState(0);
   const [discountPct, setDiscountPct] = useState(0);
 
+  // Set / Pack Kit Groups State
+  const [presetGroups, setPresetGroups] = useState({});
+  const [showCreateSetModal, setShowCreateSetModal] = useState(false);
+  const [newSetName, setNewSetName] = useState('');
+  const [newSetUnit, setNewSetUnit] = useState('Sets');
+  const [newSetCount, setNewSetCount] = useState(1);
+  const [newSetPrice, setNewSetPrice] = useState('');
+  const [newSetGstRate, setNewSetGstRate] = useState('18%');
+
   // Attachments files list
   const [attachedFiles, setAttachedFiles] = useState([]);
 
@@ -854,7 +863,19 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   // Recalculations
   const getSubTotal = () => {
-    return items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.rate || 0)), 0);
+    const standaloneSum = items.reduce((sum, item) => {
+      if (item.isPresetItem && item.presetGroupId) return sum;
+      return sum + (Number(item.qty || 0) * Number(item.rate || 0));
+    }, 0);
+    const activeGroupIds = new Set(items.filter(it => it.isPresetItem && it.presetGroupId).map(it => it.presetGroupId));
+    let setsSum = 0;
+    activeGroupIds.forEach((gid) => {
+      const grp = presetGroups[gid];
+      if (grp) {
+        setsSum += Number(grp.kitPrice || 0) * (Number(grp.setCount) || 1);
+      }
+    });
+    return standaloneSum + setsSum;
   };
   const getDiscount = () => {
     return getSubTotal() * (Number(discountPct || 0) / 100);
@@ -864,12 +885,23 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
   const getCGST = () => {
     const factor = (100 - Number(discountPct || 0)) / 100;
-    const totalTax = items.reduce((sum, item) => {
+    const standaloneTax = items.reduce((sum, item) => {
+      if (item.isPresetItem && item.presetGroupId) return sum;
       const itemTaxable = (Number(item.qty || 0) * Number(item.rate || 0)) * factor;
       const itemTaxPct = Number(item.tax !== undefined && item.tax !== '' ? item.tax : 18);
       return sum + (itemTaxable * (itemTaxPct / 100));
     }, 0);
-    return totalTax / 2;
+    const activeGroupIds = new Set(items.filter(it => it.isPresetItem && it.presetGroupId).map(it => it.presetGroupId));
+    let setsTax = 0;
+    activeGroupIds.forEach((gid) => {
+      const grp = presetGroups[gid];
+      if (grp) {
+        const grpTaxable = (Number(grp.kitPrice || 0) * (Number(grp.setCount) || 1)) * factor;
+        const grpTaxPct = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+        setsTax += grpTaxable * (grpTaxPct / 100);
+      }
+    });
+    return (standaloneTax + setsTax) / 2;
   };
   const getSGST = () => {
     return getCGST();
@@ -891,11 +923,120 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const handleAddItem = () => {
-    setItems([...items, { name: '', account: 'Raw Material', qty: 1, unit: 'MT', rate: 0, tax: 18 }]);
+    setItems([...items, { name: '', hsn: '', account: 'Raw Materials', qty: 1, unit: 'MT', rate: 0, tax: 18 }]);
   };
 
   const handleRemoveItem = (idx) => {
-    setItems(items.filter((_, i) => i !== idx));
+    setItems(prev => {
+      const target = (prev || [])[idx];
+      const remaining = (prev || []).filter((_, i) => i !== idx);
+      if (target && target.presetGroupId) {
+        const stillHas = remaining.some(it => it.presetGroupId === target.presetGroupId);
+        if (!stillHas) {
+          setPresetGroups(pg => {
+            const copy = { ...pg };
+            delete copy[target.presetGroupId];
+            return copy;
+          });
+        }
+      }
+      return remaining;
+    });
+  };
+
+  const handleCreateCustomSet = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
+    const unit = newSetUnit || 'Sets';
+    const count = unit === 'kW' ? Math.max(0.01, parseFloat(newSetCount) || 1) : Math.max(1, parseInt(newSetCount, 10) || 1);
+    const groupId = 'po_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const setGst = newSetGstRate || '18%';
+    const taxNum = parseFloat(String(setGst).replace('%', '')) || 18;
+
+    setPresetGroups(prev => ({
+      ...prev,
+      [groupId]: {
+        groupId,
+        presetName: cleanName,
+        setCount: count,
+        unit,
+        kitPrice: newSetPrice ? String(newSetPrice) : '',
+        gstRate: setGst,
+        isCustomSet: true
+      }
+    }));
+
+    setItems(prev => ([
+      ...(prev || []),
+      {
+        name: '',
+        description: '',
+        hsn: '',
+        account: 'Raw Materials',
+        qty: 1,
+        unit: unit === 'kW' ? 'kW' : 'NOS',
+        rate: 0,
+        tax: taxNum,
+        isPresetItem: true,
+        presetGroupId: groupId,
+        presetName: cleanName
+      }
+    ]));
+
+    setNewSetName('');
+    setNewSetCount(1);
+    setNewSetUnit('Sets');
+    setNewSetPrice('');
+    setNewSetGstRate('18%');
+    setShowCreateSetModal(false);
+  };
+
+  const handleAddSetItem = (groupId) => {
+    const grp = presetGroups[groupId];
+    if (!grp) return;
+    const taxNum = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+    const newRow = {
+      name: '',
+      description: '',
+      hsn: '',
+      account: 'Raw Materials',
+      qty: 1,
+      unit: grp.unit === 'kW' ? 'kW' : 'NOS',
+      rate: 0,
+      tax: taxNum,
+      isPresetItem: true,
+      presetGroupId: groupId,
+      presetName: grp.presetName
+    };
+    setItems(prev => {
+      const arr = [...(prev || [])];
+      let lastIdx = -1;
+      arr.forEach((it, idx) => {
+        if (it.presetGroupId === groupId) lastIdx = idx;
+      });
+      if (lastIdx >= 0) {
+        arr.splice(lastIdx + 1, 0, newRow);
+        return arr;
+      }
+      return [...arr, newRow];
+    });
+  };
+
+  const handleRemovePresetGroup = (groupId) => {
+    setItems(prev => (prev || []).filter(it => it.presetGroupId !== groupId));
+    setPresetGroups(prev => {
+      const copy = { ...prev };
+      delete copy[groupId];
+      return copy;
+    });
+  };
+
+  const handleUpdateGroupKitPrice = (groupId, val) => {
+    setPresetGroups(prev => {
+      const grp = prev[groupId];
+      if (!grp) return prev;
+      return { ...prev, [groupId]: { ...grp, kitPrice: val } };
+    });
   };
 
   const handleItemChange = (idx, field, val) => {
@@ -1018,12 +1159,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     let effectiveItems = validItems.map(it => ({
       name: String(it.name || it.itemName || '').trim(),
       description: String(it.description || it.desc || '').trim(),
+      hsn: it.hsn || it.hsn_or_sac || '',
       account: it.account || 'Cost of Goods Sold',
       qty: Number(it.qty || 1),
       unit: it.unit || 'NOS',
       rate: Number(it.rate) > 0 ? Number(it.rate) : 0,
       tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18,
-      sku: it.sku || ''
+      sku: it.sku || '',
+      ...(it.isPresetItem ? { isPresetItem: true, presetGroupId: it.presetGroupId || '', presetName: it.presetName || '' } : {})
     }));
 
     setFormErrors({});
@@ -1115,6 +1258,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       scope: scope,
       transportName: shipmentPref === 'Transport' ? transportName : '',
       items: effectiveItems,
+      presetGroups: presetGroups,
       shippingCharges: shippingCharges,
       otherCharges: otherCharges,
       discountPct: discountPct,
@@ -1859,6 +2003,7 @@ Procurement Team | BUSINZ`;
         ...it,
         name: it.name || it.item_name || 'Material Item',
         description: it.description || it.desc || '',
+        hsn: it.hsn || it.hsn_or_sac || '',
         account: it.account || it.account_name || 'Cost of Goods Sold',
         qty: Number(it.qty !== undefined ? it.qty : (it.quantity || 1)),
         unit: it.unit || 'NOS',
@@ -1869,6 +2014,7 @@ Procurement Team | BUSINZ`;
     } else {
       setItems([]);
     }
+    setPresetGroups((po.presetGroups && typeof po.presetGroups === 'object') ? po.presetGroups : {});
 
     setShippingCharges(po.shippingCharges !== undefined ? po.shippingCharges : (po.shipping_charge || 0));
     setOtherCharges(po.otherCharges !== undefined ? po.otherCharges : (po.adjustment || 0));
@@ -2167,6 +2313,7 @@ Procurement Team | BUSINZ`;
     setScope('Vendor Scope');
     setTransportName('');
     setItems([]);
+    setPresetGroups({});
     setShippingCharges(0);
     setOtherCharges(0);
     setDiscountPct(0);
@@ -5370,6 +5517,8 @@ Procurement Team | BUSINZ`;
                     </label>
                     <select id="purchase-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
                       <option value="" disabled>Select Payment Terms</option>
+                      <option value="7 Days">7 Days</option>
+                      <option value="15 Days Net">15 Days Net</option>
                       <option value="Net 30 Days">Net 30 Days</option>
                       <option value="Net 45 Days">Net 45 Days</option>
                       <option value="Net 60 Days">Net 60 Days</option>
@@ -5452,36 +5601,104 @@ Procurement Team | BUSINZ`;
                   </h3>
                 </div>
 
+                {(() => {
+                  const hasAnySet = items.some(it => Boolean(it.isPresetItem && it.presetGroupId));
+                  const distinctSetGroupIds = [];
+                  items.forEach(it => {
+                    if (it.isPresetItem && it.presetGroupId && !distinctSetGroupIds.includes(it.presetGroupId)) {
+                      distinctSetGroupIds.push(it.presetGroupId);
+                    }
+                  });
+                  const colCount = hasAnySet ? 10 : 8;
+                  return (
                 <div style={{ overflowX: 'auto', width: '100%' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-                        <th style={{ padding: '10px 12px', textAlign: 'left' }}>Item & Description *</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'left', width: '150px' }}>Account</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center', width: '80px' }}>Qty *</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center', width: '80px' }}>Unit</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right', width: '110px' }}>Rate (₹) *</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center', width: '90px' }}>GST (%)</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', minWidth: '240px' }}>{hasAnySet ? 'Product / Item *' : 'Item & Description *'}</th>
+                        {hasAnySet ? (
+                          <th style={{ padding: '10px 8px', textAlign: 'center', width: '110px' }}>HSN / SAC</th>
+                        ) : (
+                          <th style={{ padding: '10px 12px', textAlign: 'left', width: '150px' }}>Account</th>
+                        )}
+                        <th style={{ padding: '10px 8px', textAlign: 'center', width: '85px' }}>{hasAnySet ? 'UOM' : 'Unit'}</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'center', width: '85px' }}>{hasAnySet ? 'Qty / Set *' : 'Qty *'}</th>
+                        {hasAnySet && (
+                          <th style={{ padding: '10px 8px', textAlign: 'center', width: '100px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Qty</th>
+                        )}
+                        <th style={{ padding: '10px 10px', textAlign: 'right', width: '110px' }}>{hasAnySet ? 'Price (₹) *' : 'Rate (₹) *'}</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'center', width: '85px' }}>GST (%)</th>
+                        {hasAnySet && (
+                          <th style={{ padding: '10px 10px', textAlign: 'left', width: '130px', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Pack Amt (₹) *</th>
+                        )}
                         <th style={{ padding: '10px 12px', textAlign: 'right', width: '110px' }}>Amount (₹)</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px' }}>Action</th>
+                        <th style={{ padding: '10px 10px', textAlign: 'center', width: '50px' }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {items.length === 0 ? (
                         <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748B', fontSize: '13px', backgroundColor: '#FAFAFA' }}>
+                          <td colSpan={colCount} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748B', fontSize: '13px', backgroundColor: '#FAFAFA' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                               <Boxes size={28} style={{ color: '#94A3B8' }} />
-                              <div>No line items added yet. Click <strong>Add New Row</strong> or <strong>Add Items in Bulk</strong> below.</div>
+                              <div>No line items added yet. Click <strong>Add New Row</strong>, <strong>Add Items in Bulk</strong>, or <strong>Create Set</strong> below.</div>
                             </div>
                           </td>
                         </tr>
                       ) : (
                         items.map((item, idx) => {
-                          const total = (item.qty || 0) * (item.rate || 0);
-                          const taxAmt = total * ((item.tax || 0) / 100);
+                          const isSetItem = Boolean(item.isPresetItem && item.presetGroupId);
+                          const groupId = item.presetGroupId;
+                          const grp = isSetItem ? (presetGroups[groupId] || { presetName: item.presetName || 'Custom Set', setCount: 1, unit: 'Sets', kitPrice: '', gstRate: '18%' }) : null;
+                          const setGroupItems = isSetItem ? items.filter(it => it.presetGroupId === groupId) : [];
+                          const isFirstInGroup = isSetItem && items.findIndex(it => it.presetGroupId === groupId) === idx;
+                          const packIndex = isSetItem ? (distinctSetGroupIds.indexOf(groupId) + 1) : 0;
+                          const setCount = grp ? (Number(grp.setCount) || 1) : 1;
+                          const rowQty = Number(item.qty || 0);
+                          const totalDispatchQty = isSetItem ? (rowQty * setCount) : rowQty;
+                          const total = isSetItem ? 0 : (rowQty * (item.rate || 0));
+
                           return (
-                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <React.Fragment key={idx}>
+                              {isFirstInGroup && (
+                                <tr style={{ backgroundColor: '#EFF6FF', borderTop: '2px solid #0E7490', borderBottom: '1px solid #BAE6FD' }}>
+                                  <td colSpan={colCount} style={{ padding: '8px 14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#0E7490', color: '#FFFFFF', fontSize: '11px', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                          PACK {packIndex}
+                                        </span>
+                                        <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
+                                          {grp?.presetName || 'Custom Set'}
+                                        </strong>
+                                        <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', backgroundColor: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD' }}>
+                                          Total Quantity: {setCount} {grp?.unit === 'kW' ? 'kW' : (setCount > 1 ? 'Sets' : 'Set')} ({setGroupItems.length} {setGroupItems.length === 1 ? 'item' : 'items'})
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '11px', color: '#475569', fontWeight: '600' }}>
+                                          Kit Rate: <strong style={{ color: '#0F172A' }}>₹ {Number(grp?.kitPrice || 0).toLocaleString('en-IN')}</strong> / {grp?.unit === 'kW' ? 'kW' : 'Set'} | Total: <strong style={{ color: '#0E7490' }}>₹ {(Number(grp?.kitPrice || 0) * setCount).toLocaleString('en-IN')}</strong> + {grp?.gstRate || '18%'} GST
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAddSetItem(groupId)}
+                                          style={{ border: '1px solid #0E7490', backgroundColor: '#FFFFFF', color: '#0E7490', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                                        >
+                                          + Add Item
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemovePresetGroup(groupId)}
+                                          style={{ border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2', color: '#DC2626', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                                        >
+                                          Remove Set
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: isSetItem ? '#F8FAFC' : '#FFFFFF' }}>
                               <td style={{ padding: '8px 12px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                   <TypeableProductSelect
@@ -5498,11 +5715,14 @@ Procurement Team | BUSINZ`;
                                         if (i !== idx) return it;
                                         const next = { ...it, name: val };
                                         if (found) {
-                                          if (found.rate !== undefined && found.rate !== null && Number(found.rate) > 0) {
+                                          if (!it.isPresetItem && found.rate !== undefined && found.rate !== null && Number(found.rate) > 0) {
                                             next.rate = Number(found.rate);
                                           }
                                           if (found.unit || found.uom) {
                                             next.unit = (found.unit || found.uom || 'NOS').toUpperCase();
+                                          }
+                                          if (found.hsn || found.hsn_or_sac) {
+                                            next.hsn = found.hsn || found.hsn_or_sac;
                                           }
                                           if (found.account) {
                                             next.account = found.account;
@@ -5527,18 +5747,27 @@ Procurement Team | BUSINZ`;
                                    />
                                 </div>
                               </td>
-                              <td style={{ padding: '8px 12px' }}>
-                                <select id={`purchase-orders-account-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`account_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Account" value={item.account} onChange={(e) => handleItemChange(idx, 'account', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px' }}>
-                                  <option value="Raw Materials">Raw Materials</option>
-                                  <option value="Finished Goods">Finished Goods</option>
-                                </select>
-                              </td>
-                              <td style={{ padding: '8px 12px' }}>
-                                <input id={`purchase-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty" type="number" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px', textAlign: 'center' }}  />
-                              </td>
-                              <td style={{ padding: '8px 12px' }}>
+                              {hasAnySet ? (
+                                <td style={{ padding: '8px 8px' }}>
+                                  <input
+                                    type="text"
+                                    value={item.hsn || ''}
+                                    onChange={(e) => handleItemChange(idx, 'hsn', e.target.value)}
+                                    placeholder="HSN"
+                                    style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px', textAlign: 'center', backgroundColor: '#FFFFFF' }}
+                                  />
+                                </td>
+                              ) : (
+                                <td style={{ padding: '8px 12px' }}>
+                                  <select id={`purchase-orders-account-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`account_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Account" value={item.account} onChange={(e) => handleItemChange(idx, 'account', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px' }}>
+                                    <option value="Raw Materials">Raw Materials</option>
+                                    <option value="Finished Goods">Finished Goods</option>
+                                  </select>
+                                </td>
+                              )}
+                              <td style={{ padding: '8px 8px' }}>
                                 <select id={`purchase-orders-unit-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`unit_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Unit" value={item.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}>
-                                  {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR'].includes(item.unit) && (
+                                  {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR', 'SET', 'kW'].includes(item.unit) && (
                                     <option value={item.unit}>{item.unit}</option>
                                   )}
                                   <option>MT</option>
@@ -5546,40 +5775,84 @@ Procurement Team | BUSINZ`;
                                   <option>KG</option>
                                   <option>PCS</option>
                                   <option>MTR</option>
+                                  <option>SET</option>
+                                  <option>kW</option>
                                 </select>
                               </td>
-                              <td style={{ padding: '8px 12px' }}>
-                                <input id={`purchase-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate" type="number" value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', textAlign: 'right' }}  />
+                              <td style={{ padding: '8px 8px' }}>
+                                <input id={`purchase-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty" type="number" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px', textAlign: 'center' }}  />
                               </td>
-                              <td style={{ padding: '8px 12px' }}>
+                              {hasAnySet && (
+                                <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                                  {totalDispatchQty} {item.unit || 'NOS'}
+                                </td>
+                              )}
+                              <td style={{ padding: '8px 8px' }}>
+                                {isSetItem ? (
+                                  <div style={{ textAlign: 'right', fontSize: '11px', fontWeight: '600', color: '#64748B', paddingRight: '6px' }}>
+                                    In Pack
+                                  </div>
+                                ) : (
+                                  <input id={`purchase-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate" type="number" value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', textAlign: 'right' }}  />
+                                )}
+                              </td>
+                              <td style={{ padding: '8px 8px' }}>
                                 <select id={`purchase-orders-tax-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`tax18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Tax 18"
                                   value={item.tax !== undefined && item.tax !== '' ? Number(item.tax) : 18}
                                   onChange={(e) => handleItemChange(idx, 'tax', Number(e.target.value))}
                                   style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}
                                 >
                                   <option value={18}>18%</option>
+                                  <option value={12}>12%</option>
                                   <option value={5}>5%</option>
                                   <option value={0}>0%</option>
-                                  {item.tax !== undefined && item.tax !== '' && ![18, 5, 0].includes(Number(item.tax)) && (
+                                  {item.tax !== undefined && item.tax !== '' && ![18, 12, 5, 0].includes(Number(item.tax)) && (
                                     <option value={Number(item.tax)}>{Number(item.tax)}%</option>
                                   )}
                                 </select>
                               </td>
-                              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#1e293b' }}>
-                                ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {hasAnySet && (
+                                isSetItem ? (
+                                  isFirstInGroup ? (
+                                    <td rowSpan={setGroupItems.length} style={{ padding: '8px 10px', backgroundColor: '#ECFEFF', verticalAlign: 'middle', borderLeft: '1px solid #BAE6FD' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="any"
+                                          value={grp?.kitPrice || ''}
+                                          onChange={(e) => handleUpdateGroupKitPrice(groupId, e.target.value)}
+                                          placeholder="Pack ₹"
+                                          style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1.5px solid #0E7490', padding: '0 8px', fontSize: '12px', fontWeight: '700', textAlign: 'right', backgroundColor: '#FFFFFF', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        <span style={{ fontSize: '10px', color: '#0369A1', fontWeight: '700', textAlign: 'right' }}>
+                                          Total: ₹{(Number(grp?.kitPrice || 0) * setCount).toLocaleString('en-IN')}
+                                        </span>
+                                      </div>
+                                    </td>
+                                  ) : null
+                                ) : (
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#94A3B8', fontSize: '11px' }}>—</td>
+                                )
+                              )}
+                              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: isSetItem ? '#64748B' : '#1e293b' }}>
+                                {isSetItem ? 'In Pack' : `₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                               </td>
-                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                                 <button type="button" onClick={() => handleRemoveItem(idx)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
                                   <Trash2 style={{ width: '14px', height: '14px' }} />
                                 </button>
                               </td>
                             </tr>
+                            </React.Fragment>
                           );
                         })
                       )}
                     </tbody>
                   </table>
                 </div>
+                  );
+                })()}
 
                 <div style={{ margin: '14px 20px 6px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   {/* Add New Row Button (Matches Zoho Books layout) */}
@@ -5715,6 +5988,62 @@ Procurement Team | BUSINZ`;
                     </span>
                     Add New Product
                   </button>
+
+                  {/* Create Set Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewSetName(`Custom Set ${Object.keys(presetGroups || {}).length + 1}`);
+                      setNewSetCount(1);
+                      setNewSetUnit('Sets');
+                      setNewSetPrice('');
+                      setNewSetGstRate('18%');
+                      setShowCreateSetModal(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      backgroundColor: '#F5F3FF',
+                      border: '1px solid #DDD6FE',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '13.5px',
+                      fontWeight: '700',
+                      color: '#6D28D9',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EDE9FE'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F5F3FF'; }}
+                  >
+                    <Layers size={15} />
+                    Create Set
+                  </button>
+
+                  {Object.values(presetGroups).map(grp => (
+                    <button
+                      key={grp.groupId}
+                      type="button"
+                      onClick={() => handleAddSetItem(grp.groupId)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        backgroundColor: '#ECFEFF',
+                        border: '1px solid #A5F3FC',
+                        borderRadius: '8px',
+                        padding: '8px 14px',
+                        fontSize: '12.5px',
+                        fontWeight: '700',
+                        color: '#0E7490',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Add Extra Item into {grp.presetName}
+                    </button>
+                  ))}
                 </div>
 
               </div>
@@ -5814,7 +6143,7 @@ Procurement Team | BUSINZ`;
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                     <span style={{ color: '#64748b' }}>Subtotal</span>
-                    <strong style={{ color: '#334155' }}>₹ {items.reduce((acc, curr) => acc + ((curr.qty || 0) * (curr.rate || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    <strong style={{ color: '#334155' }}>₹ {getSubTotal().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
@@ -7690,6 +8019,171 @@ Procurement Team | BUSINZ`;
                 OK, I'll fill it
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CREATE CUSTOM SET / KIT MODAL ─── */}
+      {showCreateSetModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              width: '460px',
+              maxWidth: '92vw',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '12px', backgroundColor: '#F5F3FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Layers size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    Create Custom Set / Kit
+                  </h3>
+                  <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                    Bundle products into a set for this Purchase Order
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateSetModal(false)}
+                style={{ border: 'none', background: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCustomSet} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Set / Kit Name <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newSetName}
+                  onChange={(e) => setNewSetName(e.target.value)}
+                  placeholder="e.g. Custom 5kW Structure Set"
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '600', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Pricing / Capacity Unit
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('Sets')}
+                    style={{ flex: 1, height: '36px', borderRadius: '8px', border: newSetUnit === 'Sets' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1', backgroundColor: newSetUnit === 'Sets' ? '#F5F3FF' : '#FFFFFF', color: newSetUnit === 'Sets' ? '#7C3AED' : '#475569', fontWeight: '800', fontSize: '12.5px', cursor: 'pointer' }}
+                  >
+                    Sets (Set-based)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewSetUnit('kW')}
+                    style={{ flex: 1, height: '36px', borderRadius: '8px', border: newSetUnit === 'kW' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1', backgroundColor: newSetUnit === 'kW' ? '#F5F3FF' : '#FFFFFF', color: newSetUnit === 'kW' ? '#7C3AED' : '#475569', fontWeight: '800', fontSize: '12.5px', cursor: 'pointer' }}
+                  >
+                    kW (Kilowatt Capacity)
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    {newSetUnit === 'kW' ? 'Capacity (kW)' : 'Number of Sets'}
+                  </label>
+                  <input
+                    type="number"
+                    min={newSetUnit === 'kW' ? '0.01' : '1'}
+                    step={newSetUnit === 'kW' ? 'any' : '1'}
+                    max="99999"
+                    value={newSetCount}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') { setNewSetCount(''); return; }
+                      setNewSetCount(newSetUnit === 'kW' ? (parseFloat(val) || '') : (parseInt(val, 10) || ''));
+                    }}
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    GST Rate
+                  </label>
+                  <select
+                    value={newSetGstRate}
+                    onChange={(e) => setNewSetGstRate(e.target.value)}
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}
+                  >
+                    <option value="18%">18%</option>
+                    <option value="12%">12%</option>
+                    <option value="5%">5%</option>
+                    <option value="0%">0%</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  {newSetUnit === 'kW' ? 'Rate per kW (₹)' : 'Pack Amt / Set Price (₹)'} <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: '#64748B' }}>₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={newSetPrice}
+                    onChange={(e) => setNewSetPrice(e.target.value)}
+                    placeholder={newSetUnit === 'kW' ? 'Enter rate per 1 kW' : 'Enter Pack Amount for 1 set'}
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 12px 0 28px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateSetModal(false)}
+                  style={{ padding: '9px 18px', borderRadius: '8px', backgroundColor: '#FFFFFF', color: '#475569', border: '1px solid #CBD5E1', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '9px 20px', borderRadius: '8px', backgroundColor: '#7C3AED', color: '#FFFFFF', border: 'none', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)' }}
+                >
+                  <Layers size={15} />
+                  Create Set &amp; Add Items
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
