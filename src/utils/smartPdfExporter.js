@@ -22,6 +22,99 @@ export async function exportSmartMultiPagePdf(sheetEl, options = {}) {
   // Ensure fonts and images are rendered
   await new Promise((res) => setTimeout(res, 250));
 
+  // Check if the document uses explicit A4 page blocks (.pdf-page-sheet)
+  const explicitPages = Array.from(sheetEl.querySelectorAll('.pdf-page-sheet'));
+  if (explicitPages.length > 0) {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = 210;
+    const pdfHeight = 297;
+    let pageAdded = false;
+
+    for (const pageEl of explicitPages) {
+      const pageCanvas = await html2canvas(pageEl, {
+        scale,
+        useCORS: true,
+        allowTaint: false,
+        imageTimeout: 4000,
+        logging: false,
+        backgroundColor: '#ffffff',
+        ignoreElements: (element) => element.classList?.contains('no-print')
+      });
+
+      const a4Ratio = 297 / 210;
+      const singlePageHeight = Math.round(pageCanvas.width * a4Ratio);
+
+      if (pageCanvas.height <= singlePageHeight * 1.03) {
+        const fitCanvas = document.createElement('canvas');
+        fitCanvas.width = pageCanvas.width;
+        fitCanvas.height = singlePageHeight;
+        const ctx = fitCanvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, fitCanvas.width, fitCanvas.height);
+
+        const drawHeight = Math.min(pageCanvas.height, singlePageHeight);
+        const scaleFit = pageCanvas.height > singlePageHeight ? (singlePageHeight / pageCanvas.height) : 1;
+        const targetW = Math.round(pageCanvas.width * scaleFit);
+        const targetH = Math.round(pageCanvas.height * scaleFit);
+        const offsetX = Math.round((fitCanvas.width - targetW) / 2);
+
+        ctx.drawImage(pageCanvas, 0, 0, pageCanvas.width, pageCanvas.height, offsetX, 0, targetW, targetH || drawHeight);
+
+        if (pageAdded) pdf.addPage();
+        pdf.addImage(fitCanvas.toDataURL('image/jpeg', 0.96), 'JPEG', 0, 0, pdfWidth, pdfHeight, '', 'FAST');
+        pageAdded = true;
+      } else {
+        // Fallback: slice an oversized explicit page cleanly
+        const pageRect = pageEl.getBoundingClientRect();
+        const scaleY = pageCanvas.height / (pageRect.height || 1);
+        const avoidBoxes = Array.from(pageEl.querySelectorAll(avoidSelectors))
+          .map((node) => {
+            const r = node.getBoundingClientRect();
+            return {
+              top: Math.round((r.top - pageRect.top) * scaleY),
+              bottom: Math.round((r.bottom - pageRect.top) * scaleY),
+              height: Math.round((r.bottom - r.top) * scaleY)
+            };
+          })
+          .filter((b) => b.height > 0 && b.height < singlePageHeight * 0.9);
+
+        const cuts = [0];
+        let curY = 0;
+        while (curY + singlePageHeight < pageCanvas.height) {
+          const rawTarget = curY + singlePageHeight;
+          const cutBox = avoidBoxes.find((b) => b.top < rawTarget && b.bottom > rawTarget);
+          const safeCut = (cutBox && cutBox.top > curY + singlePageHeight * 0.15)
+            ? Math.max(curY + 50, cutBox.top - 4)
+            : rawTarget;
+          cuts.push(safeCut);
+          curY = safeCut;
+        }
+        cuts.push(pageCanvas.height);
+
+        for (let i = 0; i < cuts.length - 1; i++) {
+          const sliceH = cuts[i + 1] - cuts[i];
+          if (sliceH <= 2) continue;
+          const subCanvas = document.createElement('canvas');
+          subCanvas.width = pageCanvas.width;
+          subCanvas.height = singlePageHeight;
+          const ctx = subCanvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
+          ctx.drawImage(pageCanvas, 0, cuts[i], pageCanvas.width, sliceH, 0, 0, pageCanvas.width, sliceH);
+          if (pageAdded) pdf.addPage();
+          pdf.addImage(subCanvas.toDataURL('image/jpeg', 0.96), 'JPEG', 0, 0, pdfWidth, pdfHeight, '', 'FAST');
+          pageAdded = true;
+        }
+      }
+    }
+
+    if (returnBase64) {
+      return pdf.output('datauristring');
+    }
+    pdf.save(filename);
+    return true;
+  }
+
   // 1. Capture high-resolution master canvas
   const canvas = await html2canvas(sheetEl, {
     scale,

@@ -216,6 +216,18 @@ class RealtimeNotificationService {
       if (!isAlias) return;
     }
 
+    // BOM Cancellation Safeguard: If targeted to a specific salesperson by name, block on other users' devices (including CEO)
+    if (String(notif.event_type || '').toUpperCase().trim() === 'BOM_CANCELLED') {
+      const targetUser = String(notif.recipient_user_name || notif.metadata?.recipientUserName || notif.metadata?.salesPerson || '').toLowerCase().trim();
+      if (targetUser && targetUser !== 'all' && targetUser !== 'sales executive' && targetUser !== 'sales' && targetUser !== 'system') {
+        const matchesUser = Boolean(
+          (currentName && (currentName === targetUser || currentName.includes(targetUser) || targetUser.includes(currentName))) ||
+          (currentEmp && currentEmp.toLowerCase() === targetUser)
+        );
+        if (!matchesUser) return;
+      }
+    }
+
     // TA Exclusion: Technical Administrator (TA) is strictly IT/System Admin and must never receive Lead notifications/voice
     const currentRole = (this.getUserRole() || '').toLowerCase();
     if (currentEmp.startsWith('TA-') || currentRole.includes('technical admin')) {

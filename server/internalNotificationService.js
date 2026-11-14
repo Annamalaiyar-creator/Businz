@@ -84,11 +84,12 @@ function isClientRecipient(client, notification) {
   const targetEmp = String(notification.recipient_emp_code || '').toUpperCase().trim();
   const targetUser = String(notification.recipient_user_name || notification.metadata?.recipientUserName || notification.metadata?.salesPerson || '').toLowerCase().trim();
   const targetRole = String(notification.recipient_role || '').toLowerCase().trim();
+  const isBomCancelled = String(notification.event_type || '').toUpperCase().trim() === 'BOM_CANCELLED';
 
-  // Specific user targeted by employee code: ONLY that specific employee (or CEO/MD) receives it
+  // Specific user targeted by employee code: ONLY that specific employee (or CEO/MD, except BOM_CANCELLED) receives it
   if (targetEmp && targetEmp !== 'ALL') {
     if (clientEmp && targetEmp === clientEmp) return true;
-    if (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director')) return true;
+    if (!isBomCancelled && (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director'))) return true;
     return false;
   }
 
@@ -97,7 +98,7 @@ function isClientRecipient(client, notification) {
     const isMatch = Boolean(
       (clientName && (clientName === targetUser || clientName.includes(targetUser) || targetUser.includes(clientName))) ||
       (clientEmp && clientEmp.toLowerCase() === targetUser) ||
-      (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director'))
+      (!isBomCancelled && (clientRole === 'ceo' || clientRole === 'md' || clientRole.includes('managing director')))
     );
     return isMatch;
   }
