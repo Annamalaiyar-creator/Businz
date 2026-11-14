@@ -63,6 +63,16 @@ class RealtimeNotificationService {
     } catch (_) {}
   }
 
+  isUserAuthenticated() {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem('controlroom_is_authenticated') === 'true' &&
+        Boolean(this.getEmpCode() || this.getUserRole());
+    } catch (_) {
+      return false;
+    }
+  }
+
   /**
    * Start the real-time notification listener (Auto-reconnects, survives sleep/network changes)
    */
@@ -72,11 +82,16 @@ class RealtimeNotificationService {
     if (!this._listenersAttached) {
       this._listenersAttached = true;
       window.addEventListener('online', () => {
+        if (!this.isUserAuthenticated()) return;
         console.log('[RealtimeNotifs] ⚡ Network online detected. Reconnecting notification stream...');
         this.start(true);
       });
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
+          if (!this.isUserAuthenticated()) {
+            this.stop();
+            return;
+          }
           if (!this.eventSource || this.eventSource.readyState === EventSource.CLOSED) {
             this.start(true);
           } else {
@@ -85,10 +100,23 @@ class RealtimeNotificationService {
         }
       });
       window.addEventListener('storage', (e) => {
-        if (e.key === 'controlroom_user_role' || e.key === 'controlroom_logged_emp_id') {
-          this.start(true);
+        if (e.key === 'controlroom_is_authenticated' && e.newValue !== 'true') {
+          this.stop();
+          return;
+        }
+        if (e.key === 'controlroom_user_role' || e.key === 'controlroom_logged_emp_id' || e.key === 'controlroom_is_authenticated') {
+          if (this.isUserAuthenticated()) {
+            this.start(true);
+          } else {
+            this.stop();
+          }
         }
       });
+    }
+
+    if (!this.isUserAuthenticated()) {
+      this.stop();
+      return;
     }
 
     const currentEmp = this.getEmpCode();
@@ -107,6 +135,10 @@ class RealtimeNotificationService {
   }
 
   connect() {
+    if (!this.isUserAuthenticated()) {
+      this.stop();
+      return;
+    }
     if (this.isConnecting) return;
     this.isConnecting = true;
 
@@ -176,10 +208,18 @@ class RealtimeNotificationService {
   }
 
   scheduleReconnect() {
+    if (!this.isUserAuthenticated()) {
+      this.stop();
+      return;
+    }
     if (this.reconnectTimer) return;
     const delay = Math.min(30000, 2000 * Math.pow(1.5, this.reconnectAttempts++));
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
+      if (!this.isUserAuthenticated()) {
+        this.stop();
+        return;
+      }
       this.connect();
       // On reconnect, sync missed notifications
       if (this.lastEventTime) {
@@ -192,6 +232,7 @@ class RealtimeNotificationService {
    * Handle incoming real-time notification
    */
   handleIncomingNotification(notif) {
+    if (!this.isUserAuthenticated()) return;
     if (!notif || !notif.id) return;
 
     // RULE 3: Do NOT notify the employee who performed the action
@@ -423,11 +464,25 @@ class RealtimeNotificationService {
   }
 
   stop() {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.isConnecting = false;
+    this.reconnectAttempts = 0;
+    this._connectedEmp = null;
+    this._connectedRole = null;
     if (this.eventSource) {
       try { this.eventSource.close(); } catch (_) {}
       this.eventSource = null;
     }
+    if (typeof window !== 'undefined') {
+      window.__unifiedSseActive = false;
+      try { window.speechSynthesis?.cancel?.(); } catch (_) {}
+    }
+    this.notifications = [];
+    this.unreadCount = 0;
+    this.emitChange();
     this.subscribers.clear();
   }
 }

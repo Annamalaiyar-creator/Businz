@@ -340,12 +340,19 @@ function App() {
     return () => window.removeEventListener('controlroom_navigate_tab', handleCustomNavigate);
   }, []);
 
-  // Always keep real-time workflow & lead notification stream active across the entire app
+  // Keep real-time workflow & lead notification stream active ONLY while authenticated
   useEffect(() => {
+    if (!isAuthenticated) {
+      realtimeNotificationService.stop();
+      setToastAlert(null);
+      return undefined;
+    }
+
     realtimeNotificationService.start();
 
     const handleIncomingToast = (e) => {
       if (!e || !e.detail) return;
+      if (localStorage.getItem('controlroom_is_authenticated') !== 'true') return;
       setToastAlert(e.detail);
     };
 
@@ -356,7 +363,7 @@ function App() {
       window.removeEventListener('businz_notification_received', handleIncomingToast);
       window.removeEventListener('businz_show_toast', handleIncomingToast);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const handleLoginSuccess = (roleName) => {
     setUserRole(roleName);
@@ -435,6 +442,9 @@ function App() {
 
   const handleSignOut = () => {
     try {
+      realtimeNotificationService.stop();
+    } catch (_) {}
+    try {
       const sesId = localStorage.getItem('controlroom_device_session_id');
       if (sesId) {
         revokeSession(sesId);
@@ -456,6 +466,8 @@ function App() {
         window.history.replaceState({}, '', currentUrl.toString());
       }
     } catch (_) {}
+    setToastAlert(null);
+    setUserRole('');
     setIsAuthenticated(false);
     setActiveTab('Dashboard');
     setShowLoginModal(false);
@@ -948,11 +960,13 @@ function App() {
       )}
 
       {/* Modern WhatsApp / SaaS Real-Time Notification Card */}
-      <NotificationToast 
-        alert={toastAlert} 
-        onClose={() => setToastAlert(null)} 
-        onNavigate={(tab, extra) => handleTabChange(tab, extra)} 
-      />
+      {isAuthenticated && (
+        <NotificationToast 
+          alert={toastAlert} 
+          onClose={() => setToastAlert(null)} 
+          onNavigate={(tab, extra) => handleTabChange(tab, extra)} 
+        />
+      )}
 
       {/* Sidebar Navigation */}
     </div>
