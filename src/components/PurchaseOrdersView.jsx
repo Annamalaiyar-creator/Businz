@@ -5767,7 +5767,7 @@ Procurement Team | BUSINZ`;
                               )}
                               <td style={{ padding: '8px 8px' }}>
                                 <select id={`purchase-orders-unit-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`unit_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Unit" value={item.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}>
-                                  {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR', 'SET', 'kW'].includes(item.unit) && (
+                                  {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR', 'SET', 'kW', 'LENGTH'].includes(item.unit) && (
                                     <option value={item.unit}>{item.unit}</option>
                                   )}
                                   <option>MT</option>
@@ -5777,6 +5777,7 @@ Procurement Team | BUSINZ`;
                                   <option>MTR</option>
                                   <option>SET</option>
                                   <option>kW</option>
+                                  <option>LENGTH</option>
                                 </select>
                               </td>
                               <td style={{ padding: '8px 8px' }}>
