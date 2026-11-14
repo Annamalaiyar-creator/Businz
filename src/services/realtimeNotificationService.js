@@ -128,6 +128,12 @@ class RealtimeNotificationService {
       }
     }
 
+    if (this._connectedEmp !== currentEmp || this._connectedRole !== currentRole) {
+      this.notifications = [];
+      this.unreadCount = 0;
+      this.emitChange();
+    }
+
     this._connectedEmp = currentEmp;
     this._connectedRole = currentRole;
     this.connect();
@@ -275,6 +281,27 @@ class RealtimeNotificationService {
       if (notif.document_type === 'lead' || notif.event_type?.startsWith('LEAD_') || notif.event_type?.includes('STATUS_UNCHANGED')) {
         return;
       }
+    }
+
+    // Department / Role Safeguard: When targeted to a specific department role (and no individual empCode matched),
+    // ensure the current logged-in role actually belongs to that department.
+    const targetRole = String(notif.recipient_role || '').toLowerCase().trim();
+    if (!targetEmp && targetRole && targetRole !== 'all') {
+      if (!currentRole) return;
+      const isCeoOrMd = currentRole === 'ceo' || currentRole === 'md' || currentRole.includes('managing director');
+      const roleMatches =
+        currentRole === targetRole ||
+        currentRole.includes(targetRole) ||
+        targetRole.includes(currentRole) ||
+        (targetRole.includes('dispatch') && currentRole.includes('dispatch')) ||
+        ((targetRole.includes('account') || targetRole.includes('finance')) && (currentRole.includes('account') || currentRole.includes('finance'))) ||
+        ((targetRole.includes('bill') || targetRole.includes('invoice')) && (currentRole.includes('bill') || currentRole.includes('invoice'))) ||
+        (targetRole.includes('sale') && currentRole.includes('sale')) ||
+        (targetRole.includes('production') && currentRole.includes('production')) ||
+        (targetRole.includes('procurement') && currentRole.includes('procurement')) ||
+        ((targetRole === 'ceo' || targetRole === 'md') && isCeoOrMd) ||
+        (targetRole === 'lead_managers' && (isCeoOrMd || currentEmp.startsWith('TS-') || currentRole.includes('tech support')));
+      if (!roleMatches) return;
     }
 
     // Check if already in list (deduplication)

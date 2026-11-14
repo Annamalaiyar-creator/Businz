@@ -546,9 +546,11 @@ export default function BomConfirmAuditSection({ ctx }) {
                     return itemEdited ? { ...it, isEdited: true, ...(mergedNote ? { editedNote: mergedNote } : {}) } : it;
                   });
                   const hasAnyEdit = Boolean(confirmingBomModal.isEdited || prevBomRec?.isEdited || Object.keys(nextEditedFields).length > 0 || anyItemEdited);
+                  const todayIso = new Date().toISOString().split('T')[0];
 
                   const updatedBomData = {
                     ...confirmingBomModal,
+                    ...(hasAnyEdit ? { date: todayIso, bomDate: todayIso } : {}),
                     companyName: confirmingBomModal.companyName,
                     docType: confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'),
                     paymentType: confirmingBomModal.paymentType,

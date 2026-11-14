@@ -106,6 +106,7 @@ function isClientRecipient(client, notification) {
   // Department / Role queue targeted (only when no specific employee code is targeted)
   if (targetRole) {
     if (targetRole === 'all') return true;
+    if (!clientRole) return false;
     if (clientRole === targetRole) return true;
     if (clientRole.includes(targetRole) || targetRole.includes(clientRole)) return true;
 

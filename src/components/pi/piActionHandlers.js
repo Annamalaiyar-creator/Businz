@@ -991,7 +991,14 @@ export function createPiActionHandlers(ctx) {
         amount: '₹' + Math.round(totals.grand).toLocaleString('en-IN'),
         pdfName: pdfFile ? pdfFile.name : (signedPiDoc ? signedPiDoc.name : null),
         signedPiDoc: signedPiDoc || null,
-        piDate: piDate || new Date().toISOString().split('T')[0],
+        piDate: (() => {
+          const todayIso = new Date().toISOString().split('T')[0];
+          const effectivePiDate = isEditing ? todayIso : (piDate || todayIso);
+          if (isEditing && piDate !== todayIso) {
+            setPiDate(todayIso);
+          }
+          return effectivePiDate;
+        })(),
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         status: isDraft ? 'Draft' : (isEditing && matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
         statusType: isDraft ? 'draft' : (isEditing && matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),

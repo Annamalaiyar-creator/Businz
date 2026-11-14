@@ -1065,6 +1065,11 @@ export default function CrmQuotationsView({
 
     const calculated = calculateTotals();
     const isEditing = Boolean(editingQuoteId);
+    const todayIso = new Date().toISOString().split('T')[0];
+    const effectiveQuoteDate = isEditing ? todayIso : (quoteDate || todayIso);
+    if (isEditing && quoteDate !== todayIso) {
+      setQuoteDate(todayIso);
+    }
     const newRevCount = isEditing ? revisionCount + 1 : 0;
     const finalStatus = isEditing && saveAsStatus !== 'Draft' ? 'Revised' : saveAsStatus;
 
@@ -1072,7 +1077,7 @@ export default function CrmQuotationsView({
       id: quoteCode,
       quoteNumber: quoteCode,
       code: quoteCode,
-      date: quoteDate,
+      date: effectiveQuoteDate,
       validUntil: validUntilDate,
       deliveryDate,
       customerName: customerName.trim(),

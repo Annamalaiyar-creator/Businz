@@ -295,7 +295,6 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                           <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center' }}>HSN / SAC</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '65px' }}>Qty</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>UOM</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', width: '75px' }}>Set / kW</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Rate (₹)</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px' }}>GST</th>
                           <th style={{ padding: '8px 10px', textAlign: 'right', width: '110px' }}>Total (₹)</th>
@@ -342,7 +341,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                                 <React.Fragment key={sec.key}>
                                   {/* PRESET HEADER BANNER WITH KIT VALUE */}
                                   <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2.5px solid #0E7490', borderBottom: '1.5px solid #A5F3FC' }}>
-                                    <td colSpan={9} style={{ padding: '9px 12px' }}>
+                                    <td colSpan={8} style={{ padding: '9px 12px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                                         {/* Left: Preset Badge & Name */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -435,41 +434,6 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                                         <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                         <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
-                                        {/* Set / kW Column: Merged vertically in middle for entire preset group */}
-                                        {cIdx === 0 ? (
-                                          <td
-                                            rowSpan={sec.items.length}
-                                            style={{
-                                              padding: '7px 10px',
-                                              textAlign: 'center',
-                                              verticalAlign: 'middle',
-                                              backgroundColor: '#F8FAFC',
-                                              borderLeft: '1px solid #E2E8F0',
-                                              borderRight: '1px solid #E2E8F0'
-                                            }}
-                                          >
-                                            {(() => {
-                                              const rowIsKw = (pUnit === 'kW' || it.unit === 'KW' || it.uom === 'KW' || String(sec.presetName || '').toLowerCase().includes('kw'));
-                                              const numCount = parseFloat(setCount) || 1;
-                                              const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
-                                              const unitLabel = rowIsKw ? 'kW' : 'Set';
-                                              return (
-                                                <span style={{
-                                                  display: 'inline-block',
-                                                  padding: '2px 8px',
-                                                  borderRadius: '6px',
-                                                  fontSize: '11px',
-                                                  fontWeight: '800',
-                                                  backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
-                                                  color: rowIsKw ? '#0284C7' : '#0E7490',
-                                                  border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
-                                                }}>
-                                                  {cleanCountStr} {unitLabel}
-                                                </span>
-                                              );
-                                            })()}
-                                          </td>
-                                        ) : null}
                                         <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                                           {hasExplicitRate ? (
                                             <span style={{ color: '#475569', fontWeight: '700' }}>₹ {r.toLocaleString('en-IN')}</span>
@@ -495,7 +459,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
 
                                   {/* END OF PRESET DIVIDER */}
                                   <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1px dashed #99F6E4', borderBottom: '2.5px solid #0E7490' }}>
-                                    <td colSpan={9} style={{ padding: '8px 14px', textAlign: 'center' }}>
+                                    <td colSpan={8} style={{ padding: '8px 14px', textAlign: 'center' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                                         <div style={{ height: '1.5px', flex: 1, backgroundColor: '#5EEAD4' }} />
                                         <span style={{
@@ -532,7 +496,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                               <React.Fragment key="custom_section">
                                 {/* START OF CUSTOM PRODUCTS HEADER */}
                                 <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2.5px solid #475569', borderBottom: '1.5px solid #CBD5E1' }}>
-                                  <td colSpan={9} style={{ padding: '9px 12px' }}>
+                                  <td colSpan={8} style={{ padding: '9px 12px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span style={{
@@ -582,7 +546,6 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                                       <td style={{ padding: '7px 10px', color: '#64748B', textAlign: 'center' }}>{it.hsn || it.hsn_or_sac || '—'}</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>{q}</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{it.uom || it.unit || 'NOS'}</td>
-                                      <td style={{ padding: '7px 10px', textAlign: 'center', color: '#94A3B8', fontWeight: '700' }}>—</td>
                                       <td style={{ padding: '7px 10px', textAlign: 'right', color: '#334155', fontWeight: '700' }}>
                                         ₹ {r.toLocaleString('en-IN')}
                                       </td>
@@ -596,7 +559,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
 
                                 {/* END OF CUSTOM PRODUCTS DIVIDER */}
                                 <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px dashed #CBD5E1', borderBottom: '2.5px solid #475569' }}>
-                                  <td colSpan={9} style={{ padding: '7px 14px', textAlign: 'center' }}>
+                                  <td colSpan={8} style={{ padding: '7px 14px', textAlign: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                                       <div style={{ height: '1px', flex: 1, backgroundColor: '#CBD5E1' }} />
                                       <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', letterSpacing: '0.4px' }}>
@@ -611,7 +574,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                           })
                         ) : (
                           <tr>
-                            <td colSpan={9} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                            <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
                               No individual line items listed.
                             </td>
                           </tr>

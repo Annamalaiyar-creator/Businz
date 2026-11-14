@@ -336,10 +336,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* Row 2: Payment Terms & Logistics */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
                 <div>
                   <label htmlFor="performa-invoice-payment-terms" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Payment Terms
@@ -347,7 +344,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                   <select id="performa-invoice-payment-terms" name="paymentTerms" aria-label="Payment Terms"
                     value={paymentTerms}
                     onChange={(e) => setPaymentTerms(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
                   >
                     <option value="100% Paid">100% Paid</option>
                     <option value="Partial Paid">Partial Paid</option>
@@ -1003,7 +1000,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '120px', minWidth: '120px', textAlign: 'center' }}>HSN / SAC</th>
                       <th style={{ padding: '12px 6px', fontWeight: '700', width: '95px', minWidth: '95px', textAlign: 'center' }}>UOM</th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '110px', minWidth: '110px', textAlign: 'center' }}>{hasAnyKwPreset ? 'Qty / kW' : 'Qty / Set'} <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 6px', fontWeight: '700', width: '85px', minWidth: '85px', textAlign: 'center' }}>Set / kW</th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '135px', minWidth: '135px', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '115px', minWidth: '115px' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 8px', fontWeight: '700', width: '100px', minWidth: '100px', textAlign: 'center' }}>GST Rate</th>
@@ -1020,7 +1016,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                   <tbody>
                     {piItems.length === 0 ? (
                       <tr>
-                        <td colSpan={hasAnyPreset ? 14 : 13} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
@@ -1081,7 +1077,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                           <React.Fragment key={i}>
                             {isFirstInGroup && (
                               <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                <td colSpan={hasAnyPreset ? 14 : 13} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{
@@ -1196,7 +1192,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                             )}
                             {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
                               <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                <td colSpan={hasAnyPreset ? 14 : 13} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 13 : 12} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
                                       padding: '2px 8px',
@@ -1555,51 +1551,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                                   />
                                 </div>
                               </td>
-                              {/* Set / kW Column: Positioned after Qty and merged vertically in middle for Presets */}
-                              {isPresetItem ? (
-                                isFirstInGroup ? (
-                                  <td
-                                    rowSpan={groupCount}
-                                    style={{
-                                      padding: '12px 6px',
-                                      textAlign: 'center',
-                                      verticalAlign: 'middle',
-                                      backgroundColor: groupIndex % 2 === 1 ? '#FAF5FF' : '#F0FDFA',
-                                      borderLeft: '1px solid #E2E8F0',
-                                      borderRight: '1px solid #E2E8F0'
-                                    }}
-                                  >
-                                    {(() => {
-                                      const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
-                                      const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
-                                      const nestedSub = isSub && currentGroup?.nestedSubPresets?.find(n => (n.id === item.subPresetId || n.name === item.subPresetName));
-                                      const effectiveSetCount = isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1);
-                                      const rowIsKw = isKwPreset(effectivePresetName, effectiveUnit, item) || String(effectiveUnit).toUpperCase() === 'KW';
-                                      const numCount = parseFloat(effectiveSetCount) || 1;
-                                      const cleanCountStr = numCount % 1 === 0 ? String(numCount) : String(numCount.toFixed(2).replace(/\.?0+$/, ''));
-                                      const unitLabel = rowIsKw ? 'kW' : 'Set';
-                                      return (
-                                        <span style={{
-                                          display: 'inline-block',
-                                          padding: '2px 8px',
-                                          borderRadius: '6px',
-                                          fontSize: '11px',
-                                          fontWeight: '800',
-                                          backgroundColor: rowIsKw ? '#E0F2FE' : '#ECFEFF',
-                                          color: rowIsKw ? '#0284C7' : '#0E7490',
-                                          border: `1px solid ${rowIsKw ? '#BAE6FD' : '#A5F3FC'}`
-                                        }}>
-                                          {cleanCountStr} {unitLabel}
-                                        </span>
-                                      );
-                                    })()}
-                                  </td>
-                                ) : null
-                              ) : (
-                                <td style={{ padding: '12px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                  <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }}>—</span>
-                                </td>
-                              )}
                               {/* Total Dispatch Quantity Column */}
                               <td style={{ padding: '12px 6px', textAlign: 'center', backgroundColor: isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : '#F8FAFC' }}>
                                 {(() => {
