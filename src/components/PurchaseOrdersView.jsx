@@ -783,7 +783,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [presetGroups, setPresetGroups] = useState({});
   const [showCreateSetModal, setShowCreateSetModal] = useState(false);
   const [newSetName, setNewSetName] = useState('');
-  const [newSetUnit, setNewSetUnit] = useState('Sets');
+  const [newSetUnit, setNewSetUnit] = useState('MT');
   const [newSetCount, setNewSetCount] = useState(1);
   const [newSetPrice, setNewSetPrice] = useState('');
   const [newSetGstRate, setNewSetGstRate] = useState('18%');
@@ -948,7 +948,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const handleCreateCustomSet = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
-    const unit = newSetUnit || 'Sets';
+    const unit = newSetUnit || 'MT';
     const count = unit === 'kW' ? Math.max(0.01, parseFloat(newSetCount) || 1) : Math.max(1, parseInt(newSetCount, 10) || 1);
     const groupId = 'po_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const setGst = newSetGstRate || '18%';
@@ -986,7 +986,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     setNewSetName('');
     setNewSetCount(1);
-    setNewSetUnit('Sets');
+    setNewSetUnit('MT');
     setNewSetPrice('');
     setNewSetGstRate('18%');
     setShowCreateSetModal(false);
@@ -5764,17 +5764,15 @@ Procurement Team | BUSINZ`;
                               )}
                               <td style={{ padding: '8px 8px' }}>
                                 <select id={`purchase-orders-unit-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`unit_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Unit" value={item.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}>
-                                  {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR', 'SET', 'kW', 'LENGTH'].includes(item.unit) && (
+                                  {item.unit && !['MT', 'KG', 'LG', 'NOS', 'PCS', 'MTR'].includes(item.unit) && (
                                     <option value={item.unit}>{item.unit}</option>
                                   )}
-                                  <option>MT</option>
-                                  <option>NOS</option>
-                                  <option>KG</option>
-                                  <option>PCS</option>
-                                  <option>MTR</option>
-                                  <option>SET</option>
-                                  <option>kW</option>
-                                  <option>LENGTH</option>
+                                  <option value="MT">MT</option>
+                                  <option value="KG">KG</option>
+                                  <option value="LG">LG</option>
+                                  <option value="NOS">NOS</option>
+                                  <option value="PCS">PCS</option>
+                                  <option value="MTR">MTR</option>
                                 </select>
                               </td>
                               <td style={{ padding: '8px 8px' }}>
@@ -5868,7 +5866,7 @@ Procurement Team | BUSINZ`;
                                             title="Multiplier for this pack"
                                           />
                                           <select
-                                            value={grp?.unit || 'Sets'}
+                                            value={grp?.unit || 'MT'}
                                             onChange={(e) => {
                                               const newUom = e.target.value;
                                               setPresetGroups(prev => {
@@ -5880,14 +5878,15 @@ Procurement Team | BUSINZ`;
                                             style={{ height: '26px', borderRadius: '6px', border: '1.5px solid #BAE6FD', padding: '0 4px', fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer' }}
                                             title="Select Pack UOM"
                                           >
-                                            <option value="Sets">Sets</option>
-                                            <option value="kW">kW</option>
+                                            {grp?.unit && !['MT', 'KG', 'LG', 'NOS', 'PCS', 'MTR'].includes(grp.unit) && (
+                                              <option value={grp.unit}>{grp.unit}</option>
+                                            )}
                                             <option value="MT">MT</option>
-                                            <option value="NOS">NOS</option>
                                             <option value="KG">KG</option>
+                                            <option value="LG">LG</option>
+                                            <option value="NOS">NOS</option>
                                             <option value="PCS">PCS</option>
                                             <option value="MTR">MTR</option>
-                                            <option value="LENGTH">LENGTH</option>
                                           </select>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
@@ -6084,7 +6083,7 @@ Procurement Team | BUSINZ`;
                     onClick={() => {
                       setNewSetName(`Custom Set ${Object.keys(presetGroups || {}).length + 1}`);
                       setNewSetCount(1);
-                      setNewSetUnit('Sets');
+                      setNewSetUnit('MT');
                       setNewSetPrice('');
                       setNewSetGstRate('18%');
                       setShowCreateSetModal(true);
@@ -8190,14 +8189,12 @@ Procurement Team | BUSINZ`;
                     onChange={(e) => setNewSetUnit(e.target.value)}
                     style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}
                   >
-                    <option value="Sets">Sets</option>
-                    <option value="kW">kW</option>
                     <option value="MT">MT</option>
-                    <option value="NOS">NOS</option>
                     <option value="KG">KG</option>
+                    <option value="LG">LG</option>
+                    <option value="NOS">NOS</option>
                     <option value="PCS">PCS</option>
                     <option value="MTR">MTR</option>
-                    <option value="LENGTH">LENGTH</option>
                   </select>
                 </div>
                 <div>
