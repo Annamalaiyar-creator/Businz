@@ -12,6 +12,7 @@ import { centralInventoryStore } from '../utils/centralInventoryStore';
 import CreateProductModal from './views/CreateProductModal';
 import TypeableProductSelect from './TypeableProductSelect';
 import TypeableVendorSelect from './TypeableVendorSelect';
+import VRMPurchaseOrderPrintTemplate from './VRMPurchaseOrderPrintTemplate';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -181,6 +182,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const loggedInUserName = getLoggedInUserName();
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'create' | 'edit' | 'view'
   const [showCeoPoModal, setShowCeoPoModal] = useState(false);
+  const [printPoModal, setPrintPoModal] = useState(null);
   const [poDetailLoading, setPoDetailLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -2982,7 +2984,28 @@ Procurement Team | BUSINZ`;
                         </button>
                         <button
                           type="button"
-                          onClick={() => window.print()}
+                          onClick={() => setPrintPoModal({
+                            ...(currentPoObj || {}),
+                            poNo: poNumber,
+                            poDate,
+                            deliveryDate,
+                            paymentTerms,
+                            purchaser,
+                            vendorName,
+                            branch,
+                            contactPerson,
+                            contactNo,
+                            email,
+                            gstNo,
+                            deliveryAddress,
+                            billingAddress,
+                            items,
+                            notes,
+                            terms,
+                            discountPct,
+                            shippingCharges,
+                            otherCharges
+                          })}
                           style={{
                             backgroundColor: 'white',
                             border: '1px solid #CBD5E1',
@@ -4299,10 +4322,7 @@ Procurement Team | BUSINZ`;
                       : (poList[0] || null);
                     if (!target) return;
                     setSelectedPOs([]);
-                    handleStartView(target);
-                    setTimeout(() => {
-                      window.print();
-                    }, 400);
+                    setPrintPoModal(target);
                   }}
                   style={{
                     backgroundColor: '#FFFFFF',
@@ -6090,7 +6110,27 @@ Procurement Team | BUSINZ`;
 
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => setPrintPoModal({
+                    poNo: poNumber,
+                    poDate,
+                    deliveryDate,
+                    paymentTerms,
+                    purchaser,
+                    vendorName,
+                    branch,
+                    contactPerson,
+                    contactNo,
+                    email,
+                    gstNo,
+                    deliveryAddress,
+                    billingAddress,
+                    items,
+                    notes,
+                    terms,
+                    discountPct,
+                    shippingCharges,
+                    otherCharges
+                  })}
                   style={{
                     backgroundColor: '#FFFFFF',
                     border: '1px solid #CBD5E1',
@@ -7593,6 +7633,14 @@ Procurement Team | BUSINZ`;
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── OFFICIAL PO PRINTOUT / EXPORT PDF TEMPLATE ─── */}
+      {printPoModal && (
+        <VRMPurchaseOrderPrintTemplate
+          po={printPoModal}
+          onClose={() => setPrintPoModal(null)}
+        />
       )}
 
       {/* ─── CUSTOM TOAST NOTIFICATION POPUP (MATCHES DESIGN SYSTEM) ─── */}
