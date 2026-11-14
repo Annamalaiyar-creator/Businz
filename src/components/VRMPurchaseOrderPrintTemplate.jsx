@@ -25,6 +25,29 @@ const fmtQty = (n) => {
   return num % 1 === 0 ? String(num) : String(Number(num.toFixed(2)));
 };
 
+const resolveCompanyProfile = (locationKey) => {
+  const norm = String(locationKey || '').trim().toLowerCase();
+  if (norm.includes('ap') || norm.includes('andhra') || norm.includes('tada') || norm.includes('nellore')) {
+    return {
+      name: 'VRM STRUCTURES INDIA PRIVATE LIMITED',
+      address: 'NO 150B, PERUMAL KOVIL STREET, Padi. Tada, District - Thirupati, TADA, Andhra Pradesh - 524401, India',
+      gst: '37AAGCV4262N1ZR'
+    };
+  }
+  if (norm.includes('jash') || norm.includes('sun')) {
+    return {
+      name: 'JASH SUN POWER DYNAMICS PRIVATE LIMITED',
+      address: '2nd, 1/135A, JASH SUN, 2nd Street, Elavanthangal, Kelambakkam, Chengalpattu, Tamil Nadu - 603103, India',
+      gst: '33AAGCJ6197G1ZC'
+    };
+  }
+  return {
+    name: 'VRM STRUCTURES INDIA PRIVATE LIMITED',
+    address: '1427, GNT Road, Nagappa Industrial Estate, Puzhal, Chennai, Tamil Nadu 600066, India',
+    gst: '33AAGCV4262N1ZZ'
+  };
+};
+
 export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
   const sheetRef = useRef(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -46,14 +69,14 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
   const paymentTerms = po.paymentTerms || 'Net 30 Days';
   const issuedBy = po.purchaser || po.createdBy || 'Procurement';
 
+  const compProfile = resolveCompanyProfile(po.companyLocation || po.branch);
   const vendorName = po.vendorName || po.vendor || 'Vendor';
-  const vendorBranch = po.branch || '';
   const contactPerson = po.contactPerson || '';
-  const contactNo = po.contactNo || po.phone || '';
+  const contactNo = (po.contactNo || po.phone || '').toString().trim();
   const vendorEmail = po.email || '';
   const vendorGst = po.gstNo || po.gstin || '';
 
-  const deliveryAddress = po.deliveryAddress || '1427, GNT Road, Nagappa Industrial Estate, Puzhal, Chennai, Tamil Nadu 600066, India';
+  const deliveryAddress = po.deliveryAddress || compProfile.address;
   const billingAddress = po.billingAddress || deliveryAddress;
 
   const items = Array.isArray(po.items) ? po.items : [];
@@ -61,9 +84,11 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
   const shippingCharges = Number(po.shippingCharges || 0);
   const otherCharges = Number(po.otherCharges || 0);
 
-  const isIntra = vendorGst
-    ? isTamilNaduIntra(vendorGst)
-    : isTamilNaduIntra(deliveryAddress);
+  const compStateCode = String(compProfile.gst || '').trim().slice(0, 2);
+  const vendStateCode = String(vendorGst || '').trim().slice(0, 2);
+  const isIntra = (/^\d{2}$/.test(compStateCode) && /^\d{2}$/.test(vendStateCode))
+    ? compStateCode === vendStateCode
+    : (vendorGst ? isTamilNaduIntra(vendorGst) : isTamilNaduIntra(deliveryAddress));
 
   let rawSubTotal = 0;
   const gstMap = new Map();
@@ -294,14 +319,13 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                   />
                 </div>
                 <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F3D6E', letterSpacing: '0.2px', textTransform: 'uppercase', marginBottom: '2px' }}>
-                  {branding?.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED'}
+                  {compProfile.name}
                 </div>
-                <div style={{ fontSize: '9px', color: '#334155', lineHeight: '1.4' }}>
-                  <div>1427, GNT Road, Nagappa Industrial Estate, Puzhal,</div>
-                  <div>Chennai, Tamil Nadu 600066, India</div>
+                <div style={{ fontSize: '9px', color: '#334155', lineHeight: '1.4', maxWidth: '340px' }}>
+                  <div>{compProfile.address}</div>
                   <div style={{ marginTop: '2px' }}>
                     <strong style={{ color: '#0F172A' }}>GSTIN: </strong>
-                    <span style={{ fontWeight: '700', color: '#0F172A' }}>{branding?.companyGstin || '33AAGCV4262N1ZZ'}</span>
+                    <span style={{ fontWeight: '700', color: '#0F172A' }}>{compProfile.gst}</span>
                   </div>
                 </div>
               </div>
@@ -339,10 +363,9 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                 <div style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '3px' }}>
                   {vendorName}
                 </div>
-                {vendorBranch && <div style={{ color: '#334155' }}>Branch: {vendorBranch}</div>}
                 {contactPerson && <div style={{ color: '#334155' }}>Attn: {contactPerson}</div>}
-                {contactNo && <div style={{ color: '#334155' }}>Phone: {contactNo}</div>}
-                {vendorEmail && <div style={{ color: '#334155' }}>Email: {vendorEmail}</div>}
+                {contactNo && contactNo !== '—' && <div style={{ color: '#334155' }}>Phone: {contactNo}</div>}
+                {vendorEmail && vendorEmail !== '—' && <div style={{ color: '#334155' }}>Email: {vendorEmail}</div>}
                 {vendorGst && (
                   <div style={{ marginTop: '4px' }}>
                     <strong style={{ color: '#0F172A' }}>GSTIN: </strong>
