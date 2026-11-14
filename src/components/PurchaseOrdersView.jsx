@@ -2483,7 +2483,7 @@ Procurement Team | BUSINZ`;
                             <td style={{ padding: '10px 8px', color: '#1E293B' }}>
                               <div style={{ fontWeight: '600' }}>{item.name}</div>
                               {item.description && (
-                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontWeight: '400', lineHeight: '1.3' }}>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontWeight: '400', lineHeight: '1.3', whiteSpace: 'pre-wrap' }}>
                                   {item.description}
                                 </div>
                               )}
@@ -5374,8 +5374,6 @@ Procurement Team | BUSINZ`;
                       <option value="Net 45 Days">Net 45 Days</option>
                       <option value="Net 60 Days">Net 60 Days</option>
                       <option value="Immediate">Immediate</option>
-                      <option value="100% Advance">100% Advance</option>
-                      <option value="50% Advance, 50% on Delivery">50% Advance, 50% on Delivery</option>
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -5402,7 +5400,7 @@ Procurement Team | BUSINZ`;
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: shipmentPref === 'Transport' ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: shipmentPref === 'Transport' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-scope" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Scope <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
@@ -5428,17 +5426,6 @@ Procurement Team | BUSINZ`;
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label htmlFor="purchase-orders-currency" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                      Currency <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                    </label>
-                    <input id="purchase-orders-currency" name="currency" aria-label="Currency"
-                      type="text"
-                      readOnly
-                      value="INR - Indian Rupee"
-                      style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#334155', fontWeight: '600' }}
-                     />
-                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label htmlFor="purchase-orders-priority" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Priority <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
@@ -5531,12 +5518,12 @@ Procurement Team | BUSINZ`;
                                       }));
                                     }}
                                   />
-                                  <input id={`purchase-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter item description / specifications"
-                                    type="text"
+                                  <textarea id={`purchase-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter item description / specifications"
+                                    rows={3}
                                     value={item.description || ''}
                                     onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
                                     placeholder="Enter item description / specifications..."
-                                    style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '11px', backgroundColor: '#f8fafc', color: '#334155', outline: 'none' }}
+                                    style={{ width: '100%', minHeight: '64px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '6px 8px', fontSize: '12px', lineHeight: '1.4', fontFamily: 'inherit', resize: 'vertical', backgroundColor: '#f8fafc', color: '#334155', outline: 'none', boxSizing: 'border-box' }}
                                    />
                                 </div>
                               </td>

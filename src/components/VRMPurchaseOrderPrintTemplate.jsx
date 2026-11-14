@@ -429,7 +429,7 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                         <td style={{ padding: '7px 10px', verticalAlign: 'top' }}>
                           <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '9.8px' }}>{row.name}</div>
                           {row.description ? (
-                            <div style={{ color: '#475569', fontSize: '8.3px', marginTop: '2px', lineHeight: '1.35' }}>
+                            <div style={{ color: '#475569', fontSize: '8.3px', marginTop: '2px', lineHeight: '1.35', whiteSpace: 'pre-wrap' }}>
                               {row.description}
                             </div>
                           ) : null}
