@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Trash2, X, AlertTriangle, Info, Layers, FileCheck, AlertCircle, Receipt
 } from 'lucide-react';
+import { resolvePiSalesPersonName } from './piHelpers';
 
 export default function PiDetailsAndConfirmModals({ ctx }) {
   const {
@@ -47,7 +48,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
         const piNo = pi.piNo || pi.id || 'PI';
         const piDate = pi.date || pi.piDate || pi.createdDate || '—';
         const customer = pi.customerName || pi.customer || pi.companyName || '—';
-        const salesPerson = pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || 'Sales Team';
+        const salesPerson = resolvePiSalesPersonName(pi) || 'Sales Team';
         const items = Array.isArray(pi.items) ? pi.items : [];
 
         const parseAmt = (val) => {

@@ -762,10 +762,10 @@ export default function PiListDashboardSection({ ctx }) {
                                 fontSize: '10px',
                                 fontWeight: '800'
                               }}>
-                                {(pi.salesPerson || 'S').charAt(0).toUpperCase()}
+                                {(resolvePiSalesPersonName(pi) || 'S').charAt(0).toUpperCase()}
                               </div>
                               <span style={{ color: '#475569', fontSize: '12px', fontWeight: '600' }}>
-                                {pi.salesPerson || 'Sales Team'}
+                                {resolvePiSalesPersonName(pi) || 'Sales Team'}
                               </span>
                             </div>
                           </div>

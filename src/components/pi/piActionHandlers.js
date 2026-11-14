@@ -6,6 +6,7 @@ import { notifyPiCreated } from '../../services/notificationService';
 import { isTamilNaduIntra } from '../../utils/gstHelper';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
+import { resolvePiSalesPersonName } from './piHelpers';
 
 export function createPiActionHandlers(ctx) {
   const {
@@ -1002,13 +1003,13 @@ export function createPiActionHandlers(ctx) {
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         status: isDraft ? 'Draft' : (isEditing && matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
         statusType: isDraft ? 'draft' : (isEditing && matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
-        salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
-        salesperson: (isEditing ? matchedExisting?.salesPerson : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
-        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : (currentEmpId || '')),
-        salesPersonEmail: (isEditing ? matchedExisting?.salesPersonEmail : null) || currentLoggedEmail || '',
-        assignedSalesperson: (isEditing ? matchedExisting?.assignedSalesperson : null) || (isTechSupport ? salesPerson || '' : ''),
+        salesPerson: (isEditing ? resolvePiSalesPersonName(matchedExisting) : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
+        salesperson: (isEditing ? resolvePiSalesPersonName(matchedExisting) : null) || (isTechSupport ? salesPerson || '' : getEffectiveSalesPerson()),
+        salesPersonCode: (isEditing && resolvePiSalesPersonName(matchedExisting) ? matchedExisting?.salesPersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : (currentEmpId || '')),
+        salesPersonEmail: (isEditing && resolvePiSalesPersonName(matchedExisting) ? matchedExisting?.salesPersonEmail : null) || currentLoggedEmail || '',
+        assignedSalesperson: (isEditing ? (matchedExisting?.assignedSalesperson || resolvePiSalesPersonName(matchedExisting)) : null) || (isTechSupport ? salesPerson || '' : ''),
         assignedSalespersonCode: (isEditing ? matchedExisting?.assignedSalespersonCode : null) || (isTechSupport ? selectedSalespersonCode || '' : ''),
-        assignedToName: (isEditing ? matchedExisting?.assignedToName : null) || (isTechSupport ? salesPerson || '' : ''),
+        assignedToName: (isEditing ? (matchedExisting?.assignedToName || resolvePiSalesPersonName(matchedExisting)) : null) || (isTechSupport ? salesPerson || '' : ''),
         assignedToId: (isEditing ? matchedExisting?.assignedToId : null) || (isTechSupport ? selectedSalespersonCode || '' : ''),
         assignedAt: (isEditing ? matchedExisting?.assignedAt : null) || (isTechSupport && salesPerson ? new Date().toISOString() : null),
         assignedBy: (isEditing ? matchedExisting?.assignedBy : null) || (isTechSupport && salesPerson ? (currentEmpName || 'Tech Support') : null),
@@ -1159,7 +1160,7 @@ export function createPiActionHandlers(ctx) {
     setPhone(pi.phone || '');
     setEmail(pi.email || '');
     setGstNo(pi.gstNo || '');
-    setSalesPerson(pi.salesPerson || getActiveUserName());
+    setSalesPerson(isTechSupport ? (resolvePiSalesPersonName(pi) || '') : (resolvePiSalesPersonName(pi) || getActiveUserName()));
     setPaymentTerms(normalizePaymentTerm(pi.paymentTerms || pi.paymentType || '100% Paid'));
     setCreditDays(pi.creditDays || '');
     setTransportMode(pi.transportMode || 'Transport');
@@ -1265,7 +1266,7 @@ export function createPiActionHandlers(ctx) {
     setPhone(pi.phone || '');
     setEmail(pi.email || '');
     setGstNo(pi.gstNo || '');
-    setSalesPerson(getActiveUserName() || pi.salesPerson || '');
+    setSalesPerson(isTechSupport ? (resolvePiSalesPersonName(pi) || '') : (getActiveUserName() || resolvePiSalesPersonName(pi) || ''));
 
     // 4. Clone Terms & Transportation
     setPaymentTerms(normalizePaymentTerm(pi.paymentTerms || pi.paymentType || '100% Paid'));

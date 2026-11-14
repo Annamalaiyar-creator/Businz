@@ -96,16 +96,24 @@ export const CODE_TO_SALES_NAME = {
 };
 
 export const resolvePiSalesPersonName = (pi) => {
-  const raw = String(pi?.salesPerson || pi?.salesperson || pi?.salesRep || pi?.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-  const rawCode = String(pi?.salesPersonCode || pi?.assignedSalespersonCode || pi?.createdById || '').trim().toUpperCase();
-  const canonicalCode = canonicalizeSalespersonCode(rawCode, raw);
-
   const nonSales = [
-    'kalpanaram', 'kalpana', 'tech support', 'ts-001', 'ts-002',
+    'kalpanaram', 'kalpana ram', 'kalpana', 'tech support', 'ts-001', 'ts-002',
     'dispatch', 'dispatch head', 'admin', 'direct / admin',
     'sales', 'sales person', 'salesperson', 'sales department', 'sales executive',
     'undefined', 'null', '—', '-'
   ];
+
+  const clean = (v) => String(v || '').replace(/\s*\([^)]*\)/g, '').trim();
+  const primaryRaw = clean(pi?.salesPerson || pi?.salesperson || pi?.sales_person_name || pi?.salesRep);
+  const assignedRaw = clean(pi?.assignedSalesperson || pi?.assignedToName);
+  const creatorRaw = clean(pi?.createdBy || pi?.createdByName);
+
+  const raw = (!primaryRaw || nonSales.includes(primaryRaw.toLowerCase()))
+    ? (assignedRaw && !nonSales.includes(assignedRaw.toLowerCase()) ? assignedRaw : (primaryRaw || creatorRaw))
+    : primaryRaw;
+
+  const rawCode = String(pi?.assignedSalespersonCode || pi?.salesPersonCode || pi?.createdById || '').trim().toUpperCase();
+  const canonicalCode = canonicalizeSalespersonCode(rawCode, raw);
 
   if (raw.toLowerCase() === 'annamalai' || raw.toLowerCase() === 'ar.annamalaiyar' || raw.toLowerCase() === 'ar annamalaiyar') {
     return 'Annamalaiyar';

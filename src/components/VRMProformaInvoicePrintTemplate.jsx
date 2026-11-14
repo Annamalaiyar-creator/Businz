@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { fetchMasterBranding, getCachedBranding, saveCompanyBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { isTamilNaduIntra } from '../utils/gstHelper';
 import { getHsnCode } from '../utils/hsnCodeService';
+import { resolvePiSalesPersonName } from './pi/piHelpers';
 import {
   Printer,
   Download,
@@ -1186,7 +1187,7 @@ export function VRMProformaInvoicePrintSheet({
       const phoneVal = (pi.phone || pi.contactPhone || pi.customerPhone || pi.mobileNumber || pi.mobile || '').toString().replace(/[()]/g, '').trim();
       const roundOffVal = Math.round(grandTotal) - grandTotal;
       const hasRoundOff = Math.abs(roundOffVal) > 0.001;
-      const repName = pi.salesPerson || pi.salesperson || pi.sales_person_name || pi.createdByName || 'Sanjai Kumar';
+      const repName = resolvePiSalesPersonName(pi) || 'Sales Team';
       const docDateStr = formatDocumentDate(pi.piDate || pi.date);
       const docNoStr = pi.piNo || pi.proformaInvoiceNo || pi.invoiceNo || 'VRM-PI-2026-288';
       const primaryTitle = (cfg.documentTitle || 'PROFORMA INVOICE').toUpperCase();
@@ -1790,7 +1791,7 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                     <img
                       src={getSafePrintImageUrl(cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')), VRM_OFFICIAL_STAMP)}
