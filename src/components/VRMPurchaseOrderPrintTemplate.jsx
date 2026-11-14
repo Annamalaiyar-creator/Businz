@@ -476,11 +476,11 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                             </td>
                           </tr>
                         )}
-                        <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                          <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#64748B', fontWeight: '600' }}>
+                        <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: isSet ? '#FAFCFF' : '#FFFFFF' }}>
+                          <td style={{ padding: isSet ? '7px 6px 7px 16px' : '7px 8px', textAlign: isSet ? 'right' : 'center', verticalAlign: 'top', color: '#64748B', fontWeight: '600' }}>
                             {displayIndex}
                           </td>
-                          <td style={{ padding: '7px 10px', verticalAlign: 'top' }}>
+                          <td style={{ padding: isSet ? '7px 10px 7px 22px' : '7px 10px', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '9.8px' }}>{row.name}</div>
                             {row.description ? (
                               <div style={{ color: '#475569', fontSize: '8.3px', marginTop: '2px', lineHeight: '1.35', whiteSpace: 'pre-wrap' }}>
