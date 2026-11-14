@@ -1902,12 +1902,47 @@ export default function PiCreatorEditorSection({ ctx }) {
                 </table>
               </div>
 
+              {(() => {
+                const piAddBtnStyle = {
+                  border: '1px solid #E2E8F0',
+                  backgroundColor: '#F1F5F9',
+                  color: '#1E293B',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'background-color 0.15s ease'
+                };
+                const plusCircleIcon = (
+                  <span style={{
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    backgroundColor: '#2563EB',
+                    color: '#FFFFFF',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    lineHeight: 1,
+                    flexShrink: 0
+                  }}>+</span>
+                );
+                return (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={handleAddMaterialRow}
-                  style={{ border: '1px solid #A5F3FC', background: '#ECFEFF', color: '#0E7490', padding: '9px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  style={piAddBtnStyle}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
                 >
+                  {plusCircleIcon}
                   {hasAnyPreset ? 'Add Standalone Item' : 'Add Product / Item'}
                 </button>
 
@@ -1918,26 +1953,12 @@ export default function PiCreatorEditorSection({ ctx }) {
                     setBulkCategoryFilter('All');
                     setShowBulkItemModal(true);
                   }}
-                  style={{
-                    border: '1px solid #BFDBFE',
-                    background: '#EFF6FF',
-                    color: '#1D4ED8',
-                    padding: '9px 18px',
-                    borderRadius: '10px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 1px 2px rgba(29, 78, 216, 0.06)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#DBEAFE'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#EFF6FF'; }}
+                  style={piAddBtnStyle}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
                   title="Select multiple products/items from catalog at once"
                 >
-                  <Boxes style={{ width: '15px', height: '15px', color: '#2563EB' }} />
+                  {plusCircleIcon}
                   Add Bulk Items
                 </button>
 
@@ -1950,26 +1971,12 @@ export default function PiCreatorEditorSection({ ctx }) {
                     setNewSetGstRate('18%');
                     setShowCreateSetModal(true);
                   }}
-                  style={{
-                    border: '1px solid #DDD6FE',
-                    background: '#F5F3FF',
-                    color: '#6D28D9',
-                    padding: '9px 18px',
-                    borderRadius: '10px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 1px 2px rgba(109, 40, 217, 0.06)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EDE9FE'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F5F3FF'; }}
+                  style={piAddBtnStyle}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
                   title="Create a custom ad-hoc Set / Kit for this PI alone (does not alter pack dropdown)"
                 >
-                  <Layers style={{ width: '15px', height: '15px', color: '#7C3AED' }} />
+                  {plusCircleIcon}
                   Create Set
                 </button>
 
@@ -1978,30 +1985,18 @@ export default function PiCreatorEditorSection({ ctx }) {
                     key={grp.groupId}
                     type="button"
                     onClick={() => handleAddPresetItem(grp.groupId)}
-                    style={{
-                      border: '1px solid #C7D2FE',
-                      background: '#EEF2FF',
-                      color: '#4338CA',
-                      padding: '9px 18px',
-                      borderRadius: '10px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 1px 3px rgba(79, 70, 229, 0.1)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E0E7FF'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#EEF2FF'; }}
+                    style={piAddBtnStyle}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
                     title={`Add extra item bundled into ${grp.presetName} (₹0 unit rate, included in single kit price)`}
                   >
-                    <Layers style={{ width: '15px', height: '15px', color: '#4F46E5' }} />
-                    + Add Extra Item into {grp.presetName}
+                    {plusCircleIcon}
+                    Add Extra Item into {grp.presetName}
                   </button>
                 ))}
               </div>
+                );
+              })()}
             </div>
           </div>
 
