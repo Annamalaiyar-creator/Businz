@@ -424,30 +424,40 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                 <tr style={{ backgroundColor: '#0B3B60', color: '#FFFFFF', fontWeight: '700', fontSize: '8.5px', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
                   <th style={{ padding: '7px 8px', textAlign: 'center', width: '28px' }}>#</th>
                   <th style={{ padding: '7px 10px', textAlign: 'left' }}>ITEM &amp; DESCRIPTION</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', width: '65px' }}>QTY</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}>UNIT</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', width: '80px' }}>RATE (₹)</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', width: '85px' }}>TAXABLE (₹)</th>
-                  <th style={{ padding: '7px 10px', textAlign: 'right', width: '90px' }}>INCL. GST (₹)</th>
+                  <th style={{ padding: '7px 8px', textAlign: 'center', width: '70px' }}>HSN</th>
+                  <th style={{ padding: '7px 8px', textAlign: 'right', width: '55px' }}>QTY</th>
+                  <th style={{ padding: '7px 8px', textAlign: 'center', width: '48px' }}>UNIT</th>
+                  <th style={{ padding: '7px 8px', textAlign: 'right', width: '76px' }}>RATE (₹)</th>
+                  <th style={{ padding: '7px 8px', textAlign: 'right', width: '85px' }}>WITHOUT GST (₹)</th>
+                  <th style={{ padding: '7px 10px', textAlign: 'right', width: '88px' }}>WITH GST (₹)</th>
                 </tr>
               </thead>
               <tbody>
                 {normalizedItems.length === 0 ? (
                   <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                    <td colSpan="7" style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                    <td colSpan="8" style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
                       No line items added.
                     </td>
                   </tr>
-                ) : (
-                  normalizedItems.map((row, idx) => {
-                    const halfRate = (row.gRate / 2).toFixed(1).replace(/\.0$/, '');
-                    const halfGstAmt = row.gstAmt / 2;
-                    const gstSubText = isIntra
-                      ? `CGST / SGST: ${halfRate}% each | ₹${fmtMoney(halfGstAmt)} each`
-                      : `IGST: ${row.gRate}% | ₹${fmtMoney(row.gstAmt)}`;
+                ) : (() => {
+                  let mainCounter = 0;
+                  const seenSetGroups = new Set();
+                  return normalizedItems.map((row, idx) => {
+                    const isSet = row.isPresetItem && row.presetGroupId;
+                    const setGroupItems = isSet ? normalizedItems.filter(r => r.presetGroupId === row.presetGroupId) : [];
+                    const idxInSet = isSet ? setGroupItems.findIndex(r => r.key === row.key) : -1;
+                    const isFirstInSet = isSet && idxInSet === 0;
+                    let setNumber = 0;
+                    if (isFirstInSet) {
+                      seenSetGroups.add(row.presetGroupId);
+                      mainCounter += 1;
+                      setNumber = mainCounter;
+                    } else if (!isSet) {
+                      mainCounter += 1;
+                    }
+                    const displayIndex = isSet ? String.fromCharCode(97 + Math.max(0, idxInSet)) : String(mainCounter);
 
-                    const isFirstInSet = row.isPresetItem && normalizedItems.findIndex(r => r.presetGroupId === row.presetGroupId) === idx;
-                    const grp = row.isPresetItem ? presetGroups[row.presetGroupId] : null;
+                    const grp = isSet ? presetGroups[row.presetGroupId] : null;
                     const grpSetCount = grp ? (Number(grp.setCount) || 1) : 1;
                     const grpRate = grp ? (Number(grp.kitPrice) || 0) : 0;
                     const grpTaxable = (grpRate * grpSetCount) * (1 - discountPct / 100);
@@ -458,23 +468,17 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                       <React.Fragment key={row.key}>
                         {isFirstInSet && grp && (
                           <tr style={{ backgroundColor: '#EFF6FF', borderBottom: '1px solid #BFDBFE' }}>
-                            <td colSpan="4" style={{ padding: '7px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '9.5px' }}>
-                              SET / PACK: {grp.presetName || row.presetName} ({fmtQty(grpSetCount)} {grp.unit === 'kW' ? 'kW' : (grpSetCount > 1 ? 'Sets' : 'Set')})
+                            <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '800', color: '#0F3D6E', fontSize: '9.5px' }}>
+                              {setNumber}
                             </td>
-                            <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', color: '#0F3D6E' }}>
-                              {fmtMoney(grpRate)}
-                            </td>
-                            <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', color: '#0F3D6E' }}>
-                              {fmtMoney(grpTaxable)}
-                            </td>
-                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0F3D6E' }}>
-                              {fmtMoney(grpInclGst)}
+                            <td colSpan="7" style={{ padding: '7px 10px', fontWeight: '800', color: '#0F3D6E', fontSize: '9.8px' }}>
+                              {grp.presetName || row.presetName}
                             </td>
                           </tr>
                         )}
                         <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
                           <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#64748B', fontWeight: '600' }}>
-                            {row.index}
+                            {displayIndex}
                           </td>
                           <td style={{ padding: '7px 10px', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '9.8px' }}>{row.name}</div>
@@ -483,9 +487,9 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                                 {row.description}
                               </div>
                             ) : null}
-                            <div style={{ color: '#64748B', fontSize: '8px', marginTop: '2px' }}>
-                              {row.hsn ? `HSN: ${row.hsn} | ` : ''}{row.account ? `${row.account} | ` : ''}{row.isPresetItem ? 'Included in Set' : gstSubText}
-                            </div>
+                          </td>
+                          <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#475569' }}>
+                            {row.hsn || '—'}
                           </td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A', fontWeight: '600' }}>
                             {fmtQty(row.qty)}
@@ -493,20 +497,38 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                           <td style={{ padding: '7px 8px', textAlign: 'center', verticalAlign: 'top', color: '#475569' }}>
                             {row.unit}
                           </td>
-                          <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: row.isPresetItem ? '#94A3B8' : '#0F172A' }}>
-                            {row.isPresetItem ? 'In Pack' : fmtMoney(row.rate)}
-                          </td>
-                          <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: row.isPresetItem ? '#94A3B8' : '#0F172A' }}>
-                            {row.isPresetItem ? '—' : fmtMoney(row.taxable)}
-                          </td>
-                          <td style={{ padding: '7px 10px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: row.isPresetItem ? '#94A3B8' : '#0F172A' }}>
-                            {row.isPresetItem ? '—' : fmtMoney(row.inclGst)}
-                          </td>
+                          {isSet ? (
+                            isFirstInSet ? (
+                              <>
+                                <td rowSpan={setGroupItems.length} style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle', color: '#0F172A', fontWeight: '600', borderLeft: '1px solid #E2E8F0' }}>
+                                  {fmtMoney(grpRate)}
+                                </td>
+                                <td rowSpan={setGroupItems.length} style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle', color: '#0F172A', fontWeight: '600' }}>
+                                  {fmtMoney(grpTaxable)}
+                                </td>
+                                <td rowSpan={setGroupItems.length} style={{ padding: '7px 10px', textAlign: 'right', verticalAlign: 'middle', fontWeight: '700', color: '#0F172A' }}>
+                                  {fmtMoney(grpInclGst)}
+                                </td>
+                              </>
+                            ) : null
+                          ) : (
+                            <>
+                              <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
+                                {fmtMoney(row.rate)}
+                              </td>
+                              <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'top', color: '#0F172A' }}>
+                                {fmtMoney(row.taxable)}
+                              </td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', verticalAlign: 'top', fontWeight: '700', color: '#0F172A' }}>
+                                {fmtMoney(row.inclGst)}
+                              </td>
+                            </>
+                          )}
                         </tr>
                       </React.Fragment>
                     );
-                  })
-                )}
+                  });
+                })()}
               </tbody>
             </table>
 
