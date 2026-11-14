@@ -2,7 +2,7 @@ import React from "react";
 import {
   Plus, Trash2, Eye, FileText, AlertCircle, AlertTriangle, X,
   CheckCircle, Clock, FileCheck, UploadCloud, Truck, Package,
-  ShoppingCart, Upload, Layers, Image, Bell, Save, Boxes, ChevronDown, User, Paperclip, ArrowLeft
+  ShoppingCart, Upload, Layers, Image, Bell, Save, Boxes, ChevronDown, User, Paperclip
 } from "lucide-react";
 import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
@@ -2373,7 +2373,7 @@ export default function CreateBomFormPage(props) {
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
           >
-            <ArrowLeft size={15} /> Back
+            Back
           </button>
 
           <button
@@ -2405,7 +2405,7 @@ export default function CreateBomFormPage(props) {
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
           >
-            <FileText size={15} /> Save as Draft
+            Save as Draft
           </button>
 
           <button
@@ -2507,8 +2507,7 @@ export default function CreateBomFormPage(props) {
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#059669'; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#10B981'; }}
           >
-            <CheckCircle style={{ width: '16px', height: '16px' }} />
-            Confirm BOM →
+            Confirm BOM
           </button>
         </div>
 

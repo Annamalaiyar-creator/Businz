@@ -41,9 +41,7 @@ export default function BomConfirmAuditSection({ ctx }) {
     presetUnit,
     presetKitPrice,
     presetGroups,
-    canUserCancelBom,
     blockInventoryForBom,
-    handleCancelBomOrder,
     alert
   } = ctx;
 
@@ -380,31 +378,6 @@ export default function BomConfirmAuditSection({ ctx }) {
             >
               Back to BOM Dashboard
             </button>
-
-            {canUserCancelBom(confirmingBomModal) && !isCancelled && confirmingBomModal.status !== 'Cancelled & Stock Restored' && (
-              <button
-                onClick={() => handleCancelBomOrder(confirmingBomModal)}
-                style={{
-                  border: '1px solid #FECACA',
-                  backgroundColor: '#FEF2F2',
-                  color: '#DC2626',
-                  height: '40px',
-                  padding: '0 18px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <XCircle style={{ width: '16px', height: '16px' }} />
-                Cancel BOM & Restore Stock
-              </button>
-            )}
-
 
             {isAlreadyForwarded && !isCeo && ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(confirmingBomModal.paymentType) && (
               <button
@@ -2335,6 +2308,98 @@ export default function BomConfirmAuditSection({ ctx }) {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Sticky Bottom Menu Bar Following with Scroll for BOM Details & Reconfirmation */}
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderTop: '1.5px solid #CBD5E1',
+            padding: '12px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+            zIndex: 50,
+            boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+            borderRadius: '12px',
+            marginTop: '16px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setConfirmingBomModal(null)}
+              style={{
+                height: '40px',
+                borderRadius: '8px',
+                border: '1.5px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                padding: '0 18px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontSize: '13px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+              }}
+            >
+              Back to BOM Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrintingBomRecord(confirmingBomModal)}
+              style={{
+                height: '40px',
+                borderRadius: '8px',
+                border: '1.5px solid #10B981',
+                backgroundColor: '#ECFDF5',
+                color: '#047857',
+                padding: '0 18px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontSize: '13px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+              }}
+            >
+              Print
+            </button>
+            <button
+              type="button"
+              onClick={() => setExportFormatRecord(confirmingBomModal)}
+              style={{
+                height: '40px',
+                borderRadius: '8px',
+                border: '1.5px solid #0E7490',
+                backgroundColor: '#ECFEFF',
+                color: '#0E7490',
+                padding: '0 18px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontSize: '13px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+              }}
+            >
+              Export
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+            <strong style={{ fontSize: '15px', color: '#0E7490', fontWeight: '800' }}>
+              ₹{(orderGrandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </strong>
           </div>
         </div>
 

@@ -71,8 +71,6 @@ export default function BomOperationalModals({ ctx }) {
     presetUnit,
     presetKitPrice,
     presetGroups,
-    canUserCancelBom,
-    handleCancelBomOrder,
     executeCancelBom,
     alert,
     handleExecuteSettleCredit
@@ -134,32 +132,6 @@ export default function BomOperationalModals({ ctx }) {
                 >
                   <Download size={14} style={{ color: '#0E7490' }} /> Export
                 </button>
-                {canUserCancelBom(quickPreviewRecord) && (
-                  <button
-                    onClick={() => {
-                      const rec = quickPreviewRecord;
-                      handleCancelBomOrder(rec);
-                      setQuickPreviewRecord(null);
-                    }}
-                    style={{
-                      border: '1px solid #FECACA',
-                      backgroundColor: '#FEF2F2',
-                      color: '#DC2626',
-                      padding: '6px 14px',
-                      borderRadius: '10px',
-                      fontSize: '12px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
-                    }}
-                    title="Cancel BOM and restore blocked stock back into inventory"
-                  >
-                    <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
-                  </button>
-                )}
 
                 <button
                   onClick={() => {
