@@ -392,7 +392,7 @@ export default function CreateProductModal({ isOpen, onClose, onProductCreated, 
                   <option value="KG">KG (Kilograms)</option>
                   <option value="SET">SET (Sets)</option>
                   <option value="MTR">MTR (Meters)</option>
-                  <option value="LENGTH">LENGTH (Length)</option>
+                  <option value="LG">LG (Length)</option>
                   <option value="SQM">SQM (Square Meters)</option>
                   <option value="PKT">PKT (Packets)</option>
                   <option value="BOX">BOX (Boxes)</option>
