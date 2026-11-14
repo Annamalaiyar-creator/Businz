@@ -3124,14 +3124,13 @@ export default function GoodsReceiptNoteView(props) {
                             <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Accepted Qty</th>
                             <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Rejected Qty</th>
                             <th style={{ padding: '10px 8px', color: '#64748B', minWidth: '130px' }}>Reason for Rejection</th>
-                            <th style={{ padding: '10px 8px', color: '#64748B', minWidth: '110px' }}>Batch / Lot No</th>
                             {!isViewOnlyMode && <th style={{ padding: '10px 4px', width: '40px' }}></th>}
                           </tr>
                         </thead>
                         <tbody>
                           {grnItems.length === 0 ? (
                             <tr>
-                              <td colSpan={isViewOnlyMode ? 10 : 11} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
+                              <td colSpan={isViewOnlyMode ? 9 : 10} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
                                 No items loaded. Select a Purchase Order to display its line items for receipt entry.
                               </td>
                             </tr>
@@ -3375,26 +3374,6 @@ export default function GoodsReceiptNoteView(props) {
                                       <option>Thread Issue</option>
                                       <option>Wrong Specs</option>
                                     </select>
-                                  )}
-                                </td>
-                                <td style={{ padding: '12px 8px', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
-                                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: '500' }}>
-                                      {item.batch || '—'}
-                                    </span>
-                                  ) : (
-                                    <input
-                                      id={`goods-receipt-note-batch-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
-                                      name={`batch_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
-                                      aria-label="Batch"
-                                      type="text"
-                                      value={item.batch}
-                                      onChange={(e) => {
-                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, batch: e.target.value } : it);
-                                        setGrnItems(updated);
-                                      }}
-                                      style={{ width: '90px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', fontSize: '11px', backgroundColor: '#FFFFFF' }}
-                                    />
                                   )}
                                 </td>
                                 {!isViewOnlyMode && (
