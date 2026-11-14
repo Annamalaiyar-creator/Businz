@@ -5815,20 +5815,116 @@ Procurement Team | BUSINZ`;
                               {hasAnySet && (
                                 isSetItem ? (
                                   isFirstInGroup ? (
-                                    <td rowSpan={setGroupItems.length} style={{ padding: '8px 10px', backgroundColor: '#ECFEFF', verticalAlign: 'middle', borderLeft: '1px solid #BAE6FD' }}>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="any"
-                                          value={grp?.kitPrice || ''}
-                                          onChange={(e) => handleUpdateGroupKitPrice(groupId, e.target.value)}
-                                          placeholder="Pack ₹"
-                                          style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1.5px solid #0E7490', padding: '0 8px', fontSize: '12px', fontWeight: '700', textAlign: 'right', backgroundColor: '#FFFFFF', color: '#0F172A', boxSizing: 'border-box' }}
-                                        />
-                                        <span style={{ fontSize: '10px', color: '#0369A1', fontWeight: '700', textAlign: 'right' }}>
-                                          Total: ₹{(Number(grp?.kitPrice || 0) * setCount).toLocaleString('en-IN')}
+                                    <td rowSpan={setGroupItems.length} style={{ padding: '8px 10px', backgroundColor: '#ECFEFF', verticalAlign: 'middle', borderLeft: '1px solid #BAE6FD', minWidth: '175px' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '165px', display: 'block' }} title={grp?.presetName}>
+                                          PACK {packIndex}: {grp?.presetName}
                                         </span>
+                                        <div style={{ position: 'relative', width: '100%' }}>
+                                          <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '700', color: (!grp?.kitPrice || parseFloat(grp?.kitPrice) <= 0) ? '#DC2626' : '#0E7490', pointerEvents: 'none' }}>₹</span>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            value={grp?.kitPrice || ''}
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => handleUpdateGroupKitPrice(groupId, e.target.value)}
+                                            placeholder="Enter Amt *"
+                                            style={{
+                                              width: '100%',
+                                              height: '36px',
+                                              borderRadius: '7px',
+                                              border: (!grp?.kitPrice || parseFloat(grp?.kitPrice) <= 0) ? '2px solid #EF4444' : '2px solid #0E7490',
+                                              padding: '0 8px 0 22px',
+                                              fontSize: '13px',
+                                              fontWeight: '800',
+                                              textAlign: 'right',
+                                              backgroundColor: (!grp?.kitPrice || parseFloat(grp?.kitPrice) <= 0) ? '#FEF2F2' : '#FFFFFF',
+                                              color: (!grp?.kitPrice || parseFloat(grp?.kitPrice) <= 0) ? '#DC2626' : '#0F172A',
+                                              outline: 'none',
+                                              boxSizing: 'border-box'
+                                            }}
+                                          />
+                                        </div>
+                                        {(!grp?.kitPrice || parseFloat(grp?.kitPrice) <= 0) && (
+                                          <span style={{ fontSize: '10px', fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
+                                            * Mandatory Amount
+                                          </span>
+                                        )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                                            {setGroupItems.length} items ×
+                                          </span>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            max="99999"
+                                            value={grp?.setCount !== undefined && grp?.setCount !== null ? grp.setCount : ''}
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => {
+                                              const rawVal = e.target.value;
+                                              setPresetGroups(prev => {
+                                                const cur = prev[groupId];
+                                                if (!cur) return prev;
+                                                if (rawVal === '') return { ...prev, [groupId]: { ...cur, setCount: '' } };
+                                                const parsed = parseFloat(rawVal);
+                                                return { ...prev, [groupId]: { ...cur, setCount: isNaN(parsed) ? '' : Math.max(0, parsed) } };
+                                              });
+                                            }}
+                                            style={{ width: '48px', height: '26px', borderRadius: '6px', border: '1.5px solid #BAE6FD', fontSize: '11.5px', fontWeight: '800', color: '#0E7490', textAlign: 'center', padding: '0 2px', outline: 'none', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
+                                            title="Multiplier for this pack"
+                                          />
+                                          <select
+                                            value={grp?.unit || 'Sets'}
+                                            onChange={(e) => {
+                                              const newUom = e.target.value;
+                                              setPresetGroups(prev => {
+                                                const cur = prev[groupId];
+                                                if (!cur) return prev;
+                                                return { ...prev, [groupId]: { ...cur, unit: newUom } };
+                                              });
+                                            }}
+                                            style={{ height: '26px', borderRadius: '6px', border: '1.5px solid #BAE6FD', padding: '0 4px', fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer' }}
+                                            title="Select Pack UOM"
+                                          >
+                                            <option value="Sets">Sets</option>
+                                            <option value="kW">kW</option>
+                                            <option value="MT">MT</option>
+                                            <option value="NOS">NOS</option>
+                                            <option value="KG">KG</option>
+                                            <option value="PCS">PCS</option>
+                                            <option value="MTR">MTR</option>
+                                            <option value="LENGTH">LENGTH</option>
+                                          </select>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700' }}>GST:</span>
+                                            <select
+                                              value={grp?.gstRate || '18%'}
+                                              onChange={(e) => {
+                                                const newGst = e.target.value;
+                                                const taxNum = parseFloat(String(newGst).replace('%', '')) || 0;
+                                                setPresetGroups(prev => {
+                                                  const cur = prev[groupId];
+                                                  if (!cur) return prev;
+                                                  return { ...prev, [groupId]: { ...cur, gstRate: newGst } };
+                                                });
+                                                setItems(prev => (prev || []).map(it => it.presetGroupId === groupId ? { ...it, tax: taxNum } : it));
+                                              }}
+                                              style={{ height: '24px', borderRadius: '6px', border: '1.5px solid #BAE6FD', padding: '0 4px', fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer' }}
+                                            >
+                                              <option value="18%">18%</option>
+                                              <option value="12%">12%</option>
+                                              <option value="5%">5%</option>
+                                              <option value="0%">0%</option>
+                                            </select>
+                                          </div>
+                                          <span style={{ fontSize: '10px', color: '#0369A1', fontWeight: '800' }}>
+                                            ₹{(Number(grp?.kitPrice || 0) * setCount).toLocaleString('en-IN')}
+                                          </span>
+                                        </div>
                                       </div>
                                     </td>
                                   ) : null
@@ -8092,46 +8188,25 @@ Procurement Team | BUSINZ`;
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Pricing / Capacity Unit
-                </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setNewSetUnit('Sets')}
-                    style={{ flex: 1, height: '36px', borderRadius: '8px', border: newSetUnit === 'Sets' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1', backgroundColor: newSetUnit === 'Sets' ? '#F5F3FF' : '#FFFFFF', color: newSetUnit === 'Sets' ? '#7C3AED' : '#475569', fontWeight: '800', fontSize: '12.5px', cursor: 'pointer' }}
-                  >
-                    Sets (Set-based)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewSetUnit('kW')}
-                    style={{ flex: 1, height: '36px', borderRadius: '8px', border: newSetUnit === 'kW' ? '2px solid #7C3AED' : '1.5px solid #CBD5E1', backgroundColor: newSetUnit === 'kW' ? '#F5F3FF' : '#FFFFFF', color: newSetUnit === 'kW' ? '#7C3AED' : '#475569', fontWeight: '800', fontSize: '12.5px', cursor: 'pointer' }}
-                  >
-                    kW (Kilowatt Capacity)
-                  </button>
-                </div>
-              </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    {newSetUnit === 'kW' ? 'Capacity (kW)' : 'Number of Sets'}
+                    UOM
                   </label>
-                  <input
-                    type="number"
-                    min={newSetUnit === 'kW' ? '0.01' : '1'}
-                    step={newSetUnit === 'kW' ? 'any' : '1'}
-                    max="99999"
-                    value={newSetCount}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '') { setNewSetCount(''); return; }
-                      setNewSetCount(newSetUnit === 'kW' ? (parseFloat(val) || '') : (parseInt(val, 10) || ''));
-                    }}
-                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                  />
+                  <select
+                    value={newSetUnit}
+                    onChange={(e) => setNewSetUnit(e.target.value)}
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}
+                  >
+                    <option value="Sets">Sets</option>
+                    <option value="kW">kW</option>
+                    <option value="MT">MT</option>
+                    <option value="NOS">NOS</option>
+                    <option value="KG">KG</option>
+                    <option value="PCS">PCS</option>
+                    <option value="MTR">MTR</option>
+                    <option value="LENGTH">LENGTH</option>
+                  </select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
@@ -8152,7 +8227,7 @@ Procurement Team | BUSINZ`;
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  {newSetUnit === 'kW' ? 'Rate per kW (₹)' : 'Pack Amt / Set Price (₹)'} <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
+                  Pack Amt / Rate per {newSetUnit || 'Sets'} (₹) <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
                 </label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: '#64748B' }}>₹</span>
@@ -8162,7 +8237,7 @@ Procurement Team | BUSINZ`;
                     step="any"
                     value={newSetPrice}
                     onChange={(e) => setNewSetPrice(e.target.value)}
-                    placeholder={newSetUnit === 'kW' ? 'Enter rate per 1 kW' : 'Enter Pack Amount for 1 set'}
+                    placeholder={`Enter Pack Amount per 1 ${newSetUnit || 'Set'}`}
                     style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 12px 0 28px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
                   />
                 </div>
