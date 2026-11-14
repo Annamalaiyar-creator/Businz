@@ -131,43 +131,6 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
             </div>
           </div>
 
-          {Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0 && (
-            <div style={{
-              backgroundColor: '#FFFBEB',
-              border: '1px solid #FDE68A',
-              borderRadius: '12px',
-              padding: '14px 18px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  ✏️ Edited BOM History ({confirmingBomModal.editHistory.length})
-                </span>
-                {confirmingBomModal.lastEditedAt && (
-                  <span style={{ fontSize: '11.5px', color: '#B45309', fontWeight: '600' }}>
-                    Last edited by {confirmingBomModal.lastEditedBy || 'Sales'} on {new Date(confirmingBomModal.lastEditedAt).toLocaleString('en-IN')}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                {[...confirmingBomModal.editHistory].reverse().map((entry, idx) => (
-                  <div key={idx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #FDE68A', borderRadius: '8px', padding: '10px 12px' }}>
-                    <div style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A', marginBottom: '4px' }}>
-                      {entry.editedBy || 'Sales'}{entry.editedByRole ? ` (${entry.editedByRole})` : ''} • {entry.editedAt ? new Date(entry.editedAt).toLocaleString('en-IN') : ''}
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {(Array.isArray(entry.changes) ? entry.changes : ['BOM details updated']).map((chg, cIdx) => (
-                        <li key={cIdx}>{chg}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* 1. TOP SECTION: ALL STAGES WITH ACTUAL TIME & STAGE PROCESSING AUDIT */}
           <div style={{
             backgroundColor: '#FFFFFF',
@@ -639,7 +602,14 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                                         {presetIdx + 1}.{cIdx + 1}
                                       </td>
                                       <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
-                                        <div>{it.name || it.productName || it.c2 || 'Item'}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          <span>{it.name || it.productName || it.c2 || 'Item'}</span>
+                                          {it.isEdited && (
+                                            <span title={it.editedNote || 'Edited'} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>
+                                              Edited
+                                            </span>
+                                          )}
+                                        </div>
                                         {it.subPresetName && (
                                           <div style={{ fontSize: '10px', color: '#0D9488', fontWeight: '700', marginTop: '1px' }}>
                                             ↳ Sub-Kit: {it.subPresetName}
@@ -749,7 +719,14 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                                       C.{cIdx + 1}
                                     </td>
                                     <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>
-                                      <div>{it.name || it.productName || it.c2 || 'Item'}</div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span>{it.name || it.productName || it.c2 || 'Item'}</span>
+                                        {it.isEdited && (
+                                          <span title={it.editedNote || 'Edited'} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>
+                                            Edited
+                                          </span>
+                                        )}
+                                      </div>
                                       {it.category && (
                                         <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
                                           {it.category}

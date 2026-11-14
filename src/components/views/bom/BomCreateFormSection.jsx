@@ -74,8 +74,6 @@ export default function BomCreateFormSection({ ctx }) {
     setNewBomTransporterName,
     newBomDestination,
     setNewBomDestination,
-    newBomVehicleNo,
-    setNewBomVehicleNo,
     newBomTransportScope,
     setNewBomTransportScope,
     formErrors,
@@ -1739,7 +1737,7 @@ export default function BomCreateFormSection({ ctx }) {
                   cursor: 'pointer'
                 }}
               >
-                <option value="">-- Select Transport Mode --</option>
+                <option value="" disabled hidden>Select transport mode</option>
                 <option value="Transport">Transport</option>
                 <option value="Own Vehicle">Own Vehicle</option>
                 <option value="Porter">Porter</option>
@@ -1821,25 +1819,41 @@ export default function BomCreateFormSection({ ctx }) {
               )}
             </div>
             <div>
-              <label htmlFor="bom-orders-vehicle-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Vehicle Number</label>
-              <input id="bom-orders-vehicle-number" name="vehicleNumber" aria-label="Vehicle Number"
-                type="text"
-                value={newBomVehicleNo}
-                onChange={(e) => setNewBomVehicleNo(e.target.value)}
-                placeholder="e.g. TN 01 AB 1234 / KA 04 C 5678"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-               />
-            </div>
-            <div>
-              <label htmlFor="bom-orders-scope" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Scope</label>
+              <label htmlFor="bom-orders-scope" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Scope <span style={{ color: '#EF4444' }}>*</span>
+              </label>
               <select id="bom-orders-scope" name="scope" aria-label="Scope"
-                value={newBomTransportScope}
-                onChange={(e) => setNewBomTransportScope(e.target.value)}
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
+                required
+                value={newBomTransportScope || ''}
+                onChange={(e) => {
+                  setNewBomTransportScope(e.target.value);
+                  if (formErrors?.transportScope) {
+                    setFormErrors(prev => ({ ...prev, transportScope: null }));
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  height: '42px',
+                  borderRadius: '10px',
+                  border: (!newBomTransportScope?.trim() && formErrors?.transportScope) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                  padding: '0 14px',
+                  fontSize: '13px',
+                  color: newBomTransportScope ? '#0F172A' : '#64748B',
+                  backgroundColor: (!newBomTransportScope?.trim() && formErrors?.transportScope) ? '#FEF2F2' : 'white',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
               >
+                <option value="" disabled hidden>Select Transport scope</option>
                 <option value="VRM Structures">VRM Structures</option>
                 <option value="Customer Scope">Customer Scope</option>
               </select>
+              {!newBomTransportScope?.trim() && formErrors?.transportScope && (
+                <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
+                  ⚠️ {formErrors.transportScope}
+                </div>
+              )}
             </div>
           </div>
         </div>

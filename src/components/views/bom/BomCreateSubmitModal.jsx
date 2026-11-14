@@ -159,6 +159,8 @@ export default function BomCreateSubmitModal({ ctx }) {
     totals,
     editingBomRecord,
     setEditingBomRecord,
+    originalPiSnapshot,
+    setOriginalPiSnapshot,
     userRole
   } = ctx;
 
@@ -211,6 +213,7 @@ export default function BomCreateSubmitModal({ ctx }) {
                       setShowBOMForm(false);
                       setBomConfirmModal(null);
                       if (setEditingBomRecord) setEditingBomRecord(null);
+                      if (setOriginalPiSnapshot) setOriginalPiSnapshot(null);
                       setSelectedPreset('');
                       setPresetKitPrice('');
                       setPresetSetCount(1);
@@ -219,7 +222,7 @@ export default function BomCreateSubmitModal({ ctx }) {
                       setNewBomTransporterName('');
                       setNewBomDestination('');
                       setNewBomVehicleNo('');
-                      setNewBomTransportScope('VRM Structures');
+                      setNewBomTransportScope('');
                       setNewBomSourcePiNo('');
                       setNewBomBillingStreet('');
                       setNewBomBillingCity('');
@@ -322,7 +325,7 @@ export default function BomCreateSubmitModal({ ctx }) {
                           deliveryAddressProofDoc: sameAsBilling ? null : (deliveryDocs[0] || null),
                           deliveryAddressProofDocs: sameAsBilling ? [] : deliveryDocs,
                           transportMode: newBomTransportMode || '',
-                          transportScope: newBomTransportScope || 'VRM Structures',
+                          transportScope: newBomTransportScope || '',
                           transporterName: newBomTransporterName || '',
                           destination: (newBomDestination || '').trim(),
                           vehicleNo: newBomVehicleNo || '',
@@ -411,6 +414,53 @@ export default function BomCreateSubmitModal({ ctx }) {
 
                         let sanitizedNewBom = stripDataUrlsFromRecord(newBomRecord);
                         const isEditingExisting = Boolean(editingBomRecord && (editingBomRecord.bomCode || editingBomRecord.code || editingBomRecord.id));
+                        if (!isEditingExisting && originalPiSnapshot && sanitizedNewBom.sourcePiNo) {
+                          const normVal = (v) => String(v == null ? '' : v).trim();
+                          const editedFields = {};
+                          const oldComp = normVal(originalPiSnapshot.companyName || originalPiSnapshot.vendorName || originalPiSnapshot.customerName);
+                          const newComp = normVal(sanitizedNewBom.companyName || sanitizedNewBom.customerName);
+                          if (oldComp && newComp && oldComp !== newComp) editedFields.companyName = `${oldComp} → ${newComp}`;
+                          const oldPay = normVal(originalPiSnapshot.paymentTerms || originalPiSnapshot.paymentType);
+                          const newPay = normVal(sanitizedNewBom.paymentType);
+                          if (oldPay && newPay && oldPay !== newPay) editedFields.paymentType = `${oldPay} → ${newPay}`;
+                          const oldRem = normVal(originalPiSnapshot.remarks || originalPiSnapshot.notes);
+                          const newRem = normVal(sanitizedNewBom.remarks);
+                          if (oldRem !== newRem && (oldRem || newRem)) editedFields.remarks = `${oldRem || '—'} → ${newRem || '—'}`;
+
+                          const piItemsList = Array.isArray(originalPiSnapshot.items) ? originalPiSnapshot.items : [];
+                          const piItemMap = new Map();
+                          piItemsList.forEach(pIt => {
+                            const k = normVal(pIt?.name || pIt?.code).toLowerCase();
+                            if (k) piItemMap.set(k, pIt);
+                          });
+                          let anyItemEdited = false;
+                          sanitizedNewBom.items = (sanitizedNewBom.items || []).map(bIt => {
+                            const k = normVal(bIt?.name || bIt?.code).toLowerCase();
+                            const matchPi = k ? piItemMap.get(k) : null;
+                            if (!matchPi) {
+                              anyItemEdited = true;
+                              return { ...bIt, isEdited: true, editedNote: 'Added during PI → BOM conversion' };
+                            }
+                            const diffs = [];
+                            if (Number(matchPi.qty || 0) !== Number(bIt.qty || 0)) {
+                              diffs.push(`Qty: ${matchPi.qty || 0} → ${bIt.qty || 0}`);
+                            }
+                            if (!bIt.isPresetItem && Number(matchPi.rate || 0) !== Number(bIt.rate || 0)) {
+                              diffs.push(`Rate: ₹${Number(matchPi.rate || 0).toLocaleString('en-IN')} → ₹${Number(bIt.rate || 0).toLocaleString('en-IN')}`);
+                            }
+                            if (diffs.length > 0) {
+                              anyItemEdited = true;
+                              return { ...bIt, isEdited: true, editedNote: diffs.join(', ') };
+                            }
+                            return bIt;
+                          });
+                          if (Object.keys(editedFields).length > 0 || anyItemEdited) {
+                            sanitizedNewBom.editedFields = editedFields;
+                            sanitizedNewBom.isEdited = true;
+                            sanitizedNewBom.lastEditedAt = new Date().toISOString();
+                            sanitizedNewBom.lastEditedBy = loggedInOperatorName;
+                          }
+                        }
                         if (isEditingExisting) {
                           const nowIso = new Date().toISOString();
                           const existingCode = editingBomRecord.bomCode || editingBomRecord.code || editingBomRecord.id;
@@ -718,10 +768,11 @@ export default function BomCreateSubmitModal({ ctx }) {
                         setNewBomRemarks('');
                         setNewBomTransportMode('');
                         if (setEditingBomRecord) setEditingBomRecord(null);
+                        if (setOriginalPiSnapshot) setOriginalPiSnapshot(null);
                         setNewBomTransporterName('');
                         setNewBomDestination('');
                         setNewBomVehicleNo('');
-                        setNewBomTransportScope('VRM Structures');
+                        setNewBomTransportScope('');
                         setNewBomLrNo('');
                         setNewBomCreditDays(7);
                         setNewBomPaymentType('100% Paid');

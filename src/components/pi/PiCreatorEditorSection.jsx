@@ -85,8 +85,6 @@ export default function PiCreatorEditorSection({ ctx }) {
     setDraggedItemIndex,
     dragOverItemIndex,
     setDragOverItemIndex,
-    transportScope,
-    setTransportScope,
     piFormErrors,
     setPiFormErrors,
     paymentTerms,
@@ -357,21 +355,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                     <option value="Credit Payment">Credit Payment</option>
                   </select>
                 </div>
-
-                <div>
-                  <label htmlFor="performa-invoice-transport-scope" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Transport Scope
-                  </label>
-                  <select id="performa-invoice-transport-scope" name="transportScope" aria-label="Transport Scope"
-                    value={transportScope}
-                    onChange={(e) => setTransportScope(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
-                  >
-                    <option value="VRM Structures">VRM Structures</option>
-                    <option value="Customer Scope">Customer Scope</option>
-                  </select>
-                </div>
-
               </div>
             </div>
 

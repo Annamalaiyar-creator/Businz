@@ -413,6 +413,7 @@ export default function BomOrdersView(props) {
   // Form & Modals State
   const [showBOMForm, setShowBOMForm] = useState(false);
   const [editingBomRecord, setEditingBomRecord] = useState(null);
+  const [originalPiSnapshot, setOriginalPiSnapshot] = useState(null);
   const bomCustSearchTimerRef = useRef(null);
 
   // Lazy-load initial 60 customers only when Create BOM Form is opened (Phase B4: ~34 KB instead of 4.42 MB)
@@ -562,7 +563,7 @@ export default function BomOrdersView(props) {
   const [newBomTransporterName, setNewBomTransporterName] = useState('');
   const [newBomDestination, setNewBomDestination] = useState('');
   const [newBomVehicleNo, setNewBomVehicleNo] = useState('');
-  const [newBomTransportScope, setNewBomTransportScope] = useState('VRM Structures');
+  const [newBomTransportScope, setNewBomTransportScope] = useState('');
   const [newBomLrNo, setNewBomLrNo] = useState('');
   const [formErrors, setFormErrors] = useState({});
   const [validationErrorModal, setValidationErrorModal] = useState(null);
@@ -787,6 +788,14 @@ export default function BomOrdersView(props) {
         field: 'Destination *',
         message: 'Destination is mandatory. Please enter delivery destination.',
         targetId: 'bom-orders-destination'
+      });
+    }
+    if (!isDraft && (!newBomTransportScope || !newBomTransportScope.trim())) {
+      errors.transportScope = 'Scope is required';
+      missingList.push({
+        field: 'Scope *',
+        message: 'Please select a Transport Scope.',
+        targetId: 'bom-orders-scope'
       });
     }
 
@@ -1780,8 +1789,13 @@ export default function BomOrdersView(props) {
       setNewBomTransporterName(pendingPi.transporterName || pendingPi.transporter || '');
       setNewBomDestination(pendingPi.destination || pendingPi.deliveryCity || pendingPi.city || '');
       setNewBomVehicleNo(pendingPi.vehicleNo || '');
-      setNewBomTransportScope(pendingPi.transportScope || 'VRM Structures');
+      setNewBomTransportScope(pendingPi.transportScope || '');
       setNewBomLrNo(pendingPi.lrNo || '');
+      try {
+        setOriginalPiSnapshot(JSON.parse(JSON.stringify(pendingPi)));
+      } catch (_) {
+        setOriginalPiSnapshot(pendingPi);
+      }
 
       // 4. Extract Full Billing Address from PI
       let bStreet = '', bCity = '', bState = '', bPin = '';
@@ -2858,6 +2872,8 @@ export default function BomOrdersView(props) {
     setShowBOMForm,
     editingBomRecord,
     setEditingBomRecord,
+    originalPiSnapshot,
+    setOriginalPiSnapshot,
     handleStartEditBom,
     bomCustSearchTimerRef,
     confirmingBomModal,

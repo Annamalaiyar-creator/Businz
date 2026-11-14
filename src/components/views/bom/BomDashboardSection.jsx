@@ -41,7 +41,6 @@ export default function BomDashboardSection({ ctx }) {
     tableLoading,
     isCeo,
     setConfirmingBomModal,
-    handleStartEditBom,
     setUploadPaymentModal,
     setSettleCreditModal,
     setQuickPreviewRecord,
@@ -1443,13 +1442,7 @@ export default function BomDashboardSection({ ctx }) {
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
             const isOnlyEditable = (selectedRows || []).every(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              if (!r) return false;
-              const isCanc = Boolean(r.cancelled || r.status === 'Cancelled & Stock Restored' || String(r.status || '').toLowerCase().includes('cancel'));
-              const isPackedOrLater = Boolean(
-                r.dispatchPackingVerified ||
-                ['Packed & Ready for Dispatch', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed', 'Dispatched', 'Closed', 'CLOSED'].includes(r.status)
-              );
-              return !isCanc && !isPackedOrLater;
+              return r && (!r.status || ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Pending'].includes(r.status));
             });
             if (!isOnlyEditable) return null;
 
@@ -1460,13 +1453,9 @@ export default function BomDashboardSection({ ctx }) {
                     alert('You cannot edit multiple items at once.');
                   } else if (selectedRows.length === 1) {
                     const codeVal = selectedRows[0];
-                    const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal) || { code: codeVal };
+                    const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal };
                     setSelectedRows([]);
-                    if (handleStartEditBom) {
-                      handleStartEditBom(targetRow);
-                    } else {
-                      setConfirmingBomModal({ ...targetRow, isEditMode: true });
-                    }
+                    setConfirmingBomModal({ ...targetRow, isEditMode: true });
                   }
                 }}
                 style={{
@@ -1486,7 +1475,7 @@ export default function BomDashboardSection({ ctx }) {
                   boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                 }}
               >
-                <Edit3 size={14} style={{ color: '#0E7490' }} /> Edit BOM
+                <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
               </button>
             );
           })()}

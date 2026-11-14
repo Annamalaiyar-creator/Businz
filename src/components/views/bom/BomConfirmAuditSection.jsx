@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt, Edit3
+  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt
 } from 'lucide-react';
 import { saveCloudBomRow } from '../../../utils/supabaseDataSync';
 import { isRailPreset, isKwPreset, calculateTotalDispatchQty } from '../../../utils/vrmProductsData';
@@ -33,7 +33,6 @@ export default function BomConfirmAuditSection({ ctx }) {
     isCeo,
     confirmingBomModal,
     setConfirmingBomModal,
-    handleStartEditBom,
     setUploadPaymentModal,
     setPreviewDocModal,
     sameAsBilling,
@@ -61,7 +60,7 @@ export default function BomConfirmAuditSection({ ctx }) {
       ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'ACTIVE', 'Active', 'Pending Verification', 'Pending'].includes(confirmingBomModal.status || 'Pending Sales Confirmation')
     );
     const isAlreadyForwarded = !isEditMode;
-    const isSourcePiLocked = Boolean(confirmingBomModal.sourcePiNo);
+    const isSourcePiLocked = false;
 
     const modalPresetGroups = (Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0)
       ? confirmingBomModal.presetGroups.map(g => ({ ...g }))
@@ -332,30 +331,6 @@ export default function BomConfirmAuditSection({ ctx }) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {!isCeo && !isCancelled && !confirmingBomModal.dispatchPackingVerified && !['Packed & Ready for Dispatch', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed', 'Dispatched', 'Closed', 'CLOSED'].includes(confirmingBomModal.status) && handleStartEditBom && (
-              <button
-                type="button"
-                onClick={() => handleStartEditBom(confirmingBomModal)}
-                title="Edit BOM Details"
-                style={{
-                  border: '1px solid #F59E0B',
-                  backgroundColor: '#FFFBEB',
-                  color: '#B45309',
-                  height: '40px',
-                  padding: '0 18px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '7px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                }}
-              >
-                <Edit3 size={15} style={{ color: '#D97706' }} /> Edit BOM
-              </button>
-            )}
             <button
               type="button"
               onClick={() => setPrintingBomRecord(confirmingBomModal)}
@@ -523,6 +498,55 @@ export default function BomConfirmAuditSection({ ctx }) {
                     blockInventoryForBom(finalizedItems, confirmingBomModal.bomCode);
                   }
 
+                  const prevBomRec = (bomStore || []).find(b => b && (b.bomCode === confirmingBomModal.bomCode || b.id === confirmingBomModal.id || b.code === confirmingBomModal.code));
+                  const nextEditedFields = { ...(prevBomRec?.editedFields || confirmingBomModal.editedFields || {}) };
+                  const normVal = (v) => String(v == null ? '' : v).trim();
+                  if (prevBomRec) {
+                    if (normVal(prevBomRec.companyName) !== normVal(confirmingBomModal.companyName)) {
+                      nextEditedFields.companyName = `${normVal(prevBomRec.companyName) || '—'} → ${normVal(confirmingBomModal.companyName) || '—'}`;
+                    }
+                    if (normVal(prevBomRec.paymentType) !== normVal(confirmingBomModal.paymentType)) {
+                      nextEditedFields.paymentType = `${normVal(prevBomRec.paymentType) || '—'} → ${normVal(confirmingBomModal.paymentType) || '—'}`;
+                    }
+                    if (normVal(prevBomRec.billingAddress) !== normVal(bStr)) {
+                      nextEditedFields.billingAddress = 'Updated during BOM confirmation';
+                    }
+                    if (normVal(prevBomRec.deliveryAddress) !== normVal(dStr)) {
+                      nextEditedFields.deliveryAddress = 'Updated during BOM confirmation';
+                    }
+                  }
+                  const prevItemsMap = new Map();
+                  (Array.isArray(prevBomRec?.items) ? prevBomRec.items : []).forEach((it) => {
+                    const k = normVal(it?.name || it?.code).toLowerCase();
+                    if (k) prevItemsMap.set(k, it);
+                  });
+                  let anyItemEdited = false;
+                  const diffedItems = finalizedItems.map((it) => {
+                    const k = normVal(it?.name || it?.code).toLowerCase();
+                    const prevIt = k ? prevItemsMap.get(k) : null;
+                    const diffs = [];
+                    if (prevBomRec) {
+                      if (!prevIt) {
+                        diffs.push('Added during BOM confirmation');
+                      } else {
+                        if (Number(prevIt.qty || 0) !== Number(it.qty || 0)) {
+                          diffs.push(`Qty: ${prevIt.qty || 0} → ${it.qty || 0}`);
+                        }
+                        if (Number(prevIt.rate || 0) !== Number(it.rate || 0)) {
+                          diffs.push(`Rate: ₹${Number(prevIt.rate || 0).toLocaleString('en-IN')} → ₹${Number(it.rate || 0).toLocaleString('en-IN')}`);
+                        }
+                        if (normVal(prevIt.uom || prevIt.unit) !== normVal(it.uom || it.unit)) {
+                          diffs.push(`UOM: ${normVal(prevIt.uom || prevIt.unit)} → ${normVal(it.uom || it.unit)}`);
+                        }
+                      }
+                    }
+                    const itemEdited = Boolean(it.isEdited || diffs.length > 0);
+                    if (itemEdited) anyItemEdited = true;
+                    const mergedNote = [it.editedNote, ...diffs].filter(Boolean).join(' • ');
+                    return itemEdited ? { ...it, isEdited: true, ...(mergedNote ? { editedNote: mergedNote } : {}) } : it;
+                  });
+                  const hasAnyEdit = Boolean(confirmingBomModal.isEdited || prevBomRec?.isEdited || Object.keys(nextEditedFields).length > 0 || anyItemEdited);
+
                   const updatedBomData = {
                     ...confirmingBomModal,
                     companyName: confirmingBomModal.companyName,
@@ -533,7 +557,13 @@ export default function BomConfirmAuditSection({ ctx }) {
                     deliveryAddress: dStr,
                     deliveryAddressObj: finalDObj,
                     deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
-                    items: finalizedItems,
+                    items: diffedItems,
+                    ...(hasAnyEdit ? {
+                      isEdited: true,
+                      editedFields: nextEditedFields,
+                      lastEditedAt: confirmingBomModal.lastEditedAt || new Date().toISOString(),
+                      lastEditedBy: confirmingBomModal.lastEditedBy || defaultSalesPersonName
+                    } : {}),
                     dispatchPacking: packingItems,
                     salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
                     status: 'Sales Confirmed - Sent to Dispatch',
@@ -715,43 +745,6 @@ export default function BomConfirmAuditSection({ ctx }) {
           </div>
         )}
 
-        {Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0 && (
-          <div style={{
-            backgroundColor: '#FFFBEB',
-            border: '1px solid #FDE68A',
-            borderRadius: '12px',
-            padding: '14px 18px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                ✏️ Edited BOM History ({confirmingBomModal.editHistory.length})
-              </span>
-              {confirmingBomModal.lastEditedAt && (
-                <span style={{ fontSize: '11.5px', color: '#B45309', fontWeight: '600' }}>
-                  Last edited by {confirmingBomModal.lastEditedBy || 'Sales'} on {new Date(confirmingBomModal.lastEditedAt).toLocaleString('en-IN')}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-              {[...confirmingBomModal.editHistory].reverse().map((entry, idx) => (
-                <div key={idx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #FDE68A', borderRadius: '8px', padding: '10px 12px' }}>
-                  <div style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A', marginBottom: '4px' }}>
-                    {entry.editedBy || 'Sales'}{entry.editedByRole ? ` (${entry.editedByRole})` : ''} • {entry.editedAt ? new Date(entry.editedAt).toLocaleString('en-IN') : ''}
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {(Array.isArray(entry.changes) ? entry.changes : ['BOM details updated']).map((chg, cIdx) => (
-                      <li key={cIdx}>{chg}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* ORDER DETAILS & ADDRESSES */}
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
@@ -780,8 +773,11 @@ export default function BomConfirmAuditSection({ ctx }) {
                />
             </div>
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                 COMPANY NAME {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+                {confirmingBomModal.editedFields?.companyName && (
+                  <span title={confirmingBomModal.editedFields.companyName} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
+                )}
               </label>
               {isAlreadyForwarded ? (
                 <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center' }}>
@@ -798,8 +794,11 @@ export default function BomConfirmAuditSection({ ctx }) {
               )}
             </div>
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                 PAYMENT TYPE {(!isAlreadyForwarded || confirmingBomModal.isEditMode) && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+                {confirmingBomModal.editedFields?.paymentType && (
+                  <span title={confirmingBomModal.editedFields.paymentType} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
+                )}
               </label>
               {isAlreadyForwarded && !confirmingBomModal.isEditMode ? (
                 <div style={{ fontSize: '13px', fontWeight: '700', color: '#2563EB', height: '40px', display: 'flex', alignItems: 'center' }}>
@@ -1777,7 +1776,14 @@ export default function BomConfirmAuditSection({ ctx }) {
                                     {theme.badge} • Component {meta.itemIndexInGroup} of {pInfo ? pInfo.count : 1}
                                   </span>
                                 )}
-                                <span>{item.name || '—'}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>{item.name || '—'}</span>
+                                  {item.isEdited && (
+                                    <span title={item.editedNote || 'Edited'} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>
+                                      Edited
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
