@@ -1643,7 +1643,7 @@ export function VRMProformaInvoicePrintSheet({
 
             {/* 4. GST SUMMARY TABLE */}
             {gstTiers && gstTiers.length > 0 && (
-              <div className="print-avoid-break" style={{ marginBottom: '16px' }}>
+              <div className="print-avoid-break" style={{ marginBottom: '12px' }}>
                 <div style={{ fontSize: '9.5px', fontWeight: '800', color: '#0F3D6E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '5px' }}>
                   GST SUMMARY
                 </div>
@@ -1686,7 +1686,10 @@ export function VRMProformaInvoicePrintSheet({
                 </table>
               </div>
             )}
+          </div>
 
+          {/* PINNED BOTTOM SECTION: PAYMENT DETAILS, TERMS, TOTALS, GRAND TOTAL, WORDS, SIGNATORY & FOOTER */}
+          <div style={{ marginTop: 'auto', paddingTop: '14px' }}>
             {/* 5. BOTTOM GRID: PAYMENT DETAILS & TERMS (LEFT) | TOTALS, GRAND TOTAL, WORDS & STAMP (RIGHT) */}
             <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '52% 48%', columnGap: '26px', marginTop: '6px', fontSize: '9.2px' }}>
               <div>
@@ -1786,9 +1789,9 @@ export function VRMProformaInvoicePrintSheet({
                 </div>
               </div>
             </div>
-          </div>
 
-          {renderFooterBar('Commercial summary', 1)}
+            {renderFooterBar('Commercial summary', 1)}
+          </div>
         </div>
 
         {/* ==================== PAGES 2..N: COMPONENT SCHEDULES ==================== */}
