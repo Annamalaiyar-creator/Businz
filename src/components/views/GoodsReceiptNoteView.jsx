@@ -139,7 +139,7 @@ export default function GoodsReceiptNoteView(props) {
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [challanDate, setChallanDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [grnCreatedBy, setGrnCreatedBy] = useState(() => getLoggedInUserName());
-  const [grnReceivedBy, setGrnReceivedBy] = useState(() => getLoggedInUserName());
+  const [grnReceivedBy, setGrnReceivedBy] = useState('');
   const [grnInspectorName, setGrnInspectorName] = useState('');
   const [grnInspectionRemarks, setGrnInspectionRemarks] = useState('');
 
@@ -697,7 +697,7 @@ export default function GoodsReceiptNoteView(props) {
     setReceiptDate(new Date().toISOString().split('T')[0]);
     setChallanDate(new Date().toISOString().split('T')[0]);
     setGrnCreatedBy(getLoggedInUserName());
-    setGrnReceivedBy(getLoggedInUserName());
+    setGrnReceivedBy('');
     setGrnInspectorName('');
     setGrnInspectionRemarks('');
     setGrnItems([]);
@@ -707,18 +707,65 @@ export default function GoodsReceiptNoteView(props) {
     setSelectedGrnForModal(null);
   };
 
+  const inferInventoryType = (item = {}) => {
+    const explicit = String(item.inventoryType || item.category || item.cat || '').trim().toLowerCase();
+    if (explicit === 'finished goods' || explicit === 'finished good' || explicit === 'fg') return 'Finished Goods';
+    if (explicit === 'raw material' || explicit === 'raw materials' || explicit === 'rm') return 'Raw Material';
+    const matched = (itemsList || []).find(it => (it.name || '').toLowerCase() === String(item.name || '').toLowerCase());
+    const mCat = String(matched?.category || matched?.cat || '').toLowerCase();
+    if (mCat.includes('finished')) return 'Finished Goods';
+    if (mCat.includes('raw')) return 'Raw Material';
+    const n = String(item.name || '').toLowerCase();
+    if (n.includes('coil') || n.includes('ingot') || n.includes('billet') || n.includes('mother length') || n.includes('raw')) {
+      return 'Raw Material';
+    }
+    return 'Raw Material';
+  };
+
+  const mergePoReceivingHistory = (poRef, serverHistory = []) => {
+    const norm = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const target = norm(poRef);
+    let localGrns = [];
+    try {
+      const raw = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]';
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) localGrns = parsed;
+    } catch (_) {}
+    const combined = [...(Array.isArray(serverHistory) ? serverHistory : []), ...localGrns, ...(Array.isArray(grnList) ? grnList : [])];
+    const seen = new Set();
+    const matched = [];
+    combined.forEach(g => {
+      if (!g) return;
+      const gPo = norm(g.poRef || g.poNo || g.poId);
+      if (!target || !gPo || (gPo !== target && !gPo.includes(target) && !target.includes(gPo))) return;
+      const key = String(g.grnNo || g.id || '').trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      matched.push(g);
+    });
+    return matched;
+  };
+
   // Helper to handle push to GRN transition
   const handlePendingPushToGrn = (currentPOs = livePOs) => {
     try {
-      const pushPo = localStorage.getItem('controlroom_push_to_grn_po');
-      const pushDataStr = localStorage.getItem('controlroom_push_to_grn_po_data');
-      if (pushPo || pushDataStr) {
-        localStorage.removeItem('controlroom_push_to_grn_po');
-        localStorage.removeItem('controlroom_push_to_grn_po_data');
+      const memPush = window.__businzPendingPushToGrn || null;
+      const pushPo = (memPush && memPush.poNo) || sessionStorage.getItem('controlroom_push_to_grn_po') || localStorage.getItem('controlroom_push_to_grn_po');
+      const pushDataStr = sessionStorage.getItem('controlroom_push_to_grn_po_data') || localStorage.getItem('controlroom_push_to_grn_po_data');
+      if (memPush || pushPo || pushDataStr) {
+        try { delete window.__businzPendingPushToGrn; } catch (_) { window.__businzPendingPushToGrn = null; }
+        try {
+          sessionStorage.removeItem('controlroom_push_to_grn_po');
+          sessionStorage.removeItem('controlroom_push_to_grn_po_data');
+        } catch (_) {}
+        try {
+          localStorage.removeItem('controlroom_push_to_grn_po');
+          localStorage.removeItem('controlroom_push_to_grn_po_data');
+        } catch (_) {}
         resetCreateGRNForm();
 
-        let poTarget = null;
-        if (pushDataStr) {
+        let poTarget = (memPush && memPush.poTarget) ? memPush.poTarget : null;
+        if (!poTarget && pushDataStr) {
           try { poTarget = JSON.parse(pushDataStr); } catch (_) {}
         }
         const poRef = (poTarget && (poTarget.poNo || poTarget.id)) || pushPo;
@@ -745,6 +792,7 @@ export default function GoodsReceiptNoteView(props) {
                 accepted: remaining,
                 rejected: 0,
                 reason: '—',
+                inventoryType: inferInventoryType(it),
                 batch: it.batch || `LOT-2026-${idx + 1}`
               };
             });
@@ -786,6 +834,7 @@ export default function GoodsReceiptNoteView(props) {
             accepted: remaining,
             rejected: 0,
             reason: '—',
+            inventoryType: inferInventoryType(it),
             batch: it.batch || `LOT-2026-${idx + 1}`
           };
         });
@@ -969,7 +1018,7 @@ export default function GoodsReceiptNoteView(props) {
         }
 
         const historyTotals = (historyData && historyData.itemReceivedTotals) ? historyData.itemReceivedTotals : {};
-        const historyList = (historyData && historyData.grnHistory) ? historyData.grnHistory : [];
+        const historyList = mergePoReceivingHistory(poRef, (historyData && historyData.grnHistory) ? historyData.grnHistory : []);
 
         const items = rawItems.map((it, idx) => {
           const itemId = it.id || it.itemId || it.lineItemId || `PO-ITEM-${idx}`;
@@ -1006,6 +1055,7 @@ export default function GoodsReceiptNoteView(props) {
             accepted: acceptedVal,
             rejected: 0,
             reason: '—',
+            inventoryType: inferInventoryType(it),
             batch: it.batch || `LOT-2026-${idx + 1}`
           };
         });
@@ -1065,6 +1115,105 @@ export default function GoodsReceiptNoteView(props) {
 
   const [grnValidationModal, setGrnValidationModal] = useState(null);
 
+  const inwardGrnItemsToInventory = async (itemsToProcess, grnGeneratedId) => {
+    const inwardable = (Array.isArray(itemsToProcess) ? itemsToProcess : []).filter(
+      pi => !pi.isPoReference && Number(pi.accepted !== undefined && pi.accepted !== '' ? pi.accepted : (pi.now || 0)) > 0
+    );
+    if (inwardable.length === 0) return;
+
+    try {
+      let rawMats = [];
+      try {
+        const rawStored = localStorage.getItem('controlroom_raw_materials_store');
+        if (rawStored) rawMats = JSON.parse(rawStored);
+      } catch (_) {}
+      if (!Array.isArray(rawMats) || rawMats.length === 0) {
+        rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => []);
+      }
+      if (!Array.isArray(rawMats)) rawMats = [];
+
+      let anyUpdated = false;
+      const matchedItemIds = new Set();
+
+      const updatedRaw = rawMats.map(rm => {
+        const rmNameClean = String(rm.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rmCodeClean = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        let added = 0;
+        let matchedCategory = null;
+        inwardable.forEach((pi, pIdx) => {
+          const piNameClean = String(pi.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const piCodeClean = String(pi.code || pi.sku || pi.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const isMatch =
+            (rmNameClean && piNameClean && (rmNameClean === piNameClean || rmNameClean.includes(piNameClean) || piNameClean.includes(rmNameClean))) ||
+            (rmCodeClean && piCodeClean && (rmCodeClean === piCodeClean || rmCodeClean.includes(piCodeClean) || piCodeClean.includes(rmCodeClean)));
+          if (isMatch) {
+            const q = Number(pi.accepted !== undefined && pi.accepted !== '' ? pi.accepted : (pi.now || 0));
+            if (q > 0) {
+              added += q;
+              matchedCategory = pi.inventoryType === 'Finished Goods' ? 'Finished Goods' : 'Raw Material';
+              matchedItemIds.add(pi.id || `${piNameClean}-${pIdx}`);
+            }
+          }
+        });
+        if (added > 0) {
+          anyUpdated = true;
+          const newStock = Number(rm.stock || 0) + added;
+          return {
+            ...rm,
+            category: matchedCategory || rm.category || 'Raw Material',
+            cat: matchedCategory || rm.cat || 'Raw Material',
+            stock: newStock,
+            availableStock: newStock,
+            physicalStock: (Number(rm.physicalStock) || Number(rm.stock || 0)) + added,
+            goodsReceived: (Number(rm.goodsReceived) || 0) + added,
+            status: newStock > (rm.minLevel || 50) ? 'In Stock' : 'Low Stock',
+            lastUpdated: `Inwarded from GRN ${grnGeneratedId}`
+          };
+        }
+        return rm;
+      });
+
+      // Append any newly received/split items not yet in the inventory store
+      inwardable.forEach((pi, pIdx) => {
+        const piNameClean = String(pi.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const key = pi.id || `${piNameClean}-${pIdx}`;
+        if (matchedItemIds.has(key)) return;
+        const q = Number(pi.accepted !== undefined && pi.accepted !== '' ? pi.accepted : (pi.now || 0));
+        if (q <= 0 || !String(pi.name || '').trim()) return;
+        anyUpdated = true;
+        const targetCategory = pi.inventoryType === 'Finished Goods' ? 'Finished Goods' : 'Raw Material';
+        const genCode = pi.sku && !String(pi.sku).startsWith('SKU-') ? pi.sku : `GRN-${Date.now().toString().slice(-5)}-${pIdx + 1}`;
+        updatedRaw.push({
+          id: `MAT-${Date.now()}-${pIdx}`,
+          code: genCode,
+          sku: genCode,
+          name: String(pi.name).trim(),
+          desc: pi.desc || '',
+          description: pi.desc || '',
+          category: targetCategory,
+          cat: targetCategory,
+          unit: pi.uom || 'NOS',
+          stock: q,
+          availableStock: q,
+          physicalStock: q,
+          goodsReceived: q,
+          minLevel: 50,
+          status: q > 50 ? 'In Stock' : 'Low Stock',
+          lastUpdated: `Inwarded from GRN ${grnGeneratedId}`
+        });
+      });
+
+      if (anyUpdated) {
+        try {
+          localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
+        } catch (_) {}
+        saveCloudStoreImmediate('raw_materials_store', updatedRaw).catch(() => {});
+        window.dispatchEvent(new Event('central_inventory_updated'));
+        window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      }
+    } catch (_) {}
+  };
+
   const handleSaveAndReceive = async () => {
     if (isAccountsUser) {
       alert('Accounts team has read-only access to Goods Receipt Notes.');
@@ -1081,20 +1230,41 @@ export default function GoodsReceiptNoteView(props) {
       return;
     }
 
+    // Validate split child names
+    const unnamedSplit = grnItems.find(it => it.isSplitChild && (!it.name || String(it.name).trim() === ''));
+    if (unnamedSplit) {
+      setGrnValidationModal({
+        title: 'Received Product Name Required',
+        message: `Please enter a product name for all split received items under "${unnamedSplit.orderedItemName || 'PO Item'}".`
+      });
+      return;
+    }
+
     // Prepare item list with defaults if user didn't type explicit numbers into inputs
     const processedItems = grnItems.map(it => {
-      const remaining = Math.max(0, (it.ordered || 0) - (it.prev || 0));
-      const nowVal = (it.now !== '' && it.now !== undefined && it.now !== null) ? Number(it.now) : (remaining > 0 ? remaining : (it.ordered || 1));
+      if (it.isPoReference) {
+        return {
+          ...it,
+          now: 0,
+          accepted: 0,
+          rejected: 0,
+          inventoryType: it.inventoryType || inferInventoryType(it)
+        };
+      }
+      const remaining = it.isSplitChild ? 0 : Math.max(0, (it.ordered || 0) - (it.prev || 0));
+      const nowVal = (it.now !== '' && it.now !== undefined && it.now !== null) ? Number(it.now) : (remaining > 0 ? remaining : (it.ordered || 0));
       const acceptedVal = (it.accepted !== '' && it.accepted !== undefined && it.accepted !== null) ? Number(it.accepted) : nowVal;
       return {
         ...it,
         now: nowVal,
         accepted: acceptedVal,
-        rejected: Number(it.rejected || 0)
+        rejected: Number(it.rejected || 0),
+        inventoryType: it.inventoryType || inferInventoryType(it)
       };
     });
 
     const invalidItem = processedItems.find(it => {
+      if (it.isPoReference || it.isSplitChild) return false;
       const remaining = Math.max(0, (it.ordered || 0) - (it.prev || 0));
       return (it.now || 0) > remaining && remaining > 0;
     });
@@ -1109,10 +1279,10 @@ export default function GoodsReceiptNoteView(props) {
     }
 
     // 1. Compute totals and statuses immediately
-    const totalNow = processedItems.reduce((acc, it) => acc + Number(it.now || 0), 0);
-    const totalAccepted = processedItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
-    const totalRejected = processedItems.reduce((acc, it) => acc + Number(it.rejected || 0), 0);
-    const totalOrdered = processedItems.reduce((acc, it) => acc + Number(it.ordered || 0), 0);
+    const totalNow = processedItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.now || 0)), 0);
+    const totalAccepted = processedItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.accepted || 0)), 0);
+    const totalRejected = processedItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.rejected || 0)), 0);
+    const totalOrdered = processedItems.reduce((acc, it) => acc + (it.isSplitChild ? 0 : Number(it.ordered || 0)), 0);
 
     const prevPO = livePOs.find(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo || p.zohoId === selectedGRNPo) || {};
     const curOrd = totalOrdered > 0 ? totalOrdered : Number(prevPO.totalOrderedQty || 0);
@@ -1138,7 +1308,7 @@ export default function GoodsReceiptNoteView(props) {
       rejectedQty: totalRejected,
       createdBy: grnCreatedBy || getLoggedInUserName(),
       created_by: grnCreatedBy || getLoggedInUserName(),
-      receivedBy: grnReceivedBy || getLoggedInUserName(),
+      receivedBy: grnReceivedBy ? grnReceivedBy.trim() : '',
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || '',
       items: processedItems,
@@ -1190,71 +1360,29 @@ export default function GoodsReceiptNoteView(props) {
         totalReceived: curRec,
         receivingProgressPct: curOrd > 0 ? ((curRec / curOrd) * 100).toFixed(1) : '0.0',
         grnCount: (Number(prevPO.grnCount) || 0) + 1,
-        items: processedItems.map(it => {
-          const ord = Number(it.ordered || 0);
-          const acc = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
-          const prevIt = Number(it.prev || 0);
-          const totIt = prevIt + acc;
-          return {
-            ...it,
-            qty: ord,
-            previouslyReceived: totIt,
-            remainingQty: Math.max(0, ord - totIt)
-          };
-        })
+        items: processedItems
+          .filter(it => !it.isSplitChild)
+          .map(it => {
+            const ord = Number(it.ordered || 0);
+            const acc = it.isPoReference
+              ? processedItems
+                  .filter(c => c.isSplitChild && c.parentPoItemId === it.id)
+                  .reduce((sum, c) => sum + Number(c.accepted !== undefined ? c.accepted : (c.now || 0)), 0)
+              : Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
+            const prevIt = Number(it.prev || 0);
+            const totIt = prevIt + acc;
+            return {
+              ...it,
+              qty: ord,
+              previouslyReceived: totIt,
+              remainingQty: Math.max(0, ord - totIt)
+            };
+          })
       }).catch(() => {});
     }
 
-    // 4. IMMEDIATE PERSISTENCE: Inward Inventory Stock
-    try {
-      let rawMats = [];
-      try {
-        const rawStored = localStorage.getItem('controlroom_raw_materials_store');
-        if (rawStored) rawMats = JSON.parse(rawStored);
-      } catch (_) {}
-      if (!Array.isArray(rawMats) || rawMats.length === 0) {
-        rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => []);
-      }
-      if (Array.isArray(rawMats) && rawMats.length > 0) {
-        let anyUpdated = false;
-        const updatedRaw = rawMats.map(rm => {
-          const rmNameClean = String(rm.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const rmCodeClean = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          let added = 0;
-          processedItems.forEach(pi => {
-            const piNameClean = String(pi.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const piCodeClean = String(pi.code || pi.sku || pi.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if ((rmNameClean && piNameClean && (rmNameClean === piNameClean || rmNameClean.includes(piNameClean) || piNameClean.includes(rmNameClean))) ||
-                (rmCodeClean && piCodeClean && (rmCodeClean === piCodeClean || rmCodeClean.includes(piCodeClean) || piCodeClean.includes(rmCodeClean)))) {
-              const q = Number(pi.accepted !== undefined && pi.accepted !== '' ? pi.accepted : (pi.now || 0));
-              if (q > 0) added += q;
-            }
-          });
-          if (added > 0) {
-            anyUpdated = true;
-            const newStock = Number(rm.stock || 0) + added;
-            return {
-              ...rm,
-              stock: newStock,
-              availableStock: newStock,
-              physicalStock: (Number(rm.physicalStock) || Number(rm.stock || 0)) + added,
-              goodsReceived: (Number(rm.goodsReceived) || 0) + added,
-              status: newStock > (rm.minLevel || 50) ? 'In Stock' : 'Low Stock',
-              lastUpdated: `Inwarded from GRN ${grnGeneratedId}`
-            };
-          }
-          return rm;
-        });
-        if (anyUpdated) {
-          try {
-            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
-          } catch (_) {}
-          saveCloudStoreImmediate('raw_materials_store', updatedRaw).catch(() => {});
-          window.dispatchEvent(new Event('central_inventory_updated'));
-          window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-        }
-      }
-    } catch (_) {}
+    // 4. IMMEDIATE PERSISTENCE: Inward Inventory Stock (routes Raw Material vs Finished Goods, skips PO Reference rows)
+    await inwardGrnItemsToInventory(processedItems, grnGeneratedId);
 
     window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: newGRNRecord }));
     window.dispatchEvent(new Event('central_inventory_updated'));
@@ -1298,20 +1426,31 @@ export default function GoodsReceiptNoteView(props) {
     }
 
     const completedItems = grnItems.map(it => {
-      const ord = it.ordered || (it.prev ? it.prev + (it.now || 1) : (it.now || 1));
-      const nowQty = Math.max(1, (it.now && it.now > 0) ? it.now : (ord - (it.prev || 0)));
-      const acceptedQty = Math.max(1, (it.accepted && it.accepted > 0) ? it.accepted : nowQty);
+      if (it.isPoReference) {
+        return {
+          ...it,
+          now: 0,
+          accepted: 0,
+          rejected: 0,
+          reason: '—',
+          inventoryType: it.inventoryType || inferInventoryType(it)
+        };
+      }
+      const ord = it.isSplitChild ? 0 : (it.ordered || (it.prev ? it.prev + (it.now || 1) : (it.now || 1)));
+      const nowQty = it.isSplitChild ? Number(it.now || it.accepted || 0) : Math.max(1, (it.now && it.now > 0) ? it.now : (ord - (it.prev || 0)));
+      const acceptedQty = it.isSplitChild ? Number(it.accepted !== undefined ? it.accepted : nowQty) : Math.max(1, (it.accepted && it.accepted > 0) ? it.accepted : nowQty);
       return {
         ...it,
         ordered: ord,
         now: nowQty,
         accepted: acceptedQty,
         rejected: 0,
-        reason: '—'
+        reason: '—',
+        inventoryType: it.inventoryType || inferInventoryType(it)
       };
     });
 
-    const totalAccepted = completedItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
+    const totalAccepted = completedItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.accepted || 0)), 0);
     const docsToAttach = grnDocs || [];
 
     const payload = {
@@ -1325,7 +1464,7 @@ export default function GoodsReceiptNoteView(props) {
       rejectedQty: 0,
       createdBy: grnCreatedBy || getLoggedInUserName(),
       created_by: grnCreatedBy || getLoggedInUserName(),
-      receivedBy: grnReceivedBy || getLoggedInUserName(),
+      receivedBy: grnReceivedBy ? grnReceivedBy.trim() : '',
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
       items: completedItems,
@@ -1349,7 +1488,7 @@ export default function GoodsReceiptNoteView(props) {
       rejectedQty: 0,
       createdBy: grnCreatedBy || getLoggedInUserName(),
       created_by: grnCreatedBy || getLoggedInUserName(),
-      receivedBy: grnReceivedBy || getLoggedInUserName(),
+      receivedBy: grnReceivedBy ? grnReceivedBy.trim() : '',
       inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
       items: completedItems,
@@ -1406,56 +1545,8 @@ export default function GoodsReceiptNoteView(props) {
       }).catch(() => {});
     }
 
-    // 3. IMMEDIATE PERSISTENCE: Inward Inventory Stock
-    try {
-      let rawMats = [];
-      try {
-        const rawStored = localStorage.getItem('controlroom_raw_materials_store');
-        if (rawStored) rawMats = JSON.parse(rawStored);
-      } catch (_) {}
-      if (!Array.isArray(rawMats) || rawMats.length === 0) {
-        rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => []);
-      }
-      if (Array.isArray(rawMats) && rawMats.length > 0) {
-        let anyUpdated = false;
-        const updatedRaw = rawMats.map(rm => {
-          const rmNameClean = String(rm.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const rmCodeClean = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          let added = 0;
-          completedItems.forEach(pi => {
-            const piNameClean = String(pi.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const piCodeClean = String(pi.code || pi.sku || pi.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if ((rmNameClean && piNameClean && (rmNameClean === piNameClean || rmNameClean.includes(piNameClean) || piNameClean.includes(rmNameClean))) ||
-                (rmCodeClean && piCodeClean && (rmCodeClean === piCodeClean || rmCodeClean.includes(piCodeClean) || piCodeClean.includes(rmCodeClean)))) {
-              const q = Number(pi.accepted !== undefined && pi.accepted !== '' ? pi.accepted : (pi.now || 0));
-              if (q > 0) added += q;
-            }
-          });
-          if (added > 0) {
-            anyUpdated = true;
-            const newStock = Number(rm.stock || 0) + added;
-            return {
-              ...rm,
-              stock: newStock,
-              availableStock: newStock,
-              physicalStock: (Number(rm.physicalStock) || Number(rm.stock || 0)) + added,
-              goodsReceived: (Number(rm.goodsReceived) || 0) + added,
-              status: newStock > (rm.minLevel || 50) ? 'In Stock' : 'Low Stock',
-              lastUpdated: `Inwarded from GRN ${grnGeneratedId}`
-            };
-          }
-          return rm;
-        });
-        if (anyUpdated) {
-          try {
-            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
-          } catch (_) {}
-          saveCloudStoreImmediate('raw_materials_store', updatedRaw).catch(() => {});
-          window.dispatchEvent(new Event('central_inventory_updated'));
-          window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-        }
-      }
-    } catch (_) {}
+    // 3. IMMEDIATE PERSISTENCE: Inward Inventory Stock (routes Raw Material vs Finished Goods, skips PO Reference rows)
+    await inwardGrnItemsToInventory(completedItems, grnGeneratedId);
 
     window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: newGRNRecord }));
     window.dispatchEvent(new Event('central_inventory_updated'));
@@ -2689,11 +2780,11 @@ export default function GoodsReceiptNoteView(props) {
 
 
   const renderGrnFormCards = () => {
-    const totalOrdered = grnItems.reduce((acc, it) => acc + (Number(it.ordered) || 0), 0);
-    const totalPrev = grnItems.reduce((acc, it) => acc + (Number(it.prev) || 0), 0);
-    const totalNow = grnItems.reduce((acc, it) => acc + Number(it.now || 0), 0);
-    const totalAccepted = grnItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
-    const totalRejected = grnItems.reduce((acc, it) => acc + Number(it.rejected || 0), 0);
+    const totalOrdered = grnItems.reduce((acc, it) => acc + (it.isSplitChild ? 0 : (Number(it.ordered) || 0)), 0);
+    const totalPrev = grnItems.reduce((acc, it) => acc + (it.isSplitChild ? 0 : (Number(it.prev) || 0)), 0);
+    const totalNow = grnItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.now || 0)), 0);
+    const totalAccepted = grnItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.accepted || 0)), 0);
+    const totalRejected = grnItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.rejected || 0)), 0);
 
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '20px' }}>
@@ -2940,9 +3031,9 @@ export default function GoodsReceiptNoteView(props) {
                     ) : (
                       <>
                         {(() => {
-                          const totOrd = grnItems.reduce((acc, curr) => acc + (curr.ordered || 0), 0);
-                          const totPrev = grnItems.reduce((acc, curr) => acc + (curr.prev || 0), 0);
-                          const totNow = grnItems.reduce((acc, curr) => acc + (curr.now !== undefined ? Number(curr.now) : Number(curr.accepted || 0)), 0);
+                          const totOrd = grnItems.reduce((acc, curr) => acc + (curr.isSplitChild ? 0 : (curr.ordered || 0)), 0);
+                          const totPrev = grnItems.reduce((acc, curr) => acc + (curr.isSplitChild ? 0 : (curr.prev || 0)), 0);
+                          const totNow = grnItems.reduce((acc, curr) => acc + (curr.isPoReference ? 0 : (curr.now !== undefined ? Number(curr.now) : Number(curr.accepted || 0))), 0);
 
                           // In view-only mode, we are viewing an already saved GRN.
                           // Total received up to and including this GRN:
@@ -2971,7 +3062,8 @@ export default function GoodsReceiptNoteView(props) {
 
                           // Filter previous GRN history so when viewing a GRN, it does NOT list itself as a previous GRN!
                           const viewingGrnNo = selectedGrnForModal?.id || selectedGrnForModal?.grnNo || editingGrnId;
-                          const filteredHistory = (poReceivingHistory || []).filter(g => {
+                          const mergedHistory = mergePoReceivingHistory(selectedGRNPo, poReceivingHistory);
+                          const filteredHistory = mergedHistory.filter(g => {
                             if (!isViewOnlyMode) return true;
                             const gNo = String(g.grnNo || g.id || '').trim();
                             const vNo = String(viewingGrnNo || '').trim();
@@ -3083,17 +3175,26 @@ export default function GoodsReceiptNoteView(props) {
                               {/* Previous GRN History List */}
                               {filteredHistory.length > 0 && (
                                 <div style={{ marginTop: '4px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
-                                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                                    Previous GRN History ({filteredHistory.length})
-                                  </span>
-                                  <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    {filteredHistory.map((g, idx) => (
-                                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
-                                        <span style={{ fontWeight: 'bold', color: '#2563EB' }}>{g.grnNo || g.id}</span>
-                                        <span style={{ color: '#64748B' }}>{g.date}</span>
-                                        <span style={{ fontWeight: 'bold', color: '#137333' }}>+{g.receivedQty || 0} Qty</span>
-                                      </div>
-                                    ))}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>
+                                      Receive History &amp; Counts ({filteredHistory.length} {filteredHistory.length === 1 ? 'Receipt' : 'Receipts'})
+                                    </span>
+                                    <span style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '2px 8px', borderRadius: '12px' }}>
+                                      Total: +{filteredHistory.reduce((sum, g) => sum + (Number(g.receivedQty ?? g.acceptedQty ?? parseFloat(g.received)) || 0), 0)} Qty
+                                    </span>
+                                  </div>
+                                  <div style={{ maxHeight: '110px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {filteredHistory.map((g, idx) => {
+                                      const recCount = Number(g.receivedQty ?? g.acceptedQty ?? parseFloat(g.received)) || 0;
+                                      const recDate = g.date || g.receiptDate || (g.createdAt ? new Date(g.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+                                      return (
+                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+                                          <span style={{ fontWeight: 'bold', color: '#2563EB' }}>{g.grnNo || g.id}</span>
+                                          <span style={{ color: '#64748B' }}>{recDate}</span>
+                                          <span style={{ fontWeight: 'bold', color: '#137333' }}>+{recCount} Qty</span>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
@@ -3105,21 +3206,95 @@ export default function GoodsReceiptNoteView(props) {
                   </div>
 
                   {/* Card 3: 3. GRN Summary & Received Items (Span 12 Full Width Below) */}
+                  {(() => {
+                    const showPrevCol = grnItems.some(it => Number(it.prev || 0) > 0) || (poReceivingHistory && poReceivingHistory.length > 0);
+                    const totalCols = (showPrevCol ? 10 : 9) + (!isViewOnlyMode ? 1 : 0);
+
+                    const handleAddSplitChild = (parentItem) => {
+                      const newChild = {
+                        id: `SPLIT-${parentItem.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        parentPoItemId: parentItem.id,
+                        orderedItemName: parentItem.name,
+                        isSplitChild: true,
+                        isPoReference: false,
+                        name: '',
+                        sku: '',
+                        desc: '',
+                        uom: parentItem.uom || 'NOS',
+                        inventoryType: parentItem.inventoryType || 'Raw Material',
+                        ordered: 0,
+                        prev: 0,
+                        remaining: 0,
+                        now: 0,
+                        accepted: 0,
+                        rejected: 0,
+                        reason: '—'
+                      };
+                      const next = [];
+                      let inserted = false;
+                      grnItems.forEach((it, i) => {
+                        if (it.id === parentItem.id) {
+                          next.push({ ...it, isPoReference: true, now: 0, accepted: 0, rejected: 0 });
+                          const hasNextChild = grnItems[i + 1]?.isSplitChild && grnItems[i + 1]?.parentPoItemId === parentItem.id;
+                          if (!hasNextChild) {
+                            next.push(newChild);
+                            inserted = true;
+                          }
+                        } else {
+                          next.push(it);
+                          const isLastChildOfParent = it.isSplitChild && it.parentPoItemId === parentItem.id && !(grnItems[i + 1]?.isSplitChild && grnItems[i + 1]?.parentPoItemId === parentItem.id);
+                          if (!inserted && isLastChildOfParent) {
+                            next.push(newChild);
+                            inserted = true;
+                          }
+                        }
+                      });
+                      if (!inserted) next.push(newChild);
+                      setGrnItems(next);
+                    };
+
+                    const handleRemoveGrnItem = (targetItem) => {
+                      const remaining = grnItems.filter(it => it.id !== targetItem.id && !(targetItem.isPoReference && it.parentPoItemId === targetItem.id));
+                      if (targetItem.isSplitChild && targetItem.parentPoItemId) {
+                        const stillHasChildren = remaining.some(it => it.isSplitChild && it.parentPoItemId === targetItem.parentPoItemId);
+                        if (!stillHasChildren) {
+                          setGrnItems(remaining.map(it => {
+                            if (it.id === targetItem.parentPoItemId) {
+                              const remQty = Math.max(0, Number(it.ordered || 0) - Number(it.prev || 0));
+                              return { ...it, isPoReference: false, now: remQty, accepted: remQty, rejected: 0 };
+                            }
+                            return it;
+                          }));
+                          return;
+                        }
+                      }
+                      setGrnItems(remaining);
+                    };
+
+                    return (
                   <div className="section-card" style={{ gridColumn: 'span 12', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <strong style={{ fontSize: '14px', color: '#2563EB' }}>3. GRN Summary & Received Items</strong>
-                      <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <strong style={{ fontSize: '14px', color: '#2563EB' }}>3. GRN Summary & Received Items</strong>
+                        <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
+                      </div>
+                      {!isViewOnlyMode && grnItems.length > 0 && (
+                        <span style={{ fontSize: '11px', color: '#64748B' }}>
+                          Tip: Use <strong>+ Split Items</strong> on a PO item if multiple different products were received against one PO item.
+                        </span>
+                      )}
                     </div>
 
                     <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
-                      <table className="custom-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <table className="custom-table" style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', fontSize: '12px' }}>
                         <thead>
                           <tr style={{ textAlign: 'left', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
                             <th style={{ padding: '10px 8px', color: '#64748B', width: '36px' }}>#</th>
                             <th style={{ padding: '10px 8px', color: '#64748B', minWidth: '240px' }}>Item / Material & Description</th>
+                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '135px' }}>Inventory Type</th>
                             <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '70px' }}>UOM</th>
                             <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Ordered Qty</th>
-                            <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '110px' }}>Previously Received</th>
+                            {showPrevCol && <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '110px' }}>Previously Received</th>}
                             <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '100px' }}>Receiving Now *</th>
                             <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Accepted Qty</th>
                             <th style={{ padding: '10px 8px', color: '#64748B', textAlign: 'center', width: '90px' }}>Rejected Qty</th>
@@ -3130,21 +3305,61 @@ export default function GoodsReceiptNoteView(props) {
                         <tbody>
                           {grnItems.length === 0 ? (
                             <tr>
-                              <td colSpan={isViewOnlyMode ? 9 : 10} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
+                              <td colSpan={totalCols} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
                                 No items loaded. Select a Purchase Order to display its line items for receipt entry.
                               </td>
                             </tr>
                           ) : (
                             grnItems.map((item, idx) => (
-                              <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                                <td style={{ padding: '12px 8px', color: '#94A3B8', verticalAlign: 'top' }}>{idx + 1}</td>
-                                <td style={{ padding: '12px 8px', verticalAlign: 'top', minWidth: '240px' }}>
-                                  {isViewOnlyMode ? (
+                              <tr
+                                key={item.id}
+                                style={{
+                                  borderBottom: '1px solid #F1F5F9',
+                                  backgroundColor: item.isPoReference ? '#F8FAFC' : (item.isSplitChild ? '#F0FDFA' : 'transparent')
+                                }}
+                              >
+                                <td style={{ padding: '12px 8px', color: '#94A3B8', verticalAlign: 'top' }}>
+                                  {item.isSplitChild ? '↳' : idx + 1}
+                                </td>
+                                <td style={{ padding: '12px 8px', verticalAlign: 'top', minWidth: '240px', paddingLeft: item.isSplitChild ? '22px' : '8px' }}>
+                                  {item.isPoReference && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 7px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                                        Given PO Product (Reference Only — Not Inwarded)
+                                      </span>
+                                    </div>
+                                  )}
+                                  {item.isSplitChild && (
+                                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', marginBottom: '4px' }}>
+                                      Received Product (for {item.orderedItemName || 'PO Item'})
+                                    </div>
+                                  )}
+                                  {isViewOnlyMode || item.isPoReference ? (
                                     <div>
                                       <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>{item.name || item.itemName || 'Material Item'}</div>
                                       {item.desc && (
                                         <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', lineHeight: '1.4' }}>
                                           {item.desc}
+                                        </div>
+                                      )}
+                                      {!isViewOnlyMode && item.isPoReference && (
+                                        <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAddSplitChild(item)}
+                                            style={{
+                                              padding: '4px 10px',
+                                              borderRadius: '6px',
+                                              border: '1px solid #0E7490',
+                                              backgroundColor: '#ECFEFF',
+                                              color: '#0E7490',
+                                              fontSize: '11px',
+                                              fontWeight: '700',
+                                              cursor: 'pointer'
+                                            }}
+                                          >
+                                            + Add Received Product
+                                          </button>
                                         </div>
                                       )}
                                     </div>
@@ -3157,7 +3372,7 @@ export default function GoodsReceiptNoteView(props) {
                                         type="text"
                                         list={`grn-item-datalist-${item.id}`}
                                         value={item.name}
-                                        placeholder="Type or select Item Name..."
+                                        placeholder={item.isSplitChild ? 'Type or select Received Product...' : 'Type or select Item Name...'}
                                         onChange={(e) => {
                                           const val = e.target.value;
                                           const matched = (itemsList || []).find(it => (it.name || '').toLowerCase() === val.toLowerCase());
@@ -3165,7 +3380,8 @@ export default function GoodsReceiptNoteView(props) {
                                             ...it,
                                             name: val,
                                             uom: matched ? (matched.unit || matched.uom || it.uom) : it.uom,
-                                            desc: matched ? (matched.description || it.desc) : it.desc
+                                            desc: matched ? (matched.description || it.desc) : it.desc,
+                                            inventoryType: matched ? inferInventoryType(matched) : it.inventoryType
                                           } : it);
                                           setGrnItems(updated);
                                         }}
@@ -3184,7 +3400,7 @@ export default function GoodsReceiptNoteView(props) {
                                           name={`desc_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
                                           aria-label="Enter Item / Material Description"
                                           value={item.desc || ''}
-                                          placeholder="Enter Item / Material Description..."
+                                          placeholder="Enter Item / Material Description (e.g. length, size)..."
                                           onChange={(e) => {
                                             const val = e.target.value;
                                             const updated = grnItems.map(it => it.id === item.id ? { ...it, desc: val } : it);
@@ -3192,7 +3408,7 @@ export default function GoodsReceiptNoteView(props) {
                                           }}
                                           style={{
                                             width: '100%',
-                                            minHeight: '54px',
+                                            minHeight: '44px',
                                             border: '1px solid #CBD5E1',
                                             borderRadius: '6px',
                                             padding: '6px 10px',
@@ -3205,11 +3421,71 @@ export default function GoodsReceiptNoteView(props) {
                                           }}
                                         />
                                       </div>
+                                      {!item.isSplitChild && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAddSplitChild(item)}
+                                          style={{
+                                            marginTop: '6px',
+                                            padding: '3px 9px',
+                                            borderRadius: '6px',
+                                            border: '1px dashed #0E7490',
+                                            backgroundColor: '#ECFEFF',
+                                            color: '#0E7490',
+                                            fontSize: '10px',
+                                            fontWeight: '700',
+                                            cursor: 'pointer'
+                                          }}
+                                        >
+                                          + Split Items (Receive Different Products)
+                                        </button>
+                                      )}
                                     </>
                                   )}
                                 </td>
                                 <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
+                                  {item.isPoReference ? (
+                                    <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>Reference</span>
+                                  ) : isViewOnlyMode ? (
+                                    <span style={{
+                                      fontSize: '10px',
+                                      fontWeight: '700',
+                                      padding: '3px 8px',
+                                      borderRadius: '12px',
+                                      backgroundColor: item.inventoryType === 'Finished Goods' ? '#EFF6FF' : '#FEF3C7',
+                                      color: item.inventoryType === 'Finished Goods' ? '#1D4ED8' : '#B45309',
+                                      border: `1px solid ${item.inventoryType === 'Finished Goods' ? '#BFDBFE' : '#FDE68A'}`,
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {item.inventoryType || 'Raw Material'}
+                                    </span>
+                                  ) : (
+                                    <select
+                                      aria-label="Inventory Type"
+                                      value={item.inventoryType || 'Raw Material'}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setGrnItems(grnItems.map(it => it.id === item.id ? { ...it, inventoryType: val } : it));
+                                      }}
+                                      style={{
+                                        width: '128px',
+                                        height: '34px',
+                                        border: '1px solid #CBD5E1',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: '600',
+                                        backgroundColor: '#FFFFFF',
+                                        color: '#0F172A',
+                                        padding: '0 6px'
+                                      }}
+                                    >
+                                      <option value="Raw Material">Raw Material</option>
+                                      <option value="Finished Goods">Finished Goods</option>
+                                    </select>
+                                  )}
+                                </td>
+                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                  {isViewOnlyMode || item.isPoReference ? (
                                     <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>{item.uom || 'NOS'}</span>
                                   ) : (
                                     <input
@@ -3228,7 +3504,9 @@ export default function GoodsReceiptNoteView(props) {
                                   )}
                                 </td>
                                 <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
+                                  {item.isSplitChild ? (
+                                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>—</span>
+                                  ) : isViewOnlyMode || item.isPoReference ? (
                                     <span style={{ fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>{item.ordered ?? 0}</span>
                                   ) : (
                                     <input
@@ -3246,27 +3524,17 @@ export default function GoodsReceiptNoteView(props) {
                                     />
                                   )}
                                 </td>
+                                {showPrevCol && (
+                                  <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                                    <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
+                                      {item.isSplitChild ? '—' : (item.prev ?? 0)}
+                                    </span>
+                                  </td>
+                                )}
                                 <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
-                                    <span style={{ fontSize: '12px', color: '#64748B' }}>{item.prev ?? 0}</span>
-                                  ) : (
-                                    <input
-                                      id={`goods-receipt-note-prev-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
-                                      name={`prev_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
-                                      aria-label="Prev"
-                                      type="number"
-                                      value={item.prev}
-                                      onChange={(e) => {
-                                        const val = Number(e.target.value);
-                                        const updated = grnItems.map(it => it.id === item.id ? { ...it, prev: val } : it);
-                                        setGrnItems(updated);
-                                      }}
-                                      style={{ width: '55px', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '11px', backgroundColor: '#FFFFFF' }}
-                                    />
-                                  )}
-                                </td>
-                                <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
+                                  {item.isPoReference ? (
+                                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>—</span>
+                                  ) : isViewOnlyMode ? (
                                     <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px', backgroundColor: '#ECFEFF', padding: '3px 8px', borderRadius: '6px', border: '1px solid #CFFAFE' }}>
                                       {item.now ?? 0}
                                     </span>
@@ -3280,8 +3548,8 @@ export default function GoodsReceiptNoteView(props) {
                                         value={item.now}
                                         onChange={(e) => {
                                           const val = Number(e.target.value);
-                                          const maxAllowed = Math.max(0, item.ordered - item.prev);
-                                          const hasErr = val > maxAllowed;
+                                          const maxAllowed = item.isSplitChild ? Infinity : Math.max(0, item.ordered - item.prev);
+                                          const hasErr = !item.isSplitChild && val > maxAllowed;
                                           const updated = grnItems.map(it => it.id === item.id ? {
                                             ...it,
                                             now: val,
@@ -3311,7 +3579,9 @@ export default function GoodsReceiptNoteView(props) {
                                   )}
                                 </td>
                                 <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
+                                  {item.isPoReference ? (
+                                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>—</span>
+                                  ) : isViewOnlyMode ? (
                                     <span style={{ fontWeight: '700', color: '#16A34A', fontSize: '13px' }}>
                                       {item.accepted ?? 0}
                                     </span>
@@ -3332,7 +3602,9 @@ export default function GoodsReceiptNoteView(props) {
                                   )}
                                 </td>
                                 <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
+                                  {item.isPoReference ? (
+                                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>—</span>
+                                  ) : isViewOnlyMode ? (
                                     <span style={{ fontWeight: Number(item.rejected) > 0 ? '700' : 'normal', color: Number(item.rejected) > 0 ? '#DC2626' : '#94A3B8', fontSize: '12px' }}>
                                       {item.rejected ?? 0}
                                     </span>
@@ -3353,7 +3625,9 @@ export default function GoodsReceiptNoteView(props) {
                                   )}
                                 </td>
                                 <td style={{ padding: '12px 8px', verticalAlign: 'top' }}>
-                                  {isViewOnlyMode ? (
+                                  {item.isPoReference ? (
+                                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>—</span>
+                                  ) : isViewOnlyMode ? (
                                     <span style={{ fontSize: '11px', color: '#64748B' }}>
                                       {item.reason && item.reason !== '—' ? item.reason : '—'}
                                     </span>
@@ -3381,9 +3655,7 @@ export default function GoodsReceiptNoteView(props) {
                                     <button
                                       type="button"
                                       title="Delete Item"
-                                      onClick={() => {
-                                        setGrnItems(grnItems.filter(it => it.id !== item.id));
-                                      }}
+                                      onClick={() => handleRemoveGrnItem(item)}
                                       style={{
                                         background: 'none',
                                         border: 'none',
@@ -3410,16 +3682,16 @@ export default function GoodsReceiptNoteView(props) {
                     {/* Anchored Footer Section with Total Row & Add Button */}
                     <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
-                        <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '11px' }}>
+                        <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', fontSize: '11px' }}>
                           <tbody>
                             <tr style={{ backgroundColor: '#F8FAFC', fontWeight: 'bold' }}>
-                              <td colSpan="3" style={{ padding: '10px 8px', fontSize: '12px', color: '#0F172A' }}>Total</td>
+                              <td colSpan="4" style={{ padding: '10px 8px', fontSize: '12px', color: '#0F172A' }}>Total</td>
                               <td style={{ padding: '10px 8px', textAlign: 'center', width: '90px' }}>{totalOrdered}</td>
-                              <td style={{ padding: '10px 8px', textAlign: 'center', width: '110px', color: '#64748B' }}>{totalPrev}</td>
+                              {showPrevCol && <td style={{ padding: '10px 8px', textAlign: 'center', width: '110px', color: '#64748B' }}>{totalPrev}</td>}
                               <td style={{ padding: '10px 8px', textAlign: 'center', width: '100px', color: '#0E7490' }}>{totalNow}</td>
                               <td style={{ padding: '10px 8px', textAlign: 'center', width: '90px', color: '#137333' }}>{totalAccepted}</td>
                               <td style={{ padding: '10px 8px', textAlign: 'center', width: '90px', color: '#C5221F' }}>{totalRejected}</td>
-                              <td colSpan={isViewOnlyMode ? 2 : 3} style={{ padding: '10px 8px' }}></td>
+                              <td colSpan={isViewOnlyMode ? 1 : 2} style={{ padding: '10px 8px' }}></td>
                             </tr>
                           </tbody>
                         </table>
@@ -3436,6 +3708,7 @@ export default function GoodsReceiptNoteView(props) {
                                 desc: 'Custom ad-hoc line item',
                                 sku: 'SKU-NEW',
                                 uom: 'NOS',
+                                inventoryType: 'Raw Material',
                                 ordered: 0,
                                 prev: 0,
                                 now: 1,
@@ -3463,6 +3736,8 @@ export default function GoodsReceiptNoteView(props) {
                       )}
                     </div>
                   </div>
+                    );
+                  })()}
 
                   {/* Card 4: 4. Documents (Span 6) */}
                   <div className="section-card" style={{ gridColumn: 'span 6', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -4635,11 +4910,11 @@ export default function GoodsReceiptNoteView(props) {
             </>
           ) : (() => {
             // Calculation of Totals
-            const totalOrdered = grnItems.reduce((acc, it) => acc + it.ordered, 0);
-            const totalPrev = grnItems.reduce((acc, it) => acc + it.prev, 0);
-            const totalNow = grnItems.reduce((acc, it) => acc + Number(it.now || 0), 0);
-            const totalAccepted = grnItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
-            const totalRejected = grnItems.reduce((acc, it) => acc + Number(it.rejected || 0), 0);
+            const totalOrdered = grnItems.reduce((acc, it) => acc + (it.isSplitChild ? 0 : (Number(it.ordered) || 0)), 0);
+            const totalPrev = grnItems.reduce((acc, it) => acc + (it.isSplitChild ? 0 : (Number(it.prev) || 0)), 0);
+            const totalNow = grnItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.now || 0)), 0);
+            const totalAccepted = grnItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.accepted || 0)), 0);
+            const totalRejected = grnItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.rejected || 0)), 0);
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

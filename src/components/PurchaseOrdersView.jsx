@@ -203,14 +203,23 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     if (!poTarget) return;
     const poNo = poTarget.poNo || poTarget.id;
     try {
+      window.__businzPendingPushToGrn = { poNo, poTarget };
+    } catch (_) {}
+    try {
+      sessionStorage.setItem('controlroom_push_to_grn_po', poNo);
+      sessionStorage.setItem('controlroom_push_to_grn_po_data', JSON.stringify(poTarget));
+    } catch (_) {}
+    try {
       localStorage.setItem('controlroom_push_to_grn_po', poNo);
       localStorage.setItem('controlroom_push_to_grn_po_data', JSON.stringify(poTarget));
+    } catch (_) {}
+    try {
       window.dispatchEvent(new CustomEvent('controlroom_push_to_grn', { detail: poTarget }));
     } catch (_) {}
     if (typeof onNavigateTab === 'function') {
       onNavigateTab('Goods Receipt Note');
     } else {
-      localStorage.setItem('controlroom_active_tab', 'Goods Receipt Note');
+      try { localStorage.setItem('controlroom_active_tab', 'Goods Receipt Note'); } catch (_) {}
       window.location.reload();
     }
   };
