@@ -410,6 +410,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               receivingProgressPct: (Number(effTotalOrd) > 0 && Number(effTotalRec) >= 0) ? ((Number(effTotalRec) / Number(effTotalOrd)) * 100).toFixed(1) : (p.receivingProgressPct || existing.receivingProgressPct || '0.0'),
               grnCount: p.grnCount !== undefined ? p.grnCount : existing.grnCount,
               approvedBy: existing.approvedBy || p.approvedBy,
+              approvedAt: existing.approvedAt || p.approvedAt || p.approved_at,
+              approvedDate: existing.approvedDate || p.approvedDate,
+              approvedTime: existing.approvedTime || p.approvedTime,
+              createdAt: existing.createdAt || p.createdAt || p.created_at,
               approvalRemarks: existing.approvalRemarks || p.approvalRemarks,
               paymentDetails: p.paymentDetails || existing.paymentDetails,
               proceedDetails: p.proceedDetails || existing.proceedDetails,
@@ -1249,6 +1253,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       poDate: formattedDate,
       date: formattedDate,
       rawPoDate: poDate || (editIdx !== null && poList[editIdx]?.rawPoDate) || new Date().toISOString().split('T')[0],
+      createdAt: (editIdx !== null && (poList[editIdx]?.createdAt || poList[editIdx]?.created_at)) || new Date().toISOString(),
       deliveryDate: formatDelivery,
       paymentTerms: paymentTerms || 'Due on Receipt',
       purchaser: purchaser || loggedInUserName,
@@ -1375,12 +1380,16 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const poId = poTarget.poNo || poTarget.id;
 
     // Immediately reflect MD Approved state in the currently active view
+    const approveNow = new Date();
     setViewingPoStatus('MD Approved');
     const updatedApprovedPo = { 
       ...poTarget, 
       status: 'MD Approved', 
       statusType: 'md_approved',
       approvedBy: 'Velmurugan Rathinam (MD)',
+      approvedAt: approveNow.toISOString(),
+      approvedDate: approveNow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      approvedTime: approveNow.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
       approvalRemarks: approvalRemarksInput || 'Approved by MD'
     };
     setPoList(prev => prev.map(p => {
@@ -2400,12 +2409,14 @@ Procurement Team | BUSINZ`;
                   <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>PO Ref: {poNumber}</span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', padding: '10px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', position: 'relative', padding: '10px 0' }}>
                   {(() => {
                     const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber);
 
                     let hasLocalGrn = false;
                     let isLocalGrnClosed = false;
+                    let firstGrnRecord = null;
+                    let closedGrnRecord = null;
                     try {
                       const localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
                       if (Array.isArray(localGrns)) {
@@ -2416,13 +2427,28 @@ Procurement Team | BUSINZ`;
                         });
                         if (matched.length > 0) {
                           hasLocalGrn = true;
-                          isLocalGrnClosed = matched.some(g => {
+                          firstGrnRecord = matched[matched.length - 1] || matched[0];
+                          closedGrnRecord = matched.find(g => {
                             const gst = String(g.status || '').toUpperCase();
                             return gst.includes('CLOSED') || gst.includes('FULLY RECEIVED') || gst.includes('FULLY ACCEPTED');
-                          });
+                          }) || null;
+                          isLocalGrnClosed = Boolean(closedGrnRecord);
                         }
                       }
                     } catch (_) {}
+
+                    const fmtStageTimestamp = (isoOrStr, fallbackDate, fallbackTime) => {
+                      if (fallbackDate && fallbackTime) return `${fallbackDate}, ${fallbackTime}`;
+                      if (isoOrStr) {
+                        const parsed = new Date(isoOrStr);
+                        if (!Number.isNaN(parsed.getTime()) && String(isoOrStr).includes('T')) {
+                          const dStr = parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                          const tStr = parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                          return `${dStr}, ${tStr}`;
+                        }
+                      }
+                      return fallbackDate || (isoOrStr ? String(isoOrStr) : '');
+                    };
 
                     const st = String(viewingPoStatus || currentPoObj?.status || 'Draft / Pending Approval').trim();
                     const objStatus = String(currentPoObj?.status || '').trim();
@@ -2461,13 +2487,54 @@ Procurement Team | BUSINZ`;
                       currentStepIndex = 0;
                     }
 
+                    const createdStamp = fmtStageTimestamp(
+                      currentPoObj?.createdAt || currentPoObj?.created_at,
+                      currentPoObj?.poDate || currentPoObj?.date || poDate,
+                      currentPoObj?.createdTime
+                    );
+                    const approvedStamp = isMdApproved
+                      ? fmtStageTimestamp(
+                          currentPoObj?.approvedAt || currentPoObj?.approved_at,
+                          currentPoObj?.approvedDate,
+                          currentPoObj?.approvedTime
+                        )
+                      : '';
+                    const paymentStamp = isPaymentDone
+                      ? fmtStageTimestamp(
+                          currentPoObj?.paymentDetails?.paidAt,
+                          currentPoObj?.paymentDetails?.date,
+                          currentPoObj?.paymentDetails?.time
+                        )
+                      : '';
+                    const proceedStamp = isProceed
+                      ? fmtStageTimestamp(
+                          currentPoObj?.proceedDetails?.proceededAt,
+                          currentPoObj?.proceedDetails?.date,
+                          currentPoObj?.proceedDetails?.time
+                        )
+                      : '';
+                    const grnProcessStamp = (isPartial || hasLocalGrn || grnCount > 0 || isClosed)
+                      ? fmtStageTimestamp(
+                          firstGrnRecord?.createdAt || firstGrnRecord?.created_at,
+                          firstGrnRecord?.date || firstGrnRecord?.receiptDate,
+                          firstGrnRecord?.time
+                        )
+                      : '';
+                    const grnCompletedStamp = isClosed
+                      ? fmtStageTimestamp(
+                          closedGrnRecord?.createdAt || closedGrnRecord?.updatedAt || currentPoObj?.updatedAt,
+                          closedGrnRecord?.date || closedGrnRecord?.receiptDate,
+                          closedGrnRecord?.time
+                        )
+                      : '';
+
                     const steps = [
-                      { label: '1. PO Created' },
-                      { label: '2. MD Approval' },
-                      { label: '3. Payment Process' },
-                      { label: '4. Proceed PO' },
-                      { label: '5. GRN Process' },
-                      { label: '6. GRN Completed' }
+                      { label: '1. PO Created', timestamp: createdStamp },
+                      { label: '2. MD Approval', timestamp: approvedStamp },
+                      { label: '3. Payment Process', timestamp: paymentStamp },
+                      { label: '4. Proceed PO', timestamp: proceedStamp },
+                      { label: '5. GRN Process', timestamp: grnProcessStamp },
+                      { label: '6. GRN Completed', timestamp: grnCompletedStamp }
                     ];
 
                     return steps.map((step, idx) => {
@@ -2484,7 +2551,7 @@ Procurement Team | BUSINZ`;
                     });
                   })().map((step, idx, arr) => (
                     <React.Fragment key={idx}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 2, flex: 1 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', zIndex: 2, flex: 1 }}>
                         <div style={{
                           width: '28px',
                           height: '28px',
@@ -2500,12 +2567,17 @@ Procurement Team | BUSINZ`;
                         }}>
                           {(step.done || step.finalDone) ? '✓' : (idx + 1)}
                         </div>
-                        <span style={{ fontSize: '10px', fontWeight: step.current ? 'bold' : '600', color: step.current ? '#2563EB' : ((step.done || step.finalDone) ? '#16A34A' : '#64748B'), textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', fontWeight: step.current ? 'bold' : '600', color: step.current ? '#2563EB' : ((step.done || step.finalDone) ? '#16A34A' : '#64748B'), textAlign: 'center', marginTop: '2px' }}>
                           {step.label}
                         </span>
+                        {step.timestamp && (step.done || step.finalDone || step.current) && (
+                          <span style={{ fontSize: '9px', color: '#64748B', fontWeight: '500', textAlign: 'center', lineHeight: '1.25' }}>
+                            {step.timestamp}
+                          </span>
+                        )}
                       </div>
                       {idx < arr.length - 1 && (
-                        <div style={{ height: '2px', backgroundColor: step.done ? '#16A34A' : '#E2E8F0', flex: 1, marginTop: '-16px' }} />
+                        <div style={{ height: '2px', backgroundColor: step.done ? '#16A34A' : '#E2E8F0', flex: 1, marginTop: '13px' }} />
                       )}
                     </React.Fragment>
                   ))}
