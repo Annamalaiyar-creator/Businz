@@ -5388,26 +5388,6 @@ Procurement Team | BUSINZ`;
                       <span style={{ fontSize: '12px', fontWeight: '800', color: '#2563EB', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Building2 size={13} /> Billing Address
                       </span>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={sameAsDelivery}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setSameAsDelivery(checked);
-                            if (checked) {
-                              setBillingAddress1(deliveryAddress1);
-                              setBillingAddress2(deliveryAddress2);
-                              setBillingCity(deliveryCity);
-                              setBillingState(deliveryState);
-                              setBillingPincode(deliveryPincode);
-                              setBillingAddress(deliveryAddress);
-                            }
-                          }}
-                          style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                        />
-                        Same as Delivery
-                      </label>
                     </div>
 
                     {/* Multi-Location / Branch Selector */}
