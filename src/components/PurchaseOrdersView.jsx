@@ -5639,7 +5639,13 @@ Procurement Team | BUSINZ`;
                           <td colSpan={colCount} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748B', fontSize: '13px', backgroundColor: '#FAFAFA' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                               <Boxes size={28} style={{ color: '#94A3B8' }} />
-                              <div>No line items added yet. Click <strong>Add New Row</strong>, <strong>Add Items in Bulk</strong>, or <strong>Create Set</strong> below.</div>
+                              <div>
+                                {isProcurementRole ? (
+                                  <>No line items added yet. Click <strong>Add New Row</strong> or <strong>Add Items in Bulk</strong> below.</>
+                                ) : (
+                                  <>No line items added yet. Click <strong>Add New Row</strong>, <strong>Add Items in Bulk</strong>, or <strong>Create Set</strong> below.</>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -6077,38 +6083,40 @@ Procurement Team | BUSINZ`;
                     Add New Product
                   </button>
 
-                  {/* Create Set Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewSetName(`Custom Set ${Object.keys(presetGroups || {}).length + 1}`);
-                      setNewSetCount(1);
-                      setNewSetUnit('MT');
-                      setNewSetPrice('');
-                      setNewSetGstRate('18%');
-                      setShowCreateSetModal(true);
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      backgroundColor: '#F5F3FF',
-                      border: '1px solid #DDD6FE',
-                      borderRadius: '8px',
-                      padding: '8px 16px',
-                      fontSize: '13.5px',
-                      fontWeight: '700',
-                      color: '#6D28D9',
-                      cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EDE9FE'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F5F3FF'; }}
-                  >
-                    <Layers size={15} />
-                    Create Set
-                  </button>
+                  {/* Create Set Button (hidden for Procurement login) */}
+                  {!isProcurementRole && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewSetName(`Custom Set ${Object.keys(presetGroups || {}).length + 1}`);
+                        setNewSetCount(1);
+                        setNewSetUnit('MT');
+                        setNewSetPrice('');
+                        setNewSetGstRate('18%');
+                        setShowCreateSetModal(true);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        backgroundColor: '#F5F3FF',
+                        border: '1px solid #DDD6FE',
+                        borderRadius: '8px',
+                        padding: '8px 16px',
+                        fontSize: '13.5px',
+                        fontWeight: '700',
+                        color: '#6D28D9',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EDE9FE'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F5F3FF'; }}
+                    >
+                      <Layers size={15} />
+                      Create Set
+                    </button>
+                  )}
 
                   {Object.values(presetGroups).map(grp => (
                     <button
@@ -8112,7 +8120,7 @@ Procurement Team | BUSINZ`;
       )}
 
       {/* ─── CREATE CUSTOM SET / KIT MODAL ─── */}
-      {showCreateSetModal && (
+      {showCreateSetModal && !isProcurementRole && (
         <div
           style={{
             position: 'fixed',
