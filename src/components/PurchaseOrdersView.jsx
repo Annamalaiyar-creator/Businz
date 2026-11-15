@@ -5642,66 +5642,60 @@ Procurement Team | BUSINZ`;
                   const pendingAmt = (grandTotalVal * pendingPctNum) / 100;
                   return (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label htmlFor="purchase-orders-advance-paid" style={{ fontSize: '11px', fontWeight: '800', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          <label htmlFor="purchase-orders-advance-paid" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                             Paid (%)
                           </label>
-                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803D' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b' }}>
                             ₹{paidAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <input
-                            id="purchase-orders-advance-paid"
-                            name="advancePaidPct"
-                            aria-label="Advance Paid Percentage"
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={advancePaidPct}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              if (raw === '') {
-                                setAdvancePaidPct('');
-                                return;
-                              }
-                              const clamped = Math.min(100, Math.max(0, Number(raw) || 0));
-                              setAdvancePaidPct(String(clamped));
-                            }}
-                            style={{ height: '36px', borderRadius: '8px', border: '1px solid #86EFAC', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#166534', backgroundColor: '#FFFFFF', width: '100%' }}
-                          />
-                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#166534' }}>%</span>
-                        </div>
+                        <input
+                          id="purchase-orders-advance-paid"
+                          name="advancePaidPct"
+                          aria-label="Advance Paid Percentage"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={advancePaidPct}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                              setAdvancePaidPct('');
+                              return;
+                            }
+                            const clamped = Math.min(100, Math.max(0, Number(raw) || 0));
+                            setAdvancePaidPct(String(clamped));
+                          }}
+                          style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', width: '100%', boxSizing: 'border-box' }}
+                        />
                       </div>
 
-                      <div style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label htmlFor="purchase-orders-advance-pending" style={{ fontSize: '11px', fontWeight: '800', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          <label htmlFor="purchase-orders-advance-pending" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                             Pending (%)
                           </label>
-                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#B45309' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b' }}>
                             ₹{pendingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <input
-                            id="purchase-orders-advance-pending"
-                            name="advancePendingPct"
-                            aria-label="Advance Pending Percentage"
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={pendingPctNum}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const pendingVal = raw === '' ? 0 : Math.min(100, Math.max(0, Number(raw) || 0));
-                              setAdvancePaidPct(String(100 - pendingVal));
-                            }}
-                            style={{ height: '36px', borderRadius: '8px', border: '1px solid #FCD34D', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#92400E', backgroundColor: '#FFFFFF', width: '100%' }}
-                          />
-                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#92400E' }}>%</span>
-                        </div>
+                        <input
+                          id="purchase-orders-advance-pending"
+                          name="advancePendingPct"
+                          aria-label="Advance Pending Percentage"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={pendingPctNum}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const pendingVal = raw === '' ? 0 : Math.min(100, Math.max(0, Number(raw) || 0));
+                            setAdvancePaidPct(String(100 - pendingVal));
+                          }}
+                          style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', width: '100%', boxSizing: 'border-box' }}
+                        />
                       </div>
                     </div>
                   );
