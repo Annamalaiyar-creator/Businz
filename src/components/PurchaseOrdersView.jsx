@@ -20,6 +20,10 @@ export const COMPANY_LOCATIONS = {
     name: 'VRM Structures India Pvt Ltd',
     locationLabel: 'VRM Structures India Pvt Ltd',
     address: '1427, GNT Road, Nagappa Industrial Estate, Madhavaram, Chennai, Tamil Nadu - 600066',
+    address1: '1427, GNT Road, Nagappa Industrial Estate',
+    address2: 'Madhavaram',
+    city: 'Chennai',
+    pincode: '600066',
     gst: '33AAGCV4262N1ZZ',
     email: 'contact@vrmstructures.com',
     phone: '+91 98847 20789',
@@ -29,6 +33,10 @@ export const COMPANY_LOCATIONS = {
     name: 'VRM Structures India Pvt Ltd',
     locationLabel: 'VRM Structures (AP)',
     address: 'NO 150B, PERUMAL KOVIL STREET, Padi. Tada, District - Thirupati, TADA, Andhra Pradesh - 524401, India',
+    address1: 'NO 150B, PERUMAL KOVIL STREET, Padi. Tada',
+    address2: 'District - Thirupati',
+    city: 'TADA',
+    pincode: '524401',
     gst: '37AAGCV4262N1ZR',
     email: 'ap@vrmstructures.com',
     phone: '+91 98847 20789',
@@ -38,6 +46,10 @@ export const COMPANY_LOCATIONS = {
     name: 'Jash Sun Power Dynamics Private Limited',
     locationLabel: 'Jashsun',
     address: '2nd, 1/135A, JASH SUN, 2nd Street, Elavanthangal, Kelambakkam, Chengalpattu, Tamil Nadu - 603103, India',
+    address1: '2nd, 1/135A, JASH SUN, 2nd Street, Elavanthangal',
+    address2: 'Kelambakkam',
+    city: 'Chengalpattu',
+    pincode: '603103',
     gst: '33AAGCJ6197G1ZC',
     email: 'contact@jashsun.com',
     phone: '+91 98847 20789',
@@ -1062,7 +1074,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       const vLocs = getVendorLocations(found);
       if (vLocs.length > 0) {
         const reg = vLocs.find(l => l.id === 'registered_office') || vLocs[0];
-        const ship = vLocs.find(l => l.id === 'factory_plant') || vLocs[1] || reg;
         setBillingLocationId(reg.id);
         setBillingAddress1(reg.address1 || '');
         setBillingAddress2(reg.address2 || '');
@@ -1070,14 +1081,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         setBillingState(reg.state || '');
         setBillingPincode(reg.pincode || '');
         setBillingAddress(formatAddressObj(reg));
-
-        setDeliveryLocationId(ship.id);
-        setDeliveryAddress1(ship.address1 || '');
-        setDeliveryAddress2(ship.address2 || '');
-        setDeliveryCity(ship.city || '');
-        setDeliveryState(ship.state || '');
-        setDeliveryPincode(ship.pincode || '');
-        setDeliveryAddress(formatAddressObj(ship));
       } else {
         const vAddr = found.billingAddress || found.address || found.registeredAddress || `${val}, Main Road, Industrial Estate, Tamil Nadu - 600028`;
         setBillingAddress(vAddr);
@@ -1087,13 +1090,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         setBillingCity(found.billingCity || found.city || parsedV.city || '');
         setBillingState(found.billingState || found.state || parsedV.state || '');
         setBillingPincode(found.billingPincode || found.pincode || parsedV.pincode || '');
-
-        setDeliveryAddress1(found.billingAddress1 || found.address1 || parsedV.address1 || '');
-        setDeliveryAddress2(found.billingAddress2 || found.address2 || parsedV.address2 || '');
-        setDeliveryCity(found.billingCity || found.city || parsedV.city || '');
-        setDeliveryState(found.billingState || found.state || parsedV.state || '');
-        setDeliveryPincode(found.billingPincode || found.pincode || parsedV.pincode || '');
-        setDeliveryAddress(vAddr);
       }
     }
   };
@@ -2297,6 +2293,23 @@ Procurement Team | BUSINZ`;
         }
       })
       .catch(() => { });
+    const applyCompanyDeliveryAddress = (locKey) => {
+      const prof = getCompanyProfile(locKey);
+      const parsed = parseAddressString(prof.address || '');
+      const a1 = prof.address1 || parsed.address1 || '';
+      const a2 = prof.address2 || parsed.address2 || '';
+      const c = prof.city || parsed.city || '';
+      const s = prof.state || parsed.state || '';
+      const p = prof.pincode || parsed.pincode || '';
+      setDeliveryLocationId(prof.locationLabel || locKey || 'VRM Structures India Pvt Ltd');
+      setDeliveryAddress1(a1);
+      setDeliveryAddress2(a2);
+      setDeliveryCity(c);
+      setDeliveryState(s);
+      setDeliveryPincode(p);
+      setDeliveryAddress(prof.address || formatAddressObj({ address1: a1, address2: a2, city: c, state: s, pincode: p }));
+    };
+
     setVendorName('');
     setBranch('VRM Structures India Pvt Ltd');
     setCompanyLocation('VRM Structures India Pvt Ltd');
@@ -2305,12 +2318,7 @@ Procurement Team | BUSINZ`;
     setEmail('');
     setGstNo('');
     setDeliveryType('Organization');
-    setDeliveryAddress('');
-    setDeliveryAddress1('');
-    setDeliveryAddress2('');
-    setDeliveryCity('');
-    setDeliveryState('');
-    setDeliveryPincode('');
+    applyCompanyDeliveryAddress('VRM Structures India Pvt Ltd');
     setBillingAddress('');
     setBillingAddress1('');
     setBillingAddress2('');
@@ -5042,6 +5050,20 @@ Procurement Team | BUSINZ`;
                             const loc = e.target.value;
                             setCompanyLocation(loc);
                             setBranch(loc);
+                            const prof = getCompanyProfile(loc);
+                            const parsed = parseAddressString(prof.address || '');
+                            const a1 = prof.address1 || parsed.address1 || '';
+                            const a2 = prof.address2 || parsed.address2 || '';
+                            const c = prof.city || parsed.city || '';
+                            const s = prof.state || parsed.state || '';
+                            const p = prof.pincode || parsed.pincode || '';
+                            setDeliveryLocationId(prof.locationLabel || loc);
+                            setDeliveryAddress1(a1);
+                            setDeliveryAddress2(a2);
+                            setDeliveryCity(c);
+                            setDeliveryState(s);
+                            setDeliveryPincode(p);
+                            setDeliveryAddress(prof.address || formatAddressObj({ address1: a1, address2: a2, city: c, state: s, pincode: p }));
                           }}
                           style={{
                             height: '38px',
@@ -5181,35 +5203,39 @@ Procurement Team | BUSINZ`;
                       <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B' }}>Consignee Destination</span>
                     </div>
 
-                    {/* Multi-Location / Branch Selector */}
+                    {/* Multi-Location / Company Receiving Site Selector */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', padding: '6px 10px', borderRadius: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: '#475569' }}>
                         <Building2 size={13} color="#0E7490" />
-                        <span>Vendor Site / Location:</span>
+                        <span>Receiving Site / Location:</span>
                       </div>
                       <select
-                        value={deliveryLocationId}
+                        value={deliveryLocationId || companyLocation}
                         onChange={(e) => {
                           const selId = e.target.value;
                           setDeliveryLocationId(selId);
                           if (selId === 'custom') return;
-                          const chosen = vendorLocations.find(l => l.id === selId);
-                          if (chosen) {
-                            setDeliveryAddress1(chosen.address1 || '');
-                            setDeliveryAddress2(chosen.address2 || '');
-                            setDeliveryCity(chosen.city || '');
-                            setDeliveryState(chosen.state || '');
-                            setDeliveryPincode(chosen.pincode || '');
-                            const combined = formatAddressObj(chosen);
-                            setDeliveryAddress(combined);
-                            if (sameAsDelivery) {
-                              setBillingAddress1(chosen.address1 || '');
-                              setBillingAddress2(chosen.address2 || '');
-                              setBillingCity(chosen.city || '');
-                              setBillingState(chosen.state || '');
-                              setBillingPincode(chosen.pincode || '');
-                              setBillingAddress(combined);
-                            }
+                          const prof = getCompanyProfile(selId);
+                          const parsed = parseAddressString(prof.address || '');
+                          const a1 = prof.address1 || parsed.address1 || '';
+                          const a2 = prof.address2 || parsed.address2 || '';
+                          const c = prof.city || parsed.city || '';
+                          const s = prof.state || parsed.state || '';
+                          const p = prof.pincode || parsed.pincode || '';
+                          setDeliveryAddress1(a1);
+                          setDeliveryAddress2(a2);
+                          setDeliveryCity(c);
+                          setDeliveryState(s);
+                          setDeliveryPincode(p);
+                          const combined = prof.address || formatAddressObj({ address1: a1, address2: a2, city: c, state: s, pincode: p });
+                          setDeliveryAddress(combined);
+                          if (sameAsDelivery) {
+                            setBillingAddress1(a1);
+                            setBillingAddress2(a2);
+                            setBillingCity(c);
+                            setBillingState(s);
+                            setBillingPincode(p);
+                            setBillingAddress(combined);
                           }
                         }}
                         style={{
@@ -5226,17 +5252,8 @@ Procurement Team | BUSINZ`;
                           outline: 'none'
                         }}
                       >
-                        {vendorLocations.length > 0 ? (
-                          vendorLocations.map((loc) => (
-                            <option key={loc.id} value={loc.id}>{loc.label}</option>
-                          ))
-                        ) : (
-                          <>
-                            <option value="registered_office">Registered / Head Office</option>
-                            <option value="factory_plant">Factory / Plant Site</option>
-                            <option value="warehouse_yard">Warehouse / Stockyard</option>
-                          </>
-                        )}
+                        <option value="VRM Structures India Pvt Ltd">VRM Structures India Pvt Ltd</option>
+                        <option value="VRM Structures (AP)">VRM Structures (AP)</option>
                         <option value="custom">Custom / Other Site</option>
                       </select>
                     </div>
