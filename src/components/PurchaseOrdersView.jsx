@@ -422,6 +422,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               deliveryAddress: (p.deliveryAddress && p.deliveryAddress !== '—' && p.deliveryAddress !== '') ? p.deliveryAddress : (existing.deliveryAddress || '—'),
               billingAddress: (p.billingAddress && p.billingAddress !== '—' && p.billingAddress !== '') ? p.billingAddress : (existing.billingAddress || '—'),
               paymentTerms: (p.paymentTerms && p.paymentTerms !== 'Net 30 Days') ? p.paymentTerms : (existing.paymentTerms || p.paymentTerms || 'Due on Receipt'),
+              advancePaidPct: p.advancePaidPct !== undefined ? p.advancePaidPct : existing.advancePaidPct,
+              advancePendingPct: p.advancePendingPct !== undefined ? p.advancePendingPct : existing.advancePendingPct,
               notes: (p.notes && p.notes !== '') ? p.notes : (existing.notes || ''),
               terms: (p.terms && p.terms !== '') ? p.terms : (existing.terms || ''),
               scope: p.scope || existing.scope || 'Vendor Scope',
@@ -681,6 +683,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [poDate, setPoDate] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentTerms, setPaymentTerms] = useState('');
+  const [advancePaidPct, setAdvancePaidPct] = useState('40');
   const [purchaser, setPurchaser] = useState(loggedInUserName);
   const [purchaserMode, setPurchaserMode] = useState('dropdown'); // 'dropdown' or 'type'
   const [shipmentPref, setShipmentPref] = useState('Transport');
@@ -1256,6 +1259,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       createdAt: (editIdx !== null && (poList[editIdx]?.createdAt || poList[editIdx]?.created_at)) || new Date().toISOString(),
       deliveryDate: formatDelivery,
       paymentTerms: paymentTerms || 'Due on Receipt',
+      advancePaidPct: paymentTerms === 'Advance' ? Math.min(100, Math.max(0, Number(advancePaidPct || 0))) : null,
+      advancePendingPct: paymentTerms === 'Advance' ? Math.max(0, 100 - Math.min(100, Math.max(0, Number(advancePaidPct || 0)))) : null,
       purchaser: purchaser || loggedInUserName,
       shipmentPref: shipmentPref,
       currency: currency,
@@ -1969,6 +1974,7 @@ Procurement Team | BUSINZ`;
     setPoDate(parseDateToInputFormat(po.poDate || po.date));
     setDeliveryDate(parseDateToInputFormat(po.deliveryDate || po.delivery_date));
     setPaymentTerms(effPaymentTerms || 'Net 30 Days');
+    setAdvancePaidPct(po.advancePaidPct !== undefined && po.advancePaidPct !== null ? String(po.advancePaidPct) : '40');
     setPurchaser(po.purchaser || po.purchaser_name || loggedInUserName);
     setShipmentPref(po.shipmentPref || po.shipment_preference || 'Transport');
     setCurrency(po.currency || po.currency_code || 'INR - Indian Rupee');
@@ -2315,6 +2321,7 @@ Procurement Team | BUSINZ`;
     setPoDate(new Date().toISOString().split('T')[0]);
     setDeliveryDate('');
     setPaymentTerms('');
+    setAdvancePaidPct('40');
     setPurchaser(loggedInUserName);
     setShipmentPref('Transport');
     setCurrency('INR - Indian Rupee');
@@ -2637,7 +2644,11 @@ Procurement Team | BUSINZ`;
                   </div>
                   <div>
                     <span style={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontSize: '9px', fontWeight: 'bold' }}>Payment Terms</span>
-                    <strong style={{ color: '#1E293B', display: 'block', marginTop: '2px' }}>{paymentTerms}</strong>
+                    <strong style={{ color: '#1E293B', display: 'block', marginTop: '2px' }}>
+                      {paymentTerms === 'Advance'
+                        ? `Advance (${advancePaidPct || 40}% Paid / ${Math.max(0, 100 - Number(advancePaidPct || 40))}% Pending)`
+                        : paymentTerms}
+                    </strong>
                   </div>
                   <div>
                     <span style={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontSize: '9px', fontWeight: 'bold' }}>PO Issued By</span>
@@ -5582,8 +5593,15 @@ Procurement Team | BUSINZ`;
                     <label htmlFor="purchase-orders-payment-terms" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Payment Terms <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <select id="purchase-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
+                    <select id="purchase-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms" value={paymentTerms} onChange={(e) => {
+                      const val = e.target.value;
+                      setPaymentTerms(val);
+                      if (val === 'Advance' && (advancePaidPct === '' || advancePaidPct === undefined || advancePaidPct === null)) {
+                        setAdvancePaidPct('40');
+                      }
+                    }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
                       <option value="" disabled>Select Payment Terms</option>
+                      <option value="Advance">Advance</option>
                       <option value="7 Days">7 Days</option>
                       <option value="15 Days Net">15 Days Net</option>
                       <option value="Net 30 Days">Net 30 Days</option>
@@ -5615,6 +5633,79 @@ Procurement Team | BUSINZ`;
                     </select>
                   </div>
                 </div>
+
+                {paymentTerms === 'Advance' && (() => {
+                  const paidPctNum = Math.min(100, Math.max(0, Number(advancePaidPct === '' ? 0 : advancePaidPct) || 0));
+                  const pendingPctNum = Math.max(0, 100 - paidPctNum);
+                  const grandTotalVal = Number(getGrandTotal() || 0);
+                  const paidAmt = (grandTotalVal * paidPctNum) / 100;
+                  const pendingAmt = (grandTotalVal * pendingPctNum) / 100;
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <label htmlFor="purchase-orders-advance-paid" style={{ fontSize: '11px', fontWeight: '800', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                            Paid (%)
+                          </label>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803D' }}>
+                            ₹{paidAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            id="purchase-orders-advance-paid"
+                            name="advancePaidPct"
+                            aria-label="Advance Paid Percentage"
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={advancePaidPct}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw === '') {
+                                setAdvancePaidPct('');
+                                return;
+                              }
+                              const clamped = Math.min(100, Math.max(0, Number(raw) || 0));
+                              setAdvancePaidPct(String(clamped));
+                            }}
+                            style={{ height: '36px', borderRadius: '8px', border: '1px solid #86EFAC', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#166534', backgroundColor: '#FFFFFF', width: '100%' }}
+                          />
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#166534' }}>%</span>
+                        </div>
+                      </div>
+
+                      <div style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <label htmlFor="purchase-orders-advance-pending" style={{ fontSize: '11px', fontWeight: '800', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                            Pending (%)
+                          </label>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#B45309' }}>
+                            ₹{pendingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            id="purchase-orders-advance-pending"
+                            name="advancePendingPct"
+                            aria-label="Advance Pending Percentage"
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={pendingPctNum}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const pendingVal = raw === '' ? 0 : Math.min(100, Math.max(0, Number(raw) || 0));
+                              setAdvancePaidPct(String(100 - pendingVal));
+                            }}
+                            style={{ height: '36px', borderRadius: '8px', border: '1px solid #FCD34D', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#92400E', backgroundColor: '#FFFFFF', width: '100%' }}
+                          />
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#92400E' }}>%</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div style={{ display: 'grid', gridTemplateColumns: shipmentPref === 'Transport' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
