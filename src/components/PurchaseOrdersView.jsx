@@ -4596,44 +4596,38 @@ Procurement Team | BUSINZ`;
           {/* Title Bar */}
           <div
             className="po-no-print"
-            style={
-              viewMode === 'view'
-                ? { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
-                : {
-                    background: 'linear-gradient(135deg, #075985 0%, #0E7490 50%, #0891B2 100%)',
-                    borderRadius: '18px',
-                    padding: '24px 28px',
-                    color: '#FFFFFF',
-                    boxShadow: '0 10px 25px -5px rgba(14, 116, 144, 0.4)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '16px'
-                  }
-            }
+            style={{
+              background: 'linear-gradient(135deg, #075985 0%, #0E7490 50%, #0891B2 100%)',
+              borderRadius: '18px',
+              padding: '24px 28px',
+              color: '#FFFFFF',
+              boxShadow: '0 10px 25px -5px rgba(14, 116, 144, 0.4)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: viewMode === 'view' ? '0' : '16px' }}>
-              {viewMode !== 'view' && (
-                <div
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '14px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-                    backdropFilter: 'blur(6px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <FileCheck style={{ width: '24px', height: '24px', color: '#FFFFFF' }} />
-                </div>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '14px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                  backdropFilter: 'blur(6px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <FileCheck style={{ width: '24px', height: '24px', color: '#FFFFFF' }} />
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <h2 style={{ fontSize: viewMode === 'view' ? '20px' : '22px', fontWeight: viewMode === 'view' ? 'bold' : '900', color: viewMode === 'view' ? '#0f172a' : '#FFFFFF', margin: 0, letterSpacing: viewMode === 'view' ? 'normal' : '-0.3px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <h2 style={{ fontSize: '22px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.3px' }}>
                     {viewMode === 'view' ? 'View Purchase Order' : viewMode === 'edit' ? 'Edit Purchase Order' : 'Create Purchase Order'}
                   </h2>
                   {viewMode === 'view' && viewingPoStatus && (
@@ -4648,7 +4642,7 @@ Procurement Team | BUSINZ`;
                     )
                   )}
                 </div>
-                <span style={{ fontSize: '13px', color: viewMode === 'view' ? '#64748b' : '#CFFAFE', marginTop: '4px' }}>
+                <span style={{ fontSize: '13px', color: '#CFFAFE', marginTop: '4px' }}>
                   {viewMode === 'view' ? `Details of purchase order ${poNumber}.` : 'Fill in the details below to create a new purchase order.'}
                 </span>
               </div>
@@ -6459,6 +6453,140 @@ Procurement Team | BUSINZ`;
                 >
                   {isSubmittingPO ? 'Processing...' : (viewMode === 'edit' ? 'Save Changes' : 'Submit for Review')}
                 </button>
+              </div>
+
+              {/* Grand Total Display */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+                <strong style={{ fontSize: '15px', color: '#2563EB', fontWeight: '800' }}>
+                  ₹{getGrandTotal().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
+            </div>
+          )}
+
+          {/* Sticky Bottom Action Bar Following with Scroll for View Purchase Order */}
+          {viewMode === 'view' && (
+            <div
+              className="po-no-print"
+              style={{
+                position: 'sticky',
+                bottom: 0,
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderTop: '1.5px solid #CBD5E1',
+                padding: '12px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                zIndex: 50,
+                boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+                borderRadius: '12px',
+                marginTop: '12px',
+                boxSizing: 'border-box'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  style={{
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    padding: '0 18px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '13.5px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                  }}
+                >
+                  <ArrowLeft size={15} /> Back to PO List
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {};
+                    setPrintPoModal({
+                      ...currentPoObj,
+                      poNo: poNumber,
+                      poDate,
+                      deliveryDate,
+                      paymentTerms,
+                      purchaser,
+                      vendorName,
+                      branch,
+                      contactPerson,
+                      contactNo,
+                      email,
+                      gstNo,
+                      deliveryAddress,
+                      billingAddress,
+                      items,
+                      presetGroups,
+                      notes,
+                      terms,
+                      discountPct,
+                      shippingCharges,
+                      otherCharges
+                    });
+                  }}
+                  style={{
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    padding: '0 18px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '13.5px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                  }}
+                >
+                  <FileText size={15} style={{ color: '#059669' }} /> Export / Print PDF
+                </button>
+
+                {!isExecutiveOrMD && !isAccounts && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const matchedPo = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
+                        poNo: poNumber, vendor: vendorName, branch, contactPerson, contactNo, email, gstNo,
+                        deliveryType, deliveryAddress, billingAddress, poDate, deliveryDate, paymentTerms,
+                        purchaser, shipmentPref, currency, project, priority, items, shippingCharges, otherCharges,
+                        discountPct, notes, terms, approvalRequired, approver
+                      };
+                      handleStartClone(matchedPo);
+                    }}
+                    style={{
+                      height: '40px',
+                      borderRadius: '8px',
+                      border: '1px solid #C7D2FE',
+                      backgroundColor: '#EEF2FF',
+                      color: '#4338CA',
+                      padding: '0 18px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      fontSize: '13.5px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Copy size={14} style={{ color: '#4338CA' }} /> Clone PO
+                  </button>
+                )}
               </div>
 
               {/* Grand Total Display */}
