@@ -409,7 +409,7 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                   DELIVERY ADDRESS
                 </div>
                 <div style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '3px' }}>
-                  {compProfile.name}
+                  {po?.deliveryCompanyName || po?.deliveryName || compProfile.name}
                 </div>
                 <div style={{ color: '#334155' }}>{deliveryAddress}</div>
               </div>

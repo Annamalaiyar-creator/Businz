@@ -666,6 +666,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [gstNo, setGstNo] = useState('');
   const [deliveryType, setDeliveryType] = useState('Organization'); // 'Organization' | 'Customer'
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryCompanyName, setDeliveryCompanyName] = useState('VRM Structures India Pvt Ltd');
   const [deliveryAddress1, setDeliveryAddress1] = useState('');
   const [deliveryAddress2, setDeliveryAddress2] = useState('');
   const [deliveryCity, setDeliveryCity] = useState('');
@@ -1236,6 +1237,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         state: (deliveryState || '').trim(),
         pincode: (deliveryPincode || '').trim()
       },
+      deliveryCompanyName: (deliveryCompanyName || '').trim(),
       billingAddress: (effBillAddress || '').trim(),
       billingAddress1: (billingAddress1 || '').trim(),
       billingAddress2: (billingAddress2 || '').trim(),
@@ -1936,6 +1938,7 @@ Procurement Team | BUSINZ`;
     setGstNo(effGst);
     setDeliveryType(po.deliveryType || 'Organization');
     setDeliveryAddress(effDelAddr);
+    setDeliveryCompanyName(po.deliveryCompanyName || po.deliveryName || getCompanyProfile(effBranch).name);
     const parsedDel = (po.deliveryAddressObj && typeof po.deliveryAddressObj === 'object')
       ? po.deliveryAddressObj
       : parseAddressString(effDelAddr);
@@ -2302,6 +2305,7 @@ Procurement Team | BUSINZ`;
       const s = prof.state || parsed.state || '';
       const p = prof.pincode || parsed.pincode || '';
       setDeliveryLocationId(prof.locationLabel || locKey || 'VRM Structures India Pvt Ltd');
+      setDeliveryCompanyName(prof.name || 'VRM Structures India Pvt Ltd');
       setDeliveryAddress1(a1);
       setDeliveryAddress2(a2);
       setDeliveryCity(c);
@@ -2666,7 +2670,7 @@ Procurement Team | BUSINZ`;
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', fontSize: '11px' }}>
 
-                  {/* Vendor Details Card */}
+                  {/* Vendor Details Card (with Vendor Billing Address) */}
                   <div style={{ border: '1px solid #F1F5F9', borderRadius: '8px', padding: '16px', backgroundColor: '#F8FAFC' }}>
                     <strong style={{ fontSize: '11px', color: '#2563EB', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>Vendor Details</strong>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -2675,19 +2679,23 @@ Procurement Team | BUSINZ`;
                       {contactPerson && <span style={{ color: '#475569' }}>Attn: {contactPerson}</span>}
                       {contactNo && <span style={{ color: '#475569' }}>Phone: {contactNo}</span>}
                       {email && <span style={{ color: '#475569' }}>Email: {email}</span>}
-                      {gstNo && <span style={{ color: '#475569', fontWeight: 'bold' }}>GSTIN: {gstNo}</span>}
+                      {billingAddress && (
+                        <span style={{ color: '#334155', marginTop: '4px', lineHeight: '1.4' }}>
+                          <strong style={{ color: '#0F172A' }}>Billing Address: </strong>{billingAddress}
+                        </span>
+                      )}
+                      {gstNo && <span style={{ color: '#475569', fontWeight: 'bold', marginTop: '2px' }}>GSTIN: {gstNo}</span>}
                     </div>
                   </div>
 
-                  {/* Address Details */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div style={{ border: '1px solid #F1F5F9', borderRadius: '8px', padding: '12px', backgroundColor: '#FFFFFF' }}>
-                      <strong style={{ fontSize: '9px', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Delivery Address</strong>
-                      <span style={{ color: '#334155', lineHeight: '1.4' }}>{deliveryAddress || '—'}</span>
-                    </div>
-                    <div style={{ border: '1px solid #F1F5F9', borderRadius: '8px', padding: '12px', backgroundColor: '#FFFFFF' }}>
-                      <strong style={{ fontSize: '9px', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Billing Address</strong>
-                      <span style={{ color: '#334155', lineHeight: '1.4' }}>{billingAddress || '—'}</span>
+                  {/* Delivery Address Box (VRM or Custom Consignee Name) */}
+                  <div style={{ border: '1px solid #F1F5F9', borderRadius: '8px', padding: '16px', backgroundColor: '#F8FAFC' }}>
+                    <strong style={{ fontSize: '11px', color: '#0E7490', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>Delivery Address</strong>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <strong style={{ fontSize: '13px', color: '#0F172A' }}>
+                        {deliveryCompanyName || getCompanyProfile(companyLocation || branch).name}
+                      </strong>
+                      <span style={{ color: '#334155', lineHeight: '1.45' }}>{deliveryAddress || '—'}</span>
                     </div>
                   </div>
 
@@ -5058,6 +5066,7 @@ Procurement Team | BUSINZ`;
                             const s = prof.state || parsed.state || '';
                             const p = prof.pincode || parsed.pincode || '';
                             setDeliveryLocationId(prof.locationLabel || loc);
+                            setDeliveryCompanyName(prof.name || 'VRM Structures India Pvt Ltd');
                             setDeliveryAddress1(a1);
                             setDeliveryAddress2(a2);
                             setDeliveryCity(c);
@@ -5222,6 +5231,7 @@ Procurement Team | BUSINZ`;
                           const c = prof.city || parsed.city || '';
                           const s = prof.state || parsed.state || '';
                           const p = prof.pincode || parsed.pincode || '';
+                          setDeliveryCompanyName(prof.name || 'VRM Structures India Pvt Ltd');
                           setDeliveryAddress1(a1);
                           setDeliveryAddress2(a2);
                           setDeliveryCity(c);
@@ -5229,14 +5239,6 @@ Procurement Team | BUSINZ`;
                           setDeliveryPincode(p);
                           const combined = prof.address || formatAddressObj({ address1: a1, address2: a2, city: c, state: s, pincode: p });
                           setDeliveryAddress(combined);
-                          if (sameAsDelivery) {
-                            setBillingAddress1(a1);
-                            setBillingAddress2(a2);
-                            setBillingCity(c);
-                            setBillingState(s);
-                            setBillingPincode(p);
-                            setBillingAddress(combined);
-                          }
                         }}
                         style={{
                           height: '28px',
@@ -5256,6 +5258,19 @@ Procurement Team | BUSINZ`;
                         <option value="VRM Structures (AP)">VRM Structures (AP)</option>
                         <option value="custom">Custom / Other Site</option>
                       </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>
+                        Delivery To / Site Name <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={deliveryCompanyName}
+                        onChange={(e) => setDeliveryCompanyName(e.target.value)}
+                        placeholder="VRM Structures India Pvt Ltd or Other Site Name..."
+                        style={{ height: '36px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12.5px', fontWeight: '600', color: '#0F172A', backgroundColor: '#FFFFFF' }}
+                      />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -6610,6 +6625,7 @@ Procurement Team | BUSINZ`;
                       email,
                       gstNo,
                       deliveryAddress,
+                      deliveryCompanyName,
                       billingAddress,
                       items,
                       presetGroups,
