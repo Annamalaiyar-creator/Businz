@@ -4498,7 +4498,6 @@ export default function GoodsReceiptNoteView(props) {
                                  />
                               </th>
                               <th style={{ width: '13%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
-                              <th style={{ width: '12%', minWidth: '115px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
                               <th style={{ width: '18%', minWidth: '160px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
                               <th style={{ width: '13%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Created By</th>
                               <th style={{ width: '12%', minWidth: '115px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Received By</th>
@@ -4510,7 +4509,7 @@ export default function GoodsReceiptNoteView(props) {
                           <tbody>
                             {sortedGrns.length === 0 ? (
                               <tr>
-                                <td colSpan="9" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                                <td colSpan="8" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
                                   No Goods Receipt Notes found matching the criteria.{!isAccountsUser ? ' Click "Create GRN" to record a receipt.' : ''}
                                 </td>
                               </tr>
@@ -4551,15 +4550,6 @@ export default function GoodsReceiptNoteView(props) {
                                       >
                                         {row.id}
                                       </a>
-                                    </td>
-                                    <td style={{ padding: '12px 14px', color: '#475569', textAlign: 'left', fontWeight: '500' }}>
-                                      <span
-                                        onClick={(e) => { e.stopPropagation(); handleOpenPoModal(row.poRef); }}
-                                        title="Click to view Purchase Order in popup"
-                                        style={{ color: '#0E7490', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }}
-                                      >
-                                        {row.poRef}
-                                      </span>
                                     </td>
                                     <td style={{ padding: '12px 14px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
                                       {row.vendor}

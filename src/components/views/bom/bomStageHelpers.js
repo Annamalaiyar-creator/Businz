@@ -134,8 +134,8 @@ export const getBomStageTiming = (b, matchingPi = null) => {
     const str = String(val).trim();
     if (!str || str === '—' || str === '-') return { date: null, hasTime: false };
 
-    // Check DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY (with optional time)
-    const ddmmyyyy = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
+    // Check DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY (with optional comma / 'at' and time)
+    const ddmmyyyy = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s*,?\s*(?:at\s+)?(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
     if (ddmmyyyy) {
       const day = parseInt(ddmmyyyy[1], 10);
       const month = parseInt(ddmmyyyy[2], 10) - 1;
@@ -182,54 +182,61 @@ export const getBomStageTiming = (b, matchingPi = null) => {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
+  const statusLower = String(b.status || '').toLowerCase();
+
   // 1. Stage 1: PI Commercial
-  const rawPi = matchingPi?.createdAt || matchingPi?.piDate || matchingPi?.date || b.piDate || b.sourcePiDate || b.createdAt;
+  const rawPi = matchingPi?.createdAt || matchingPi?.created_at || b.piCreatedAt || matchingPi?.piDate || matchingPi?.date || b.piDate || b.sourcePiDate || b.createdAt || b.created_at || b.date;
   const pPi = parseAnyDate(rawPi);
+  const pPiTimeFallback = pPi.hasTime ? pPi : parseAnyDate(matchingPi?.createdAt || matchingPi?.created_at || matchingPi?.updatedAt || b.createdAt || b.created_at);
   const dPi = pPi.date;
   const hasPi = Boolean(dPi || b.sourcePiNo || b.piNo);
-  const piTime = formatTimeStr(pPi) || b.piTime || matchingPi?.time || null;
+  const piTime = formatTimeStr(pPiTimeFallback) || b.piTime || matchingPi?.time || null;
 
   // 2. Stage 2: BOM Confirmed (locked to exact confirmed time, never changing)
-  const rawConfirmed = b.salesConfirmedAt || b.confirmedAt || b.reconfirmedAt || b.createdAt || b.appliedAt || b.date;
+  const rawConfirmed = b.salesConfirmedAt || b.sales_confirmed_at || b.confirmedAt || b.confirmed_at || b.reconfirmedAt || b.reconfirmed_at || b.createdAt || b.created_at || b.appliedAt || b.date;
   const pConfirmed = parseAnyDate(rawConfirmed);
+  const pConfirmedTimeFallback = pConfirmed.hasTime ? pConfirmed : parseAnyDate(b.salesConfirmedAt || b.sales_confirmed_at || b.reconfirmedAt || b.createdAt || b.created_at || b.updatedAt);
   const dConfirmed = pConfirmed.date;
-  const hasConfirmed = Boolean(b.salesConfirmed || (b.status && b.status !== 'Draft' && !String(b.status).toLowerCase().includes('draft')));
-  const confirmedTime = formatTimeStr(pConfirmed) || b.confirmedTime || b.salesConfirmedTime || b.time || null;
+  const confirmedTime = formatTimeStr(pConfirmedTimeFallback) || b.confirmedTime || b.salesConfirmedTime || b.time || null;
 
-  // 3. Stage 3: Dispatch Packing
-  const rawPacking = b.packingCompletedAt || b.packedAt || b.packingVerifiedAt || b.accountsVerification?.packedAt || (b.packingStatus === 'PACKING_VERIFIED' ? (b.updatedAt || b.date) : null);
-  const pPacking = parseAnyDate(rawPacking);
-  const dPacking = pPacking.date;
-  const hasPacking = Boolean(dPacking || b.packingStatus === 'PACKING_VERIFIED');
-  const isPackingActive = hasConfirmed && !hasPacking;
-  const packingCompletedTime = formatTimeStr(pPacking) || b.packedTime || null;
-  const packingReceivedTime = confirmedTime;
-
-  // 4. Stage 4: Accounts Verification
-  const rawAccounts = b.accountsVerifiedAt || b.accountsVerification?.verifiedAt || (b.isAccountsDone ? (b.updatedAt || b.date) : null);
-  const pAccounts = parseAnyDate(rawAccounts);
-  const dAccounts = pAccounts.date;
-  const hasAccounts = Boolean(dAccounts || b.isAccountsDone || b.accountsVerification?.verified);
-  const isAccountsActive = hasPacking && !hasAccounts;
-  const accountsCompletedTime = formatTimeStr(pAccounts) || b.accountsVerifiedTime || null;
-  const accountsReceivedTime = packingCompletedTime || confirmedTime;
-
-  // 5. Stage 5: GST Invoiced
-  const rawInvoice = b.invoiceConfirmedAt || b.invoicedAt || b.stockDeductionDate || (b.invoiceConfirmed ? (b.updatedAt || b.date) : null);
-  const pInvoice = parseAnyDate(rawInvoice);
-  const dInvoice = pInvoice.date;
-  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed);
-  const isInvoiceActive = hasAccounts && !hasInvoice;
-  const invoiceCompletedTime = formatTimeStr(pInvoice) || b.invoiceTime || null;
-  const invoiceReceivedTime = accountsCompletedTime || packingCompletedTime || confirmedTime;
-
-  // 6. Stage 6: Final Dispatched
-  const rawDispatch = b.dispatchedAt || b.vehicleLoading?.loadedAt || (b.fullyCompleted ? (b.updatedAt || b.date) : null);
+  // 6. Stage 6: Final Dispatched (evaluate bottom-up so later completed stages imply earlier stages are done)
+  const rawDispatch = b.dispatchedAt || b.dispatched_at || b.vehicleLoading?.loadedAt || (b.fullyCompleted || statusLower.includes('dispatched') ? (b.updatedAt || b.updated_at || b.date) : null);
   const pDispatch = parseAnyDate(rawDispatch);
   const dDispatch = pDispatch.date;
-  const hasDispatch = Boolean(dDispatch || b.fullyCompleted);
-  const isDispatchActive = hasInvoice && !hasDispatch;
+  const hasDispatch = Boolean(dDispatch || b.fullyCompleted || statusLower.includes('dispatched') || statusLower === 'closed');
   const dispatchCompletedTime = formatTimeStr(pDispatch) || b.dispatchedTime || null;
+
+  // 5. Stage 5: GST Invoiced
+  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || ((b.invoiceConfirmed || statusLower.includes('invoice') || hasDispatch) ? (b.updatedAt || b.updated_at || b.date) : null);
+  const pInvoice = parseAnyDate(rawInvoice);
+  const dInvoice = pInvoice.date;
+  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed || (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') || b.taxInvoiceNo || statusLower.includes('invoice') || statusLower.includes('vehicle loading') || hasDispatch);
+  const invoiceCompletedTime = formatTimeStr(pInvoice) || b.invoiceTime || null;
+
+  // 4. Stage 4: Accounts Verification
+  const rawAccounts = b.accountsVerifiedAt || b.accounts_verified_at || b.accountsVerification?.verifiedAt || ((b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.updatedAt || b.updated_at || b.date) : null);
+  const pAccounts = parseAnyDate(rawAccounts);
+  const dAccounts = pAccounts.date;
+  const hasAccounts = Boolean(dAccounts || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice || (statusLower.includes('accounts verified') && !statusLower.includes('sent to accounts')) || statusLower.includes('passed to invoice'));
+  const accountsCompletedTime = formatTimeStr(pAccounts) || b.accountsVerifiedTime || null;
+
+  // 3. Stage 3: Dispatch Packing
+  const rawPacking = b.packingCompletedAt || b.packedAt || b.packed_at || b.packingVerifiedAt || b.accountsVerification?.packedAt || ((b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed')) ? (b.updatedAt || b.updated_at || b.date) : null);
+  const pPacking = parseAnyDate(rawPacking);
+  const dPacking = pPacking.date;
+  const hasPacking = Boolean(dPacking || b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed'));
+  const packingCompletedTime = formatTimeStr(pPacking) || b.packedTime || null;
+
+  const hasConfirmed = Boolean(b.salesConfirmed || b.salesReconfirmed || hasPacking || (b.status && !statusLower.includes('draft') && !statusLower.includes('pending confirmation')));
+
+  const isPackingActive = hasConfirmed && !hasPacking;
+  const isAccountsActive = hasPacking && !hasAccounts;
+  const isInvoiceActive = hasAccounts && !hasInvoice;
+  const isDispatchActive = hasInvoice && !hasDispatch;
+
+  const packingReceivedTime = confirmedTime;
+  const accountsReceivedTime = packingCompletedTime || confirmedTime;
+  const invoiceReceivedTime = accountsCompletedTime || packingCompletedTime || confirmedTime;
   const dispatchReceivedTime = invoiceCompletedTime || accountsCompletedTime || packingCompletedTime || confirmedTime;
 
   // Turnaround durations between actual completions
