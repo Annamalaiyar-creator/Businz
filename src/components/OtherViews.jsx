@@ -65,17 +65,18 @@ function ViewLoadingFallback({ activeTab }) {
 class ViewErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
   componentDidCatch(error, errorInfo) {
     console.error(`Render error in view "${this.props.activeTab}":`, error, errorInfo);
+    this.setState({ errorInfo });
   }
   componentDidUpdate(prevProps) {
     if (prevProps.activeTab !== this.props.activeTab && this.state.hasError) {
-      this.setState({ hasError: false, error: null });
+      this.setState({ hasError: false, error: null, errorInfo: null });
     }
   }
   render() {
@@ -124,6 +125,7 @@ class ViewErrorBoundary extends Component {
               <summary style={{ cursor: 'pointer', fontWeight: '700', color: '#DC2626' }}>Technical Details</summary>
               <pre style={{ marginTop: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#991B1B', fontFamily: 'monospace' }}>
                 {this.state.error.stack || this.state.error.toString()}
+                {this.state.errorInfo?.componentStack ? `\n\nComponent Stack:${this.state.errorInfo.componentStack}` : ''}
               </pre>
             </details>
           )}

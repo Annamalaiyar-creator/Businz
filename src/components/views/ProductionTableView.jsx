@@ -74,10 +74,10 @@ export default function ProductionTableView({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-            {pageConfig.title}
+            {safeText(pageConfig.title, '')}
           </h2>
           <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-            {pageConfig.subtitle}
+            {safeText(pageConfig.subtitle, '')}
           </span>
         </div>
         {pageConfig.actionText && !isSuperUser ? (
