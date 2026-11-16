@@ -297,6 +297,63 @@ function determineIsIntraState(piData) {
 }
 
 /**
+ * Resolve or create a Goods item in Zoho Books so converted Invoices never default to Service on IRP.
+ */
+async function resolveOrCreateZohoGoodsItem({ name, rate, hsnCode, unit = 'NOS', taxId, description = '' }, itemCacheMap) {
+  const cleanName = String(name || 'Solar Structure Component').trim().slice(0, 100);
+  const cacheKey = cleanName.toLowerCase();
+  const effectiveHsn = String(hsnCode || '73089090').trim() || '73089090';
+  const effectiveUnit = String(unit || 'NOS').trim().slice(0, 20) || 'NOS';
+
+  try {
+    let matched = itemCacheMap.get(cacheKey);
+    if (!matched) {
+      const searchRes = await zohoRequest({ path: `/books/v3/items?name=${encodeURIComponent(cleanName)}` });
+      if (searchRes.ok && Array.isArray(searchRes.data?.items)) {
+        matched = searchRes.data.items.find(i => String(i.name || '').trim().toLowerCase() === cacheKey);
+        if (matched) itemCacheMap.set(cacheKey, matched);
+      }
+    }
+
+    if (matched?.item_id) {
+      if (matched.product_type !== 'goods' || String(matched.hsn_or_sac || '').trim() !== effectiveHsn) {
+        await zohoRequest({
+          method: 'PUT',
+          path: `/books/v3/items/${matched.item_id}`,
+          body: {
+            product_type: 'goods',
+            hsn_or_sac: effectiveHsn,
+            unit: matched.unit || effectiveUnit
+          }
+        }).catch(() => {});
+      }
+      return matched.item_id;
+    }
+
+    const createRes = await zohoRequest({
+      method: 'POST',
+      path: '/books/v3/items',
+      body: {
+        name: cleanName,
+        rate: Number(rate) || 0,
+        description: String(description || cleanName).slice(0, 100),
+        product_type: 'goods',
+        hsn_or_sac: effectiveHsn,
+        unit: effectiveUnit,
+        ...(taxId ? { tax_id: taxId } : {})
+      }
+    });
+    if (createRes.ok && createRes.data?.item?.item_id) {
+      itemCacheMap.set(cacheKey, createRes.data.item);
+      return createRes.data.item.item_id;
+    }
+  } catch (err) {
+    console.warn(`[Zoho Item Resolution Warning] (${cleanName}):`, err.message);
+  }
+  return null;
+}
+
+/**
  * Push a single Proforma Invoice to Zoho Books as an Estimate / Quote.
  */
 export async function pushPiToZoho(piData) {
@@ -321,64 +378,80 @@ export async function pushPiToZoho(piData) {
   const isIntraState = determineIsIntraState(piData);
   const defaultRate = parseFloat(piData.taxRate || piData.gstRate) || 18;
 
-  // 3. Build Line Items
+  // 3. Build Line Items (linking/creating Zoho Goods items so IRP never treats them as Service)
   const lineItems = [];
+  const itemCacheMap = new Map();
   const pGroups = piData.presetGroups || {};
   const groupEntries = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
   const hasPresetGroups = groupEntries.length > 0;
 
   // Add Preset Kits
   if (hasPresetGroups) {
-    groupEntries.forEach(grp => {
-      if (!grp) return;
+    for (const grp of groupEntries) {
+      if (!grp) continue;
       const setCount = parseFloat(grp.setCount) || 1;
       const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
       const name = grp.presetName || grp.name || piData.presetName || 'Solar Mounting Structure Preset Kit';
       const kitRate = parseFloat(grp.taxRate || grp.gstRate) || defaultRate;
       const taxId = resolveZohoTaxId({ isIntraState, requestedRate: kitRate, activeTaxes });
       const hsnCode = String(grp.hsn || grp.hsn_or_sac || grp.hsnCode || piData.hsn || '73089090').trim();
+      const unitStr = String(grp.unit || 'Set').trim() || 'Set';
+      const descStr = `Preset Kit Package (${setCount} ${unitStr})`.slice(0, 100);
+      const itemId = await resolveOrCreateZohoGoodsItem({ name, rate: unitPrice, hsnCode, unit: unitStr, taxId, description: descStr }, itemCacheMap);
       lineItems.push({
+        ...(itemId ? { item_id: itemId } : {}),
         name: String(name).slice(0, 100),
         rate: unitPrice,
         quantity: setCount,
+        unit: unitStr,
         tax_id: taxId,
         hsn_or_sac: hsnCode,
         product_type: 'goods',
-        description: `Preset Kit Package (${setCount} Set)`.slice(0, 100)
+        description: descStr
       });
-    });
+    }
   }
 
   // Add Custom / Individual items
   const customItems = Array.isArray(piData.items) ? piData.items : [];
-  customItems.forEach(it => {
-    if (hasPresetGroups && (it.isPresetItem || it.presetGroupId)) return;
+  for (const it of customItems) {
+    if (hasPresetGroups && (it.isPresetItem || it.presetGroupId)) continue;
     const q = parseFloat(it.qty || it.quantity) || 1;
     let r = parseFloat(it.rate != null ? it.rate : it.unitValue);
     if (isNaN(r) || r < 0) r = 0;
     const itemRate = parseFloat(it.taxRate || it.gstRate) || defaultRate;
     const taxId = resolveZohoTaxId({ isIntraState, requestedRate: itemRate, activeTaxes });
     const hsnCode = String(it.hsn || it.hsn_or_sac || it.hsnCode || piData.hsn || '73089090').trim();
+    const itemName = String(it.name || it.productName || 'Solar Structure Component').slice(0, 100);
+    const unitStr = String(it.uom || it.unit || 'NOS').trim() || 'NOS';
+    const descStr = String(it.description || it.category || 'Product Scope').slice(0, 100);
+    const itemId = await resolveOrCreateZohoGoodsItem({ name: itemName, rate: r, hsnCode, unit: unitStr, taxId, description: descStr }, itemCacheMap);
     lineItems.push({
-      name: String(it.name || it.productName || 'Solar Structure Component').slice(0, 100),
+      ...(itemId ? { item_id: itemId } : {}),
+      name: itemName,
       rate: r,
       quantity: q,
+      unit: unitStr,
       tax_id: taxId,
       hsn_or_sac: hsnCode,
       product_type: 'goods',
-      description: String(it.description || it.category || 'Product Scope').slice(0, 100)
+      description: descStr
     });
-  });
+  }
 
   // Fallback line item if empty
   if (lineItems.length === 0) {
     const fallbackRate = parseFloat(piData.grandTotal || piData.subtotal || piData.total || 1000);
     const taxId = resolveZohoTaxId({ isIntraState, requestedRate: defaultRate, activeTaxes });
     const hsnCode = String(piData.hsn || '73089090').trim();
+    const fallbackName = String(piData.productName || 'Solar Mounting Structure Scope').slice(0, 100);
+    const itemId = await resolveOrCreateZohoGoodsItem({ name: fallbackName, rate: fallbackRate, hsnCode, unit: 'NOS', taxId, description: 'Solar Structure Scope' }, itemCacheMap);
     lineItems.push({
-      name: String(piData.productName || 'Solar Mounting Structure Scope').slice(0, 100),
+      ...(itemId ? { item_id: itemId } : {}),
+      name: fallbackName,
       rate: fallbackRate,
       quantity: 1,
+      unit: 'NOS',
       tax_id: taxId,
       hsn_or_sac: hsnCode,
       product_type: 'goods',

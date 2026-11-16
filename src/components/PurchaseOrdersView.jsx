@@ -3238,11 +3238,19 @@ ${senderName} | VRM Structures India Private Limited`;
           'Cancelled'
         ];
 
+        const rawBaseList = isExecutiveOrMD
+          ? poList.filter(po => {
+              if (!po) return false;
+              const rawPoSt = String(po.status || '').trim().toUpperCase();
+              return !(rawPoSt === 'DRAFT' || (!rawPoSt && po.statusType === 'draft'));
+            })
+          : poList;
+
         const kpiBaseList = (!kpiFilterMeta || !kpiFilterMeta.targetKeys)
-          ? poList
+          ? rawBaseList
           : (kpiFilterMeta.targetKeys.size === 0
             ? []
-            : poList.filter(po => {
+            : rawBaseList.filter(po => {
                 if (!po) return false;
                 const k1 = String(po.poNo || '').trim().toLowerCase();
                 const k2 = String(po.id || '').trim().toLowerCase();
@@ -3259,10 +3267,6 @@ ${senderName} | VRM Structures India Private Limited`;
 
         const filteredPOList = kpiBaseList.filter(po => {
           if (!po) return false;
-          const rawPoSt = String(po.status || '').trim().toUpperCase();
-          if (isExecutiveOrMD && (rawPoSt === 'DRAFT' || po.statusType === 'draft')) {
-            return false;
-          }
           const pNo = String(po.poNo || po.id || '');
           const pVend = String(po.vendor || po.companyName || '');
           const matchesSearch = pNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
