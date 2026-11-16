@@ -237,7 +237,7 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
     raw === 'proceed_po'
   ) {
     return {
-      label: customLabel || 'Proceed PO',
+      label: customLabel || 'Pending GRN',
       bg: '#ecfeff',
       color: '#0e7490',
       border: '1px solid #a5f3fc',

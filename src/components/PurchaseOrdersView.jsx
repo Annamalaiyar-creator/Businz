@@ -2434,8 +2434,8 @@ ${senderName} | VRM Structures India Private Limited`;
     if (raw === 'Payment Processed / Credit Verified' || raw === 'Payment Processed') {
       return <StatusBadge status="Payment Processed" customLabel="Payment Processed" size="sm" />;
     }
-    if (raw === 'Proceed PO (GRN Ready)' || raw === 'Proceed PO') {
-      return <StatusBadge status="Proceed PO" customLabel="Proceed PO" size="sm" />;
+    if (raw === 'Proceed PO (GRN Ready)' || raw === 'Proceed PO' || raw === 'Pending GRN') {
+      return <StatusBadge status="Proceed PO" customLabel="Pending GRN" size="sm" />;
     }
     if (raw === 'CANCELLED' || raw === 'Cancelled') {
       return <StatusBadge status="Cancelled" customLabel="Cancelled" size="sm" />;
@@ -3165,371 +3165,6 @@ ${senderName} | VRM Structures India Private Limited`;
                   );
                 })()}
 
-                {/* Bottom Review & Approval Action Card for Executive / Approver */}
-                {(() => {
-                  const st = String(viewingPoStatus || '').trim();
-                  const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
-                    poNo: poNumber,
-                    vendor: vendorName,
-                    amount: `₹ ${Number(getGrandTotal() || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-                    paymentTerms
-                  };
-                  const objStatus = String(currentPoObj?.status || '').trim();
-                  const objStatusType = String(currentPoObj?.statusType || '').toLowerCase();
-                  
-                  let hasLocalGrn = false;
-                  let isLocalGrnClosed = false;
-                  try {
-                    const localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
-                    if (Array.isArray(localGrns)) {
-                      const matched = localGrns.filter(g => {
-                        const gRef = String(g.poRef || g.poNo || g.poId || '').toLowerCase().trim();
-                        const pRef = String(poNumber || '').toLowerCase().trim();
-                        return gRef && pRef && (gRef === pRef || gRef.includes(pRef) || pRef.includes(gRef));
-                      });
-                      if (matched.length > 0) {
-                        hasLocalGrn = true;
-                        isLocalGrnClosed = matched.some(g => {
-                          const gst = String(g.status || '').toUpperCase();
-                          return gst.includes('CLOSED') || gst.includes('FULLY RECEIVED') || gst.includes('FULLY ACCEPTED');
-                        });
-                      }
-                    }
-                  } catch (_) {}
-
-                  const totalRec = Number(currentPoObj?.totalReceived || currentPoObj?.totalReceivedQty || 0);
-                  const grnCount = Number(currentPoObj?.grnCount || (currentPoObj?.grnHistory ? currentPoObj.grnHistory.length : 0));
-                  const isClosed = st.includes('CLOSED') || st.includes('FULLY RECEIVED') || objStatus.includes('CLOSED') || objStatusType === 'closed' || isLocalGrnClosed;
-                  const isAlreadyInGrnProcessOrPartial = !isClosed && (
-                    st.toUpperCase().includes('PARTIAL') ||
-                    objStatus.toUpperCase().includes('PARTIAL') ||
-                    objStatusType.includes('partial') ||
-                    st.toUpperCase().includes('PACKED') ||
-                    objStatus.toUpperCase().includes('PACKED') ||
-                    objStatusType.includes('packed') ||
-                    st.toUpperCase().includes('GRN PROCESS') ||
-                    objStatus.toUpperCase().includes('GRN PROCESS') ||
-                    totalRec > 0 ||
-                    hasLocalGrn ||
-                    grnCount > 0
-                  );
-                  const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po');
-                  const isGrnProcess = isAlreadyInGrnProcessOrPartial || isProceedPoOnly;
-                  const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed');
-                  const isAlreadyApproved = isClosed || isGrnProcess || isPaymentProcessed || st === 'MD Approved' || objStatus === 'MD Approved' || objStatusType === 'md_approved' || Boolean(currentPoObj?.approvedBy);
-
-                  const isDraftOrPending = !isAlreadyApproved && st !== 'REJECTED' && objStatus !== 'REJECTED';
-
-                  return (
-                    <div className="po-view-footer-actions po-no-print" style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '16px 24px',
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: '12px',
-                      border: '1px solid #E2E8F0',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                      marginTop: '8px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            try {
-                              sessionStorage.removeItem('controlroom_po_view_mode');
-                              sessionStorage.removeItem('controlroom_viewing_po');
-                            } catch (_) {}
-                            setViewMode('list');
-                          }}
-                          style={{
-                            backgroundColor: 'white',
-                            border: '1px solid #CBD5E1',
-                            borderRadius: '8px',
-                            padding: '8px 18px',
-                            fontSize: '13px',
-                            fontWeight: '600',
-                            color: '#475569',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          ← Back to PO List
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPrintPoModal({
-                            ...(currentPoObj || {}),
-                            poNo: poNumber,
-                            poDate,
-                            deliveryDate,
-                            paymentTerms,
-                            purchaser,
-                            vendorName,
-                            branch,
-                            contactPerson,
-                            contactNo,
-                            email,
-                            gstNo,
-                            deliveryAddress,
-                            billingAddress,
-                            items,
-                            notes,
-                            terms,
-                            discountPct,
-                            shippingCharges,
-                            otherCharges
-                          })}
-                          style={{
-                            backgroundColor: 'white',
-                            border: '1px solid #CBD5E1',
-                            borderRadius: '8px',
-                            padding: '8px 18px',
-                            fontSize: '13px',
-                            fontWeight: '600',
-                            color: '#475569',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}
-                        >
-                          <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
-                        </button>
-
-                        {/* Cancel PO action */}
-                        {!isClosed && String(viewingPoStatus || currentPoObj?.status || '').toUpperCase() !== 'CANCELLED' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCancellingPo(currentPoObj);
-                              setCancellationRemarkInput('');
-                            }}
-                            style={{
-                              backgroundColor: '#FEF2F2',
-                              border: '1px solid #FECACA',
-                              borderRadius: '8px',
-                              padding: '8px 18px',
-                              fontSize: '13px',
-                              fontWeight: '700',
-                              color: '#DC2626',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px'
-                            }}
-                          >
-                            <Ban size={15} style={{ color: '#DC2626' }} /> Cancel PO
-                          </button>
-                        )}
-                        {String(viewingPoStatus || currentPoObj?.status || '').toUpperCase() === 'CANCELLED' && (
-                          <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            backgroundColor: '#FEF2F2',
-                            border: '1px solid #FECACA',
-                            borderRadius: '8px',
-                            padding: '6px 14px',
-                            fontSize: '12px',
-                            fontWeight: '700',
-                            color: '#DC2626'
-                          }}>
-                            <Ban size={14} style={{ color: '#DC2626' }} /> Cancelled: {currentPoObj?.cancelReason || currentPoObj?.cancellationRemark || 'Order Cancelled'}
-                          </div>
-                        )}
-                      </div>
-
-                      {isDraftOrPending ? (
-                        canApproveAsMD ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                              Decision for PO <strong>{poNumber}</strong>:
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setRejectingPo(currentPoObj)}
-                              style={{
-                                backgroundColor: '#FEF2F2',
-                                border: '1px solid #FECACA',
-                                borderRadius: '8px',
-                                padding: '8px 18px',
-                                fontSize: '13px',
-                                fontWeight: '700',
-                                color: '#DC2626',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                              }}
-                            >
-                              <XCircle size={15} style={{ color: '#DC2626' }} /> Reject PO
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setApprovingPo(currentPoObj)}
-                              style={{
-                                backgroundColor: '#16A34A',
-                                border: 'none',
-                                borderRadius: '8px',
-                                padding: '8px 22px',
-                                fontSize: '13px',
-                                fontWeight: '700',
-                                color: 'white',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)'
-                              }}
-                            >
-                              <CheckCircle size={15} /> Approve as MD
-                            </button>
-                          </div>
-                        ) : null
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {isClosed ? (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700', color: '#166534' }}>
-                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> GRN Completed
-                            </div>
-                          ) : isAlreadyInGrnProcessOrPartial ? (
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              backgroundColor: '#ECFEFF',
-                              border: '1px solid #0E7490',
-                              borderRadius: '8px',
-                              padding: '6px 14px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              color: '#0E7490'
-                            }}>
-                              <CheckCircle size={14} style={{ color: '#0E7490' }} /> In GRN Process
-                            </div>
-                          ) : isProceedPoOnly ? (
-                            isAccounts ? (
-                              <div style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                backgroundColor: '#ECFEFF',
-                                border: '1px solid #0E7490',
-                                borderRadius: '8px',
-                                padding: '6px 14px',
-                                fontSize: '12px',
-                                fontWeight: '700',
-                                color: '#0E7490'
-                              }}>
-                                <CheckCircle size={14} style={{ color: '#0E7490' }} /> Proceed PO (GRN Ready)
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handlePushToGrn(currentPoObj)}
-                                style={{
-                                  backgroundColor: '#0E7490',
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  padding: '7px 18px',
-                                  fontSize: '13px',
-                                  fontWeight: '700',
-                                  color: 'white',
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                                }}
-                              >
-                                <Boxes size={15} /> Push to GRN
-                              </button>
-                            )
-                          ) : isPaymentProcessed ? (
-                            <>
-                              <div style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                backgroundColor: '#F0FDF4',
-                                border: '1px solid #BBF7D0',
-                                borderRadius: '8px',
-                                padding: '6px 14px',
-                                fontSize: '12px',
-                                fontWeight: '700',
-                                color: '#166534'
-                              }}>
-                                <CheckCircle size={14} style={{ color: '#16A34A' }} /> Payment Processed / Credit Verified
-                              </div>
-                              {isProcurementHead && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenProceedPoModal(currentPoObj)}
-                                  style={{
-                                    backgroundColor: '#0E7490',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    padding: '7px 18px',
-                                    fontSize: '13px',
-                                    fontWeight: '700',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                                  }}
-                                >
-                                  <Send size={15} /> Proceed PO (Ready for GRN)
-                                </button>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <div style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                backgroundColor: isAccounts ? '#EEF2FF' : '#F0FDF4',
-                                border: isAccounts ? '1px solid #C7D2FE' : '1px solid #BBF7D0',
-                                borderRadius: '8px',
-                                padding: '6px 14px',
-                                fontSize: '12px',
-                                fontWeight: '700',
-                                color: isAccounts ? '#3730A3' : '#166534'
-                              }}>
-                                <CheckCircle size={14} style={{ color: isAccounts ? '#4F46E5' : '#16A34A' }} /> {isAccounts ? 'Awaiting Accounts Verification' : 'MD Approved'}
-                              </div>
-
-                              {isAccounts && (st === 'MD Approved' || currentPoObj?.status === 'MD Approved') && !Boolean(currentPoObj?.paymentDetails) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenPaymentProcessModal(currentPoObj)}
-                                  style={{
-                                    backgroundColor: '#0E7490',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    padding: '7px 18px',
-                                    fontSize: '13px',
-                                    fontWeight: '700',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                                  }}
-                                >
-                                  <CreditCard size={15} /> Process Payment / Verify Credit
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
 
               </div>
             </div>
@@ -3596,7 +3231,7 @@ ${senderName} | VRM Structures India Private Limited`;
           'Pending Approval',
           'MD Approved',
           'Payment Processed',
-          'Proceed PO',
+          'Pending GRN',
           'Partially Received',
           'Fully Received',
           'Cancelled'
@@ -3639,7 +3274,7 @@ ${senderName} | VRM Structures India Private Limited`;
             ((statusFilter === 'Pending Approval' || statusFilter === 'Draft' || statusFilter === 'Draft / Pending Approval') && currentStage === 'Draft') ||
             (statusFilter === 'MD Approved' && currentStage === 'MD_APPROVED') ||
             ((statusFilter === 'Payment Processed' || statusFilter === 'Payment Processed / Credit Verified') && currentStage === 'PAYMENT_PROCESSED') ||
-            ((statusFilter === 'Proceed PO' || statusFilter === 'Proceed PO (GRN Ready)') && currentStage === 'PROCEED_PO') ||
+            ((statusFilter === 'Pending GRN' || statusFilter === 'Proceed PO' || statusFilter === 'Proceed PO (GRN Ready)') && currentStage === 'PROCEED_PO') ||
             ((statusFilter === 'Partially Received' || statusFilter === 'Partially Recived' || statusFilter === 'OPEN / PARTIALLY RECEIVED') && currentStage === 'PARTIALLY_RECEIVED') ||
             ((statusFilter === 'Fully Received' || statusFilter === 'Fully Recived' || statusFilter === 'CLOSED / FULLY RECEIVED' || statusFilter === 'Closed') && currentStage === 'CLOSED') ||
             (statusFilter === 'Cancelled' && currentStage === 'CANCELLED') ||
@@ -3874,7 +3509,7 @@ ${senderName} | VRM Structures India Private Limited`;
                 { id: 'Draft', label: 'Pending Approval', count: kpiBaseList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
                 { id: 'MD_APPROVED', label: 'MD Approved', count: kpiBaseList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
                 { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: kpiBaseList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
-                { id: 'PROCEED_PO', label: 'Proceed PO', count: kpiBaseList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
+                { id: 'PROCEED_PO', label: 'Pending GRN', count: kpiBaseList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
                 { id: 'PARTIALLY_RECEIVED', label: 'Partially Received', count: kpiBaseList.filter(po => getPoStage(po) === 'PARTIALLY_RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
                 { id: 'CLOSED', label: 'Fully Received', count: kpiBaseList.filter(po => getPoStage(po) === 'CLOSED').length, bg: '#dcfce7', fg: '#15803d' },
                 { id: 'CANCELLED', label: 'Cancelled', count: kpiBaseList.filter(po => getPoStage(po) === 'CANCELLED').length, bg: '#fee2e2', fg: '#b91c1c' }
@@ -4785,7 +4420,7 @@ ${senderName} | VRM Structures India Private Limited`;
                       if (isAccounts) {
                         return (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ECFEFF', border: '1px solid #0E7490', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700', color: '#0E7490' }}>
-                            <CheckCircle size={14} style={{ color: '#0E7490' }} /> Proceed PO (GRN Ready)
+                            <CheckCircle size={14} style={{ color: '#0E7490' }} /> Pending GRN
                           </div>
                         );
                       }
@@ -6700,6 +6335,43 @@ ${senderName} | VRM Structures India Private Limited`;
                     <Copy size={14} style={{ color: '#4338CA' }} /> Clone PO
                   </button>
                 )}
+
+                {(() => {
+                  const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
+                    poNo: poNumber,
+                    vendor: vendorName,
+                    amount: `₹ ${Number(getGrandTotal() || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+                    paymentTerms
+                  };
+                  const stUpper = String(viewingPoStatus || currentPoObj?.status || '').toUpperCase();
+                  const isPoClosedOrCancelled = stUpper.includes('CLOSED') || stUpper.includes('FULLY RECEIVED') || stUpper === 'CANCELLED';
+                  if (isPoClosedOrCancelled) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancellingPo(currentPoObj);
+                        setCancellationRemarkInput('');
+                      }}
+                      style={{
+                        height: '40px',
+                        borderRadius: '8px',
+                        border: '1px solid #FECACA',
+                        backgroundColor: '#FEF2F2',
+                        color: '#DC2626',
+                        padding: '0 18px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        fontSize: '13.5px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Ban size={15} style={{ color: '#DC2626' }} /> Cancel PO
+                    </button>
+                  );
+                })()}
               </div>
 
               {/* Grand Total Display */}
