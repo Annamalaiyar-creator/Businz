@@ -279,6 +279,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     if (s.toLowerCase().includes('proceed') || st.includes('proceed') || ost.includes('proceed') || Boolean(po.proceedDetails)) return 'PROCEED_PO';
     if (s.toLowerCase().includes('payment') || st.includes('payment') || ost.includes('payment') || Boolean(po.paymentDetails)) return 'PAYMENT_PROCESSED';
     if (s === 'MD Approved' || st === 'md_approved' || ost.includes('approved') || Boolean(po.approvedBy)) return 'MD_APPROVED';
+    if (s.toUpperCase() === 'DRAFT' || (!s && st === 'draft')) return 'PURE_DRAFT';
     return 'Draft';
   };
 
@@ -395,6 +396,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const existing = prevMap.get(pNo) || prevMap.get(pId) || prevMap.get(pZohoId);
           if (existing) {
             const stageRank = {
+              'PURE_DRAFT': 0,
               'Draft': 1,
               'MD_APPROVED': 2,
               'PAYMENT_PROCESSED': 3,
@@ -2422,7 +2424,10 @@ ${senderName} | VRM Structures India Private Limited`;
     if (isAccounts && (raw === 'MD Approved' || raw === 'md_approved')) {
       return <StatusBadge status="Awaiting Accounts Verification" size="sm" />;
     }
-    if (raw === 'Draft' || raw === 'Draft / Pending Approval' || raw === 'Pending MD Approval' || raw === 'Pending Approval' || raw === 'pending') {
+    if (raw === 'Draft' || raw === 'DRAFT') {
+      return <StatusBadge status="Draft" customLabel="Draft" size="sm" />;
+    }
+    if (raw === 'Draft / Pending Approval' || raw === 'Pending MD Approval' || raw === 'Pending Approval' || raw === 'pending') {
       return <StatusBadge status="Pending Approval" customLabel="Pending Approval" size="sm" />;
     }
     if (raw === 'CLOSED / FULLY RECEIVED' || raw === 'Closed / Fully Received' || raw.toLowerCase().includes('fully received') || raw.toLowerCase() === 'closed') {
@@ -3238,12 +3243,8 @@ ${senderName} | VRM Structures India Private Limited`;
           'Cancelled'
         ];
 
-        const rawBaseList = isExecutiveOrMD
-          ? poList.filter(po => {
-              if (!po) return false;
-              const rawPoSt = String(po.status || '').trim().toUpperCase();
-              return !(rawPoSt === 'DRAFT' || (!rawPoSt && po.statusType === 'draft'));
-            })
+        const rawBaseList = (isExecutiveOrMD || isAccounts)
+          ? poList.filter(po => getPoStage(po) !== 'PURE_DRAFT')
           : poList;
 
         const kpiBaseList = (!kpiFilterMeta || !kpiFilterMeta.targetKeys)
@@ -3511,6 +3512,7 @@ ${senderName} | VRM Structures India Private Limited`;
                 { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: kpiBaseList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' }
               ] : [
                 { id: 'All', label: 'All orders', count: kpiBaseList.length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'PURE_DRAFT', label: 'Drafts', count: kpiBaseList.filter(po => getPoStage(po) === 'PURE_DRAFT').length, bg: '#f1f5f9', fg: '#475569' },
                 { id: 'Draft', label: 'Pending Approval', count: kpiBaseList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
                 { id: 'MD_APPROVED', label: 'MD Approved', count: kpiBaseList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
                 { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: kpiBaseList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
