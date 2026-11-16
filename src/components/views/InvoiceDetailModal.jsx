@@ -80,7 +80,7 @@ export default function InvoiceDetailModal({
   });
 
   const targetBomRef = matchingBom?.bomCode || matchingBom?.code || rawBomRefText || 'VRM-BOM-2026-01';
-  const bomRefText = targetBomRef;
+  const bomRefText = (typeof targetBomRef === 'string' && targetBomRef.trim()) ? targetBomRef.trim() : 'VRM-BOM-2026-01';
 
   useEffect(() => {
     let isMounted = true;
@@ -1796,7 +1796,7 @@ export default function InvoiceDetailModal({
                       ? historyList[selectedProofVersionIdx]
                       : addressProofDoc;
 
-                    const proofName = typeof activeDoc === "string" ? activeDoc : (activeDoc?.originalName || activeDoc?.name || "Delivery Address Proof Document");
+                    const proofName = safeStringVal(typeof activeDoc === "string" ? activeDoc : (activeDoc?.originalName || activeDoc?.name), "Delivery Address Proof Document");
                     let proofDataUrl = (typeof activeDoc === "string" && (activeDoc.startsWith("data:") || activeDoc.startsWith("http") || activeDoc.startsWith("/")))
                       ? activeDoc
                       : (activeDoc?.dataUrl || activeDoc?.fileData || activeDoc?.url || null);
