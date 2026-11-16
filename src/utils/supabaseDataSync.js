@@ -928,6 +928,7 @@ export function toConsumerBom(row) {
     packedById: row.packed_by_id || row.packedById || extraData.packedById || cleanAccountsVerification?.packedById || null,
     packingCompletedAt: row.packing_completed_at || row.packingCompletedAt || extraData.packingCompletedAt || null,
     invoiceConfirmed: Boolean(row.invoice_confirmed),
+    invoiceConfirmedAt: row.invoice_confirmed_at || extraData.invoiceConfirmedAt || row.stock_deduction_date || extraData.stockDeductionDate || null,
     invoiceDeducted: Boolean(row.invoice_deducted),
     invoiceNo: row.invoice_no || extraData.invoiceNo || '',
     stockBlocked: Boolean(row.stock_blocked),
@@ -953,10 +954,11 @@ export function toConsumerBom(row) {
     dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || { photos: [], videos: [] }),
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
+    piCreatedAt: row.pi_created_at || extraData.piCreatedAt || null,
     vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
     lrCopyDoc: row.lr_copy_doc || extraData.lrCopyDoc || null,
     fullyCompleted: Boolean(extraData.fullyCompleted || row.status === 'Completed' || row.status === 'Closed' || row.status === 'Fully Dispatched & Delivered'),
-    dispatchedAt: row.dispatched_at || extraData.dispatchedAt || null,
+    dispatchedAt: row.dispatched_at || extraData.dispatchedAt || row.vehicle_loading?.loadedAt || extraData.vehicleLoading?.loadedAt || null,
     completedAt: row.completed_at || extraData.completedAt || null,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
@@ -1044,6 +1046,10 @@ export function toDatabaseBomRow(item) {
   if (item.packedBy) mergedExtra.packedBy = item.packedBy;
   if (item.packedById) mergedExtra.packedById = item.packedById;
   if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
+  if (item.piCreatedAt) mergedExtra.piCreatedAt = item.piCreatedAt;
+  if (item.invoiceConfirmedAt) mergedExtra.invoiceConfirmedAt = item.invoiceConfirmedAt;
+  if (item.stockDeductionDate) mergedExtra.stockDeductionDate = item.stockDeductionDate;
+  if (item.dispatchedAt) mergedExtra.dispatchedAt = item.dispatchedAt;
   if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
   if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
   if (item.invoiceNo) mergedExtra.invoiceNo = item.invoiceNo;

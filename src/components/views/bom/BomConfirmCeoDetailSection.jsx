@@ -66,7 +66,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                 </span>
               </div>
               <span style={{ fontSize: '12.5px', color: '#64748B', marginTop: '4px', display: 'block' }}>
-                Customer: <strong style={{ color: '#0F172A' }}>{confirmingBomModal.customerName || confirmingBomModal.companyName || 'Customer'}</strong> • Rep: <strong>{(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Order Value: <strong style={{ color: '#0E7490' }}>₹ {orderGrandTotal.toLocaleString('en-IN')}</strong>
+                Customer: <strong style={{ color: '#0F172A' }}>{confirmingBomModal.customerName || confirmingBomModal.companyName || 'Customer'}</strong> • Rep: <strong>{(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Order Value: <strong style={{ color: '#0E7490' }}>₹ {orderGrandTotal.toLocaleString('en-IN')}</strong>{confirmingBomModal.deliveryDate ? <> • Expected Date: <strong style={{ color: '#0E7490' }}>{confirmingBomModal.deliveryDate}</strong></> : null}
               </span>
             </div>
 

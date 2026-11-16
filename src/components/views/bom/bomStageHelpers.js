@@ -194,7 +194,7 @@ export const getBomStageTiming = (b, matchingPi = null) => {
   // 1. Stage 1: PI Commercial
   const rawPi = matchingPi?.createdAt || matchingPi?.created_at || b.piCreatedAt || matchingPi?.piDate || matchingPi?.date || b.piDate || b.sourcePiDate || b.createdAt || b.created_at || b.date;
   const pPi = parseAnyDate(rawPi);
-  const pPiTimeFallback = pPi.hasTime ? pPi : parseAnyDate(matchingPi?.createdAt || matchingPi?.created_at || matchingPi?.updatedAt || b.createdAt || b.created_at);
+  const pPiTimeFallback = pPi.hasTime ? pPi : parseAnyDate(matchingPi?.createdAt || matchingPi?.created_at || b.piCreatedAt || b.createdAt || b.created_at);
   const dPi = pPi.date;
   const hasPi = Boolean(dPi || b.sourcePiNo || b.piNo);
   const piTime = formatTimeStr(pPiTimeFallback) || b.piTime || matchingPi?.time || null;
@@ -202,12 +202,12 @@ export const getBomStageTiming = (b, matchingPi = null) => {
   // 2. Stage 2: BOM Confirmed (locked to exact confirmed time, never changing)
   const rawConfirmed = b.salesConfirmedAt || b.sales_confirmed_at || b.confirmedAt || b.confirmed_at || b.reconfirmedAt || b.reconfirmed_at || b.createdAt || b.created_at || b.appliedAt || b.date;
   const pConfirmed = parseAnyDate(rawConfirmed);
-  const pConfirmedTimeFallback = pConfirmed.hasTime ? pConfirmed : parseAnyDate(b.salesConfirmedAt || b.sales_confirmed_at || b.reconfirmedAt || b.createdAt || b.created_at || b.updatedAt);
+  const pConfirmedTimeFallback = pConfirmed.hasTime ? pConfirmed : parseAnyDate(b.salesConfirmedAt || b.sales_confirmed_at || b.reconfirmedAt || b.createdAt || b.created_at);
   const dConfirmed = pConfirmed.date;
   const confirmedTime = formatTimeStr(pConfirmedTimeFallback) || b.confirmedTime || b.salesConfirmedTime || b.time || null;
 
   // 6. Stage 6: Final Dispatched (evaluate bottom-up so later completed stages imply earlier stages are done)
-  const rawDispatch = b.dispatchedAt || b.dispatched_at || b.vehicleLoading?.loadedAt || (b.fullyCompleted || statusLower.includes('dispatched') ? (b.updatedAt || b.updated_at || b.date) : null);
+  const rawDispatch = b.dispatchedAt || b.dispatched_at || b.vehicleLoading?.loadedAt || ((b.fullyCompleted || statusLower.includes('dispatched')) ? (b.completedAt || b.updatedAt || b.updated_at || b.date) : null);
   const pDispatch = parseAnyDate(rawDispatch);
   const dDispatch = pDispatch.date;
   const hasDispatch = Boolean(dDispatch || b.fullyCompleted || statusLower.includes('dispatched') || statusLower === 'closed');
@@ -221,21 +221,21 @@ export const getBomStageTiming = (b, matchingPi = null) => {
     statusLower.includes('invoiced') ||
     statusLower.includes('vehicle loading')
   );
-  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || ((b.invoiceConfirmed || b.invoiceGenerated || isInvDoneByStatus || hasDispatch) ? (b.updatedAt || b.updated_at || b.date) : null);
+  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || ((b.invoiceConfirmed || isInvDoneByStatus || hasDispatch) ? (b.date || null) : null);
   const pInvoice = parseAnyDate(rawInvoice);
   const dInvoice = pInvoice.date;
-  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed || b.invoiceGenerated || isInvDoneByStatus || hasDispatch);
+  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed || (!isPendingInvStatus && b.invoiceGenerated) || isInvDoneByStatus || hasDispatch);
   const invoiceCompletedTime = formatTimeStr(pInvoice) || b.invoiceTime || null;
 
   // 4. Stage 4: Accounts Verification
-  const rawAccounts = b.accountsVerifiedAt || b.accounts_verified_at || b.accountsVerification?.verifiedAt || ((b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.updatedAt || b.updated_at || b.date) : null);
+  const rawAccounts = b.accountsVerifiedAt || b.accounts_verified_at || b.accountsVerification?.verifiedAt || ((b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.date || null) : null);
   const pAccounts = parseAnyDate(rawAccounts);
   const dAccounts = pAccounts.date;
   const hasAccounts = Boolean(dAccounts || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice || (statusLower.includes('accounts verified') && !statusLower.includes('sent to accounts')) || statusLower.includes('passed to invoice'));
   const accountsCompletedTime = formatTimeStr(pAccounts) || b.accountsVerifiedTime || null;
 
   // 3. Stage 3: Dispatch Packing
-  const rawPacking = b.packingCompletedAt || b.packedAt || b.packed_at || b.packingVerifiedAt || b.accountsVerification?.packedAt || ((b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed')) ? (b.updatedAt || b.updated_at || b.date) : null);
+  const rawPacking = b.packingCompletedAt || b.packedAt || b.packed_at || b.packingVerifiedAt || b.accountsVerification?.packedAt || ((b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed')) ? (b.date || null) : null);
   const pPacking = parseAnyDate(rawPacking);
   const dPacking = pPacking.date;
   const hasPacking = Boolean(dPacking || b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed'));
@@ -329,7 +329,8 @@ export const getOrderLifecycle = (row) => {
   const statusStr = String(row.status || '').toLowerCase();
   const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || statusStr.includes('cancel'));
   const isDispatched = row.status === 'Dispatched' || row.status === 'Closed' || row.status === 'CLOSED' || statusStr.includes('dispatched');
-  const isInvoiceGenerated = isDispatched || Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo) || ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status) || statusStr.includes('invoice');
+  const isPendingInvLifecycle = statusStr.includes('passed to invoice') || statusStr.includes('awaiting invoice') || statusStr.includes('ready for invoice') || statusStr.includes('proceed billing');
+  const isInvoiceGenerated = isDispatched || Boolean(row.invoiceConfirmed || row.invoiceConfirmedAt || row.stockDeductionDate) || (!isPendingInvLifecycle && (Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo) || ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status) || statusStr.includes('invoice')));
   const isAccountsVerified = isInvoiceGenerated ||
     Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
     ['Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified - Proceed Billing', 'Accounts Verified & Passed to Invoice'].includes(row.status) ||

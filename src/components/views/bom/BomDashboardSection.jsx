@@ -568,6 +568,7 @@ export default function BomDashboardSection({ ctx }) {
                     const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || (row.status || '').toLowerCase().includes('cancel') || row.tabGroup === 'Cancelled');
                     const bDateRaw = row.appliedAt || row.bomDate || row.date || row.createdAt;
                     const dateFormatted = formatBomDateDot(bDateRaw);
+                    const expectedDateFormatted = row.deliveryDate ? formatBomDateDot(row.deliveryDate) : '';
                     const timing = getBomStageTiming(row);
                     const currentStage = getBomActiveStage(row);
 
@@ -628,7 +629,12 @@ export default function BomDashboardSection({ ctx }) {
                           </div>
                         </td>
                         <td style={{ padding: '12px 14px', color: '#64748B', width: '120px', minWidth: '110px', whiteSpace: 'nowrap' }}>
-                          {dateFormatted}
+                          <div>{dateFormatted}</div>
+                          {isCeo && expectedDateFormatted && (
+                            <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600', marginTop: '2px' }}>
+                              Exp: {expectedDateFormatted}
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

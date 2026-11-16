@@ -919,6 +919,7 @@ export default function InvoiceDetailModal({
                     ...b,
                     status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch',
                     invoiceConfirmed: true,
+                    invoiceConfirmedAt: b.invoiceConfirmedAt || new Date().toISOString(),
                     invoiceNo: targetInvNumber,
                     stockDeducted: true,
                     stockDeductionDate: new Date().toISOString(),
