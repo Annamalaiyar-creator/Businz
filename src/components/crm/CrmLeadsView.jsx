@@ -934,7 +934,7 @@ export default function CrmLeadsView({
   };
 
   // CSV Export
-  const handleExportCsv = () => {
+  const handleExportCsv = (exportAll = false) => {
     const escapeCsv = (str) => {
       if (str === null || str === undefined) return '""';
       const s = String(str).replace(/"/g, '""');
@@ -947,9 +947,11 @@ export default function CrmLeadsView({
       'Assigned To', 'Assigned By', 'Status', '2h Inactive', 'Created At'
     ];
 
-    const targetList = selectedLeadIds.length > 0
-      ? dbLeads.filter(l => selectedLeadIds.includes(l.id))
-      : filteredLeads;
+    const targetList = exportAll
+      ? dbLeads
+      : (selectedLeadIds.length > 0
+          ? dbLeads.filter(l => selectedLeadIds.includes(l.id))
+          : filteredLeads);
 
     const rows = targetList.map(l => [
       l.lead_number,
@@ -1040,7 +1042,32 @@ export default function CrmLeadsView({
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => handleExportCsv(true)}
+            title="Export all leads to CSV"
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              color: '#0F172A',
+              height: '40px',
+              padding: '0 16px',
+              borderRadius: '50px',
+              fontSize: '13px',
+              fontWeight: '700',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Download size={15} style={{ color: '#059669' }} />
+            <span>Export Leads ({dbLeads.length})</span>
+          </button>
+
           {canCreateLead && (
             <button
               onClick={() => {

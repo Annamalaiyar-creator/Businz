@@ -1640,29 +1640,33 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       ? pd.paymentImages
       : (pd?.paymentImage ? [{ dataUrl: pd.paymentImage, name: pd.paymentImageMeta?.name || 'Payment_Proof.jpg' }] : []);
 
+    const allAttachments = [
+      ...allImages,
+      ...(Array.isArray(poTarget.attachments) ? poTarget.attachments : []),
+      ...(Array.isArray(poTarget.documents) ? poTarget.documents : [])
+    ].filter(Boolean);
+    const attachmentNamesText = allAttachments.length > 0
+      ? `\n\nAttachments (${allAttachments.length}):\n${allAttachments.map((a, idx) => `- ${a?.name || a?.fileName || a?.title || `Attachment ${idx + 1}`}`).join('\n')}`
+      : '';
+
+    const senderName = loggedInUserName || poTarget.purchaser || poTarget.issuedBy || poTarget.createdBy || 'Procurement Team';
+
     const defaultMsg = `Dear ${poTarget.vendor || 'Vendor'},
 
-Greetings from BUSINZ.
+Greetings from VRM Structures India Private Limited.
 
 Please find the official Purchase Order ${poTarget.poNo || poTarget.id} details below:
 
-📦 Purchase Order Details:
-• PO Number: ${poTarget.poNo || poTarget.id}
-• Total Amount: ${poTarget.amount || '—'}
-• Date: ${poTarget.date || new Date().toLocaleDateString('en-GB')}
-• Delivery Terms: ${poTarget.deliveryTerms || 'Immediate / Standard'}
-
-💳 Payment Clearance & Settlement:
-• Status: Verified & Approved by Accounts Team
-• Payment Mode: ${pd?.mode || 'Bank Transfer'}
-• Reference / UTR No: ${pd?.refNo || 'TXN-CONFIRMED'}
-• Amount Verified: ${pd?.amount || poTarget.amount || '—'}
-• Payment Proof Receipts: ${allImages.length > 0 ? `${allImages.length} verified payment receipt(s) attached` : 'Credit Mode / Net Terms Authorized'}
+Purchase Order Details:
+- PO Number: ${poTarget.poNo || poTarget.id}
+- Total Amount: ${poTarget.amount || '—'}
+- Date: ${poTarget.date || new Date().toLocaleDateString('en-GB')}
+- Delivery Terms: ${poTarget.deliveryTerms || 'Immediate / Standard'}${attachmentNamesText}
 
 Please acknowledge receipt of this Purchase Order and confirm your delivery schedule.
 
 Thank you,
-Procurement Team | BUSINZ`;
+${senderName} | VRM Structures India Private Limited`;
 
     setSelectedPOs([]);
     setProceedEmailInput(cleanEmail);
