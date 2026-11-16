@@ -1329,8 +1329,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           })
         });
 
-        // Trigger real-time notification to CEO for review & approval
-        if (newPO.status === 'Draft / Pending Approval' || newPO.statusType === 'pending' || String(newPO.approvalRequired).toUpperCase() === 'YES') {
+        // Trigger real-time notification to CEO for review & approval (never for Drafts)
+        if (!isDraft && (newPO.status === 'Draft / Pending Approval' || newPO.statusType === 'pending' || String(newPO.approvalRequired).toUpperCase() === 'YES')) {
           notifyPoSentForApproval({
             poNo: newPO.poNo,
             vendor: newPO.vendor,
@@ -3385,22 +3385,7 @@ ${senderName} | VRM Structures India Private Limited`;
                               <CheckCircle size={15} /> Approve as MD
                             </button>
                           </div>
-                        ) : (
-                          <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            backgroundColor: '#FFFBEB',
-                            border: '1px solid #FDE68A',
-                            borderRadius: '8px',
-                            padding: '6px 14px',
-                            fontSize: '12px',
-                            fontWeight: '700',
-                            color: '#B45309'
-                          }}>
-                            <Clock size={14} style={{ color: '#D97706' }} /> Awaiting MD / CEO Approval
-                          </div>
-                        )
+                        ) : null
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {isClosed ? (
@@ -3638,6 +3623,10 @@ ${senderName} | VRM Structures India Private Limited`;
 
         const filteredPOList = kpiBaseList.filter(po => {
           if (!po) return false;
+          const rawPoSt = String(po.status || '').trim().toUpperCase();
+          if (isExecutiveOrMD && (rawPoSt === 'DRAFT' || po.statusType === 'draft')) {
+            return false;
+          }
           const pNo = String(po.poNo || po.id || '');
           const pVend = String(po.vendor || po.companyName || '');
           const matchesSearch = pNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -4410,7 +4399,7 @@ ${senderName} | VRM Structures India Private Limited`;
                   const isProceedPo = st === 'Proceed PO' || st === 'PROCEED PO' || stt === 'proceed_po' || rowStage === 'PROCEED_PO' || Boolean(target.proceedDetails);
                   const isPaymentProcessed = !isProceedPo && (st === 'Payment Processed' || stt === 'payment_processed' || rowStage === 'PAYMENT_PROCESSED' || Boolean(target.paymentDetails));
                   const isAlreadyApproved = isPaymentProcessed || isProceedPo || st === 'MD Approved' || stt === 'md_approved' || rowStage === 'MD_APPROVED';
-                  const isDraftOrPending = !isAlreadyApproved && (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
+                  const isDraftOrPending = !isAlreadyApproved && (st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
 
                   // A) If CEO/MD and still Draft -> Show "Approve as MD"
                   if (canApproveAsMD && isDraftOrPending) {
@@ -6848,7 +6837,7 @@ ${senderName} | VRM Structures India Private Limited`;
                   const st = String(viewingPoStatus || currentPoObj?.status || '').trim();
                   const objStatusType = String(currentPoObj?.statusType || '').toLowerCase();
                   const isMdApproved = st === 'MD Approved' || objStatusType === 'md_approved' || Boolean(currentPoObj?.approvedBy);
-                  const isDraftOrPending = !isMdApproved && (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
+                  const isDraftOrPending = !isMdApproved && (st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
 
                   if (isDraftOrPending && canApproveAsMD) {
                     return (
@@ -7034,7 +7023,7 @@ ${senderName} | VRM Structures India Private Limited`;
                   const st = String(viewingPoStatus || currentPoObj?.status || '').trim();
                   const objStatusType = String(currentPoObj?.statusType || '').toLowerCase();
                   const isMdApproved = st === 'MD Approved' || objStatusType === 'md_approved' || Boolean(currentPoObj?.approvedBy);
-                  const isDraftOrPending = !isMdApproved && (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
+                  const isDraftOrPending = !isMdApproved && (st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
 
                   if (isDraftOrPending && canApproveAsMD) {
                     return (

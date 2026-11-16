@@ -5308,7 +5308,7 @@ app.post('/api/purchaseorders', async (req, res) => {
       const actRole = req.headers['x-user-role'] || req.body.actorRole || 'Procurement';
       const vendorName = localPOObj.vendor || 'Vendor';
 
-      const needsApproval = isPendingApproval || localPOObj.status === 'Draft / Pending Approval' || localPOObj.statusType === 'pending' || String(localPOObj.approvalRequired).toUpperCase() === 'YES';
+      const needsApproval = !isDraft && (isPendingApproval || localPOObj.status === 'Draft / Pending Approval' || localPOObj.statusType === 'pending' || String(localPOObj.approvalRequired).toUpperCase() === 'YES');
 
       if (needsApproval && !isNoApproval) {
         createInternalNotification({
