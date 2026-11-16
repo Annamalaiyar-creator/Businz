@@ -192,9 +192,9 @@ export default function LongRailConfiguratorView({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px 24px', overflowY: 'auto', maxHeight: 'calc(92vh - 110px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px 24px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
       {/* Top Row: Master Structure Selector + Quick KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '16px', alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '16px', alignItems: 'stretch', flexShrink: 0 }}>
         <MasterStructureProfileDropdown
           value={masterStructureValue}
           onChange={onMasterStructureChange}
@@ -231,7 +231,7 @@ export default function LongRailConfiguratorView({
       </div>
 
       {/* Global Parameters */}
-      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px 16px' }}>
+      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px 16px', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sliders size={14} color="#0E7490" />
@@ -332,7 +332,7 @@ export default function LongRailConfiguratorView({
       </div>
 
       {/* Row-by-Row Rail Cut Matrix */}
-      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Layers size={14} color="#0E7490" />
@@ -361,9 +361,9 @@ export default function LongRailConfiguratorView({
           </button>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ maxHeight: '260px', overflowY: 'auto', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
               <tr style={{ backgroundColor: '#F1F5F9', color: '#475569', textAlign: 'center', borderBottom: '1px solid #E2E8F0' }}>
                 <th style={{ padding: '8px' }}>Panels</th>
                 <th style={{ padding: '8px' }}>Rows</th>
@@ -443,7 +443,7 @@ export default function LongRailConfiguratorView({
       </div>
 
       {/* Double C Rail with L Bracket BOM Table */}
-      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Boxes size={14} color="#0E7490" />
@@ -487,7 +487,7 @@ export default function LongRailConfiguratorView({
       </div>
 
       {/* Footer Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', paddingTop: '4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', paddingTop: '4px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Insert into Quotation as:</span>
           <button
