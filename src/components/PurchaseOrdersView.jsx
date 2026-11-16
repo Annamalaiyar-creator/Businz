@@ -2434,7 +2434,8 @@ ${senderName} | VRM Structures India Private Limited`;
     if (raw === 'Payment Processed / Credit Verified' || raw === 'Payment Processed') {
       return <StatusBadge status="Payment Processed" customLabel="Payment Processed" size="sm" />;
     }
-    if (raw === 'Proceed PO (GRN Ready)' || raw === 'Proceed PO' || raw === 'Pending GRN') {
+    const rawLower = raw.toLowerCase();
+    if (rawLower.includes('proceed po') || rawLower === 'proceed_po' || rawLower === 'pending grn') {
       return <StatusBadge status="Proceed PO" customLabel="Pending GRN" size="sm" />;
     }
     if (raw === 'CANCELLED' || raw === 'Cancelled') {

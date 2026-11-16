@@ -233,8 +233,9 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
   }
 
   if (
-    raw === 'proceed po' ||
-    raw === 'proceed_po'
+    raw.includes('proceed po') ||
+    raw === 'proceed_po' ||
+    raw === 'pending grn'
   ) {
     return {
       label: customLabel || 'Pending GRN',
