@@ -28,6 +28,7 @@ function TypeableProductSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(value || '');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [unlistedConfirmName, setUnlistedConfirmName] = useState(null);
   const [menuCoords, setMenuCoords] = useState({
     top: 'auto',
     bottom: 'auto',
@@ -40,6 +41,7 @@ function TypeableProductSelect({
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
   const justSelectedRef = useRef(false);
+  const userTypedRef = useRef(false);
 
   // Sync internal search query with external value changes
   useEffect(() => {
@@ -111,13 +113,23 @@ function TypeableProductSelect({
         dropdownRef.current && !dropdownRef.current.contains(e.target)
       ) {
         setIsOpen(false);
+        const trimmed = (searchQuery || '').trim();
+        if (userTypedRef.current && trimmed && !justSelectedRef.current) {
+          const existsInCatalog = activeItemsList.some(it =>
+            String(it.name || '').trim().toLowerCase() === trimmed.toLowerCase() ||
+            String(it.code || '').trim().toLowerCase() === trimmed.toLowerCase()
+          );
+          if (!existsInCatalog) {
+            setUnlistedConfirmName(trimmed);
+          }
+        }
       }
     };
     if (isOpen) {
       document.addEventListener('mousedown', handleOutsideClick);
       return () => document.removeEventListener('mousedown', handleOutsideClick);
     }
-  }, [isOpen]);
+  }, [isOpen, searchQuery, activeItemsList]);
 
   const [catalogTick, setCatalogTick] = useState(0);
 
@@ -189,6 +201,7 @@ function TypeableProductSelect({
 
   const handleInputChange = (e) => {
     const val = e.target.value;
+    userTypedRef.current = true;
     setSearchQuery(val);
     if (!isOpen) setIsOpen(true);
     setHighlightedIndex(-1);
@@ -203,6 +216,7 @@ function TypeableProductSelect({
 
   const handleSelectItem = (item) => {
     justSelectedRef.current = true;
+    userTypedRef.current = false;
     setSearchQuery(item.name);
     setIsOpen(false);
     setHighlightedIndex(-1);
@@ -218,15 +232,53 @@ function TypeableProductSelect({
   };
 
   const handleCustomSelect = () => {
-    if (!searchQuery.trim()) return;
-    justSelectedRef.current = true;
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
     setIsOpen(false);
     setHighlightedIndex(-1);
     if (inputRef.current) {
       inputRef.current.blur();
     }
+    const existsInCatalog = activeItemsList.some(it =>
+      String(it.name || '').trim().toLowerCase() === trimmed.toLowerCase() ||
+      String(it.code || '').trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (!existsInCatalog) {
+      setUnlistedConfirmName(trimmed);
+      return;
+    }
+    justSelectedRef.current = true;
+    userTypedRef.current = false;
     if (onChange) {
-      onChange(searchQuery.trim(), null);
+      onChange(trimmed, null);
+    }
+    setTimeout(() => {
+      justSelectedRef.current = false;
+    }, 200);
+  };
+
+  const handleProceedUnlisted = () => {
+    if (!unlistedConfirmName) return;
+    const confirmedName = unlistedConfirmName;
+    justSelectedRef.current = true;
+    userTypedRef.current = false;
+    setUnlistedConfirmName(null);
+    setSearchQuery(confirmedName);
+    if (onChange) {
+      onChange(confirmedName, null);
+    }
+    setTimeout(() => {
+      justSelectedRef.current = false;
+    }, 200);
+  };
+
+  const handleRejectUnlisted = () => {
+    justSelectedRef.current = true;
+    userTypedRef.current = false;
+    setUnlistedConfirmName(null);
+    setSearchQuery('');
+    if (onChange) {
+      onChange('', null);
     }
     setTimeout(() => {
       justSelectedRef.current = false;
@@ -529,6 +581,100 @@ function TypeableProductSelect({
               );
             })
           )}
+        </div>,
+        document.body
+      )}
+
+      {unlistedConfirmName && createPortal(
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100001,
+            padding: '16px'
+          }}
+        >
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '14px',
+            border: '1px solid #E2E8F0',
+            boxShadow: '0 20px 45px rgba(15, 23, 42, 0.25)',
+            maxWidth: '420px',
+            width: '100%',
+            padding: '22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FDE68A',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <AlertTriangle size={20} style={{ color: '#D97706' }} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+                  Product Not in Inventory
+                </h4>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>
+                  Inventory Verification Notice
+                </span>
+              </div>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+              <strong style={{ color: '#0F172A' }}>"{unlistedConfirmName}"</strong> is not available in the inventory list. Do you want to proceed with this product?
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={handleRejectUnlisted}
+                style={{
+                  border: '1px solid #FECACA',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                No, Don&apos;t Proceed
+              </button>
+              <button
+                type="button"
+                onClick={handleProceedUnlisted}
+                style={{
+                  border: 'none',
+                  backgroundColor: '#0E7490',
+                  color: '#FFFFFF',
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Proceed
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}
