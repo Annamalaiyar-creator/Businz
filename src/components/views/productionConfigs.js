@@ -56,6 +56,19 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
     return (isNaN(n) || n <= 0) ? 0 : n;
   };
 
+  const computeItemsTotal = (items) => {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    return items.reduce((sum, it) => {
+      if (!it) return sum;
+      const explicitAmt = cleanAmtNum(it.amt || it.total || it.amount);
+      if (explicitAmt > 0) return sum + explicitAmt;
+      const qty = Number(it.bomQty || it.qty || 1) || 1;
+      const rate = cleanAmtNum(it.rate || it.unitPrice || it.price);
+      const tax = it.tax !== undefined ? (Number(it.tax) || 0) : 18;
+      return sum + (qty * rate * (1 + tax / 100));
+    }, 0);
+  };
+
   let findMatchingBom = () => null;
   let allInvoicesUnified = [];
 
@@ -158,12 +171,14 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
           const bomBySoIdxMap = new Map();
           const bomByInvIdxMap = new Map();
           const bomByNormInvIdxMap = new Map();
+          const bomByCustIdxMap = new Map();
           for (let i = 0; i < bomStore.length; i++) {
             const b = bomStore[i];
             if (!b) continue;
             const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
             const soNo = (b.salesOrderNo || '').toLowerCase().trim();
             const bInv = (b.invoiceNo || '').toLowerCase().trim();
+            const bCust = (b.customerName || b.companyName || '').toLowerCase().trim();
             if (bCode && !bomByCodeIdxMap.has(bCode)) bomByCodeIdxMap.set(bCode, i);
             if (soNo && !bomBySoIdxMap.has(soNo)) bomBySoIdxMap.set(soNo, i);
             if (bInv && bInv !== 'pending confirmation' && !bInv.includes('pending')) {
@@ -171,13 +186,16 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               const normInv = bInv.replace(/[^a-z0-9]/gi, '');
               if (normInv && !bomByNormInvIdxMap.has(normInv)) bomByNormInvIdxMap.set(normInv, i);
             }
+            if (bCust && !['customer', 'customer order', 'pending'].includes(bCust)) {
+              if (!bomByCustIdxMap.has(bCust)) bomByCustIdxMap.set(bCust, i);
+            }
           }
 
           findMatchingBom = (inv) => {
             if (!inv) return null;
             const directRef = (inv.poNo || inv.bomCode || '').toLowerCase().trim();
-            const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
-            const invNum = (inv.invNo || inv.code || inv.id || '').toLowerCase().trim();
+            const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|VRMS\/BOM\/[\d-]+\/\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
+            const invNum = (inv.invNo || inv.invoiceNo || inv.code || inv.id || '').toLowerCase().trim();
 
             let bestIdx = Infinity;
             if (directRef) {
@@ -193,7 +211,13 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               const normInv = invNum.replace(/[^a-z0-9]/gi, '');
               if (normInv && bomByNormInvIdxMap.has(normInv)) bestIdx = Math.min(bestIdx, bomByNormInvIdxMap.get(normInv));
             }
-            return bestIdx < bomStore.length ? bomStore[bestIdx] : null;
+            if (bestIdx < bomStore.length) return bomStore[bestIdx];
+
+            const custName = (inv.vendor || inv.customerName || inv.c2 || '').toLowerCase().trim();
+            if (custName && !['customer', 'customer order', 'pending'].includes(custName) && bomByCustIdxMap.has(custName)) {
+              return bomStore[bomByCustIdxMap.get(custName)];
+            }
+            return null;
           };
 
           const mergedInvoices = (invoiceList || []).filter(inv => {
@@ -217,7 +241,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
             const bomTotal = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || 0;
             const existingAmt = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal);
-            const resolvedAmount = existingAmt > 0 ? existingAmt : (bomTotal > 0 ? bomTotal : 0);
+            const itemsTotal = computeItemsTotal(inv.items);
+            const resolvedAmount = existingAmt > 0 ? existingAmt : (bomTotal > 0 ? bomTotal : (itemsTotal > 0 ? itemsTotal : 0));
 
             const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
             const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : '';
@@ -401,8 +426,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 const isReady = statusStr === 'Ready for Payment' || statusStr === 'Accounts Verified & Passed to Invoice' || statusStr === 'Packing Verified - Ready for Billing' || statusStr === 'Ready for Invoicing' || payStr === 'Ready' || payStr === 'Ready for Payment';
 
                 const matchingBom = findMatchingBom(i);
-                const resolvedBomCode = safeStringVal(i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code, 'BOM-001');
-                const resolvedAmt = cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || 0;
+                const resolvedBomCode = safeStringVal(i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code, '—');
+                const resolvedAmt = cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || computeItemsTotal(i.items) || 0;
                 const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
                 const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
                 const rawInvNo = safeStringVal(i.invNo, '');
