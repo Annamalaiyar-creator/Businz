@@ -203,7 +203,7 @@ export default function ProductionTableView({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
             <span>
-              Showing <strong>{filteredRows.length}</strong> Tax Invoices filtered from {kpiFilterMeta.sourceLabel ? `${kpiFilterMeta.sourceLabel} KPI` : 'Company Overview KPI'} ({kpiFilterMeta.periodLabel})
+              Showing <strong>{filteredRows.length}</strong> Tax Invoices filtered from {kpiFilterMeta.sourceLabel ? `${safeText(kpiFilterMeta.sourceLabel, 'Company Overview')} KPI` : 'Company Overview KPI'} ({safeText(kpiFilterMeta.periodLabel, 'Overview')})
             </span>
           </div>
           <button
@@ -266,7 +266,7 @@ export default function ProductionTableView({
               whiteSpace: 'nowrap'
             }}
           >
-            {tab.label}
+            {safeText(tab.label, '')}
             <span style={{
               fontSize: '10px',
               padding: '2px 7px',
