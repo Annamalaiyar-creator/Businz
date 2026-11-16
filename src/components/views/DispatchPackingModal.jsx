@@ -7,7 +7,7 @@ import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, getMediaF
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
-import { VRM_PRODUCTS, calculateTotalDispatchQty } from "../../utils/vrmProductsData";
+import { VRM_PRODUCTS, resolveBomItemDispatchQty } from "../../utils/vrmProductsData";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { uploadBomDocumentFile, deleteBomDocumentFile } from "../../utils/bomStorageClient";
@@ -421,8 +421,7 @@ export default function DispatchPackingModal({
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
     const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
     const isPacked = Boolean(isAccountsLocked || isAlreadySentToAccounts);
-    const setCount = parseFloat(it.setCount || dispatchPackingModal.presetSetCount || dispatchPackingModal.setCount) || 1;
-    const totalDispatchQty = it.totalDispatchQty || calculateTotalDispatchQty(it, setCount, it.presetName || dispatchPackingModal.presetName, it.category);
+    const totalDispatchQty = resolveBomItemDispatchQty(it, dispatchPackingModal);
     const qtyPerSet = it.qtyPerSet || it.qty || 1;
     return {
       name: it.name || it.c2 || 'Item',
@@ -445,8 +444,7 @@ export default function DispatchPackingModal({
         const nameStr = (p.name || p.itemName || '').toLowerCase().trim();
         const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || rawMatch.code || null));
         const isPacked = isAccountsLocked ? (p.packed !== false) : Boolean(p.packed || p.scanned || (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '' && Number(p.packedQty) > 0) || isAlreadySentToAccounts);
-        const setCount = parseFloat(p.setCount || rawMatch.setCount || dispatchPackingModal.presetSetCount || dispatchPackingModal.setCount) || 1;
-        const totalDispatchQty = p.totalDispatchQty || rawMatch.totalDispatchQty || calculateTotalDispatchQty(p, setCount, p.presetName || rawMatch.presetName || dispatchPackingModal.presetName, p.category || rawMatch.category);
+        const totalDispatchQty = resolveBomItemDispatchQty(p, dispatchPackingModal, rawMatch);
         const qtyPerSet = p.qtyPerSet || rawMatch.qtyPerSet || p.qty || rawMatch.qty || 1;
         const resolvedBomQty = p.totalDispatchQty || rawMatch.totalDispatchQty || p.bomQty || totalDispatchQty;
         const resolvedPackedQty = (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '')
@@ -789,8 +787,7 @@ export default function DispatchPackingModal({
               : (it.bomQty || it.qty || 1)
           }))
         : (dispatchPackingModal.items || []).map(it => {
-            const setCount = parseFloat(it.setCount || dispatchPackingModal.presetSetCount || dispatchPackingModal.setCount) || 1;
-            const dispQty = it.totalDispatchQty || calculateTotalDispatchQty(it, setCount, it.presetName || dispatchPackingModal.presetName, it.category);
+            const dispQty = resolveBomItemDispatchQty(it, dispatchPackingModal);
             return {
               code: it.code,
               name: it.name,

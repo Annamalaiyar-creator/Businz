@@ -4012,13 +4012,54 @@ export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', p
   return Math.round(baseQty * mult * 100) / 100;
 };
 
+export const resolveBomItemDispatchQty = (item, bomRecord = null, rawMatch = null) => {
+  if (!item && !rawMatch) return 0;
+  const it = item || {};
+  const rm = rawMatch || {};
+  if (it.totalDispatchQty !== undefined && it.totalDispatchQty !== null && it.totalDispatchQty !== '') {
+    return Number(it.totalDispatchQty) || 0;
+  }
+  if (rm.totalDispatchQty !== undefined && rm.totalDispatchQty !== null && rm.totalDispatchQty !== '') {
+    return Number(rm.totalDispatchQty) || 0;
+  }
+
+  const rawGroups = bomRecord?.presetGroups;
+  const groupsMap = Array.isArray(rawGroups)
+    ? rawGroups.reduce((acc, g) => {
+        const gid = g?.groupId || g?.presetGroupId;
+        if (gid) acc[gid] = g;
+        return acc;
+      }, {})
+    : (rawGroups && typeof rawGroups === 'object' ? rawGroups : {});
+
+  const groupId = it.presetGroupId || rm.presetGroupId || null;
+  const grp = groupId ? groupsMap[groupId] : null;
+  const isPreset = Boolean(it.isPresetItem || rm.isPresetItem || groupId || it.presetName || rm.presetName);
+
+  let effectiveSetCount = 1;
+  if (it.isSubPreset || rm.isSubPreset) {
+    effectiveSetCount = parseFloat(it.subSetCount || rm.subSetCount || 1) || 1;
+  } else if (grp) {
+    effectiveSetCount = parseFloat(grp.setCount || grp.sets || 1) || 1;
+  } else if (isPreset) {
+    effectiveSetCount = parseFloat(it.setCount || rm.setCount || bomRecord?.presetSetCount || bomRecord?.setCount || 1) || 1;
+  }
+
+  const effectivePresetName = it.presetName || rm.presetName || grp?.presetName || (isPreset ? bomRecord?.presetName : '') || '';
+  const effectiveCategory = it.category || rm.category || grp?.category || '';
+  const effectiveUnit = grp?.unit || grp?.unitType || it.unit || it.uom || rm.unit || rm.uom || '';
+
+  return calculateTotalDispatchQty({ ...rm, ...it }, effectiveSetCount, effectivePresetName, effectiveCategory, effectiveUnit);
+};
+
 export default {
   VRM_PRODUCTS,
   wordFingerprint,
   resolveProductCode,
   isRailPreset,
   isKwPreset,
-  calculateTotalDispatchQty
+  calculateTotalDispatchQty,
+  resolveBomItemDispatchQty
 };
 
 

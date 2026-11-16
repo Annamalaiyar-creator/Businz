@@ -8,7 +8,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { resolveDocumentUrl } from "../../utils/documentResolver";
 import DispatchMediaThumbnail from "./DispatchMediaThumbnail";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
-import { isRailPreset, calculateTotalDispatchQty } from "../../utils/vrmProductsData";
+import { isRailPreset, calculateTotalDispatchQty, resolveBomItemDispatchQty } from "../../utils/vrmProductsData";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
 
@@ -219,8 +219,7 @@ export default function ConfirmingBomModal({
                 const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
 
                 const finalizedItems = (confirmingBomModal.items || []).map(i => {
-                  const setCount = parseFloat(i.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
-                  const totalDispatchQty = i.totalDispatchQty || calculateTotalDispatchQty(i, setCount, i.presetName || confirmingBomModal.presetName, i.category);
+                  const totalDispatchQty = resolveBomItemDispatchQty(i, confirmingBomModal);
                   return {
                     ...i,
                     confirmed: true,

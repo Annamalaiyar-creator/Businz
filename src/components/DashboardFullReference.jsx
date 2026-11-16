@@ -170,9 +170,138 @@ export default function DashboardFullReference({ userRole }) {
 
   const totalValueNum = filteredPOs.reduce((acc, po) => acc + parseAmt(po.amount, po), 0);
   const totalValueCr = (totalValueNum / 10000000).toFixed(2);
+  const totalPoQty = filteredPOs.reduce((acc, po) => {
+    if (po.totalOrderedQty !== undefined && po.totalOrderedQty !== null && Number(po.totalOrderedQty) > 0) {
+      return acc + Number(po.totalOrderedQty);
+    }
+    if (Array.isArray(po.items) && po.items.length > 0) {
+      return acc + po.items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) || 0), 0);
+    }
+    return acc;
+  }, 0);
   const posRaisedCount = filteredPOs.length;
-  const draftCount = filteredPOs.filter((po) => po.status === 'Draft' || po.statusType === 'draft').length;
-  const approvedCount = filteredPOs.filter((po) => po.status === 'Approved' || po.status === 'OPEN' || po.statusType === 'approved').length;
+  const draftCount = filteredPOs.filter((po) => String(po.status || '').toLowerCase().includes('draft') || String(po.status || '').toLowerCase().includes('pending') || po.statusType === 'draft').length;
+  const approvedCount = filteredPOs.filter((po) => {
+    const st = String(po.status || '').toLowerCase();
+    return st.includes('approved') || st === 'open' || st.includes('proceed') || po.statusType === 'approved';
+  }).length;
+
+  // Live PO Status breakdown for PO Status Overview card
+  const livePoStatusBreakdown = useMemo(() => {
+    const total = poData.length;
+    let completed = 0;
+    let partial = 0;
+    let approved = 0;
+    let pending = 0;
+    poData.forEach(po => {
+      const st = String(po.status || '').toLowerCase();
+      const stType = String(po.statusType || '').toLowerCase();
+      if (st.includes('closed') || st.includes('fully') || st.includes('completed') || stType === 'closed') {
+        completed += 1;
+      } else if (st.includes('partial') || stType === 'partially_received') {
+        partial += 1;
+      } else if (st.includes('approved') || st === 'open' || st.includes('proceed') || stType === 'approved') {
+        approved += 1;
+      } else if (!st.includes('cancel')) {
+        pending += 1;
+      }
+    });
+    const pctOf = (n) => (total > 0 ? n / total : 0);
+    return {
+      total,
+      items: [
+        { name: 'Completed / Closed', count: `${completed}`, color: '#22C55E', pct: pctOf(completed) },
+        { name: 'Partially Received', count: `${partial}`, color: '#0084FF', pct: pctOf(partial) },
+        { name: 'Approved / Open', count: `${approved}`, color: '#06B6D4', pct: pctOf(approved) },
+        { name: 'Pending / Draft', count: `${pending}`, color: '#F59E0B', pct: pctOf(pending) }
+      ]
+    };
+  }, [poData]);
+
+  // Live Material Category Spend breakdown from PO items
+  const liveCategorySpend = useMemo(() => {
+    const buckets = {
+      'Alu Profiles': 0,
+      'HDG / Steel': 0,
+      'Raw Material': 0,
+      'Fasteners & Clamps': 0,
+      'Other Materials': 0
+    };
+    const formatCompactInr = (val) => {
+      if (val >= 10000000) return `₹ ${(val / 10000000).toFixed(2)} Cr`;
+      if (val >= 100000) return `₹ ${(val / 100000).toFixed(2)} L`;
+      return `₹ ${Math.round(val).toLocaleString('en-IN')}`;
+    };
+    poData.forEach(po => {
+      if (Array.isArray(po.items) && po.items.length > 0) {
+        let itemSumUsed = 0;
+        po.items.forEach(it => {
+          const lineAmt = Number(it.rate || it.unitPrice || it.price || 0) * Number(it.qty || it.quantity || 1) * (1 + (Number(it.tax || 18) / 100));
+          if (lineAmt <= 0) return;
+          itemSumUsed += lineAmt;
+          const text = `${it.category || ''} ${it.name || ''}`.toLowerCase();
+          if (text.includes('alu') || text.includes('rail') || text.includes('rafter') || text.includes('purlin')) {
+            buckets['Alu Profiles'] += lineAmt;
+          } else if (text.includes('steel') || text.includes('hdg') || text.includes('column') || text.includes('leg')) {
+            buckets['HDG / Steel'] += lineAmt;
+          } else if (text.includes('raw') || text.includes('coil') || text.includes('ingot') || text.includes('billet')) {
+            buckets['Raw Material'] += lineAmt;
+          } else if (text.includes('clamp') || text.includes('bolt') || text.includes('nut') || text.includes('washer') || text.includes('fastener')) {
+            buckets['Fasteners & Clamps'] += lineAmt;
+          } else {
+            buckets['Other Materials'] += lineAmt;
+          }
+        });
+        if (itemSumUsed === 0) {
+          buckets['Other Materials'] += parseAmt(po.amount, po);
+        }
+      } else {
+        buckets['Other Materials'] += parseAmt(po.amount, po);
+      }
+    });
+    const grand = Object.values(buckets).reduce((s, v) => s + v, 0);
+    const colors = {
+      'Alu Profiles': '#2563EB',
+      'HDG / Steel': '#16A34A',
+      'Raw Material': '#CA8A04',
+      'Fasteners & Clamps': '#9333EA',
+      'Other Materials': '#DC2626'
+    };
+    return Object.entries(buckets).map(([name, val]) => ({
+      name,
+      count: formatCompactInr(val),
+      color: colors[name],
+      pct: grand > 0 ? val / grand : 0
+    }));
+  }, [poData]);
+
+  // Live Overdue POs list (non-closed, non-cancelled POs past expected delivery date)
+  const liveOverduePOs = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return poData
+      .map(po => {
+        const st = String(po.status || '').toLowerCase();
+        if (st.includes('closed') || st.includes('fully') || st.includes('cancel') || po.statusType === 'closed') {
+          return null;
+        }
+        const dueRaw = po.expectedDeliveryDate || po.deliveryDate || po.dueDate || po.poDate;
+        if (!dueRaw) return null;
+        const dueDate = new Date(dueRaw);
+        if (isNaN(dueDate.getTime())) return null;
+        dueDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.floor((todayStart.getTime() - dueDate.getTime()) / 86400000);
+        if (diffDays <= 0) return null;
+        return {
+          ...po,
+          delay: `${diffDays} Day${diffDays === 1 ? '' : 's'} Overdue`,
+          _diffDays: diffDays
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b._diffDays - a._diffDays)
+      .slice(0, 5);
+  }, [poData]);
 
   // Helper & calculations for TODAY'S SNAPSHOT (Live System Data)
   const isToday = (dateStr) => {
@@ -207,23 +336,30 @@ export default function DashboardFullReference({ userRole }) {
     (po.statusType === 'approved' || po.status === 'OPEN') && (!po.grnCount || po.grnCount === 0)
   ).length;
 
-  // Monthly aggregated data for PO Value Trend chart (last 6 months)
-  const monthNames = [
-    { code: '03', label: 'Mar-26' },
-    { code: '04', label: 'Apr-26' },
-    { code: '05', label: 'May-26' },
-    { code: '06', label: 'Jun-26' },
-    { code: '07', label: 'Jul-26' },
-    { code: '08', label: 'Aug-26' }
-  ];
+  // Monthly aggregated data for PO Value Trend chart (last 6 months dynamically)
+  const monthNames = useMemo(() => {
+    const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const list = [];
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const yr = String(d.getFullYear());
+      const code = String(d.getMonth() + 1).padStart(2, '0');
+      list.push({
+        year: yr,
+        code,
+        label: `${shortMonths[d.getMonth()]}-${yr.slice(-2)}`
+      });
+    }
+    return list;
+  }, []);
 
   const trendData = monthNames.map((m) => {
     const mPOs = poData.filter((po) => {
-      if (!po.poDate) return false;
-      const parts = po.poDate.split('-');
-      return parts[0] === '2026' && parts[1] === m.code;
+      const d = parseRecordDate(po);
+      if (!d) return false;
+      return String(d.getFullYear()) === m.year && String(d.getMonth() + 1).padStart(2, '0') === m.code;
     });
-    const totalVal = mPOs.reduce((acc, po) => acc + parseAmt(po.amount), 0);
+    const totalVal = mPOs.reduce((acc, po) => acc + parseAmt(po.amount, po), 0);
     return {
       month: m.label,
       code: m.code,
@@ -629,14 +765,14 @@ export default function DashboardFullReference({ userRole }) {
           },
           {
             title: `TOTAL PO QTY (${selectedPeriod})`,
-            value: `${posRaisedCount * 18} MT`,
-            trend: '12.8%',
+            value: `${totalPoQty.toLocaleString('en-IN')} Units`,
+            trend: 'Live',
             trendUp: true,
             icon: Package,
             iconColor: '#0284C7',
             iconBg: '#F0F9FF',
-            bottomPrefix: `${selectedPeriod}, dispatched `,
-            bottomHighlight: `+${posRaisedCount * 18} MT`
+            bottomPrefix: `${selectedPeriod}, ordered `,
+            bottomHighlight: `${totalPoQty.toLocaleString('en-IN')} Units`
           },
           {
             title: `POS RAISED (${selectedPeriod})`,
@@ -780,7 +916,7 @@ export default function DashboardFullReference({ userRole }) {
         {/* CARD 1: INVOICE / PROFORMA / PO STATUS OVERVIEW */}
         <POStatusOverview 
           title={(userRole === 'Invoice Executive' || userRole === 'Accounts Head' || userRole === 'Finance & Accounts') ? "Tax Invoices Status" : (userRole === 'Sales Executive' || userRole === 'Sales Head') ? "Proforma Invoices Status" : "PO Status Overview"}
-          totalCount={(userRole === 'Invoice Executive' || userRole === 'Accounts Head' || userRole === 'Finance & Accounts') ? "160" : (userRole === 'Sales Executive' || userRole === 'Sales Head') ? "42" : "5,280"}
+          totalCount={(userRole === 'Invoice Executive' || userRole === 'Accounts Head' || userRole === 'Finance & Accounts') ? "160" : (userRole === 'Sales Executive' || userRole === 'Sales Head') ? "42" : String(livePoStatusBreakdown.total)}
           totalLabel={(userRole === 'Invoice Executive' || userRole === 'Accounts Head' || userRole === 'Finance & Accounts') ? "TOTAL INVOICES" : (userRole === 'Sales Executive' || userRole === 'Sales Head') ? "TOTAL PIs" : "TOTAL POS"}
           items={(userRole === 'Invoice Executive' || userRole === 'Accounts Head' || userRole === 'Finance & Accounts') ? [
             { name: 'Paid / Settled', count: '138 Invoices', color: '#16A34A', pct: 0.862 },
@@ -792,12 +928,7 @@ export default function DashboardFullReference({ userRole }) {
             { name: 'Pending Customer Approval', count: '8 PIs', color: '#2563EB', pct: 0.190 },
             { name: 'Draft Quotations', count: '4 PIs', color: '#CA8A04', pct: 0.095 },
             { name: 'Expired / Cancelled', count: '2 PIs', color: '#DC2626', pct: 0.048 }
-          ] : [
-            { name: 'Completed', count: '4,746', color: '#22C55E', pct: 0.68 },
-            { name: 'In Progress', count: '342', color: '#0084FF', pct: 0.18 },
-            { name: 'Planned', count: '142', color: '#06B6D4', pct: 0.09 },
-            { name: 'Approved', count: '50', color: '#38BDF8', pct: 0.05 }
-          ]}
+          ] : livePoStatusBreakdown.items}
         />
 
         {/* CARD 2: CATEGORY SHARE */}
@@ -817,13 +948,7 @@ export default function DashboardFullReference({ userRole }) {
             { name: 'Mid Clamps', count: '₹ 0.68 Cr', color: '#CA8A04', pct: 0.14 },
             { name: 'End Clamps', count: '₹ 0.38 Cr', color: '#9333EA', pct: 0.08 },
             { name: 'Accessories', count: '₹ 0.21 Cr', color: '#DC2626', pct: 0.04 }
-          ] : [
-            { name: 'Alu Profiles', count: '₹ 1.86 Cr', color: '#2563EB', pct: 0.435 },
-            { name: 'HDG Steel Structure', count: '₹ 1.24 Cr', color: '#16A34A', pct: 0.29 },
-            { name: 'Raw Material Stock', count: '₹ 0.64 Cr', color: '#CA8A04', pct: 0.15 },
-            { name: 'Fasteners & Bolts', count: '₹ 0.32 Cr', color: '#9333EA', pct: 0.075 },
-            { name: 'Others & Misc', count: '₹ 0.22 Cr', color: '#DC2626', pct: 0.05 }
-          ])}
+          ] : liveCategorySpend)}
         />
 
         {/* CARD 3: INVOICE COMPLIANCE / CONVERSIONS / APPROVAL PENDING */}
@@ -1199,7 +1324,25 @@ export default function DashboardFullReference({ userRole }) {
                   { no: 'SunEdison Energy Ltd', name: '5 PIs', val: '₹ 0.85 Cr', delay: '100% Advance' },
                   { no: 'Sterling & Wilson', name: '4 PIs', val: '₹ 0.62 Cr', delay: '15 Days Credit' },
                   { no: 'Waaree Energies', name: '3 PIs', val: '₹ 0.45 Cr', delay: '30% Advance' }
-                ] : poData.slice(0, 5)).map((o, idx) => (
+                ] : liveOverduePOs).length === 0 ? (
+                  <tr>
+                    <td colSpan="4" style={{ padding: '18px 12px', textAlign: 'center', color: '#94A3B8', fontSize: '11px' }}>
+                      No overdue Purchase Orders
+                    </td>
+                  </tr>
+                ) : ((userRole === 'Invoice Executive' || userRole === 'Accounts Head' || userRole === 'Finance & Accounts') ? [
+                  { no: 'INV-2026-118', name: 'Waaree Energies', val: '₹ 15.60 L', delay: '12 Days Overdue' },
+                  { no: 'INV-2026-105', name: 'Bright Energy EPC', val: '₹ 8.40 L', delay: '9 Days Overdue' },
+                  { no: 'INV-2026-094', name: 'Voltix Solutions', val: '₹ 10.20 L', delay: '7 Days Overdue' },
+                  { no: 'INV-2026-081', name: 'Green Infra Ltd', val: '₹ 5.10 L', delay: '4 Days Overdue' },
+                  { no: 'INV-2026-077', name: 'SST Solar Infra', val: '₹ 3.20 L', delay: '2 Days Overdue' }
+                ] : (userRole === 'Sales Executive' || userRole === 'Sales Head') ? [
+                  { no: 'Adani Green Energy', name: '8 PIs', val: '₹ 1.45 Cr', delay: '30 Days Credit' },
+                  { no: 'Tata Power Solar', name: '6 PIs', val: '₹ 1.10 Cr', delay: '20% Advance' },
+                  { no: 'SunEdison Energy Ltd', name: '5 PIs', val: '₹ 0.85 Cr', delay: '100% Advance' },
+                  { no: 'Sterling & Wilson', name: '4 PIs', val: '₹ 0.62 Cr', delay: '15 Days Credit' },
+                  { no: 'Waaree Energies', name: '3 PIs', val: '₹ 0.45 Cr', delay: '30% Advance' }
+                ] : liveOverduePOs).map((o, idx) => (
                   <tr key={idx} style={{ borderBottom: idx === 4 ? 'none' : '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>
                     <td style={{ padding: '8px 12px', color: '#64748B', fontWeight: '600' }}>{o.no || o.name || o.poNo || o.po}</td>
                     <td style={{ padding: '8px 12px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.name || o.count || o.vendor}</td>

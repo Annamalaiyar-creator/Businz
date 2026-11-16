@@ -5,6 +5,7 @@ import { stripDataUrlsFromRecord, cleanNum, normalizePaymentTerm } from '../../.
 import { uploadBomDocumentFile } from '../../../utils/bomStorageClient';
 import { notifyBomCreatedToSales } from '../../../services/notificationService';
 import { getNextSequence } from '../../../utils/sequenceGenerator';
+import { resolveBomItemDispatchQty } from '../../../utils/vrmProductsData';
 
 function buildBomEditChanges(oldBom, nextBom) {
   if (!oldBom || !nextBom) return ['BOM details updated'];
@@ -348,21 +349,37 @@ export default function BomCreateSubmitModal({ ctx }) {
                           createdById: effectiveCreatedById,
                           convertedBy: loggedInOperatorName,
                           convertedById: loggedInOperatorId,
-                          items: (bomMaterialsList || []).map(item => ({
-                            code: item.code || '',
-                            name: item.name || 'Custom Item',
-                            category: item.category || (item.isPresetItem ? 'Preset Component' : ''),
-                            uom: item.uom || item.unit || 'NOS',
-                            unit: item.uom || item.unit || 'NOS',
-                            qty: cleanNum(item.qty, 1),
-                            rate: item.isPresetItem ? 0 : cleanNum(item.rate, 0),
-                            gstRate: item.gstRate || '18%',
-                            confirmed: false,
-                            isPresetItem: Boolean(item.isPresetItem),
-                            presetGroupId: item.presetGroupId || null,
-                            presetName: item.presetName || null,
-                            baseQty: item.baseQty != null ? cleanNum(item.baseQty, 1) : null
-                          })),
+                          items: (bomMaterialsList || []).map(item => {
+                            const grp = item.presetGroupId ? presetGroups[item.presetGroupId] : null;
+                            const itemSetCount = item.isSubPreset
+                              ? (parseFloat(item.subSetCount) || 1)
+                              : (grp ? (parseFloat(grp.setCount) || 1) : (item.isPresetItem ? (parseFloat(presetSetCount) || 1) : 1));
+                            const totalDisp = resolveBomItemDispatchQty(
+                              { ...item, setCount: itemSetCount },
+                              { presetGroups, presetSetCount, presetName: selectedPreset }
+                            );
+                            return {
+                              code: item.code || '',
+                              name: item.name || 'Custom Item',
+                              category: item.category || (item.isPresetItem ? 'Preset Component' : ''),
+                              uom: item.uom || item.unit || 'NOS',
+                              unit: item.uom || item.unit || 'NOS',
+                              qty: cleanNum(item.qty, 1),
+                              setCount: itemSetCount,
+                              totalDispatchQty: totalDisp,
+                              rate: item.isPresetItem ? 0 : cleanNum(item.rate, 0),
+                              gstRate: item.gstRate || '18%',
+                              confirmed: false,
+                              isPresetItem: Boolean(item.isPresetItem),
+                              presetGroupId: item.presetGroupId || null,
+                              presetName: item.presetName || null,
+                              isSubPreset: Boolean(item.isSubPreset),
+                              subPresetName: item.subPresetName || null,
+                              subSetCount: item.subSetCount || null,
+                              subUnit: item.subUnit || null,
+                              baseQty: item.baseQty != null ? cleanNum(item.baseQty, 1) : null
+                            };
+                          }),
                           payments: {
                             advance50Uploaded: false,
                             dispatch50Uploaded: false,
@@ -374,12 +391,28 @@ export default function BomCreateSubmitModal({ ctx }) {
                             proofDocObjs: paymentDocs,
                             paymentUpdated: newBomPaymentType === '100% Paid' && paymentDocs.length > 0
                           },
-                          dispatchPacking: (bomMaterialsList || []).map(item => ({
-                            code: item.code || '',
-                            name: item.name || 'Custom Item',
-                            bomQty: cleanNum(item.qty, 1),
-                            packed: false
-                          })),
+                          dispatchPacking: (bomMaterialsList || []).map(item => {
+                            const grp = item.presetGroupId ? presetGroups[item.presetGroupId] : null;
+                            const itemSetCount = item.isSubPreset
+                              ? (parseFloat(item.subSetCount) || 1)
+                              : (grp ? (parseFloat(grp.setCount) || 1) : (item.isPresetItem ? (parseFloat(presetSetCount) || 1) : 1));
+                            const totalDisp = resolveBomItemDispatchQty(
+                              { ...item, setCount: itemSetCount },
+                              { presetGroups, presetSetCount, presetName: selectedPreset }
+                            );
+                            return {
+                              code: item.code || '',
+                              name: item.name || 'Custom Item',
+                              bomQty: totalDisp,
+                              qtyPerSet: cleanNum(item.qty, 1),
+                              totalDispatchQty: totalDisp,
+                              setCount: itemSetCount,
+                              isPresetItem: Boolean(item.isPresetItem),
+                              presetGroupId: item.presetGroupId || null,
+                              presetName: item.presetName || null,
+                              packed: false
+                            };
+                          }),
                           accountsVerification: {
                             paymentStatus: null,
                             hardCopyReceived: false,
