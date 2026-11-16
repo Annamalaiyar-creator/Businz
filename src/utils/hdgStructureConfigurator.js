@@ -15,7 +15,8 @@ export const MASTER_STRUCTURE_OPTIONS = [
       { value: 'alu_fam_ssr', label: 'Standing Seam Profile (80 mm Height • Grub Screws)' },
       { value: 'alu_fam_mr_125', label: 'Mini Rail Profile — 125 mm Height (Rivets + EPDM)' },
       { value: 'alu_fam_mr_100', label: 'Mini Rail Profile — 100 mm Height (Rivets + EPDM)' },
-      { value: 'alu_fam_mr_75', label: 'Mini Rail Profile — 75 mm Height (Rivets + EPDM)' }
+      { value: 'alu_fam_mr_75', label: 'Mini Rail Profile — 75 mm Height (Rivets + EPDM)' },
+      { value: 'long_rail_bom', label: 'Long Rail — Double C Rail 45mm with L Bracket (1200–4800 mm)' }
     ]
   },
   {

@@ -20,6 +20,7 @@ import {
 } from '../../utils/aluminiumStructureConfigurator';
 import AluminiumStructureConfiguratorView from './AluminiumStructureConfiguratorView';
 import PmSuryaGharConfiguratorView from './PmSuryaGharConfiguratorView';
+import LongRailConfiguratorView from './LongRailConfiguratorView';
 import MasterStructureProfileDropdown from './MasterStructureProfileDropdown';
 
 /**
@@ -669,6 +670,8 @@ export default function HdgStructureConfiguratorModal({
   const handleMasterStructureChange = (val) => {
     if (val === 'pm_surya_ghar') {
       setStructureCategory('pm_surya_ghar');
+    } else if (val === 'long_rail_bom') {
+      setStructureCategory('long_rail');
     } else if (val.startsWith('alu_fam_')) {
       const famId = val.replace('alu_fam_', '');
       const targetFamily = ALUMINIUM_PROFILE_FAMILIES.find(f => f.familyId === famId);
@@ -685,6 +688,7 @@ export default function HdgStructureConfiguratorModal({
 
   const currentStructureValue = useMemo(() => {
     if (structureCategory === 'pm_surya_ghar') return 'pm_surya_ghar';
+    if (structureCategory === 'long_rail') return 'long_rail_bom';
     if (structureCategory === 'aluminium') {
       const rail = ALUMINIUM_CATALOG.find(r => r.id === selectedAluRailId);
       const family = getProfileFamilyForRail(rail);
@@ -938,6 +942,8 @@ export default function HdgStructureConfiguratorModal({
                 <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.3px' }}>
                   {structureCategory === 'pm_surya_ghar'
                     ? 'PM Surya Ghar Solar BOS Kit Configurator'
+                    : structureCategory === 'long_rail'
+                    ? 'Long Rail (Double C Rail 45mm) Configurator'
                     : structureCategory === 'aluminium'
                     ? 'Aluminium Rooftop MMS Configurator'
                     : 'Solar HDG Structure Configurator'}
@@ -953,6 +959,8 @@ export default function HdgStructureConfiguratorModal({
                 }}>
                   {structureCategory === 'pm_surya_ghar'
                     ? 'Muft Bijli Yojana'
+                    : structureCategory === 'long_rail'
+                    ? 'Double C Rail + L Bracket'
                     : structureCategory === 'aluminium'
                     ? 'NALCO Benchmark Engine'
                     : 'Live Quotation Engine'}
@@ -961,6 +969,8 @@ export default function HdgStructureConfiguratorModal({
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
                 {structureCategory === 'pm_surya_ghar'
                   ? 'Turnkey Solar Sizing Engine: Solar PV Modules + Inverter + Structure + BOS Kit'
+                  : structureCategory === 'long_rail'
+                  ? 'Row-by-Row Standard Rail Cut Optimization (1200–4800 mm) + Clamps, L-Angles & Joiner Hardware BOM'
                   : structureCategory === 'aluminium'
                   ? 'Mini Rails & Standing Seam Rooftop Systems • Mathematical Formula Parity with Price List Workout'
                   : 'C-Section 100×50×15 & Square Tube 60×60 • Pre-Engineered Unified 1-Row, 2-Row & 3-Row Tables'}
@@ -1019,6 +1029,13 @@ export default function HdgStructureConfiguratorModal({
         {structureCategory === 'aluminium' ? (
           <AluminiumStructureConfiguratorView
             initialRailId={selectedAluRailId}
+            masterStructureValue={currentStructureValue}
+            onMasterStructureChange={handleMasterStructureChange}
+            onApplyToQuote={onApplyToQuote}
+            onClose={onClose}
+          />
+        ) : structureCategory === 'long_rail' ? (
+          <LongRailConfiguratorView
             masterStructureValue={currentStructureValue}
             onMasterStructureChange={handleMasterStructureChange}
             onApplyToQuote={onApplyToQuote}
