@@ -2067,6 +2067,14 @@ export default function AccountsVerificationModal({
                         ? explicitKitItems
                         : (pGroups.length === 1 ? dynamicAccItems : []);
 
+                      const rawGst = grp.gstRate || kitItems[0]?.gstRate || (pGroups.length === 1 && Number(accountsVerificationModal.subTotal) > 0 && Number(accountsVerificationModal.gstAmount) >= 0
+                        ? Math.round((Number(accountsVerificationModal.gstAmount) / Number(accountsVerificationModal.subTotal)) * 100)
+                        : null) || (String(grp.presetName || '').toLowerCase().includes('bos') && String(grp.presetName || '').toLowerCase().includes('dcr') ? 5 : 18);
+                      const kitGstPct = parseFloat(String(rawGst).replace('%', ''));
+                      const safeKitGstPct = Number.isFinite(kitGstPct) ? kitGstPct : 18;
+                      const kitGstAmt = kTotal * (safeKitGstPct / 100);
+                      const kitGrandTotal = kTotal + kitGstAmt;
+
                       return (
                         <React.Fragment key={`acc-kit-${gIdx}`}>
                           {/* Centered Kit Header Row with GST Value */}
@@ -2091,7 +2099,7 @@ export default function AccountsVerificationModal({
                                   Kit Rate: <strong style={{ color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {unitType}
                                 </span>
                                 <span style={{ fontSize: '12px', fontWeight: '700', color: '#166534' }}>
-                                  GST (18%): <strong>₹ {(kTotal * 0.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                  GST ({safeKitGstPct}%): <strong>₹ {kitGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                                 </span>
                                 <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490' }}>
                                   Total with GST: <strong>₹ {(kTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
@@ -2155,10 +2163,10 @@ export default function AccountsVerificationModal({
                                       ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </div>
                                     <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700', marginTop: '3px' }}>
-                                      + 18% GST: ₹ {(kTotal * 0.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      + {safeKitGstPct}% GST: ₹ {kitGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </div>
                                     <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '800', marginTop: '2px', borderTop: '1px dashed #CBD5E1', paddingTop: '2px' }}>
-                                      Total: ₹ {(kTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      Total: ₹ {kitGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </div>
                                   </td>
                                 </>

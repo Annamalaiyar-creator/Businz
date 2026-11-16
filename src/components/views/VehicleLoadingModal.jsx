@@ -884,9 +884,14 @@ return (
               allPackedItems.map((item, idx) => {
                 const code = item.code || item.itemCode || item.productCode || `ITM-${idx + 1}`;
                 const name = item.name || item.itemName || 'Standard Component';
-                const qty = Number(item.totalDispatchQty || item.bomQty || item.qty || item.packedQty || 1);
+                const orderedQty = Number(item.totalDispatchQty || item.bomQty || item.qty || item.packedQty || 1);
+                const packedQty = Number(
+                  item.packedQty !== undefined && item.packedQty !== null && item.packedQty !== ''
+                    ? item.packedQty
+                    : (item.packed !== false ? orderedQty : 0)
+                );
                 const uom = item.uom || item.unit || 'Nos';
-                const isPacked = item.packed !== false;
+                const isPacked = (packedQty >= orderedQty && orderedQty > 0) || (item.packed === true && packedQty > 0);
                 return (
                   <tr key={idx} style={{ borderBottom: idx === allPackedItems.length - 1 ? 'none' : '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA' }}>
                     <td style={{ padding: '12px 18px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>
@@ -905,10 +910,10 @@ return (
                       {name}
                     </td>
                     <td style={{ padding: '12px 18px', textAlign: 'center', color: '#475569', fontWeight: '700' }}>
-                      {qty.toLocaleString('en-IN')} {uom}
+                      {orderedQty.toLocaleString('en-IN')} {uom}
                     </td>
-                    <td style={{ padding: '12px 18px', textAlign: 'center', color: '#059669', fontWeight: '800' }}>
-                      {qty.toLocaleString('en-IN')} {uom}
+                    <td style={{ padding: '12px 18px', textAlign: 'center', color: isPacked ? '#059669' : '#D97706', fontWeight: '800' }}>
+                      {packedQty.toLocaleString('en-IN')} {uom}
                     </td>
                     <td style={{ padding: '12px 18px', textAlign: 'center' }}>
                       <span style={{

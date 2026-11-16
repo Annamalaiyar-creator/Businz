@@ -1034,10 +1034,13 @@ export function VRMProformaInvoicePrintSheet({
     const rawPerKit = parseFloat(it.qtyPerSet ?? it.baseQty ?? it.qty);
     const perKitQty = !isNaN(rawPerKit) && rawPerKit > 0 ? rawPerKit : q;
     const rawTotalDisp = parseFloat(it.totalDispatchQty);
-    const setMultiplier = parseFloat(grpMeta?.setCount || it.setCount || pi.presetSetCount || 1) || 1;
-    const totalQty = !isNaN(rawTotalDisp) && rawTotalDisp > 0
-      ? rawTotalDisp
-      : (isPreset ? (perKitQty * setMultiplier) : q);
+    const isCustomSetItem = Boolean(it.isCustomSet || grpMeta?.isCustomSet || grpMeta?.presetId === 'custom_set');
+    const setMultiplier = isCustomSetItem ? 1 : (parseFloat(grpMeta?.setCount || it.setCount || pi.presetSetCount || 1) || 1);
+    const totalQty = isCustomSetItem
+      ? q
+      : (!isNaN(rawTotalDisp) && rawTotalDisp > 0
+        ? rawTotalDisp
+        : (isPreset ? (perKitQty * setMultiplier) : q));
 
     return {
       rawIndex: idx,

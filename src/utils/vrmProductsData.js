@@ -3975,8 +3975,8 @@ export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', p
   ) || 0;
   if (baseQty <= 0) return 0;
 
-  // 1. Standalone custom items (not part of any preset) -> entered quantity is directly the total dispatch qty (multiplier = 1)
-  if (!item.isPresetItem && !item.presetGroupId && !item.presetName && !presetName) {
+  // 1. Standalone custom items or Create Set (isCustomSet) -> entered quantity is directly the total dispatch qty (multiplier = 1)
+  if (item.isCustomSet || (!item.isPresetItem && !item.presetGroupId && !item.presetName && !presetName)) {
     return baseQty;
   }
 
@@ -4036,8 +4036,11 @@ export const resolveBomItemDispatchQty = (item, bomRecord = null, rawMatch = nul
   const grp = groupId ? groupsMap[groupId] : null;
   const isPreset = Boolean(it.isPresetItem || rm.isPresetItem || groupId || it.presetName || rm.presetName);
 
+  const isCustomSet = Boolean(it.isCustomSet || rm.isCustomSet || grp?.isCustomSet || grp?.presetId === 'custom_set');
   let effectiveSetCount = 1;
-  if (it.isSubPreset || rm.isSubPreset) {
+  if (isCustomSet) {
+    effectiveSetCount = 1;
+  } else if (it.isSubPreset || rm.isSubPreset) {
     effectiveSetCount = parseFloat(it.subSetCount || rm.subSetCount || 1) || 1;
   } else if (grp) {
     effectiveSetCount = parseFloat(grp.setCount || grp.sets || 1) || 1;
@@ -4049,7 +4052,7 @@ export const resolveBomItemDispatchQty = (item, bomRecord = null, rawMatch = nul
   const effectiveCategory = it.category || rm.category || grp?.category || '';
   const effectiveUnit = grp?.unit || grp?.unitType || it.unit || it.uom || rm.unit || rm.uom || '';
 
-  return calculateTotalDispatchQty({ ...rm, ...it }, effectiveSetCount, effectivePresetName, effectiveCategory, effectiveUnit);
+  return calculateTotalDispatchQty({ ...rm, ...it, isCustomSet }, effectiveSetCount, effectivePresetName, effectiveCategory, effectiveUnit);
 };
 
 export default {

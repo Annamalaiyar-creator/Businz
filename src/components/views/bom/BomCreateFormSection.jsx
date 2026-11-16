@@ -1329,8 +1329,11 @@ export default function BomCreateFormSection({ ctx }) {
                               const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
                               const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom);
                               const nestedSub = isSub && currentGroup?.nestedSubPresets?.find(n => (n.id === item.subPresetId || n.name === item.subPresetName));
-                              const effectiveSetCount = isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1);
-                              const calcTotalDisp = calculateTotalDispatchQty(
+                              const isCustomSetGroup = Boolean(item.isCustomSet || currentGroup?.isCustomSet || currentGroup?.presetId === 'custom_set');
+                              const effectiveSetCount = isCustomSetGroup ? 1 : (isSub ? (item.subSetCount || nestedSub?.setCount || 1) : (currentGroup?.setCount || 1));
+                              const calcTotalDisp = isCustomSetGroup
+                                ? (parseFloat(item.qty) || 0)
+                                : calculateTotalDispatchQty(
                                 item,
                                 effectiveSetCount,
                                 effectivePresetName,

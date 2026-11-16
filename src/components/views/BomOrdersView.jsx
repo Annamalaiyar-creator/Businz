@@ -1870,7 +1870,8 @@ export default function BomOrdersView(props) {
                 unit: gUnit,
                 unitType: gUnit,
                 kitPrice: g.kitPrice != null ? String(g.kitPrice) : '',
-                gstRate: g.gstRate || '18%'
+                gstRate: g.gstRate || '18%',
+                isCustomSet: Boolean(g.isCustomSet || g.presetId === 'custom_set')
               };
             }
           });
@@ -1889,7 +1890,8 @@ export default function BomOrdersView(props) {
                 unit: gUnit,
                 unitType: gUnit,
                 kitPrice: g.kitPrice != null ? String(g.kitPrice) : '',
-                gstRate: g.gstRate || '18%'
+                gstRate: g.gstRate || '18%',
+                isCustomSet: Boolean(g.isCustomSet || g.presetId === 'custom_set')
               };
             }
           });
