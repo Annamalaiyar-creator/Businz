@@ -1947,7 +1947,7 @@ export default function InvoiceDetailModal({
                                     <FileText style={{ width: '14px', height: '14px', color: isSelected ? '#1D4ED8' : '#2563EB' }} />
                                     <div>
                                       <div style={{ fontWeight: '700', color: isSelected ? '#1D4ED8' : '#0F172A' }}>
-                                        Version {hIdx + 1}: {hDoc.name || hDoc.originalName || 'Proof.png'} {hIdx === 0 ? '(Original)' : '(Reissued)'}
+                                        Version {hIdx + 1}: {safeStringVal(hDoc?.name || hDoc?.originalName, 'Proof.png')} {hIdx === 0 ? '(Original)' : '(Reissued)'}
                                       </div>
                                       <div style={{ fontSize: '10px', color: '#64748B' }}>
                                         {hDoc.uploadedAt ? new Date(hDoc.uploadedAt).toLocaleString('en-GB') : 'Uploaded'}
@@ -2025,7 +2025,7 @@ export default function InvoiceDetailModal({
 
               {/* ADDRESS PROOF DOCUMENT PREVIEW CARD - ONLY IF DIFFERENT ADDRESS */}
               {!isSame && addressProofDoc && (() => {
-                const docName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Address_Proof_Document.png");
+                const docName = safeStringVal(typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.originalName || addressProofDoc?.name), "Address_Proof_Document.png");
                 const docUrl = resolvedAddressProofUrl || (typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || resolveDocumentUrl(addressProofDoc, bomRefText)));
                 const isPdf = Boolean((docName && docName.toLowerCase().endsWith('.pdf')) || (docUrl && (docUrl.startsWith('data:application/pdf') || docUrl.includes('.pdf'))));
 
@@ -2112,7 +2112,7 @@ export default function InvoiceDetailModal({
                 const paymentProofDoc = inv.paymentProofDoc || matchingBom?.paymentProofDoc || matchingBom?.paymentProof || null;
                 if (!paymentProofDoc) return null;
 
-                const pName = typeof paymentProofDoc === "string" ? paymentProofDoc : (paymentProofDoc?.originalName || paymentProofDoc?.name || "Payment_Remittance_Slip.png");
+                const pName = safeStringVal(typeof paymentProofDoc === "string" ? paymentProofDoc : (paymentProofDoc?.originalName || paymentProofDoc?.name), "Payment_Remittance_Slip.png");
                 const pUrl = resolvedPaymentProofUrl || (typeof paymentProofDoc === "string" ? paymentProofDoc : (paymentProofDoc?.dataUrl || paymentProofDoc?.fileData || paymentProofDoc?.url || resolveDocumentUrl(paymentProofDoc, bomRefText)));
                 const isPdf = Boolean((pName && pName.toLowerCase().endsWith('.pdf')) || (pUrl && (pUrl.startsWith('data:application/pdf') || pUrl.includes('.pdf'))));
 
@@ -2229,15 +2229,15 @@ export default function InvoiceDetailModal({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '20px', borderLeft: '2px solid #E2E8F0' }}>
             {(() => {
               // 1. BOM Creation details
-              const bomCreatorName = matchingBom?.createdBy || matchingBom?.createdByName || matchingBom?.salesPerson || 'Balaji (BOM Executive)';
-              const bomCreatorRole = matchingBom?.createdByRole || 'Design & BOM Team';
-              const bomCreatedDate = matchingBom?.createdAt || matchingBom?.date || `${invDateText}, 09:00 AM`;
+              const bomCreatorName = safeStringVal(matchingBom?.createdBy || matchingBom?.createdByName || matchingBom?.salesPerson, 'Balaji (BOM Executive)');
+              const bomCreatorRole = safeStringVal(matchingBom?.createdByRole, 'Design & BOM Team');
+              const bomCreatedDate = safeStringVal(matchingBom?.createdAt || matchingBom?.date, `${invDateText}, 09:00 AM`);
               const bomItemCount = (matchingBom?.items || itemsList || []).length;
 
               // 2. Dispatch Packing details
-              const dispatchPackerName = matchingBom?.packedBy || matchingBom?.dispatchPackedBy || 'Karthik Raja (Dispatch Head)';
+              const dispatchPackerName = safeStringVal(matchingBom?.packedBy || matchingBom?.dispatchPackedBy, 'Karthik Raja (Dispatch Head)');
               const dispatchPackerRole = 'Dispatch & Warehouse Team';
-              const dispatchPackedDate = matchingBom?.packedAt || matchingBom?.dispatchDate || `${invDateText}, 09:45 AM`;
+              const dispatchPackedDate = safeStringVal(matchingBom?.packedAt || matchingBom?.dispatchDate, `${invDateText}, 09:45 AM`);
               const allPackingList = (matchingBom?.dispatchPacking && Array.isArray(matchingBom.dispatchPacking) && matchingBom.dispatchPacking.length > 0)
                 ? matchingBom.dispatchPacking
                 : (matchingBom?.items || itemsList || []).map(it => ({ name: it.name, code: it.code, bomQty: it.bomQty || it.qty || 1, packed: it.selected !== false }));
@@ -2260,21 +2260,21 @@ export default function InvoiceDetailModal({
 
               // 3. Accounts Verification details
               const accData = (matchingBom && matchingBom.accountsVerification) || inv.accountsVerification || {};
-              const approverName = accData.verifiedBy || inv.verifiedBy || 'Accounts Head (Venkatesh)';
-              const approverRole = accData.verifiedByRole || 'Accounts Approver';
-              const approvalTime = accData.verifiedAt || `${invDateText}, 10:15 AM`;
+              const approverName = safeStringVal(accData.verifiedBy || inv.verifiedBy, 'Accounts Head (Venkatesh)');
+              const approverRole = safeStringVal(accData.verifiedByRole, 'Accounts Approver');
+              const approvalTime = safeStringVal(accData.verifiedAt, `${invDateText}, 10:15 AM`);
               const isAccVerified = Boolean(accData.verified || inv.status === 'Accounts Verified & Passed to Invoice' || inv.status === 'Invoice Confirmed');
 
               // 4. Invoice details
               const isConfirmed = ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed', 'Fully Dispatched & Delivered'].includes(inv.status);
-              const invoicePersonName = isConfirmed ? (inv.confirmedBy || matchingBom?.invoiceConfirmedBy || 'Priya (Billing & Invoice Exec)') : 'Priya / Anand (Billing Exec)';
+              const invoicePersonName = isConfirmed ? safeStringVal(inv.confirmedBy || matchingBom?.invoiceConfirmedBy, 'Priya (Billing & Invoice Exec)') : 'Priya / Anand (Billing Exec)';
               const invoicePersonRole = 'Finance & Billing Team';
-              const invoiceTime = isConfirmed ? (inv.confirmedAt || `${invDateText}, 10:25 AM`) : `${invDateText}, 10:16 AM`;
+              const invoiceTime = isConfirmed ? safeStringVal(inv.confirmedAt, `${invDateText}, 10:25 AM`) : `${invDateText}, 10:16 AM`;
 
               // 5. Final Dispatch & Vehicle Loading
               const vLoading = matchingBom?.vehicleLoading || inv.vehicleLoading || null;
               const isDispatched = Boolean(vLoading || matchingBom?.status === 'Completed' || inv.status === 'Fully Dispatched & Delivered');
-              const driverText = vLoading ? `${vLoading.driverName || 'K. Murugan'} (${vLoading.vehicleNo || 'TN-09-CB-4821'})` : 'Despatch Logistics Crew';
+              const driverText = vLoading ? `${safeStringVal(vLoading.driverName, 'K. Murugan')} (${safeStringVal(vLoading.vehicleNo, 'TN-09-CB-4821')})` : 'Despatch Logistics Crew';
 
               const timelineSteps = [
                 {
@@ -2314,7 +2314,7 @@ export default function InvoiceDetailModal({
                   user: approverName,
                   role: approverRole,
                   color: isAccVerified ? '#16A34A' : '#D97706',
-                  badge: isAccVerified ? (accData.paymentStatus || 'Payment Verified & Approved') : 'Pending Accounts Verification',
+                  badge: isAccVerified ? safeStringVal(accData.paymentStatus, 'Payment Verified & Approved') : 'Pending Accounts Verification',
                   badgeColor: isAccVerified ? '#DCFCE7' : '#FEF3C7',
                   badgeTextColor: isAccVerified ? '#166534' : '#B45309',
                   borderColor: isAccVerified ? '#86EFAC' : '#FDE68A'
@@ -2334,11 +2334,11 @@ export default function InvoiceDetailModal({
                 {
                   stage: 'Dispatch & Logistics',
                   title: isDispatched ? 'Vehicle Loaded & Dispatched' : 'Pending Vehicle Loading & Dispatch',
-                  date: vLoading?.loadedTimeStr || (isDispatched ? `${invDateText}, 11:30 AM` : 'Awaiting Lorry Loading'),
+                  date: safeStringVal(vLoading?.loadedTimeStr, isDispatched ? `${invDateText}, 11:30 AM` : 'Awaiting Lorry Loading'),
                   user: driverText,
                   role: 'Logistics & Fleet Team',
                   color: isDispatched ? '#059669' : '#94A3B8',
-                  badge: isDispatched ? `Dispatched • ${vLoading?.vehicleNo || 'Vehicle Verified'}` : 'Next Stage: Vehicle Loading',
+                  badge: isDispatched ? `Dispatched • ${safeStringVal(vLoading?.vehicleNo, 'Vehicle Verified')}` : 'Next Stage: Vehicle Loading',
                   badgeColor: isDispatched ? '#F0FDF4' : '#F8FAFC',
                   badgeTextColor: isDispatched ? '#166534' : '#64748B',
                   borderColor: isDispatched ? '#BBF7D0' : '#E2E8F0'
