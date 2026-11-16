@@ -79,9 +79,16 @@ export const getBomActiveStage = (row) => {
     return { name: 'Dispatched', bg: '#F0FDF4', color: '#166534', border: '#BBF7D0', dot: '#16A34A' };
   }
 
-  const isInvoiceGenerated = Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo || row.invoiceConfirmed) ||
+  const isPendingInvoiceStatus = statusStr.includes('passed to invoice') || statusStr.includes('awaiting invoice') || statusStr.includes('ready for invoice') || statusStr.includes('proceed billing');
+  const isInvoiceStatus = !isPendingInvoiceStatus && (
     ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status) ||
-    statusStr.includes('invoice') ||
+    statusStr.includes('invoice confirmed') ||
+    statusStr.includes('invoice generated') ||
+    statusStr.includes('invoiced') ||
+    statusStr.includes('vehicle loading')
+  );
+  const isInvoiceGenerated = Boolean(row.invoiceGenerated || row.invoiceConfirmed) ||
+    isInvoiceStatus ||
     Boolean(row.invoiceConfirmedAt || row.invoicedAt || row.stockDeductionDate);
   if (isInvoiceGenerated) {
     return { name: 'Vehicle Loading Pending', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC', dot: '#0891B2' };
@@ -207,10 +214,17 @@ export const getBomStageTiming = (b, matchingPi = null) => {
   const dispatchCompletedTime = formatTimeStr(pDispatch) || b.dispatchedTime || null;
 
   // 5. Stage 5: GST Invoiced
-  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || ((b.invoiceConfirmed || statusLower.includes('invoice') || hasDispatch) ? (b.updatedAt || b.updated_at || b.date) : null);
+  const isPendingInvStatus = statusLower.includes('passed to invoice') || statusLower.includes('awaiting invoice') || statusLower.includes('ready for invoice') || statusLower.includes('proceed billing');
+  const isInvDoneByStatus = !isPendingInvStatus && (
+    statusLower.includes('invoice confirmed') ||
+    statusLower.includes('invoice generated') ||
+    statusLower.includes('invoiced') ||
+    statusLower.includes('vehicle loading')
+  );
+  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || ((b.invoiceConfirmed || b.invoiceGenerated || isInvDoneByStatus || hasDispatch) ? (b.updatedAt || b.updated_at || b.date) : null);
   const pInvoice = parseAnyDate(rawInvoice);
   const dInvoice = pInvoice.date;
-  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed || (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') || b.taxInvoiceNo || statusLower.includes('invoice') || statusLower.includes('vehicle loading') || hasDispatch);
+  const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed || b.invoiceGenerated || isInvDoneByStatus || hasDispatch);
   const invoiceCompletedTime = formatTimeStr(pInvoice) || b.invoiceTime || null;
 
   // 4. Stage 4: Accounts Verification
