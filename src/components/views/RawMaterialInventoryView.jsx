@@ -224,27 +224,27 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   ]);
 
   const ALUMINUM_PROFILES = [
-    { code: 'ALU-LEN-2414MM', name: 'Aluminium Mother Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '2414 mm', stock: 5000, minLevel: 20, store: 'Bay #1 - Extrusion Yard', hsn: '7604', status: 'In Stock' },
-    { code: 'ALU-BAR-2650MM', name: 'Aluminium Extrusion Bar (2650 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 5000, minLevel: 20, store: 'Bay #1 - Extrusion Yard', hsn: '7604', status: 'In Stock' },
-    { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 5000, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'LC', name: 'Locking Nut / Channel (LC)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 5000, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 5000, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 5000, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 5000, minLevel: 25, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'TOP-2M', name: 'Top Section 2 Mtr (TOP-2M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'BOT-2M', name: 'Bottom Section 2 Mtr (BOT-2M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'TOP-1.5M', name: 'Top Section 1.5 Mtr (TOP-1.5M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '1500', cutLength: '1500 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'BOT-2.4M', name: 'Bottom Section 2.4 Mtr (BOT-2.4M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2400', cutLength: '2400 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MC35', name: 'Mid Clamp 35mm (MC35)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MC30', name: 'Mid Clamp 30mm (MC30)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '30 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'T10', name: 'T Nut 10mm (T10)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2562', cutLength: '10 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'UM', name: 'Mid Clamp Universal (UM)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'UE', name: 'End Clamp 35mm New (UE)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'EC35', name: 'End Clamp 35mm (EC35)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'ALB', name: 'L Bracket (ALB)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2050', cutLength: '2050 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'T8', name: 'T Nut KMC 8mm (T8)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2580', cutLength: '8 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' }
+    { code: 'ALU-LEN-2414MM', name: 'Aluminium Mother Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '2414 mm', stock: 5000, minLevel: 20, store: 'Bay #1 - Extrusion Yard', hsn: '76042990', status: 'In Stock' },
+    { code: 'ALU-BAR-2650MM', name: 'Aluminium Extrusion Bar (2650 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 5000, minLevel: 20, store: 'Bay #1 - Extrusion Yard', hsn: '76042990', status: 'In Stock' },
+    { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 5000, minLevel: 30, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'LC', name: 'Locking Nut / Channel (LC)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 5000, minLevel: 30, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 5000, minLevel: 35, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 5000, minLevel: 35, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 5000, minLevel: 25, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'TOP-2M', name: 'Top Section 2 Mtr (TOP-2M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'BOT-2M', name: 'Bottom Section 2 Mtr (BOT-2M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'TOP-1.5M', name: 'Top Section 1.5 Mtr (TOP-1.5M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '1500', cutLength: '1500 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'BOT-2.4M', name: 'Bottom Section 2.4 Mtr (BOT-2.4M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2400', cutLength: '2400 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '76042990', status: 'In Stock' },
+    { code: 'MC35', name: 'Mid Clamp 35mm (MC35)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '76169990', status: 'In Stock' },
+    { code: 'MC30', name: 'Mid Clamp 30mm (MC30)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '30 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '76169990', status: 'In Stock' },
+    { code: 'T10', name: 'T Nut 10mm (T10)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2562', cutLength: '10 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '73181600', status: 'In Stock' },
+    { code: 'UM', name: 'Mid Clamp Universal (UM)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '76169990', status: 'In Stock' },
+    { code: 'UE', name: 'End Clamp 35mm New (UE)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '76169990', status: 'In Stock' },
+    { code: 'EC35', name: 'End Clamp 35mm (EC35)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '76169990', status: 'In Stock' },
+    { code: 'ALB', name: 'L Bracket (ALB)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2050', cutLength: '2050 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '76169990', status: 'In Stock' },
+    { code: 'T8', name: 'T Nut KMC 8mm (T8)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2580', cutLength: '8 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '73181600', status: 'In Stock' }
   ];
 
   const initialMaterials = useMemo(() => ALUMINUM_PROFILES.map(p => ({
@@ -308,7 +308,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           reorderLevel: it.reorderLevel || 50,
           status: itStock > 0 ? 'In Stock' : 'Out of Stock',
           store: it.location || it.warehouse || it.store || 'Main Store',
-          hsn: it.hsn || '7604',
+          hsn: it.hsn || '76042990',
           rate: it.rate || it.price || 0,
           purchaseRate: it.purchaseRate || 0,
           lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
@@ -429,7 +429,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             reorderLevel: it.reorderLevel || 50,
             status: itStock > 0 ? 'In Stock' : 'Out of Stock',
             store: it.location || it.warehouse || it.store || 'Main Store',
-            hsn: it.hsn || '7604',
+            hsn: it.hsn || '76042990',
             rate: it.rate || it.price || 0,
             purchaseRate: it.purchaseRate || 0,
             lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
@@ -1595,7 +1595,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const stock = Number(row.stock) || 0;
         const minLevel = Number(row.minLevel) || 50;
         const store = String(row.store || 'Main Store').trim();
-        const hsn = String(row.hsn || '7604').trim();
+        const hsn = String(row.hsn || '76042990').trim();
         const lengthMm = row.lengthMm ? String(row.lengthMm).replace(/[^0-9.]+/g, '') : undefined;
 
         let status = 'In Stock';
@@ -1741,7 +1741,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           const stock = Number(String(findVal('Physical Stock', 'Current Stock', 'Stock', 'Quantity', 'Qty') || '0').replace(/[^0-9.-]+/g, '')) || 0;
           const minLevel = Number(String(findVal('Min Level', 'Safety Stock', 'Reorder Level', 'Min. Level') || '50').replace(/[^0-9.-]+/g, '')) || 50;
           const store = String(findVal('Store Location', 'Store', 'Location', 'Bay') || 'Main Store').trim();
-          const hsn = String(findVal('HSN', 'HSN Code', 'SAC') || '7604').trim();
+          const hsn = String(findVal('HSN', 'HSN Code', 'SAC') || '76042990').trim();
           const lengthMm = String(findVal('Length', 'Length Mm', 'Length (mm)', 'LengthMm') || '').replace(/[^0-9.]+/g, '');
 
           let status = 'In Stock';
@@ -1897,7 +1897,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           const stock = Number(String(findVal('Physical Stock', 'Current Stock', 'Stock', 'Quantity', 'Qty') || '0').replace(/[^0-9.-]+/g, '')) || 0;
           const minLevel = Number(String(findVal('Min Level', 'Safety Stock', 'Reorder Level', 'Min. Level') || '50').replace(/[^0-9.-]+/g, '')) || 50;
           const store = String(findVal('Store Location', 'Store', 'Location', 'Bay') || 'Main Store').trim();
-          const hsn = String(findVal('HSN', 'HSN Code', 'SAC') || '7604').trim();
+          const hsn = String(findVal('HSN', 'HSN Code', 'SAC') || '76042990').trim();
           const lengthMm = String(findVal('Length', 'Length Mm', 'Length (mm)', 'LengthMm') || '').replace(/[^0-9.]+/g, '');
 
           let status = 'In Stock';
@@ -2893,7 +2893,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 <span>•</span>
                 <span>Warehouse Location: <strong style={{ color: '#0E7490' }}>{selectedMat.store || 'Finished Goods Bay'}</strong></span>
                 <span>•</span>
-                <span>HSN Code: <strong style={{ color: '#1E293B' }}>{selectedMat.hsn || '7604'}</strong></span>
+                <span>HSN Code: <strong style={{ color: '#1E293B' }}>{selectedMat.hsn || '76042990'}</strong></span>
               </div>
             </div>
 

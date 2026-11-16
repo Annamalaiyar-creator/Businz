@@ -1046,7 +1046,7 @@ class ProductionModuleEngine {
             minLevel: 20,
             status: goodQty > 0 ? 'In Stock' : 'Out of Stock',
             store: 'Bay #4 - FG Store',
-            hsn: '7616',
+            hsn: '76169990',
             lastUpdated: 'Production Approved',
             reserved: 0,
             goodsReceived: goodQty,

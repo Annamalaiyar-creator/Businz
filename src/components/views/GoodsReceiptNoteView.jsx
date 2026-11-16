@@ -2790,9 +2790,14 @@ export default function GoodsReceiptNoteView(props) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '20px' }}>
 
                   {/* Card 1: 1. GRN Information (Span 6) */}
-                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <strong style={{ fontSize: '14px', color: '#2563EB' }}>1. GRN Information</strong>
+                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
+                        1
+                      </div>
+                      <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        GRN INFORMATION
+                      </h3>
                       <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
                     </div>
 
@@ -2997,9 +3002,16 @@ export default function GoodsReceiptNoteView(props) {
                   </div>
 
                   {/* Card 2: 2. Purchase Order Summary & Receiving History (Span 6) */}
-                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '14px', color: '#2563EB' }}>2. Purchase Order Summary</strong>
+                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
+                          2
+                        </div>
+                        <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          PURCHASE ORDER SUMMARY
+                        </h3>
+                      </div>
                       {selectedGRNPo && (
                         <button
                           type="button"
@@ -3272,10 +3284,15 @@ export default function GoodsReceiptNoteView(props) {
                     };
 
                     return (
-                  <div className="section-card" style={{ gridColumn: 'span 12', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ fontSize: '14px', color: '#2563EB' }}>3. GRN Summary & Received Items</strong>
+                  <div className="section-card" style={{ gridColumn: 'span 12', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
+                          3
+                        </div>
+                        <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          GRN SUMMARY &amp; RECEIVED ITEMS
+                        </h3>
                         <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
                       </div>
                       {!isViewOnlyMode && grnItems.length > 0 && (
@@ -3740,11 +3757,14 @@ export default function GoodsReceiptNoteView(props) {
                   })()}
 
                   {/* Card 4: 4. Documents (Span 6) */}
-                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <strong style={{ fontSize: '14px', color: '#2563EB' }}>
-                        4. Documents <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
-                      </strong>
+                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
+                        4
+                      </div>
+                      <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        DOCUMENTS <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
+                      </h3>
                       <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
                     </div>
 
@@ -3929,9 +3949,14 @@ export default function GoodsReceiptNoteView(props) {
                   </div>
 
                   {/* Card 5: 5. GRN Summary (Span 6 - Same line beside Documents) */}
-                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <strong style={{ fontSize: '14px', color: '#2563EB' }}>5. GRN Summary</strong>
+                  <div className="section-card" style={{ gridColumn: 'span 6', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
+                        5
+                      </div>
+                      <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        GRN SUMMARY
+                      </h3>
                       <HelpCircle style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
                     </div>
 
@@ -4919,30 +4944,107 @@ export default function GoodsReceiptNoteView(props) {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-                {/* Form Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, color: '#0F172A' }}>
-                      {isViewOnlyMode ? 'View Goods Receipt Note (GRN)' : (editingGrnId ? `Edit Draft (${editingGrnId})` : 'New Goods Receipt Note (GRN)')}
-                    </h2>
-                    <span style={{ fontSize: '12px', color: '#64748b' }}>
-                      {isViewOnlyMode ? 'Viewing recorded goods receipt details (Read Only)' : 'Record goods received against a Purchase Order'}
-                    </span>
+                {/* Form Header (Matching PO Teal Banner Design) */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, #075985 0%, #0E7490 50%, #0891B2 100%)',
+                    borderRadius: '18px',
+                    padding: '24px 28px',
+                    color: '#FFFFFF',
+                    boxShadow: '0 10px 25px -5px rgba(14, 116, 144, 0.4)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '16px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '14px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                        backdropFilter: 'blur(6px)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      <FileCheck style={{ width: '24px', height: '24px', color: '#FFFFFF' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <h2 style={{ fontSize: '22px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.3px' }}>
+                        {isViewOnlyMode ? 'View Goods Receipt Note (GRN)' : (editingGrnId ? `Edit Draft (${editingGrnId})` : 'New Goods Receipt Note (GRN)')}
+                      </h2>
+                      <span style={{ fontSize: '13px', color: '#CFFAFE', marginTop: '4px' }}>
+                        {isViewOnlyMode ? 'Viewing recorded goods receipt details (Read Only)' : 'Record goods received against a Purchase Order'}
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateGRN(false);
+                      resetCreateGRNForm();
+                    }}
+                    style={{
+                      height: '38px',
+                      padding: '0 18px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.35)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                      color: '#FFFFFF',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isViewOnlyMode ? '← Back to GRNs' : '← Back to GRNs'}
+                  </button>
+                </div>
+
+                {/* Form Body layout */}
+                {renderGrnFormCards()}
+
+                {/* Sticky Bottom Action Bar (Matching PO Design) */}
+                <div
+                  style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    borderTop: '1.5px solid #CBD5E1',
+                    padding: '12px 24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '16px',
+                    zIndex: 50,
+                    boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+                    borderRadius: '12px',
+                    marginTop: '12px',
+                    boxSizing: 'border-box',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     <button
+                      type="button"
                       onClick={() => {
                         setShowCreateGRN(false);
                         resetCreateGRNForm();
                       }}
                       style={{
-                        height: '38px',
+                        height: '40px',
                         padding: '0 20px',
                         borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
+                        border: '1.5px solid #CBD5E1',
                         backgroundColor: '#FFFFFF',
                         color: '#334155',
-                        fontSize: '13px',
+                        fontSize: '14px',
                         fontWeight: '600',
                         cursor: 'pointer'
                       }}
@@ -4952,38 +5054,41 @@ export default function GoodsReceiptNoteView(props) {
                     {!isViewOnlyMode && (
                       <>
                         <button
+                          type="button"
                           onClick={handleSaveAndReceive}
                           style={{
-                            height: '38px',
-                            padding: '0 16px',
+                            height: '40px',
+                            padding: '0 20px',
                             borderRadius: '8px',
                             border: 'none',
-                            backgroundColor: '#2563EB',
+                            backgroundColor: '#0E7490',
                             color: '#FFFFFF',
-                            fontSize: '13px',
-                            fontWeight: '600',
-                            cursor: 'pointer'
+                            fontSize: '14px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)'
                           }}
                         >
-                          Save & Receive
+                          Save &amp; Receive
                         </button>
                         <button
+                          type="button"
                           onClick={handleFullyReceived}
                           title="Mark all items as received, close GRN, and close PO in BUSINZ Native Catalog"
                           style={{
-                            height: '38px',
-                            padding: '0 18px',
+                            height: '40px',
+                            padding: '0 20px',
                             borderRadius: '8px',
                             border: 'none',
                             backgroundColor: '#16a34a',
                             color: '#FFFFFF',
-                            fontSize: '13px',
+                            fontSize: '14px',
                             fontWeight: '700',
                             cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '6px',
-                            boxShadow: '0 2px 4px rgba(22, 163, 74, 0.2)'
+                            boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
                           }}
                         >
                           <CheckCircle style={{ width: '16px', height: '16px' }} />
@@ -4992,10 +5097,11 @@ export default function GoodsReceiptNoteView(props) {
                       </>
                     )}
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px', fontWeight: '700', color: '#475569' }}>
+                    <span>Receiving Now: <strong style={{ color: '#0E7490' }}>{totalNow}</strong></span>
+                    <span>Accepted: <strong style={{ color: '#16A34A' }}>{totalAccepted}</strong></span>
+                  </div>
                 </div>
-
-                {/* Form Body layout */}
-                {renderGrnFormCards()}
 
               </div>
             );
