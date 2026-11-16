@@ -3109,60 +3109,118 @@ ${senderName} | VRM Structures India Private Limited`;
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {matchedGrns.map((g, gIdx) => {
                           const isFullyRec = String(g.status || '').toUpperCase().includes('FULLY') || String(g.status || '').toUpperCase().includes('CLOSED');
-                          const recQty = g.receivedQty || (Array.isArray(g.items) ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : '—');
-                          const accQty = g.acceptedQty !== undefined ? g.acceptedQty : recQty;
+                          const recQty = g.receivedQty || (Array.isArray(g.items) ? g.items.reduce((s, it) => s + Number(it.accepted !== undefined ? it.accepted : (it.now || 0)), 0) : '—');
                           const rejQty = Number(g.rejectedQty || 0);
+                          const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber);
+                          const grnItemsList = (Array.isArray(g.items) && g.items.length > 0)
+                            ? g.items
+                            : (Array.isArray(currentPoObj?.items) ? currentPoObj.items.map(it => {
+                                const ord = Number(it.qty !== undefined ? it.qty : (it.quantity || 0));
+                                const fallbackRec = (currentPoObj.items.length === 1 && recQty !== '—') ? recQty : ord;
+                                return {
+                                  name: it.name || it.item_name || it.description || 'Material Item',
+                                  uom: it.unit || it.uom || 'NOS',
+                                  ordered: ord,
+                                  accepted: fallbackRec,
+                                  rejected: 0,
+                                  date: g.date || '—'
+                                };
+                              }) : []);
 
                           return (
                             <div key={gIdx} style={{
                               backgroundColor: '#FFFFFF',
                               border: '1px solid #E2E8F0',
                               borderRadius: '8px',
-                              padding: '10px 14px',
+                              padding: '12px 14px',
                               display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              flexWrap: 'wrap',
+                              flexDirection: 'column',
                               gap: '10px'
                             }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div style={{
-                                  width: '28px', height: '28px', borderRadius: '6px',
-                                  backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}>
-                                  <Boxes size={14} style={{ color: isFullyRec ? '#166534' : '#B45309' }} />
-                                </div>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{g.grnNo || g.id}</strong>
-                                    <span style={{
-                                      fontSize: '10px',
-                                      fontWeight: '700',
-                                      padding: '1px 6px',
-                                      borderRadius: '6px',
-                                      backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
-                                      color: isFullyRec ? '#166534' : '#B45309',
-                                      border: isFullyRec ? '1px solid #86EFAC' : '1px solid #FDE68A'
-                                    }}>
-                                      {isFullyRec ? 'Fully Received' : 'Partially Received'}
-                                    </span>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: '10px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div style={{
+                                    width: '28px', height: '28px', borderRadius: '6px',
+                                    backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                  }}>
+                                    <Boxes size={14} style={{ color: isFullyRec ? '#166534' : '#B45309' }} />
                                   </div>
-                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                                    Date: {g.date || '—'} • DC / Inv No: <strong>{g.challanNo || '—'}</strong> • Received by: {g.receivedBy || 'Store Inwarder'}
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{g.grnNo || g.id}</strong>
+                                      <span style={{
+                                        fontSize: '10px',
+                                        fontWeight: '700',
+                                        padding: '1px 6px',
+                                        borderRadius: '6px',
+                                        backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
+                                        color: isFullyRec ? '#166534' : '#B45309',
+                                        border: isFullyRec ? '1px solid #86EFAC' : '1px solid #FDE68A'
+                                      }}>
+                                        {isFullyRec ? 'Fully Received' : 'Partially Received'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                      Date: {g.date || '—'} • DC / Inv No: <strong>{g.challanNo || '—'}</strong> • Received by: {g.receivedBy || 'Store Inwarder'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div style={{ textAlign: 'right', fontSize: '11.5px' }}>
+                                  <div>
+                                    <strong style={{ color: '#0E7490' }}>{recQty} Units</strong> Received
+                                    {rejQty > 0 && <span style={{ color: '#DC2626', marginLeft: '4px' }}>({rejQty} rejected)</span>}
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '600', marginTop: '2px' }}>
+                                    ✓ Inwarded into Live Inventory
                                   </div>
                                 </div>
                               </div>
 
-                              <div style={{ textAlign: 'right', fontSize: '11.5px' }}>
-                                <div>
-                                  <strong style={{ color: '#0E7490' }}>{recQty} Units</strong> Received
-                                  {rejQty > 0 && <span style={{ color: '#DC2626', marginLeft: '4px' }}>({rejQty} rejected)</span>}
+                              {grnItemsList.length > 0 && (
+                                <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '6px' }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+                                    <thead>
+                                      <tr style={{ backgroundColor: '#F8FAFC', color: '#475569', borderBottom: '1px solid #E2E8F0' }}>
+                                        <th style={{ padding: '7px 10px', fontWeight: '700' }}>Product Name</th>
+                                        <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'center' }}>UOM</th>
+                                        <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Ordered Qty</th>
+                                        <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Received Qty</th>
+                                        <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Date</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {grnItemsList.map((it, itIdx) => {
+                                        const itemName = it.name || it.item_name || it.productName || it.description || 'Material Item';
+                                        const itemUom = it.uom || it.unit || 'NOS';
+                                        const ordQtyVal = it.ordered ?? it.orderedQty ?? it.poQty ?? it.qty ?? it.quantity ?? '—';
+                                        const recQtyVal = it.accepted ?? it.now ?? it.receivedQty ?? ordQtyVal;
+                                        const itemRej = Number(it.rejected || 0);
+                                        const itemDate = it.date || it.receivedDate || g.date || '—';
+                                        return (
+                                          <tr key={itIdx} style={{ borderBottom: itIdx < grnItemsList.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                                            <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>{itemName}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{itemUom}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>{ordQtyVal}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0E7490' }}>
+                                              {recQtyVal}
+                                              {itemRej > 0 && <span style={{ color: '#DC2626', fontWeight: '600', marginLeft: '4px' }}>({itemRej} rej)</span>}
+                                            </td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#64748B' }}>{itemDate}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
                                 </div>
-                                <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '600', marginTop: '2px' }}>
-                                  ✓ Inwarded into Live Inventory
-                                </div>
-                              </div>
+                              )}
                             </div>
                           );
                         })}
