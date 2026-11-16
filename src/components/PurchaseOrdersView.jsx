@@ -2441,7 +2441,7 @@ ${senderName} | VRM Structures India Private Limited`;
     }
     const rawLower = raw.toLowerCase();
     if (rawLower.includes('proceed po') || rawLower === 'proceed_po' || rawLower === 'pending grn') {
-      return <StatusBadge status="Proceed PO" customLabel="Pending GRN" size="sm" />;
+      return <StatusBadge status="Proceed PO" label="Pending GRN" size="sm" />;
     }
     if (raw === 'CANCELLED' || raw === 'Cancelled') {
       return <StatusBadge status="Cancelled" customLabel="Cancelled" size="sm" />;

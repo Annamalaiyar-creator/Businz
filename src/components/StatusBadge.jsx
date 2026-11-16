@@ -238,7 +238,7 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
     raw === 'pending grn'
   ) {
     return {
-      label: customLabel || 'Pending GRN',
+      label: 'Pending GRN',
       bg: '#ecfeff',
       color: '#0e7490',
       border: '1px solid #a5f3fc',
