@@ -292,7 +292,7 @@ class CentralInventoryStore {
       this.saveTransactions();
     }
 
-    // 3. Load GRNs
+    // 3. Load GRNs (never overwrite cloud store with [] on empty localStorage init)
     const savedGrn = safeStorageGet(this.storageKeyGrn);
     if (savedGrn) {
       try {
@@ -302,7 +302,6 @@ class CentralInventoryStore {
       }
     } else {
       this.grnList = [];
-      this.saveGrns();
     }
 
     // 4. Load Job Works
@@ -315,7 +314,6 @@ class CentralInventoryStore {
       }
     } else {
       this.jobWorks = [];
-      this.saveJobWorks();
     }
 
     // 5. Load Production Orders
@@ -328,7 +326,6 @@ class CentralInventoryStore {
       }
     } else {
       this.productionOrders = [];
-      this.saveProdOrders();
     }
 
     // 6. Load Reservations
@@ -341,7 +338,6 @@ class CentralInventoryStore {
       }
     } else {
       this.reservations = [];
-      this.saveReservations();
     }
 
     // 7. Notifications (Decommissioned)
