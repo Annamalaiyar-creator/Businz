@@ -1132,24 +1132,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [proceedPhoneInput, setProceedPhoneInput] = useState('');
   const [proceedMessageContent, setProceedMessageContent] = useState('');
 
-  const triggerSaveConfirm = (e) => {
-    if (e) e.preventDefault();
-    executeCreatePO(e, 'Draft / Pending Approval');
-  };
-
-  const executeCreatePO = (e, targetStatus = 'Draft / Pending Approval') => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (isSubmittingPO) return;
-    setIsSubmittingPO(true);
-
-    const statusToSave = typeof targetStatus === 'string' ? targetStatus : 'Draft / Pending Approval';
-    const isDraft = statusToSave === 'Draft' || statusToSave === 'DRAFT';
-
-    // Validate mandatory fields marked with red asterisk *
+  const getMissingPoFields = () => {
     const missingFields = [];
     if (!vendorName || String(vendorName).trim() === '') missingFields.push('Vendor Name');
     const effDelAddress = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: deliveryPincode }) || (deliveryAddress || '').trim();
-    const effBillAddress = formatAddressObj({ address1: billingAddress1, address2: billingAddress2, city: billingCity, state: billingState, pincode: billingPincode }) || (billingAddress || '').trim();
     if (!effDelAddress || (!deliveryAddress1.trim() && !deliveryCity.trim() && !deliveryAddress.trim())) missingFields.push('Delivery Address');
     if (!poDate || String(poDate).trim() === '') missingFields.push('PO Date');
     if (!deliveryDate || String(deliveryDate).trim() === '') missingFields.push('Expected Delivery Date');
@@ -1163,6 +1149,33 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     if (validItems.length === 0) {
       missingFields.push('Line Items (Must add at least 1 valid item with Name and Quantity)');
     }
+    return missingFields;
+  };
+
+  const triggerSaveConfirm = (e) => {
+    if (e) e.preventDefault();
+    if (isSubmittingPO) return;
+    const missingFields = getMissingPoFields();
+    if (missingFields.length > 0) {
+      setValidationErrorModal({ fields: missingFields });
+      return;
+    }
+    setShowSaveConfirm(true);
+  };
+
+  const executeCreatePO = (e, targetStatus = 'Draft / Pending Approval') => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (isSubmittingPO) return;
+    setIsSubmittingPO(true);
+
+    const statusToSave = typeof targetStatus === 'string' ? targetStatus : 'Draft / Pending Approval';
+    const isDraft = statusToSave === 'Draft' || statusToSave === 'DRAFT';
+
+    // Validate mandatory fields marked with red asterisk *
+    const missingFields = getMissingPoFields();
+    const effDelAddress = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: deliveryPincode }) || (deliveryAddress || '').trim();
+    const effBillAddress = formatAddressObj({ address1: billingAddress1, address2: billingAddress2, city: billingCity, state: billingState, pincode: billingPincode }) || (billingAddress || '').trim();
+    const validItems = (items || []).filter(it => it && String(it.name || '').trim() !== '' && Number(it.qty) > 0);
 
     if (missingFields.length > 0) {
       setIsSubmittingPO(false);
@@ -7499,32 +7512,101 @@ ${senderName} | VRM Structures India Private Limited`;
       />
 
       {/* ==================== SAVE CONFIRMATION POPUP ==================== */}
-      {showSaveConfirm && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '24px', border: '1px solid #e2e8f0', width: '420px', padding: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ backgroundColor: '#2563eb', color: 'white', fontSize: '12px', fontWeight: '800', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', letterSpacing: '0.15em' }}>
-              CONFIRM
-            </div>
-            <div style={{ padding: '16px', border: '1.5px dashed #cbd5e1', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'white' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <h3 style={{ fontSize: '17px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>Save Purchase Order?</h3>
-                <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '600' }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>
+      {showSaveConfirm && (() => {
+        const confirmItems = (items || []).filter(it => it && String(it.name || '').trim() !== '' && Number(it.qty) > 0);
+        const confirmDelAddr = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: deliveryPincode }) || (deliveryAddress || '').trim();
+        const subtotalAmt = getTaxableAmount();
+        const gstAmt = getCGST() + getSGST();
+        const grandTotalAmt = getGrandTotal();
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '16px' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '20px', border: '1px solid #e2e8f0', width: '620px', maxWidth: '100%', maxHeight: '90vh', padding: '18px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ backgroundColor: '#2563eb', color: 'white', fontSize: '12px', fontWeight: '800', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', letterSpacing: '0.12em', flexShrink: 0 }}>
+                RECONFIRM PURCHASE ORDER DETAILS
               </div>
-              <p style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.5', margin: 0 }}>
-                Please confirm the details of purchase order <strong>{poNumber}</strong>:
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: '#475569', paddingLeft: '8px', borderLeft: '3px solid #3b82f6' }}>
-                <div><strong>Vendor:</strong> {vendorName || 'Fresh Vendor'}</div>
-                <div><strong>Total Amount:</strong> ₹{getGrandTotal().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px', marginTop: '6px' }}>
-                <button onClick={() => setShowSaveConfirm(false)} style={{ border: 'none', backgroundColor: 'transparent', color: '#64748b', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Discard</button>
-                <button onClick={executeCreatePO} style={{ backgroundColor: '#dbeafe', color: '#2563eb', border: 'none', borderRadius: '8px', padding: '6px 14px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>Save PO</button>
+              <div style={{ padding: '16px', border: '1.5px dashed #cbd5e1', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'white', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                    {viewMode === 'edit' ? 'Confirm Purchase Order Changes?' : 'Confirm Purchase Order Submission?'}
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: '700' }}>{poNumber}</span>
+                </div>
+                <p style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.4', margin: 0 }}>
+                  Please verify all PO details below before confirming:
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '12px', color: '#334155', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div><span style={{ color: '#64748b' }}>Vendor:</span> <strong>{vendorName || 'Fresh Vendor'}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>PO Issued By:</span> <strong>{purchaser || '-'}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>PO Date:</span> <strong>{poDate || '-'}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>Expected Delivery:</span> <strong>{deliveryDate || '-'}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>Payment Terms:</span> <strong>{paymentTerms || '-'}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>Priority:</span> <strong>{priority || '-'}</strong></div>
+                  <div style={{ gridColumn: '1 / -1' }}><span style={{ color: '#64748b' }}>Delivery Address:</span> <strong>{confirmDelAddr || '-'}</strong></div>
+                </div>
+
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                  <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                      <thead style={{ backgroundColor: '#f1f5f9', position: 'sticky', top: 0 }}>
+                        <tr>
+                          <th style={{ textAlign: 'left', padding: '7px 10px', color: '#475569', fontWeight: '700' }}>Item</th>
+                          <th style={{ textAlign: 'right', padding: '7px 8px', color: '#475569', fontWeight: '700' }}>Qty</th>
+                          <th style={{ textAlign: 'right', padding: '7px 8px', color: '#475569', fontWeight: '700' }}>Rate</th>
+                          <th style={{ textAlign: 'right', padding: '7px 10px', color: '#475569', fontWeight: '700' }}>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {confirmItems.map((it, idx) => {
+                          const qty = Number(it.qty || 0);
+                          const rate = Number(it.rate || 0);
+                          return (
+                            <tr key={idx} style={{ borderTop: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '6px 10px', color: '#1e293b', fontWeight: '600' }}>{it.name}</td>
+                              <td style={{ padding: '6px 8px', textAlign: 'right', color: '#334155' }}>{qty} {it.unit || 'NOS'}</td>
+                              <td style={{ padding: '6px 8px', textAlign: 'right', color: '#334155' }}>₹{rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td style={{ padding: '6px 10px', textAlign: 'right', color: '#1e293b', fontWeight: '600' }}>₹{(qty * rate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', padding: '10px 12px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe' }}>
+                  <div style={{ display: 'flex', gap: '16px', color: '#475569' }}>
+                    <span>Subtotal: <strong>₹{subtotalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                    <span>GST: <strong>₹{gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#1d4ed8', fontWeight: '800' }}>
+                    Total: ₹{grandTotalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveConfirm(false)}
+                    disabled={isSubmittingPO}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: 'white', color: '#475569', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: '700', cursor: isSubmittingPO ? 'not-allowed' : 'pointer' }}
+                  >
+                    Go Back & Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => executeCreatePO(e, 'Draft / Pending Approval')}
+                    disabled={isSubmittingPO}
+                    style={{ backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '12px', fontWeight: '700', cursor: isSubmittingPO ? 'not-allowed' : 'pointer', opacity: isSubmittingPO ? 0.6 : 1 }}
+                  >
+                    {isSubmittingPO ? 'Submitting...' : (viewMode === 'edit' ? 'Confirm & Save Changes' : 'Confirm & Submit PO')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ==================== CANCEL/DISCARD DETAILS CONFIRMATION POPUP ==================== */}
       {showCancelConfirm && (

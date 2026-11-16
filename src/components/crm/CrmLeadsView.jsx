@@ -944,8 +944,42 @@ export default function CrmLeadsView({
     const headers = [
       'Lead Number', 'Company Name', 'Contact Person', 'Phone', 'Email',
       'Location', 'Product Requirement', 'Estimated kW', 'Source',
-      'Assigned To', 'Assigned By', 'Status', '2h Inactive', 'Created At'
+      'Assigned To', 'Assigned By', 'Status', 'Notes', '2h Inactive', 'Created At'
     ];
+
+    let storedNotesMap = {};
+    try {
+      const rawStoredNotes = localStorage.getItem('controlroom_crm_lead_notes');
+      if (rawStoredNotes) storedNotesMap = JSON.parse(rawStoredNotes) || {};
+    } catch (_) {}
+
+    const resolveLeadNotes = (l) => {
+      const parts = [];
+      const seen = new Set();
+      const pushNote = (val) => {
+        const txt = String(val || '').trim();
+        if (!txt) return;
+        const key = txt.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          parts.push(txt);
+        }
+      };
+
+      const localEntries = [
+        ...(Array.isArray(storedNotesMap[l.lead_number]) ? storedNotesMap[l.lead_number] : []),
+        ...(Array.isArray(storedNotesMap[l.id]) ? storedNotesMap[l.id] : [])
+      ];
+      localEntries.forEach(n => pushNote(n?.text));
+
+      if (l.activity_notes && typeof l.activity_notes === 'string') {
+        l.activity_notes.split(/\n---\n/).forEach(pushNote);
+      }
+      if (l.notes && typeof l.notes === 'string') {
+        l.notes.split(/\n---\n/).forEach(pushNote);
+      }
+      return parts.join(' | ');
+    };
 
     const targetList = exportAll
       ? dbLeads
@@ -966,6 +1000,7 @@ export default function CrmLeadsView({
       l.assigned_to_name ? `${l.assigned_to_name} (${l.assigned_to_user_id})` : 'Unassigned',
       l.assigned_by_name ? `${l.assigned_by_name} (${l.assigned_by_role || ''})` : '-',
       l.status || '',
+      resolveLeadNotes(l),
       (l.is_unattended_2h || l.is_unattended_24h) ? 'YES' : 'NO',
       l.created_at ? new Date(l.created_at).toLocaleString() : ''
     ]);

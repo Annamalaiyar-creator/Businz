@@ -306,6 +306,11 @@ export async function getLeads({ userRole = '', userEmpId = '', userName = '', s
       l.estimated_kw,
       l.category,
       l.notes,
+      (
+        SELECT STRING_AGG(la.summary, E'\n---\n' ORDER BY la.created_at DESC)
+        FROM public.lead_activities la
+        WHERE la.lead_id = l.id AND la.activity_type = 'NOTE' AND la.summary IS NOT NULL AND TRIM(la.summary) <> ''
+      ) AS activity_notes,
       l.converted_customer_id,
       l.converted_customer_code,
       l.lead_created_by_id,
