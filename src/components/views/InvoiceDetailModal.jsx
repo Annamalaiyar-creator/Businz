@@ -330,7 +330,7 @@ export default function InvoiceDetailModal({
 
   const advanceAmt = isFullAdvance ? totalAmtRaw : (is50Percent ? totalAmtRaw * 0.5 : totalAmtRaw);
   const balanceAmt = isFullAdvance ? 0 : (is50Percent ? totalAmtRaw * 0.5 : 0);
-  const paymentStatusText = inv.pay || (balanceAmt === 0 ? 'Verified & Paid (100%)' : 'Ready for Payment');
+  const paymentStatusText = safeStringVal(inv.pay, balanceAmt === 0 ? 'Verified & Paid (100%)' : 'Ready for Payment');
 
   const getPaymentBadgeStyle = (term) => {
     const t = String(term || '').toLowerCase();
@@ -1214,7 +1214,7 @@ export default function InvoiceDetailModal({
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Sales Person</div>
               <strong style={{ color: '#0E7490', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <User size={13} style={{ color: '#0E7490' }} />
-                {((inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}
+                {safeStringVal(inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy, 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
               </strong>
             </div>
             <div>
@@ -1379,8 +1379,8 @@ export default function InvoiceDetailModal({
               addressProofDoc = { ...addressProofDoc, dataUrl: cached };
             }
           }
-          const bAddr = inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
-          const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress || bAddr;
+          const bAddr = safeStringVal(inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress, 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai');
+          const dAddr = safeStringVal(inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress, bAddr);
           const isSameAddress = Boolean(
             inv.sameAsBilling ||
             matchingBom?.sameAsBilling ||
@@ -1425,25 +1425,25 @@ export default function InvoiceDetailModal({
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                             <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
-                              {it.code || `PRD-00${idx + 1}`}
+                              {safeStringVal(it.code, `PRD-00${idx + 1}`)}
                             </td>
                             <td style={{ padding: '10px', fontWeight: '700', color: '#0F172A' }}>
-                              {it.name}
+                              {safeStringVal(it.name, 'Item')}
                             </td>
                             <td style={{ padding: '10px', color: '#64748B' }}>
-                              {it.desc || it.category || 'High grade component'}
+                              {safeStringVal(it.desc || it.category, 'High grade component')}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {it.uom || 'Nos'}
+                              {safeStringVal(it.uom, 'Nos')}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>
-                              {it.bomQty || it.qty || 1}
+                              {Number(it.bomQty || it.qty || 1) || 1}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
                               ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {it.tax !== undefined ? it.tax : 18}%
+                              {safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
                               ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1548,25 +1548,25 @@ export default function InvoiceDetailModal({
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: '#FFF5F5' }}>
                             <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
-                              {it.code || `PRD-00${idx + 1}`}
+                              {safeStringVal(it.code, `PRD-00${idx + 1}`)}
                             </td>
                             <td style={{ padding: '10px', fontWeight: '700', color: '#991B1B' }}>
-                              {it.name}
+                              {safeStringVal(it.name, 'Item')}
                             </td>
                             <td style={{ padding: '10px', color: '#64748B' }}>
-                              {it.desc || it.category || 'High grade component'}
+                              {safeStringVal(it.desc || it.category, 'High grade component')}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {it.uom || 'Nos'}
+                              {safeStringVal(it.uom, 'Nos')}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#DC2626' }}>
-                              {it.bomQty || it.qty || 1}
+                              {Number(it.bomQty || it.qty || 1) || 1}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
                               ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {it.tax !== undefined ? it.tax : 18}%
+                              {safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#DC2626' }}>
                               ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
