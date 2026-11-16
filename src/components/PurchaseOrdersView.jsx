@@ -4328,23 +4328,6 @@ ${senderName} | VRM Structures India Private Limited`;
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               {viewMode === 'view' ? (
                 <>
-                  {!isExecutiveOrMD && !isAccounts && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const matchedPo = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
-                          poNo: poNumber, vendor: vendorName, branch, contactPerson, contactNo, email, gstNo,
-                          deliveryType, deliveryAddress, billingAddress, poDate, deliveryDate, paymentTerms,
-                          purchaser, shipmentPref, currency, project, priority, items, shippingCharges, otherCharges,
-                          discountPct, notes, terms, approvalRequired, approver
-                        };
-                        handleStartClone(matchedPo);
-                      }}
-                      style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '600', color: '#4338CA', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                      <Copy style={{ width: '14px', height: '14px', color: '#4338CA' }} /> Clone PO
-                    </button>
-                  )}
                   {/* Stage-based Workflow Action Buttons */}
                   {(() => {
                     const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
@@ -4560,33 +4543,11 @@ ${senderName} | VRM Structures India Private Limited`;
                           </div>
                         );
                       }
-                      return (
-                        <div style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          backgroundColor: '#FFFBEB',
-                          border: '1px solid #FDE68A',
-                          borderRadius: '8px',
-                          padding: '6px 14px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          color: '#B45309'
-                        }}>
-                          <Clock style={{ width: '14px', height: '14px', color: '#D97706' }} /> Awaiting MD / CEO Approval
-                        </div>
-                      );
+                      return null;
                     }
 
                     return null;
                   })()}
-
-                  <button
-                    type="button"
-                    style={{ backgroundColor: '#2563eb', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '600', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Mail style={{ width: '14px', height: '14px' }} /> Share as mail
-                  </button>
                 </>
               ) : null}
             </div>
@@ -7890,6 +7851,63 @@ ${senderName} | VRM Structures India Private Limited`;
                   }}
                 />
               </div>
+
+              {/* Attached Images / Documents Preview */}
+              {(() => {
+                const pd = proceedingPo.paymentDetails;
+                const modalImages = Array.isArray(pd?.paymentImages) && pd.paymentImages.length > 0
+                  ? pd.paymentImages
+                  : (pd?.paymentImage ? [{ dataUrl: pd.paymentImage, name: pd.paymentImageMeta?.name || 'Payment_Proof.jpg' }] : []);
+                const modalAttachments = [
+                  ...modalImages,
+                  ...(Array.isArray(proceedingPo.attachments) ? proceedingPo.attachments : []),
+                  ...(Array.isArray(proceedingPo.documents) ? proceedingPo.documents : [])
+                ].filter(Boolean);
+                if (modalAttachments.length === 0) return null;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>
+                      Attachments ({modalAttachments.length}) — Preview & Download (WhatsApp links send text only; attach file in WhatsApp if needed)
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {modalAttachments.map((att, idx) => {
+                        const src = att?.dataUrl || att?.url || att?.fileUrl || att?.previewUrl || '';
+                        const attName = att?.name || att?.fileName || att?.title || `Attachment ${idx + 1}`;
+                        const isImg = Boolean(src && (src.startsWith('data:image/') || /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(attName) || /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(src)));
+                        return (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px' }}>
+                            {isImg ? (
+                              <img
+                                src={src}
+                                alt={attName}
+                                onClick={() => setPreviewZoomImage({ dataUrl: src, name: attName })}
+                                style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer', border: '1px solid #E2E8F0' }}
+                                title="Click to preview"
+                              />
+                            ) : (
+                              <FileText size={18} style={{ color: '#0E7490' }} />
+                            )}
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: '#1E293B', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {attName}
+                            </span>
+                            {src && (
+                              <a
+                                href={src}
+                                download={attName}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490', textDecoration: 'none', padding: '3px 8px', backgroundColor: '#ECFEFF', borderRadius: '6px', border: '1px solid #A5F3FC' }}
+                              >
+                                Download
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Vendor Email & Phone Contact Fields */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
