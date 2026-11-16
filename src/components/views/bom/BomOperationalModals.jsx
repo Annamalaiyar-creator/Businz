@@ -1209,7 +1209,7 @@ export default function BomOperationalModals({ ctx }) {
                       </div>
                       <div>
                         <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Payment Terms</span>
-                        <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.paymentType || '100% Full Advance'}</strong>
+                        <strong style={{ color: '#0F172A' }}>{uploadPaymentModal.paymentType || uploadPaymentModal.paymentTerms || uploadPaymentModal.piPaymentTerms || '100% Paid'}</strong>
                       </div>
                       <div>
                         <span style={{ color: '#64748B', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Total Amount</span>

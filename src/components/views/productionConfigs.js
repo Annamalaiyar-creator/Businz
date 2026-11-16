@@ -746,7 +746,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     c2: customerDisplayName,
                     docType: docTypeVal,
                     c3: docTypeVal,
-                    c4: b.paymentType || '100% Paid',
+                    c4: b.paymentType || b.paymentTerms || b.piPaymentTerms || '100% Paid',
                     c5: totalAmtFormatted,
                     c6: creditAmtFormatted,
                     paymentStatusText: payStatus,

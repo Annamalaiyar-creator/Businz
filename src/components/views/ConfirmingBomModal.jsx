@@ -558,7 +558,9 @@ export default function ConfirmingBomModal({
                   setConfirmingBomModal({
                     ...confirmingBomModal,
                     docType: val,
-                    ...(val === 'DC' ? { paymentType: '100% Paid' } : {})
+                    ...(val === 'DC'
+                      ? { _prevPaymentType: confirmingBomModal.paymentType || confirmingBomModal.paymentTerms || confirmingBomModal.piPaymentTerms, paymentType: '100% Paid' }
+                      : (confirmingBomModal._prevPaymentType ? { paymentType: confirmingBomModal._prevPaymentType, _prevPaymentType: undefined } : {}))
                   });
                 }}
                 style={{
@@ -582,7 +584,7 @@ export default function ConfirmingBomModal({
             </label>
             {isAlreadyForwarded ? (
               <div style={{ fontSize: '13px', fontWeight: '700', color: '#2563EB', height: '40px', display: 'flex', alignItems: 'center' }}>
-                {normalizePaymentTerm(confirmingBomModal.paymentType)}
+                {normalizePaymentTerm(confirmingBomModal.paymentType || confirmingBomModal.paymentTerms || confirmingBomModal.piPaymentTerms)}
               </div>
             ) : confirmingBomModal.docType === 'DC' ? (
               <select id="confirming-bom-payment-type" name="paymentType" aria-label="PaymentType"
@@ -597,7 +599,7 @@ export default function ConfirmingBomModal({
               </select>
             ) : (
               <select id="confirming-bom-payment-type" name="paymentType" aria-label="PaymentType"
-                value={normalizePaymentTerm(confirmingBomModal.paymentType)}
+                value={normalizePaymentTerm(confirmingBomModal.paymentType || confirmingBomModal.paymentTerms || confirmingBomModal.piPaymentTerms)}
                 onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
                 style={{
                   width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px',
