@@ -16,6 +16,8 @@ import { resolveDocumentUrl } from '../../utils/documentResolver';
 import { getMediaFromCache } from '../../utils/otherViewsShared';
 import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
 import CeoInventoryAnalyticsSection from './CeoInventoryAnalyticsSection';
+import CeoDispatchAnalyticsSection from './CeoDispatchAnalyticsSection';
+import CeoProductionAnalyticsSection from './CeoProductionAnalyticsSection';
 import { getBomStageTiming } from './BomOrdersView';
 import { isBomAddressProofPending } from './bom/bomStageHelpers';
 
@@ -4613,188 +4615,14 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             };
           })} />
 
-          {/* ======================================================== */}
-          {/* OPTION 1: DISPATCH & FULFILLMENT BOTTLENECK ANALYTICS   */}
-          {/* ======================================================== */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: '12px'
-          }}>
-            {/* Card 1: 2-Hour Dispatch SLA Stopwatch */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              border: '1px solid #EAEFEF',
-              padding: '16px',
-              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
-                    <Clock size={15} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                      2-Hour Dispatch SLA Stopwatch
-                    </div>
-                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>BOM confirmation to dispatch loading</div>
-                  </div>
-                </div>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: '800',
-                  color: confirmedBomsStopwatchAudit.overallCompliancePct >= 80 ? '#16A34A' : (confirmedBomsStopwatchAudit.overallCompliancePct >= 50 ? '#D97706' : '#DC2626'),
-                  backgroundColor: confirmedBomsStopwatchAudit.overallCompliancePct >= 80 ? '#F0FDF4' : (confirmedBomsStopwatchAudit.overallCompliancePct >= 50 ? '#FFFBEB' : '#FEF2F2'),
-                  border: `1px solid ${confirmedBomsStopwatchAudit.overallCompliancePct >= 80 ? '#BBF7D0' : (confirmedBomsStopwatchAudit.overallCompliancePct >= 50 ? '#FDE68A' : '#FECACA')}`,
-                  padding: '3px 8px',
-                  borderRadius: '12px'
-                }}>
-                  {confirmedBomsStopwatchAudit.overallCompliancePct}% Within 2h
-                </span>
-              </div>
-
-              {/* Progress Bar */}
-              <div style={{ width: '100%', height: '8px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden', display: 'flex' }}>
-                <div style={{ width: `${confirmedBomsStopwatchAudit.overallCompliancePct}%`, backgroundColor: '#16A34A', height: '100%' }} />
-                <div style={{ width: `${100 - confirmedBomsStopwatchAudit.overallCompliancePct}%`, backgroundColor: confirmedBomsStopwatchAudit.breachedSlaCount > 0 ? '#EF4444' : '#F59E0B', height: '100%' }} />
-              </div>
-
-              {/* Status Buckets */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '4px' }}>
-                <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', textAlign: 'center' }}>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#16A34A' }}>{confirmedBomsStopwatchAudit.withinSlaCount}</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#15803D', marginTop: '2px' }}>≤ 2 Hours</div>
-                </div>
-                <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#D97706' }}>{confirmedBomsStopwatchAudit.approachingSlaCount}</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', marginTop: '2px' }}>Near SLA (2-2.5h)</div>
-                </div>
-                <div style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', textAlign: 'center' }}>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#DC2626' }}>{confirmedBomsStopwatchAudit.breachedSlaCount}</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#B91C1C', marginTop: '2px' }}>Breached (&gt; 2h)</div>
-                </div>
-              </div>
-
-              <div style={{
-                marginTop: 'auto',
-                paddingTop: '8px',
-                borderTop: '1px solid #F1F5F9',
-                fontSize: '10.5px',
-                color: '#64748B',
-                lineHeight: '1.4',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <span>Avg Fulfillment: <strong style={{ color: '#0F172A' }}>{confirmedBomsStopwatchAudit.avgTotalTatStr}</strong></span>
-                {confirmedBomsStopwatchAudit.primaryBottleneckDept ? (
-                  <span style={{ color: '#D97706', fontWeight: '700', fontSize: '10px' }}>
-                    Slowest: {confirmedBomsStopwatchAudit.primaryBottleneckDept.dept} ({confirmedBomsStopwatchAudit.primaryBottleneckDept.avgMins}m)
-                  </span>
-                ) : (
-                  <span style={{ color: '#16A34A', fontWeight: '700', fontSize: '10px' }}>All stages on pace</span>
-                )}
-              </div>
-            </div>
-
-            {/* Card 3: Actionable Fast-Track Blockers */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              border: '1px solid #EAEFEF',
-              padding: '16px',
-              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
-                    <AlertTriangle size={15} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                      Actionable Fast-Track Queue
-                    </div>
-                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>Fulfillment stage transitions</div>
-                  </div>
-                </div>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: '800',
-                  color: '#D97706',
-                  backgroundColor: '#FFFBEB',
-                  border: '1px solid #FDE68A',
-                  padding: '3px 8px',
-                  borderRadius: '12px'
-                }}>
-                  {dispatchBottleneckStats.actionableBlockers.length} In Queue
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '165px' }}>
-                {dispatchBottleneckStats.actionableBlockers.length > 0 ? (
-                  dispatchBottleneckStats.actionableBlockers.map((blk, bIdx) => (
-                    <div
-                      key={bIdx}
-                      onClick={() => setViewingBomModal(blk.bom)}
-                      style={{
-                        padding: '7px 10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                    >
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490' }}>{blk.code}</span>
-                          <span style={{ fontSize: '10.5px', color: '#64748B' }}>· {blk.customer}</span>
-                        </div>
-                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {blk.blocker}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px' }}>
-                        <span style={{ fontSize: '9.5px', fontWeight: '700', padding: '2px 5px', borderRadius: '4px', backgroundColor: blk.severity === 'high' ? '#FEE2E2' : '#FEF3C7', color: blk.severity === 'high' ? '#DC2626' : '#D97706' }}>
-                          {blk.days}d ago
-                        </span>
-                        <ChevronRight size={13} color="#94A3B8" />
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748B', fontSize: '11px' }}>
-                    ✓ All orders are flowing smoothly through the dispatch lifecycle.
-                  </div>
-                )}
-              </div>
-
-              <div style={{
-                marginTop: 'auto',
-                paddingTop: '8px',
-                borderTop: '1px solid #F1F5F9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '10.5px',
-                color: '#64748B'
-              }}>
-                <span>Click any order to view full lifecycle verification</span>
-              </div>
-            </div>
-          </div>
+          <CeoDispatchAnalyticsSection
+            bomList={bomList}
+            dispatchesList={dispatchesList}
+            challansList={challansList}
+            invList={invList}
+            inventoryList={inventoryList}
+            onOpenBom={setViewingBomModal}
+          />
 
         </div>
       )}
@@ -4833,110 +4661,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             }
           ]} />
 
-          {/* Production Leadership Accountability */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #EAEFEF',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                Plant & Production Team Accountability
-              </span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => onNavigateTab && onNavigateTab('Production Monitoring')}
-                  style={{
-                    border: 'none',
-                    backgroundColor: '#0284C7',
-                    color: '#FFFFFF',
-                    padding: '5px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  Production Monitoring <ArrowRight size={12} />
-                </button>
-                <button
-                  onClick={() => onNavigateTab && onNavigateTab('Work Orders')}
-                  style={{
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: '#FFFFFF',
-                    color: '#475569',
-                    padding: '5px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  Work Orders <ArrowRight size={12} />
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
-              {teamDirectory.filter(t => t.department === 'Production').map(prod => {
-                const perf = personPerformanceData.find(p => p.code === prod.code);
-                return (
-                  <div
-                    key={prod.code}
-                    onClick={() => setActivePersonModal(perf)}
-                    style={{
-                      padding: '14px',
-                      borderRadius: '12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A' }}>{prod.name}</div>
-                        <div style={{ fontSize: '10.5px', color: '#64748B' }}>{prod.designation}</div>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: perf?.ratingColor, backgroundColor: perf?.ratingBg, padding: '2px 7px', borderRadius: '6px' }}>
-                        {perf?.targetPct}% Target
-                      </span>
-                    </div>
-
-                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#0284C7', marginTop: '4px' }}>
-                      {Math.round(perf?.achievedVal || 0)} MT Produced
-                    </div>
-
-                    <div style={{ width: '100%', height: '5px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${Math.min(100, perf?.targetPct || 0)}%`,
-                        height: '100%',
-                        backgroundColor: '#0284C7'
-                      }} />
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#64748B' }}>
-                      <span>{perf?.recordCount || 0} Orders Completed</span>
-                      <span>Target: {Math.round(prod.monthlyTarget * periodMultiplier)} MT</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <CeoProductionAnalyticsSection
+            workOrdersList={workOrdersList}
+            bomList={bomList}
+            inventoryList={inventoryList}
+          />
 
         </div>
       )}
