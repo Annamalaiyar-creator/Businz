@@ -178,21 +178,10 @@ export default function BomExecutiveModals({ ctx }) {
               : false
         );
 
-        // 6 Lifecycle stage indicators with Real Operational Timestamps & Active Processing Stage
+        // 5 Lifecycle stage indicators with Real Operational Timestamps & Active Processing Stage
         const stages = [
           {
             num: 1,
-            label: 'PI Created',
-            done: timing?.hasPi,
-            active: false,
-            date: timing?.piDate || '—',
-            completedTime: timing?.piTime,
-            receivedTime: timing?.piTime,
-            duration: null,
-            subtext: timing?.hasPi ? 'Issued to Client' : 'Direct Order'
-          },
-          {
-            num: 2,
             label: 'BOM Confirmed',
             done: timing?.hasConfirmed,
             active: !timing?.hasConfirmed,
@@ -203,7 +192,7 @@ export default function BomExecutiveModals({ ctx }) {
             subtext: timing?.hasConfirmed ? 'Sales Confirmed' : 'Draft Order'
           },
           {
-            num: 3,
+            num: 2,
             label: 'Dispatch Packing',
             done: timing?.hasPacking,
             active: timing?.isPackingActive,
@@ -214,7 +203,7 @@ export default function BomExecutiveModals({ ctx }) {
             subtext: timing?.hasPacking ? 'Packing Verified' : 'Awaiting Packing'
           },
           {
-            num: 4,
+            num: 3,
             label: 'Accounts Verification',
             done: timing?.hasAccounts,
             active: timing?.isAccountsActive,
@@ -225,7 +214,7 @@ export default function BomExecutiveModals({ ctx }) {
             subtext: timing?.hasAccounts ? 'Accounts Verified' : 'Awaiting Accounts'
           },
           {
-            num: 5,
+            num: 4,
             label: 'Invoice',
             done: timing?.hasInvoice,
             active: timing?.isInvoiceActive,
@@ -236,7 +225,7 @@ export default function BomExecutiveModals({ ctx }) {
             subtext: timing?.hasInvoice ? 'Invoice Confirmed' : 'Awaiting Billing'
           },
           {
-            num: 6,
+            num: 5,
             label: 'Final Dispatch',
             done: timing?.hasDispatch,
             active: timing?.isDispatchActive,
@@ -374,7 +363,7 @@ export default function BomExecutiveModals({ ctx }) {
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
                     {stages.map((stg) => {
                       const isComplete = stg.done;
                       const isCurrent = stg.active;

@@ -188,36 +188,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
               gap: '12px',
               alignItems: 'stretch'
             }}>
-              {/* Stage 1: PI Created */}
-              <div style={{
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: '12px',
-                padding: '12px 14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-                    Step 1 · PI Created
-                  </span>
-                  <Receipt size={14} color="#64748B" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>
-                    {timing?.piTime || (timing?.hasPi ? 'Completed' : '—')}
-                  </div>
-                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
-                    {confirmingBomModal.sourcePiNo ? `Ref: ${confirmingBomModal.sourcePiNo}` : (timing?.hasPi ? 'Proforma Invoice' : 'Direct BOM Order')}
-                  </div>
-                </div>
-                <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid #E2E8F0', fontSize: '10.5px', fontWeight: '700', color: '#0284C7', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{timing?.hasPi ? '✓ Converted to BOM' : '—'}</span>
-                </div>
-              </div>
-
-              {/* Stage 2: BOM Confirmed */}
+              {/* Stage 1: BOM Confirmed */}
               <div style={{
                 backgroundColor: '#F0F9FF',
                 border: '1.5px solid #BAE6FD',
@@ -229,7 +200,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#0284C7', textTransform: 'uppercase' }}>
-                    Step 2 · BOM Confirmed
+                    Step 1 · BOM Confirmed
                   </span>
                   <Factory size={14} color="#0284C7" />
                 </div>
@@ -246,7 +217,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                 </div>
               </div>
 
-              {/* Stage 3: Dispatch Packing */}
+              {/* Stage 2: Dispatch Packing */}
               <div style={{
                 backgroundColor: timing?.hasPacking ? '#ECFDF5' : (timing?.isPackingActive ? '#FFFBEB' : '#F8FAFC'),
                 border: `1.5px solid ${timing?.hasPacking ? '#A7F3D0' : (timing?.isPackingActive ? '#FDE68A' : '#E2E8F0')}`,
@@ -258,7 +229,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasPacking ? '#059669' : (timing?.isPackingActive ? '#D97706' : '#64748B'), textTransform: 'uppercase' }}>
-                    Step 3 · Dispatch Packing
+                    Step 2 · Dispatch Packing
                   </span>
                   <PackageCheck size={14} color={timing?.hasPacking ? '#059669' : '#D97706'} />
                 </div>
@@ -275,7 +246,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                 </div>
               </div>
 
-              {/* Stage 4: Accounts Verification */}
+              {/* Stage 3: Accounts Verification */}
               <div style={{
                 backgroundColor: timing?.hasAccounts ? '#ECFDF5' : (timing?.isAccountsActive ? '#F5F3FF' : '#F8FAFC'),
                 border: `1.5px solid ${timing?.hasAccounts ? '#A7F3D0' : (timing?.isAccountsActive ? '#DDD6FE' : '#E2E8F0')}`,
@@ -287,7 +258,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasAccounts ? '#059669' : (timing?.isAccountsActive ? '#7C3AED' : '#64748B'), textTransform: 'uppercase' }}>
-                    Step 4 · Accounts Verification
+                    Step 3 · Accounts Verification
                   </span>
                   <CreditCard size={14} color={timing?.hasAccounts ? '#059669' : '#7C3AED'} />
                 </div>
@@ -304,7 +275,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                 </div>
               </div>
 
-              {/* Stage 5: Invoice */}
+              {/* Stage 4: Invoice */}
               <div style={{
                 backgroundColor: timing?.hasInvoice ? '#ECFDF5' : (timing?.isInvoiceActive ? '#EFF6FF' : '#F8FAFC'),
                 border: `1.5px solid ${timing?.hasInvoice ? '#A7F3D0' : (timing?.isInvoiceActive ? '#BFDBFE' : '#E2E8F0')}`,
@@ -316,7 +287,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasInvoice ? '#059669' : (timing?.isInvoiceActive ? '#2563EB' : '#64748B'), textTransform: 'uppercase' }}>
-                    Step 5 · Invoice
+                    Step 4 · Invoice
                   </span>
                   <Receipt size={14} color={timing?.hasInvoice ? '#059669' : '#2563EB'} />
                 </div>
@@ -333,7 +304,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                 </div>
               </div>
 
-              {/* Stage 6: Final Dispatch */}
+              {/* Stage 5: Final Dispatch */}
               <div style={{
                 backgroundColor: timing?.hasDispatch ? '#F0FDF4' : (timing?.isDispatchActive ? '#F0FDF4' : '#F8FAFC'),
                 border: `1.5px solid ${timing?.hasDispatch ? '#86EFAC' : (timing?.isDispatchActive ? '#BBF7D0' : '#E2E8F0')}`,
@@ -345,7 +316,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '10.5px', fontWeight: '800', color: timing?.hasDispatch ? '#16A34A' : '#64748B', textTransform: 'uppercase' }}>
-                    Step 6 · Final Dispatch
+                    Step 5 · Final Dispatch
                   </span>
                   <Truck size={14} color={timing?.hasDispatch ? '#16A34A' : '#64748B'} />
                 </div>
