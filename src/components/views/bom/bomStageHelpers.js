@@ -128,7 +128,7 @@ export const getBomActiveStage = (row) => {
 };
 
 
-export const getBomStageTiming = (b, matchingPi = null) => {
+export const getBomStageTiming = (b, matchingPi = null, matchingInvoice = null) => {
   if (!b) return null;
 
   const parseAnyDate = (val) => {
@@ -221,22 +221,30 @@ export const getBomStageTiming = (b, matchingPi = null) => {
     statusLower.includes('invoiced') ||
     statusLower.includes('vehicle loading')
   );
-  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || ((b.invoiceConfirmed || isInvDoneByStatus || hasDispatch) ? (b.date || null) : null);
+  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || matchingInvoice?.confirmedAt || matchingInvoice?.stockDeductionDate || matchingInvoice?.createdAt || ((b.invoiceConfirmed || isInvDoneByStatus || hasDispatch) ? (matchingInvoice?.date || b.date || null) : null);
   const pInvoice = parseAnyDate(rawInvoice);
   const dInvoice = pInvoice.date;
   const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed || (!isPendingInvStatus && b.invoiceGenerated) || isInvDoneByStatus || hasDispatch);
   const invoiceCompletedTime = formatTimeStr(pInvoice) || b.invoiceTime || null;
 
   // 4. Stage 4: Accounts Verification
-  const rawAccounts = b.accountsVerifiedAt || b.accounts_verified_at || b.accountsVerification?.verifiedAt || ((b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.date || null) : null);
+  const rawAccounts = b.accountsVerifiedAt || b.accounts_verified_at || b.accountsVerification?.verifiedAt || ((b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.date || b.createdAt || null) : null);
   const pAccounts = parseAnyDate(rawAccounts);
   const dAccounts = pAccounts.date;
   const hasAccounts = Boolean(dAccounts || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice || (statusLower.includes('accounts verified') && !statusLower.includes('sent to accounts')) || statusLower.includes('passed to invoice'));
   const accountsCompletedTime = formatTimeStr(pAccounts) || b.accountsVerifiedTime || null;
 
   // 3. Stage 3: Dispatch Packing
-  const rawPacking = b.packingCompletedAt || b.packedAt || b.packed_at || b.packingVerifiedAt || b.accountsVerification?.packedAt || ((b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed')) ? (b.date || null) : null);
-  const pPacking = parseAnyDate(rawPacking);
+  const rawPacking = b.packingCompletedAt || b.packedAt || b.packed_at || b.packingVerifiedAt || b.accountsVerification?.packedAt || ((b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed')) ? (b.date || b.createdAt || null) : null);
+  let pPacking = parseAnyDate(rawPacking);
+  if (pPacking.date && dAccounts && pPacking.date.getTime() > dAccounts.getTime()) {
+    const earlierPacking = parseAnyDate(b.accountsVerification?.packedAt || b.packingVerifiedAt);
+    if (earlierPacking.date && earlierPacking.date.getTime() <= dAccounts.getTime()) {
+      pPacking = earlierPacking;
+    } else {
+      pPacking = pAccounts;
+    }
+  }
   const dPacking = pPacking.date;
   const hasPacking = Boolean(dPacking || b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed'));
   const packingCompletedTime = formatTimeStr(pPacking) || b.packedTime || null;
@@ -251,7 +259,7 @@ export const getBomStageTiming = (b, matchingPi = null) => {
   const packingReceivedTime = confirmedTime;
   const accountsReceivedTime = packingCompletedTime || confirmedTime;
   const invoiceReceivedTime = accountsCompletedTime || packingCompletedTime || confirmedTime;
-  const dispatchReceivedTime = invoiceCompletedTime || accountsCompletedTime || packingCompletedTime || confirmedTime;
+  const dispatchReceivedTime = invoiceCompletedTime || (hasInvoice ? null : (accountsCompletedTime || packingCompletedTime || confirmedTime));
 
   // Turnaround durations between actual completions
   const packingDuration = (dPacking && dConfirmed) ? formatDuration(dPacking.getTime() - dConfirmed.getTime()) : null;

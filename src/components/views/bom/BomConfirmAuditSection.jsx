@@ -195,7 +195,22 @@ export default function BomConfirmAuditSection({ ctx }) {
       return parts.length > 0 ? parts.join(', ') : (fallbackStr || '—');
     };
 
-    const timing = getBomStageTiming(confirmingBomModal);
+    let matchedInv = null;
+    try {
+      const invList = JSON.parse(localStorage.getItem('controlroom_invoice_store') || '[]');
+      if (Array.isArray(invList)) {
+        const bCode = String(confirmingBomModal.bomCode || confirmingBomModal.code || '').trim().toLowerCase();
+        const bInv = String(confirmingBomModal.invoiceNo || '').trim().toLowerCase();
+        matchedInv = invList.find(inv => {
+          if (!inv) return false;
+          const iBom = String(inv.bomCode || inv.poNo || '').trim().toLowerCase();
+          const iNo = String(inv.invNo || inv.invoiceNo || inv.code || '').trim().toLowerCase();
+          return (bCode && iBom === bCode) || (bInv && iNo === bInv);
+        }) || null;
+      }
+    } catch (_) {}
+
+    const timing = getBomStageTiming(confirmingBomModal, sourcePi, matchedInv);
 
 
   const auditVars = {
