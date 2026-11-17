@@ -416,11 +416,9 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: '1. Executive Dashboard',
           id: 'executive_dashboard',
-          dashboardSubTab: role === 'HR' ? 'kit-analytics' : 'overview',
+          dashboardSubTab: 'overview',
           items: [
-            ...(role === 'HR' ? [{ label: 'Kit & Materials Analytics', targetTab: 'Dashboard', subTabTarget: 'kit-analytics', icon: Boxes }] : []),
-            { label: role === 'HR' ? 'Operations Overview' : 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard },
-            ...(role !== 'HR' ? [{ label: 'Kit & Materials Analytics', targetTab: 'Dashboard', subTabTarget: 'kit-analytics', icon: Boxes }] : [])
+            { label: role === 'HR' ? 'Operations Overview' : 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard }
           ]
         },
         {

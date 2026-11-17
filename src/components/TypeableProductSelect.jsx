@@ -105,32 +105,6 @@ function TypeableProductSelect({
     }
   }, [isOpen]);
 
-  // Outside click listener
-  useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (
-        containerRef.current && !containerRef.current.contains(e.target) &&
-        dropdownRef.current && !dropdownRef.current.contains(e.target)
-      ) {
-        setIsOpen(false);
-        const trimmed = (searchQuery || '').trim();
-        if (userTypedRef.current && trimmed && !justSelectedRef.current) {
-          const existsInCatalog = activeItemsList.some(it =>
-            String(it.name || '').trim().toLowerCase() === trimmed.toLowerCase() ||
-            String(it.code || '').trim().toLowerCase() === trimmed.toLowerCase()
-          );
-          if (!existsInCatalog) {
-            setUnlistedConfirmName(trimmed);
-          }
-        }
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleOutsideClick);
-      return () => document.removeEventListener('mousedown', handleOutsideClick);
-    }
-  }, [isOpen, searchQuery, activeItemsList]);
-
   const [catalogTick, setCatalogTick] = useState(0);
 
   // Live listener to auto-refresh dropdown whenever products or inventory are updated anywhere
@@ -177,6 +151,32 @@ function TypeableProductSelect({
     }
     return result;
   }, [itemsList, catalogTick]);
+
+  // Outside click listener (placed after activeItemsList to avoid TDZ ReferenceError)
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (
+        containerRef.current && !containerRef.current.contains(e.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target)
+      ) {
+        setIsOpen(false);
+        const trimmed = (searchQuery || '').trim();
+        if (userTypedRef.current && trimmed && !justSelectedRef.current) {
+          const existsInCatalog = activeItemsList.some(it =>
+            String(it.name || '').trim().toLowerCase() === trimmed.toLowerCase() ||
+            String(it.code || '').trim().toLowerCase() === trimmed.toLowerCase()
+          );
+          if (!existsInCatalog) {
+            setUnlistedConfirmName(trimmed);
+          }
+        }
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      return () => document.removeEventListener('mousedown', handleOutsideClick);
+    }
+  }, [isOpen, searchQuery, activeItemsList]);
 
   // Filter items based on query (computed only when dropdown is open)
   const filteredItems = useMemo(() => {

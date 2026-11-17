@@ -15,6 +15,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { resolveDocumentUrl } from '../../utils/documentResolver';
 import { getMediaFromCache } from '../../utils/otherViewsShared';
 import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
+import CeoInventoryAnalyticsSection from './CeoInventoryAnalyticsSection';
 import { getBomStageTiming } from './BomOrdersView';
 
 // Canonical BUSINZ KPI Grid Component for all CEO Dashboards
@@ -183,8 +184,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [activeSubTab, setActiveSubTab] = useState(() => {
     if (userRole === 'HR') {
       const saved = localStorage.getItem('controlroom_ceo_sub_tab');
-      if (saved === 'accounts' || saved === 'finance') return 'kit-analytics';
-      return saved || 'kit-analytics';
+      if (saved === 'accounts' || saved === 'finance' || saved === 'kit-analytics') return 'overview';
+      return saved || 'overview';
     }
     const saved = localStorage.getItem('controlroom_ceo_sub_tab');
     if (saved === 'kit-analytics' || saved === 'reports-dashboard' || saved === 'reports' || saved === 'sales' || saved === 'sales-targets') return 'overview';
@@ -2852,7 +2853,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       }}>
         {[
           ...(userRole === 'HR' ? [
-            { id: 'kit-analytics', label: 'Kit & Materials Analytics', icon: Boxes },
             { id: 'overview', label: 'Operations Overview', icon: LayoutDashboard }
           ] : [
             { id: 'overview', label: 'Company Overview', icon: LayoutDashboard }
@@ -5564,44 +5564,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             }
           ]} />
 
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>Live Inventory Stock Directory Snapshot</span>
-            <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto' }}>
-              <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                    <th style={{ padding: '8px 10px' }}>Item Code / SKU</th>
-                    <th style={{ padding: '8px 10px' }}>Material Description</th>
-                    <th style={{ padding: '8px 10px' }}>Category</th>
-                    <th style={{ padding: '8px 10px' }}>Available Qty</th>
-                    <th style={{ padding: '8px 10px' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventoryList.length > 0 ? inventoryList.slice(0, 8).map((item, idx) => {
-                    const qty = parseFloat(item.stock ?? item.quantity ?? item.availableStock ?? 0) || 0;
-                    const minQty = parseFloat(item.minStock ?? item.reorderLevel ?? 10) || 10;
-                    const isLow = qty <= minQty;
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>{item.code || item.itemCode || item.sku || `SKU-${idx + 1}`}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{item.name || item.itemName || item.description || 'Raw Material'}</td>
-                        <td style={{ padding: '8px 10px', color: '#64748B' }}>{item.category || 'Solar Structure Material'}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: '800', color: isLow ? '#DC2626' : '#0F172A' }}>{qty} {item.unit || item.uom || 'Nos'}</td>
-                        <td style={{ padding: '8px 10px' }}>
-                          <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: isLow ? '#FEF2F2' : '#DCFCE7', color: isLow ? '#DC2626' : '#16A34A' }}>
-                            {isLow ? 'Low Stock' : 'In Stock'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  }) : (
-                    <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>No inventory items loaded yet. Click "Inventory Overview" to inspect warehouse stores.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <CeoInventoryAnalyticsSection
+            inventoryList={inventoryList}
+            bomList={bomList}
+            grnList={allGrnList}
+            poList={allPoList}
+            onNavigateTab={onNavigateTab}
+          />
         </div>
       )}
 
