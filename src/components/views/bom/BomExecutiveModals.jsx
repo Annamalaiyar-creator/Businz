@@ -126,7 +126,22 @@ export default function BomExecutiveModals({ ctx }) {
           (bom.sameAsBilling === false && (!billNorm || !delivNorm || billNorm !== delivNorm)) ||
           (bom.sameAsBilling === undefined && Boolean(billNorm && delivNorm && billNorm !== delivNorm));
 
-        const timing = getBomStageTiming(bom, matchingPi);
+        let matchedInv = null;
+        try {
+          const invList = JSON.parse(localStorage.getItem('controlroom_invoice_store') || '[]');
+          if (Array.isArray(invList)) {
+            const bInv = String(bom.invoiceNo || '').trim().toLowerCase();
+            const bCodeLower = String(bomCode || '').trim().toLowerCase();
+            matchedInv = invList.find(inv => {
+              if (!inv) return false;
+              const iBom = String(inv.bomCode || inv.poNo || '').trim().toLowerCase();
+              const iNo = String(inv.invNo || inv.invoiceNo || inv.code || '').trim().toLowerCase();
+              return (bCodeLower && iBom === bCodeLower) || (bInv && iNo === bInv);
+            }) || null;
+          }
+        } catch (_) {}
+
+        const timing = getBomStageTiming(bom, matchingPi, matchedInv);
 
         const pTermsLower = String(bom.paymentType || bom.paymentTerms || matchingPi?.paymentTerms || '').toLowerCase();
         const isCreditTerms = pTermsLower.includes('credit') || pTermsLower.includes('net 30');

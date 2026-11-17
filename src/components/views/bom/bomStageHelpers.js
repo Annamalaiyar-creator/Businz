@@ -138,8 +138,9 @@ export const getBomStageTiming = (b, matchingPi = null, matchingInvoice = null) 
       return isNaN(d.getTime()) ? { date: null, hasTime: false } : { date: d, hasTime: true };
     }
     if (val instanceof Date) return isNaN(val.getTime()) ? { date: null, hasTime: false } : { date: val, hasTime: true };
+    if (typeof val === 'object') return { date: null, hasTime: false };
     const str = String(val).trim();
-    if (!str || str === '—' || str === '-') return { date: null, hasTime: false };
+    if (!str || str === '—' || str === '-' || str === 'null' || str === 'undefined') return { date: null, hasTime: false };
 
     // Check DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY (with optional comma / 'at' and time)
     const ddmmyyyy = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s*,?\s*(?:at\s+)?(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
@@ -163,6 +164,18 @@ export const getBomStageTiming = (b, matchingPi = null, matchingInvoice = null) 
       return { date: d, hasTime };
     }
     return { date: null, hasTime: false };
+  };
+
+  const firstValidDate = (...candidates) => {
+    let bestDateOnly = null;
+    for (const c of candidates) {
+      const parsed = parseAnyDate(c);
+      if (parsed.date && !isNaN(parsed.date.getTime())) {
+        if (parsed.hasTime) return parsed;
+        if (!bestDateOnly) bestDateOnly = parsed;
+      }
+    }
+    return bestDateOnly || { date: null, hasTime: false };
   };
 
   const formatTimeStr = (res) => {
@@ -192,23 +205,19 @@ export const getBomStageTiming = (b, matchingPi = null, matchingInvoice = null) 
   const statusLower = String(b.status || '').toLowerCase();
 
   // 1. Stage 1: PI Commercial
-  const rawPi = matchingPi?.createdAt || matchingPi?.created_at || b.piCreatedAt || matchingPi?.piDate || matchingPi?.date || b.piDate || b.sourcePiDate || b.createdAt || b.created_at || b.date;
-  const pPi = parseAnyDate(rawPi);
-  const pPiTimeFallback = pPi.hasTime ? pPi : parseAnyDate(matchingPi?.createdAt || matchingPi?.created_at || b.piCreatedAt || b.createdAt || b.created_at);
+  const pPi = firstValidDate(matchingPi?.createdAt, matchingPi?.created_at, b.piCreatedAt, matchingPi?.piDate, matchingPi?.date, b.piDate, b.sourcePiDate, b.createdAt, b.created_at, b.date);
   const dPi = pPi.date;
   const hasPi = Boolean(dPi || b.sourcePiNo || b.piNo);
-  const piTime = formatTimeStr(pPiTimeFallback) || b.piTime || matchingPi?.time || null;
+  const piTime = formatTimeStr(pPi) || b.piTime || matchingPi?.time || null;
 
   // 2. Stage 2: BOM Confirmed (locked to exact confirmed time, never changing)
-  const rawConfirmed = b.salesConfirmedAt || b.sales_confirmed_at || b.confirmedAt || b.confirmed_at || b.reconfirmedAt || b.reconfirmed_at || b.createdAt || b.created_at || b.appliedAt || b.date;
-  const pConfirmed = parseAnyDate(rawConfirmed);
-  const pConfirmedTimeFallback = pConfirmed.hasTime ? pConfirmed : parseAnyDate(b.salesConfirmedAt || b.sales_confirmed_at || b.reconfirmedAt || b.createdAt || b.created_at);
+  const pConfirmed = firstValidDate(b.salesConfirmedAt, b.sales_confirmed_at, b.confirmedAt, b.confirmed_at, b.reconfirmedAt, b.reconfirmed_at, b.createdAt, b.created_at, b.appliedAt, b.date);
   const dConfirmed = pConfirmed.date;
-  const confirmedTime = formatTimeStr(pConfirmedTimeFallback) || b.confirmedTime || b.salesConfirmedTime || b.time || null;
+  const confirmedTime = formatTimeStr(pConfirmed) || b.confirmedTime || b.salesConfirmedTime || b.time || null;
 
   // 6. Stage 6: Final Dispatched (evaluate bottom-up so later completed stages imply earlier stages are done)
-  const rawDispatch = b.dispatchedAt || b.dispatched_at || b.vehicleLoading?.loadedAt || ((b.fullyCompleted || statusLower.includes('dispatched')) ? (b.completedAt || b.updatedAt || b.updated_at || b.date) : null);
-  const pDispatch = parseAnyDate(rawDispatch);
+  const dispatchFallback = (b.fullyCompleted || statusLower.includes('dispatched')) ? (b.completedAt || b.updatedAt || b.updated_at || b.date) : null;
+  const pDispatch = firstValidDate(b.dispatchedAt, b.dispatched_at, b.vehicleLoading?.loadedAt, dispatchFallback);
   const dDispatch = pDispatch.date;
   const hasDispatch = Boolean(dDispatch || b.fullyCompleted || statusLower.includes('dispatched') || statusLower === 'closed');
   const dispatchCompletedTime = formatTimeStr(pDispatch) || b.dispatchedTime || null;
@@ -221,22 +230,22 @@ export const getBomStageTiming = (b, matchingPi = null, matchingInvoice = null) 
     statusLower.includes('invoiced') ||
     statusLower.includes('vehicle loading')
   );
-  const rawInvoice = b.invoiceConfirmedAt || b.invoice_confirmed_at || b.invoicedAt || b.invoiced_at || b.stockDeductionDate || matchingInvoice?.confirmedAt || matchingInvoice?.stockDeductionDate || matchingInvoice?.createdAt || ((b.invoiceConfirmed || isInvDoneByStatus || hasDispatch) ? (matchingInvoice?.date || b.date || null) : null);
-  const pInvoice = parseAnyDate(rawInvoice);
+  const invDateFallback = (b.invoiceConfirmed || isInvDoneByStatus || hasDispatch) ? (matchingInvoice?.date || b.date || null) : null;
+  const pInvoice = firstValidDate(b.invoiceConfirmedAt, b.invoice_confirmed_at, b.invoicedAt, b.invoiced_at, b.stockDeductionDate, matchingInvoice?.confirmedAt, matchingInvoice?.stockDeductionDate, matchingInvoice?.createdAt, invDateFallback);
   const dInvoice = pInvoice.date;
   const hasInvoice = Boolean(dInvoice || b.invoiceConfirmed || (!isPendingInvStatus && b.invoiceGenerated) || isInvDoneByStatus || hasDispatch);
   const invoiceCompletedTime = formatTimeStr(pInvoice) || b.invoiceTime || null;
 
   // 4. Stage 4: Accounts Verification
-  const rawAccounts = b.accountsVerifiedAt || b.accounts_verified_at || b.accountsVerification?.verifiedAt || ((b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.date || b.createdAt || null) : null);
-  const pAccounts = parseAnyDate(rawAccounts);
+  const accDateFallback = (b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.date || b.createdAt || null) : null;
+  const pAccounts = firstValidDate(b.accountsVerifiedAt, b.accounts_verified_at, b.accountsVerification?.verifiedAt, accDateFallback);
   const dAccounts = pAccounts.date;
   const hasAccounts = Boolean(dAccounts || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice || (statusLower.includes('accounts verified') && !statusLower.includes('sent to accounts')) || statusLower.includes('passed to invoice'));
   const accountsCompletedTime = formatTimeStr(pAccounts) || b.accountsVerifiedTime || null;
 
   // 3. Stage 3: Dispatch Packing
-  const rawPacking = b.packingCompletedAt || b.packedAt || b.packed_at || b.packingVerifiedAt || b.accountsVerification?.packedAt || ((b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed')) ? (b.date || b.createdAt || null) : null);
-  let pPacking = parseAnyDate(rawPacking);
+  const packDateFallback = (b.dispatchPackingVerified || b.packingVerified || b.dispatchPackingDone || b.packingStatus === 'PACKING_VERIFIED' || hasAccounts || statusLower.includes('packed')) ? (b.date || b.createdAt || null) : null;
+  let pPacking = firstValidDate(b.packingCompletedAt, b.packedAt, b.packed_at, b.packingVerifiedAt, b.accountsVerification?.packedAt, packDateFallback);
   if (pPacking.date && dAccounts && pPacking.date.getTime() > dAccounts.getTime()) {
     const earlierPacking = parseAnyDate(b.accountsVerification?.packedAt || b.packingVerifiedAt);
     if (earlierPacking.date && earlierPacking.date.getTime() <= dAccounts.getTime()) {
