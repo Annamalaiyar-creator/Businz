@@ -238,7 +238,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                     {timing?.hasPacking ? (timing?.packingCompletedTime ? `At ${timing.packingCompletedTime}` : 'Packed') : (timing?.isPackingActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasPacking ? '#047857' : '#B45309', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasPacking ? (timing.packingDuration ? `Took ${timing.packingDuration}` : 'Packing Verified') : (timing?.isPackingActive ? `Received: ${timing.packingReceivedTime || timing.confirmedTime || 'In Queue'}` : 'Awaiting packing')}
+                    {timing?.hasPacking ? (timing.packingDuration ? `Took ${timing.packingDuration}` : 'Packing Verified') : (timing?.isPackingActive ? 'In Progress' : 'Awaiting packing')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasPacking ? '#A7F3D0' : '#FDE68A'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasPacking ? '#059669' : '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -267,7 +267,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                     {timing?.hasAccounts ? (timing?.accountsCompletedTime ? `At ${timing.accountsCompletedTime}` : 'Verified') : (timing?.isAccountsActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasAccounts ? '#047857' : '#6D28D9', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasAccounts ? (timing.accountsDuration ? `Took ${timing.accountsDuration}` : 'Accounts Verified') : (timing?.isAccountsActive ? `Received: ${timing.accountsReceivedTime || ''}` : 'Awaiting accounts')}
+                    {timing?.hasAccounts ? (timing.accountsDuration ? `Took ${timing.accountsDuration}` : 'Accounts Verified') : (timing?.isAccountsActive ? 'In Progress' : 'Awaiting accounts')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasAccounts ? '#A7F3D0' : '#DDD6FE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasAccounts ? '#059669' : '#7C3AED', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -296,7 +296,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                     {timing?.hasInvoice ? (timing?.invoiceCompletedTime ? `At ${timing.invoiceCompletedTime}` : 'Invoiced') : (timing?.isInvoiceActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasInvoice ? '#047857' : '#1D4ED8', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasInvoice ? (timing.invoiceDuration ? `Took ${timing.invoiceDuration}` : 'Invoice Confirmed') : (timing?.isInvoiceActive ? `Received: ${timing.invoiceReceivedTime || ''}` : 'Awaiting billing')}
+                    {timing?.hasInvoice ? (timing.invoiceDuration ? `Took ${timing.invoiceDuration}` : 'Invoice Confirmed') : (timing?.isInvoiceActive ? 'In Progress' : 'Awaiting billing')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasInvoice ? '#A7F3D0' : '#BFDBFE'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasInvoice ? '#059669' : '#2563EB', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -325,7 +325,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                     {timing?.hasDispatch ? (timing?.dispatchCompletedTime ? `At ${timing.dispatchCompletedTime}` : 'Dispatched') : (timing?.isDispatchActive ? 'Processing' : 'Pending')}
                   </div>
                   <div style={{ fontSize: '10px', color: timing?.hasDispatch ? '#15803D' : '#16A34A', marginTop: '1px', fontWeight: '700' }}>
-                    {timing?.hasDispatch ? (timing.dispatchDuration ? `Took ${timing.dispatchDuration}` : 'Final Dispatch') : (timing?.isDispatchActive ? `Received: ${timing.dispatchReceivedTime || ''}` : 'Awaiting loading')}
+                    {timing?.hasDispatch ? (timing.dispatchDuration ? `Took ${timing.dispatchDuration}` : 'Final Dispatch') : (timing?.isDispatchActive ? 'In Progress' : 'Awaiting loading')}
                   </div>
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: `1px solid ${timing?.hasDispatch ? '#86EFAC' : '#BBF7D0'}`, fontSize: '10.5px', fontWeight: '700', color: timing?.hasDispatch ? '#16A34A' : '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>

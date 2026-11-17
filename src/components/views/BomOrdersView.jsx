@@ -20,7 +20,8 @@ import {
   CODE_TO_SALES_NAME,
   getCleanSalesPersonName,
   safeSaveBomStoreToLocal,
-  sanitizeBomRecord
+  sanitizeBomRecord,
+  isBomAddressProofPending
 } from './bom/bomStageHelpers';
 import {
   BomDocPreviewModal,
@@ -2092,7 +2093,8 @@ export default function BomOrdersView(props) {
       { id: 'accounts_verification_pending', label: 'Accounts Verification Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Accounts Verification Pending').length, bg: '#f3e8ff', fg: '#7e22ce' },
       { id: 'invoice_pending', label: 'Invoice Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Invoice Pending').length, bg: '#dbeafe', fg: '#1d4ed8' },
       { id: 'vehicle_loading_pending', label: 'Vehicle Loading Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Vehicle Loading Pending').length, bg: '#cffafe', fg: '#0e7490' },
-      { id: 'dispatched', label: 'Dispatched', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Dispatched').length, bg: '#dcfce7', fg: '#166534' }
+      { id: 'dispatched', label: 'Dispatched', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Dispatched').length, bg: '#dcfce7', fg: '#166534' },
+      { id: 'address_proof_pending', label: 'Address Proof Pending', count: tabBaseBomList.filter(b => isBomAddressProofPending(b)).length, bg: '#fee2e2', fg: '#b91c1c' }
     ] : [
       { id: 'All', label: 'All BOMs', count: tabBaseBomList.filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
       { id: 'Pending', label: 'Pending Sales Confirmation', count: tabBaseBomList.filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
@@ -2339,6 +2341,8 @@ export default function BomOrdersView(props) {
     if (isCeo) {
       if (subTab === 'all' || subTab === 'all boms') {
         matchesTab = !isCancelled;
+      } else if (subTab === 'address_proof_pending') {
+        matchesTab = isBomAddressProofPending(r) && !isCancelled;
       } else {
         const activeStage = getBomActiveStage(r);
         const stageNorm = activeStage.name.toLowerCase().replace(/\s+/g, '_');

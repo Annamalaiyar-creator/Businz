@@ -523,3 +523,53 @@ export const sanitizeBomRecord = (b) => {
   }
   return b;
 };
+
+/** Returns true when a non-cancelled BOM uses a different delivery address without an attached address proof doc. */
+export const isBomAddressProofPending = (bom) => {
+  if (!bom || typeof bom !== 'object') return false;
+  const st = String(bom.status || '').toLowerCase();
+  if (bom.cancelled || bom.status === 'Cancelled & Stock Restored' || st.includes('cancel')) return false;
+  if (bom.processedWithoutAddressProof || bom.addressProofWaived) return false;
+  if (bom.sameAsBilling === true) return false;
+
+  const bObj = bom.billingAddressObj || {};
+  const dObj = bom.deliveryAddressObj || {};
+  const bStreet = String(bObj.address || bObj.street || '').trim().toLowerCase();
+  const dStreet = String(dObj.address || dObj.street || '').trim().toLowerCase();
+  const bCity = String(bObj.city || '').trim().toLowerCase();
+  const dCity = String(dObj.city || '').trim().toLowerCase();
+  const bState = String(bObj.state || '').trim().toLowerCase();
+  const dState = String(dObj.state || '').trim().toLowerCase();
+  const bPin = String(bObj.pincode || '').trim().toLowerCase();
+  const dPin = String(dObj.pincode || '').trim().toLowerCase();
+
+  const hasDObjFields = Boolean(dStreet || dCity || dState || dPin);
+  const bStr = String(bom.billingAddress || '').trim().toLowerCase();
+  const dStr = String(bom.deliveryAddress || '').trim().toLowerCase();
+
+  let isDifferentAddress = false;
+  if (hasDObjFields) {
+    isDifferentAddress = !(dStreet === bStreet && dCity === bCity && dState === bState && dPin === bPin);
+  } else if (dStr) {
+    isDifferentAddress = dStr !== bStr;
+  } else if (bom.sameAsBilling === false) {
+    isDifferentAddress = true;
+  }
+
+  if (!isDifferentAddress) return false;
+
+  const proofDoc = bom.deliveryAddressProofDoc || bom.addressProofDoc || null;
+  if (!proofDoc) return true;
+  if (typeof proofDoc === 'string') return proofDoc.trim().length === 0;
+  if (typeof proofDoc === 'object') {
+    return !(
+      proofDoc.name ||
+      proofDoc.originalName ||
+      proofDoc.url ||
+      proofDoc.dataUrl ||
+      proofDoc.fileData ||
+      proofDoc.storagePath
+    );
+  }
+  return false;
+};

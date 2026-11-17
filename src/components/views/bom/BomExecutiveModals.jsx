@@ -3,6 +3,7 @@ import {
   Eye, X, Truck, CreditCard, Boxes, Receipt, Factory, Clock, AlertCircle
 } from 'lucide-react';
 import { cleanNum } from '../../../utils/otherViewsShared';
+import { isBomAddressProofPending } from './bomStageHelpers';
 import ExecutiveOrderDossierModal from '../ExecutiveOrderDossierModal';
 
 export default function BomExecutiveModals({ ctx }) {
@@ -301,6 +302,22 @@ export default function BomExecutiveModals({ ctx }) {
                       }}>
                         {bom.status || 'Active'}
                       </span>
+                      {isBomAddressProofPending(bom) && (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          backgroundColor: '#FEF2F2',
+                          color: '#DC2626',
+                          border: '1px solid #FCA5A5',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <AlertCircle size={10} /> Address Proof Pending
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
                       Customer Project: <strong>{customer}</strong> • Date: {formatBomDateDot(bomDate)} • Rep: {salesPerson}
@@ -456,7 +473,7 @@ export default function BomExecutiveModals({ ctx }) {
                                 color: '#0E7490',
                                 lineHeight: '1.2'
                               }}>
-                                {stg.receivedTime ? `Received: ${stg.receivedTime}` : 'In Progress'}
+                                In Progress
                               </span>
                             ) : (
                               <span style={{

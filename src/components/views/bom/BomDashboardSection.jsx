@@ -5,6 +5,7 @@ import {
 import ModernDateRangePicker from '../../ModernDateRangePicker';
 import BomOperationalModals from './BomOperationalModals';
 import BomExecutiveModals from './BomExecutiveModals';
+import { isBomAddressProofPending } from './bomStageHelpers';
 
 export default function BomDashboardSection({ ctx }) {
   const {
@@ -871,6 +872,27 @@ export default function BomDashboardSection({ ctx }) {
                           }}>
                             <AlertCircle size={11} style={{ color: '#D97706' }} />
                             Packed — Awaiting Sales Payment Proof
+                          </span>
+                        )}
+
+                        {isCeo && !isCancelled && isBomAddressProofPending(row) && (
+                          <span
+                            title="Different delivery address — Address proof not attached by Sales"
+                            style={{
+                              backgroundColor: '#FEF2F2',
+                              color: '#DC2626',
+                              border: '1px solid #FCA5A5',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <AlertCircle size={11} style={{ color: '#DC2626' }} />
+                            Address Proof Pending
                           </span>
                         )}
 

@@ -17,6 +17,7 @@ import { getMediaFromCache } from '../../utils/otherViewsShared';
 import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
 import CeoInventoryAnalyticsSection from './CeoInventoryAnalyticsSection';
 import { getBomStageTiming } from './BomOrdersView';
+import { isBomAddressProofPending } from './bom/bomStageHelpers';
 
 // Canonical BUSINZ KPI Grid Component for all CEO Dashboards
 export function CeoKpiGrid({ kpis }) {
@@ -7903,6 +7904,22 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       }}>
                         {bom.status || 'Active'}
                       </span>
+                      {isBomAddressProofPending(bom) && (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          backgroundColor: '#FEF2F2',
+                          color: '#DC2626',
+                          border: '1px solid #FCA5A5',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <AlertCircle size={10} /> Address Proof Pending
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
                       Customer Project: <strong>{customer}</strong> • Date: {bomDate} • Rep: {salesPerson}
@@ -8058,7 +8075,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                 color: '#0E7490',
                                 lineHeight: '1.2'
                               }}>
-                                {stg.receivedTime ? `Received: ${stg.receivedTime}` : 'In Progress'}
+                                In Progress
                               </span>
                             ) : (
                               <span style={{
