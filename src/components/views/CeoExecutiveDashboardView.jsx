@@ -496,7 +496,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       const localBoms = getCached('controlroom_bom_store') || getCached('bom_orders') || getCached('bom_store') || [];
       const localInvs = getCached('controlroom_invoices_store') || getCached('invoice_store') || [];
       const localPresets = getCached('presets_store') || [];
-      const localInventory = getCached('controlroom_raw_material_store') || getCached('raw_material_store') || getCached('inventory_items_store') || [];
+      const localInventory =
+        getCached('controlroom_raw_materials_store') ||
+        getCached('controlroom_central_items_v2') ||
+        getCached('controlroom_item_store') ||
+        getCached('controlroom_items_list') ||
+        getCached('controlroom_raw_material_store') ||
+        getCached('raw_material_store') ||
+        getCached('inventory_items_store') ||
+        [];
       const localGrns = getCached('controlroom_grn_store') || getCached('grn_store') || [];
 
       if (Array.isArray(localQuotes) && localQuotes.length > 0) setQuotesList(localQuotes);
@@ -579,7 +587,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           .then(r => r.json())
           .then(j => Array.isArray(j?.data) ? j.data : [])
           .catch(() => []),
-        fetchCloudStore('raw_material_store', [])
+        fetchCloudStore('item_store', [])
+          .then(res => (Array.isArray(res) && res.length > 0) ? res : fetchCloudStore('raw_materials_store', []))
+          .then(res => (Array.isArray(res) && res.length > 0) ? res : fetchCloudStore('raw_material_store', []))
           .then(res => (Array.isArray(res) && res.length > 0) ? res : fetchCloudStore('inventory_items_store', []))
           .catch(() => []),
         fetchCloudStore('grn_store', []).catch(() => []),

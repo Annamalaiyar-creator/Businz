@@ -679,16 +679,20 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const computedItemsSum = Array.isArray(b.items) && b.items.length > 0
                     ? b.items.reduce((sum, it) => sum + ((parseFloat(it.qty || it.bomQty || it.quantity || 0) * parseFloat(it.rate || it.price || it.unitPrice || 0)) || 0), 0)
                     : 0;
+                  const bGstRate = Number(b.gstRate || 18) || 18;
+                  const bGstMult = 1 + bGstRate / 100;
+                  const baseSubAmt = Number(b.subTotal || b.subtotal || b.kitSubtotal || b.presetKitPrice || 0);
+                  const subWithGstAmt = baseSubAmt > 0
+                    ? (Number(b.gstAmount || 0) > 0 ? baseSubAmt + Number(b.gstAmount) : Math.round(baseSubAmt * bGstMult * 100) / 100)
+                    : 0;
                   let rawAmt = Number(
                     acc.totalAmount || 
                     b.grandTotal || 
-                    b.subTotal || 
+                    subWithGstAmt || 
                     b.totalAmount || 
                     b.amount || 
                     b.total || 
-                    b.kitSubtotal || 
-                    b.presetKitPrice || 
-                    (computedItemsSum > 0 ? (computedItemsSum * 1.18) : 0) || 
+                    (computedItemsSum > 0 ? Math.round(computedItemsSum * bGstMult * 100) / 100 : 0) || 
                     0
                   );
                   if (rawAmt <= 0 && String(rawCode).trim() === 'VRM-BOM-1166') {

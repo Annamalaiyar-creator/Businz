@@ -337,7 +337,42 @@ export default function AccountsVerificationModal({
     return m.customerName || m.companyName || 'Customer';
   })();
   const payTypeText = (accountsVerificationModal && (accountsVerificationModal.paymentType || accountsVerificationModal.c3)) || 'Net 30 Days';
-  const orderValue = cleanNum(accountsVerificationModal?.grandTotal, 0) || cleanNum(accountsVerificationModal?.subTotal, 0) || cleanNum(accountsVerificationModal?.totalAmount, 0) || (Array.isArray(accountsVerificationModal?.items) ? accountsVerificationModal.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0) : 0);
+
+  // Resolve linked source PI early so Accounts has full GST total & PI-level payment proofs
+  const resolvedMatchedPi = (() => {
+    const targetPiNo = accountsVerificationModal?.sourcePiNo || accountsVerificationModal?.piNo;
+    if (!targetPiNo || typeof window === 'undefined') return null;
+    try {
+      const rawPiStore = localStorage.getItem('controlroom_pi_store') || localStorage.getItem('businz_pi_store') || localStorage.getItem('sales_pi_store');
+      if (!rawPiStore) return null;
+      const parsedPis = JSON.parse(rawPiStore);
+      const piArr = Array.isArray(parsedPis) ? parsedPis : (parsedPis.pis || []);
+      const targetNorm = String(targetPiNo).trim().toLowerCase();
+      return piArr.find(p =>
+        String(p.piNo || '').trim().toLowerCase() === targetNorm ||
+        String(p.id || '').trim().toLowerCase() === targetNorm
+      ) || null;
+    } catch (_) {
+      return null;
+    }
+  })();
+
+  const gstRateFallback = cleanNum(accountsVerificationModal?.gstRate, 0) || cleanNum(resolvedMatchedPi?.gstRate, 0) || 18;
+  const gstMultFallback = 1 + gstRateFallback / 100;
+  const rawSubForOrder = cleanNum(accountsVerificationModal?.subTotal, 0) || cleanNum(accountsVerificationModal?.subtotal, 0) || cleanNum(resolvedMatchedPi?.subTotal, 0);
+  const rawGstForOrder = cleanNum(accountsVerificationModal?.gstAmount, 0) || cleanNum(resolvedMatchedPi?.gstAmount, 0);
+  const subWithGstForOrder = rawSubForOrder > 0
+    ? (rawGstForOrder > 0 ? rawSubForOrder + rawGstForOrder : Math.round(rawSubForOrder * gstMultFallback * 100) / 100)
+    : 0;
+  const itemsSumWithGst = Array.isArray(accountsVerificationModal?.items) && accountsVerificationModal.items.length > 0
+    ? Math.round(accountsVerificationModal.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0) * gstMultFallback * 100) / 100
+    : 0;
+  const orderValue =
+    cleanNum(accountsVerificationModal?.grandTotal, 0) ||
+    cleanNum(resolvedMatchedPi?.grandTotal, 0) ||
+    subWithGstForOrder ||
+    cleanNum(accountsVerificationModal?.totalAmount, 0) ||
+    itemsSumWithGst;
 
   const getExpectedInvNo = () => {
     const raw = accountsVerificationModal?.invoiceNo;
@@ -371,6 +406,8 @@ export default function AccountsVerificationModal({
   const payTypeLower = String(payType).toLowerCase();
   const isWhileDispatch = payType === 'Payment While Dispatch' || payTypeLower.includes('while dispatch') || payTypeLower.includes('before dispatch');
   const isPartialPaidTerms = payTypeLower.includes('partial') || payTypeLower.includes('50%');
+  const isCreditTerms = payTypeLower.includes('credit') || payTypeLower.includes('net 30') || payTypeLower.includes('net 15') || payTypeLower.includes('net 45') || payTypeLower.includes('net 60');
+  const is100PaidTerms = payTypeLower.includes('100%') || payTypeLower.includes('full') || payTypeLower.includes('advance');
   const requiresPaymentProofForApproval = Boolean(
     isWhileDispatch ||
     isPartialPaidTerms ||
@@ -385,13 +422,20 @@ export default function AccountsVerificationModal({
     accountsVerificationModal?.salesPoDetails?.proofDocObj ||
     accountsVerificationModal?.balancePaymentProofDoc ||
     accountsVerificationModal?.payments?.balanceProofDocObj ||
-    accountsVerificationModal?.payments?.balanceProofDoc;
+    accountsVerificationModal?.payments?.balanceProofDoc ||
+    resolvedMatchedPi?.paymentProofDoc ||
+    (Array.isArray(resolvedMatchedPi?.paymentProofDocs) && resolvedMatchedPi.paymentProofDocs[0]) ||
+    resolvedMatchedPi?.payments?.proofDocObj ||
+    resolvedMatchedPi?.payments?.proofDoc;
 
   const hasUploadedPaymentProof = Boolean(
     (typeof rawProofForCheck === 'string' && rawProofForCheck.trim().length > 0) ||
-    (rawProofForCheck && typeof rawProofForCheck === 'object' && (rawProofForCheck.url || rawProofForCheck.dataUrl || rawProofForCheck.storagePath || rawProofForCheck.storageBucket || rawProofForCheck.name)) ||
+    (rawProofForCheck && typeof rawProofForCheck === 'object' && (rawProofForCheck.url || rawProofForCheck.dataUrl || rawProofForCheck.fileData || rawProofForCheck.storagePath || rawProofForCheck.storageBucket || rawProofForCheck.name || rawProofForCheck.originalName)) ||
     resolvedProofDataUrl ||
     accountsVerificationModal?.paymentProofDocName ||
+    (Array.isArray(accountsVerificationModal?.paymentProofDocs) && accountsVerificationModal.paymentProofDocs.length > 0) ||
+    (Array.isArray(accountsVerificationModal?.balancePaymentProofDocs) && accountsVerificationModal.balancePaymentProofDocs.length > 0) ||
+    (Array.isArray(resolvedMatchedPi?.paymentProofDocs) && resolvedMatchedPi.paymentProofDocs.length > 0) ||
     accountsVerificationModal?.balancePaymentProofDoc ||
     accountsVerificationModal?.balanceProofDoc ||
     accountsVerificationModal?.payments?.proofDoc ||
@@ -485,7 +529,9 @@ export default function AccountsVerificationModal({
     const updatedBomData = {
       ...verifiedBOM,
       invoiceNo: finalInvNo,
-      grandTotal: cleanNum(currentTotalAmount, 0),
+      grandTotal: cleanNum(accountsVerificationModal?.grandTotal, 0) > 0
+        ? cleanNum(accountsVerificationModal.grandTotal, 0)
+        : (orderValue > 0 ? orderValue : cleanNum(currentTotalAmount, 0)),
       paymentDate: currentPayDate,
       isAccountsDone: true,
       invoiceConfirmed: false,
@@ -1013,7 +1059,7 @@ export default function AccountsVerificationModal({
                   const val = e.target.value;
                   setAccountsVerificationModal(prev => prev ? ({
                     ...prev,
-                    grandTotal: parseFloat(val) || 0,
+                    grandTotal: cleanNum(prev.grandTotal, 0) > 0 ? prev.grandTotal : (parseFloat(val) || 0),
                     accountsVerification: { ...(prev.accountsVerification || {}), totalAmount: val }
                   }) : null);
                 }}
@@ -1177,27 +1223,42 @@ export default function AccountsVerificationModal({
               (fallbackDocName ? getMediaFromCache(fallbackDocName) : null);
 
             const allPaymentDocs = (() => {
-              if (Array.isArray(accountsVerificationModal.paymentProofDocs) && accountsVerificationModal.paymentProofDocs.length > 0) {
-                return accountsVerificationModal.paymentProofDocs;
+              const candidates = [
+                ...(Array.isArray(accountsVerificationModal.paymentProofDocs) ? accountsVerificationModal.paymentProofDocs : []),
+                ...(Array.isArray(accountsVerificationModal.balancePaymentProofDocs) ? accountsVerificationModal.balancePaymentProofDocs : []),
+                ...(Array.isArray(accountsVerificationModal.payments?.proofDocObjs) ? accountsVerificationModal.payments.proofDocObjs : []),
+                ...(Array.isArray(accountsVerificationModal.payments?.proofDocs) ? accountsVerificationModal.payments.proofDocs : []),
+                ...(Array.isArray(accountsVerificationModal.uploadedDocuments)
+                  ? accountsVerificationModal.uploadedDocuments.filter(d =>
+                      (d?.category && String(d.category).toLowerCase().includes('payment')) ||
+                      (d?.type && String(d.type).toLowerCase().includes('payment')) ||
+                      (d?.name && String(d.name).toLowerCase().includes('payment'))
+                    )
+                  : []),
+                ...(accountsVerificationModal.paymentProofDoc ? (Array.isArray(accountsVerificationModal.paymentProofDoc) ? accountsVerificationModal.paymentProofDoc : [accountsVerificationModal.paymentProofDoc]) : []),
+                ...(accountsVerificationModal.balancePaymentProofDoc ? [accountsVerificationModal.balancePaymentProofDoc] : []),
+                ...(accountsVerificationModal.balanceProofDoc ? [accountsVerificationModal.balanceProofDoc] : []),
+                ...(accountsVerificationModal.payments?.proofDocObj ? [accountsVerificationModal.payments.proofDocObj] : []),
+                ...(accountsVerificationModal.payments?.balanceProofDocObj ? [accountsVerificationModal.payments.balanceProofDocObj] : []),
+                ...(accountsVerificationModal.salesPoDetails?.proofDocObj ? [accountsVerificationModal.salesPoDetails.proofDocObj] : []),
+                ...(accountsVerificationModal.salesPoDetails?.balanceProofDocObj ? [accountsVerificationModal.salesPoDetails.balanceProofDocObj] : []),
+                ...(Array.isArray(resolvedMatchedPi?.paymentProofDocs) ? resolvedMatchedPi.paymentProofDocs : []),
+                ...(resolvedMatchedPi?.paymentProofDoc ? (Array.isArray(resolvedMatchedPi.paymentProofDoc) ? resolvedMatchedPi.paymentProofDoc : [resolvedMatchedPi.paymentProofDoc]) : []),
+                ...(Array.isArray(resolvedMatchedPi?.payments?.proofDocObjs) ? resolvedMatchedPi.payments.proofDocObjs : []),
+                ...(rawProof ? [typeof rawProof === 'object' ? rawProof : { name: rawProof }] : [])
+              ].filter(Boolean);
+
+              const seen = new Set();
+              const deduped = [];
+              for (const d of candidates) {
+                const docObj = typeof d === 'object' ? d : { name: String(d) };
+                const key = docObj.storagePath || docObj.url || docObj.name || docObj.originalName || JSON.stringify(docObj);
+                if (key && !seen.has(key)) {
+                  seen.add(key);
+                  deduped.push(docObj);
+                }
               }
-              if (Array.isArray(accountsVerificationModal.uploadedDocuments) && accountsVerificationModal.uploadedDocuments.length > 0) {
-                const pDocs = accountsVerificationModal.uploadedDocuments.filter(d => 
-                  (d.category && d.category.includes('payment')) ||
-                  (d.type && d.type.includes('payment')) ||
-                  (d.name && d.name.toLowerCase().includes('payment'))
-                );
-                if (pDocs.length > 0) return pDocs;
-              }
-              if (Array.isArray(accountsVerificationModal.payments?.proofDocObjs) && accountsVerificationModal.payments.proofDocObjs.length > 0) {
-                return accountsVerificationModal.payments.proofDocObjs;
-              }
-              if (Array.isArray(accountsVerificationModal.payments?.proofDocs) && accountsVerificationModal.payments.proofDocs.length > 0) {
-                return accountsVerificationModal.payments.proofDocs;
-              }
-              if (rawProof) {
-                return [typeof rawProof === 'object' ? rawProof : { name: rawProof }];
-              }
-              return [];
+              return deduped;
             })();
 
             const hasAnyPaymentProof = allPaymentDocs.length > 0 || hasUploadedPaymentProof;
@@ -1486,7 +1547,7 @@ export default function AccountsVerificationModal({
                       </div>
                     )}
                   </div>
-                ) : requiresPaymentProofForApproval ? (
+                ) : (requiresPaymentProofForApproval || (is100PaidTerms && !isCreditTerms)) ? (
                   <div style={{
                     backgroundColor: '#FFFBEB',
                     border: '1.5px solid #F59E0B',
