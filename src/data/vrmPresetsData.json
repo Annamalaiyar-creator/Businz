@@ -901,7 +901,7 @@
   },
   "preset_2_2_c_purlin__500_x_1000_": {
     "id": "preset_2_2_c_purlin__500_x_1000_",
-    "label": "2*2 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1031,7 +1031,7 @@
   },
   "preset_2_3_c_purlin__500_x_1000_": {
     "id": "preset_2_3_c_purlin__500_x_1000_",
-    "label": "2*3 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1161,7 +1161,7 @@
   },
   "preset_2_4_c_purlin__500_x_1000_": {
     "id": "preset_2_4_c_purlin__500_x_1000_",
-    "label": "2*4 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1291,7 +1291,7 @@
   },
   "preset_2_5_c_purlin__500_x_1000_": {
     "id": "preset_2_5_c_purlin__500_x_1000_",
-    "label": "2*5 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1421,7 +1421,7 @@
   },
   "preset_2_6_c_purlin__500_x_1000_": {
     "id": "preset_2_6_c_purlin__500_x_1000_",
-    "label": "2*6 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1551,7 +1551,7 @@
   },
   "preset_2_7_c_purlin__500_x_1000_": {
     "id": "preset_2_7_c_purlin__500_x_1000_",
-    "label": "2*7 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1689,7 +1689,7 @@
   },
   "preset_2_8_c_purlin__500_x_1000_": {
     "id": "preset_2_8_c_purlin__500_x_1000_",
-    "label": "2*8 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1819,7 +1819,7 @@
   },
   "preset_2_9_c_purlin__500_x_1000_": {
     "id": "preset_2_9_c_purlin__500_x_1000_",
-    "label": "2*9 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -1957,7 +1957,7 @@
   },
   "preset_2_10_c_purlin__500_x_1000_": {
     "id": "preset_2_10_c_purlin__500_x_1000_",
-    "label": "2*10 C Purlin (500 x 1000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -2087,7 +2087,7 @@
   },
   "preset_2_2_c_purlin__650_x_1300_": {
     "id": "preset_2_2_c_purlin__650_x_1300_",
-    "label": "2*2 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -2217,7 +2217,7 @@
   },
   "preset_2_3_c_purlin__650_x_1300_": {
     "id": "preset_2_3_c_purlin__650_x_1300_",
-    "label": "2*3 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -2347,7 +2347,7 @@
   },
   "preset_2_4_c_purlin__650_x_1300_": {
     "id": "preset_2_4_c_purlin__650_x_1300_",
-    "label": "2*4 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -2485,7 +2485,7 @@
   },
   "preset_2_5_c_purlin__650_x_1300_": {
     "id": "preset_2_5_c_purlin__650_x_1300_",
-    "label": "2*5 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -2607,7 +2607,7 @@
   },
   "preset_2_6_c_purlin__650_x_1300_": {
     "id": "preset_2_6_c_purlin__650_x_1300_",
-    "label": "2*6 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -2737,7 +2737,7 @@
   },
   "preset_2_7_c_purlin__650_x_1300_": {
     "id": "preset_2_7_c_purlin__650_x_1300_",
-    "label": "2*7 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -2875,7 +2875,7 @@
   },
   "preset_2_8_c_purlin__650_x_1300_": {
     "id": "preset_2_8_c_purlin__650_x_1300_",
-    "label": "2*8 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3005,7 +3005,7 @@
   },
   "preset_2_9_c_purlin__650_x_1300_": {
     "id": "preset_2_9_c_purlin__650_x_1300_",
-    "label": "2*9 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3143,7 +3143,7 @@
   },
   "preset_2_10_c_purlin__650_x_1300_": {
     "id": "preset_2_10_c_purlin__650_x_1300_",
-    "label": "2*10 C Purlin (650 x 1300) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3273,7 +3273,7 @@
   },
   "preset_2_2_c_purlin__900_x_1500_": {
     "id": "preset_2_2_c_purlin__900_x_1500_",
-    "label": "2*2 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3403,7 +3403,7 @@
   },
   "preset_2_3_c_purlin__900_x_1500_": {
     "id": "preset_2_3_c_purlin__900_x_1500_",
-    "label": "2*3 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3533,7 +3533,7 @@
   },
   "preset_2_4_c_purlin__900_x_1500_": {
     "id": "preset_2_4_c_purlin__900_x_1500_",
-    "label": "2*4 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3671,7 +3671,7 @@
   },
   "preset_2_5_c_purlin__900_x_1500_": {
     "id": "preset_2_5_c_purlin__900_x_1500_",
-    "label": "2*5 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3793,7 +3793,7 @@
   },
   "preset_2_6_c_purlin__900_x_1500_": {
     "id": "preset_2_6_c_purlin__900_x_1500_",
-    "label": "2*6 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -3923,7 +3923,7 @@
   },
   "preset_2_7_c_purlin__900_x_1500_": {
     "id": "preset_2_7_c_purlin__900_x_1500_",
-    "label": "2*7 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -4061,7 +4061,7 @@
   },
   "preset_2_8_c_purlin__900_x_1500_": {
     "id": "preset_2_8_c_purlin__900_x_1500_",
-    "label": "2*8 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -4191,7 +4191,7 @@
   },
   "preset_2_9_c_purlin__900_x_1500_": {
     "id": "preset_2_9_c_purlin__900_x_1500_",
-    "label": "2*9 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -4329,7 +4329,7 @@
   },
   "preset_2_10_c_purlin__900_x_1500_": {
     "id": "preset_2_10_c_purlin__900_x_1500_",
-    "label": "2*10 C Purlin (900 x 1500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -4459,7 +4459,7 @@
   },
   "preset_2_2_c_purlin__1200_x_1800_": {
     "id": "preset_2_2_c_purlin__1200_x_1800_",
-    "label": "2*2 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -4589,7 +4589,7 @@
   },
   "preset_2_3_c_purlin__1200_x_1800_": {
     "id": "preset_2_3_c_purlin__1200_x_1800_",
-    "label": "2*3 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -4719,7 +4719,7 @@
   },
   "preset_2_4_c_purlin__1200_x_1800_": {
     "id": "preset_2_4_c_purlin__1200_x_1800_",
-    "label": "2*4 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -4857,7 +4857,7 @@
   },
   "preset_2_5_c_purlin__1200_x_1800_": {
     "id": "preset_2_5_c_purlin__1200_x_1800_",
-    "label": "2*5 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5003,7 +5003,7 @@
   },
   "preset_2_6_c_purlin__1200_x_1800_": {
     "id": "preset_2_6_c_purlin__1200_x_1800_",
-    "label": "2*6 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5125,7 +5125,7 @@
   },
   "preset_2_7_c_purlin__1200_x_1800_": {
     "id": "preset_2_7_c_purlin__1200_x_1800_",
-    "label": "2*7 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5287,7 +5287,7 @@
   },
   "preset_2_8_c_purlin__1200_x_1800_": {
     "id": "preset_2_8_c_purlin__1200_x_1800_",
-    "label": "2*8 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5433,7 +5433,7 @@
   },
   "preset_2_9_c_purlin__1200_x_1800_": {
     "id": "preset_2_9_c_purlin__1200_x_1800_",
-    "label": "2*9 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5515,7 +5515,7 @@
   },
   "preset_2_10_c_purlin__1200_x_1800_": {
     "id": "preset_2_10_c_purlin__1200_x_1800_",
-    "label": "2*10 C Purlin (1200 x 1800) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5645,7 +5645,7 @@
   },
   "preset_2_2_c_purlin__2000_x_2500_": {
     "id": "preset_2_2_c_purlin__2000_x_2500_",
-    "label": "2*2 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5799,7 +5799,7 @@
   },
   "preset_2_3_c_purlin__2000_x_2500_": {
     "id": "preset_2_3_c_purlin__2000_x_2500_",
-    "label": "2*3 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -5953,7 +5953,7 @@
   },
   "preset_2_4_c_purlin__2000_x_2500_": {
     "id": "preset_2_4_c_purlin__2000_x_2500_",
-    "label": "2*4 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -6107,7 +6107,7 @@
   },
   "preset_2_5_c_purlin__2000_x_2500_": {
     "id": "preset_2_5_c_purlin__2000_x_2500_",
-    "label": "2*5 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -6261,7 +6261,7 @@
   },
   "preset_2_6_c_purlin__2000_x_2500_": {
     "id": "preset_2_6_c_purlin__2000_x_2500_",
-    "label": "2*6 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -6415,7 +6415,7 @@
   },
   "preset_2_7_c_purlin__2000_x_2500_": {
     "id": "preset_2_7_c_purlin__2000_x_2500_",
-    "label": "2*7 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -6577,7 +6577,7 @@
   },
   "preset_2_8_c_purlin__2000_x_2500_": {
     "id": "preset_2_8_c_purlin__2000_x_2500_",
-    "label": "2*8 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -6731,7 +6731,7 @@
   },
   "preset_2_9_c_purlin__2000_x_2500_": {
     "id": "preset_2_9_c_purlin__2000_x_2500_",
-    "label": "2*9 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -6901,7 +6901,7 @@
   },
   "preset_2_10_c_purlin__2000_x_2500_": {
     "id": "preset_2_10_c_purlin__2000_x_2500_",
-    "label": "2*10 C Purlin (2000 x 2500) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -7055,7 +7055,7 @@
   },
   "preset_2_2_c_purlin__2500_x_3000_": {
     "id": "preset_2_2_c_purlin__2500_x_3000_",
-    "label": "2*2 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -7209,7 +7209,7 @@
   },
   "preset_2_3_c_purlin__2500_x_3000_": {
     "id": "preset_2_3_c_purlin__2500_x_3000_",
-    "label": "2*3 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -7363,7 +7363,7 @@
   },
   "preset_2_4_c_purlin__2500_x_3000_": {
     "id": "preset_2_4_c_purlin__2500_x_3000_",
-    "label": "2*4 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -7517,7 +7517,7 @@
   },
   "preset_2_5_c_purlin__2500_x_3000_": {
     "id": "preset_2_5_c_purlin__2500_x_3000_",
-    "label": "2*5 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -7671,7 +7671,7 @@
   },
   "preset_2_6_c_purlin__2500_x_3000_": {
     "id": "preset_2_6_c_purlin__2500_x_3000_",
-    "label": "2*6 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -7825,7 +7825,7 @@
   },
   "preset_2_7_c_purlin__2500_x_3000_": {
     "id": "preset_2_7_c_purlin__2500_x_3000_",
-    "label": "2*7 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -7987,7 +7987,7 @@
   },
   "preset_2_8_c_purlin__2500_x_3000_": {
     "id": "preset_2_8_c_purlin__2500_x_3000_",
-    "label": "2*8 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -8141,7 +8141,7 @@
   },
   "preset_2_9_c_purlin__2500_x_3000_": {
     "id": "preset_2_9_c_purlin__2500_x_3000_",
-    "label": "2*9 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -8311,7 +8311,7 @@
   },
   "preset_2_10_c_purlin__2500_x_3000_": {
     "id": "preset_2_10_c_purlin__2500_x_3000_",
-    "label": "2*10 C Purlin (2500 x 3000) - HDG C Purlin (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (2 Row)",
     "material": "HDG",
     "rowType": "2 Row",
@@ -8465,7 +8465,7 @@
   },
   "preset_3_2_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_2_c_purlin__650_x_900_x_1200_",
-    "label": "3*2 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*2 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -8643,7 +8643,7 @@
   },
   "preset_3_3_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_3_c_purlin__650_x_900_x_1200_",
-    "label": "3*3 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*3 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -8821,7 +8821,7 @@
   },
   "preset_3_4_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_4_c_purlin__650_x_900_x_1200_",
-    "label": "3*4 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*4 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -8999,7 +8999,7 @@
   },
   "preset_3_5_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_5_c_purlin__650_x_900_x_1200_",
-    "label": "3*5 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*5 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -9177,7 +9177,7 @@
   },
   "preset_3_6_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_6_c_purlin__650_x_900_x_1200_",
-    "label": "3*6 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*6 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -9355,7 +9355,7 @@
   },
   "preset_3_7_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_7_c_purlin__650_x_900_x_1200_",
-    "label": "3*7 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*7 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -9541,7 +9541,7 @@
   },
   "preset_3_8_c_purlin__650_x_900x_1200_": {
     "id": "preset_3_8_c_purlin__650_x_900x_1200_",
-    "label": "3*8 C Purlin (650 x 900x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*8 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -9719,7 +9719,7 @@
   },
   "preset_3_9_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_9_c_purlin__650_x_900_x_1200_",
-    "label": "3*9 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*9 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -9905,7 +9905,7 @@
   },
   "preset_3_10_c_purlin__650_x_900_x_1200_": {
     "id": "preset_3_10_c_purlin__650_x_900_x_1200_",
-    "label": "3*10 C Purlin (650 x 900 x 1200) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*10 Table With 650mm*900mm*1200mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -10083,7 +10083,7 @@
   },
   "preset_3_2_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_2_c_purlin__900_x_1200_x_1800_",
-    "label": "3*2 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*2 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -10261,7 +10261,7 @@
   },
   "preset_3_3_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_3_c_purlin__900_x_1200_x_1800_",
-    "label": "3*3 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*3 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -10439,7 +10439,7 @@
   },
   "preset_3_4_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_4_c_purlin__900_x_1200_x_1800_",
-    "label": "3*4 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*4 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -10617,7 +10617,7 @@
   },
   "preset_3_5_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_5_c_purlin__900_x_1200_x_1800_",
-    "label": "3*5 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*5 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -10795,7 +10795,7 @@
   },
   "preset_3_6_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_6_c_purlin__900_x_1200_x_1800_",
-    "label": "3*6 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*6 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -10973,7 +10973,7 @@
   },
   "preset_3_7_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_7_c_purlin__900_x_1200_x_1800_",
-    "label": "3*7 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*7 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -11159,7 +11159,7 @@
   },
   "preset_3_8_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_8_c_purlin__900_x_1200_x_1800_",
-    "label": "3*8 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*8 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -11337,7 +11337,7 @@
   },
   "preset_3_9_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_9_c_purlin__900_x_1200_x_1800_",
-    "label": "3*9 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*9 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -11523,7 +11523,7 @@
   },
   "preset_3_10_c_purlin__900_x_1200_x_1800_": {
     "id": "preset_3_10_c_purlin__900_x_1200_x_1800_",
-    "label": "3*10 C Purlin (900 x 1200 x 1800) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*10 Table With 900mm*1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -11701,7 +11701,7 @@
   },
   "preset_3_2_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_2_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*2 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*2 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -11887,7 +11887,7 @@
   },
   "preset_3_3_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_3_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*3 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*3 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -12073,7 +12073,7 @@
   },
   "preset_3_4_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_4_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*4 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*4 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -12259,7 +12259,7 @@
   },
   "preset_3_5_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_5_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*5 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*5 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -12445,7 +12445,7 @@
   },
   "preset_3_6_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_6_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*6 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*6 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -12631,7 +12631,7 @@
   },
   "preset_3_7_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_7_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*7 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*7 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -12825,7 +12825,7 @@
   },
   "preset_3_8_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_8_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*8 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*8 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -13011,7 +13011,7 @@
   },
   "preset_3_9_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_9_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*9 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*9 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -13213,7 +13213,7 @@
   },
   "preset_3_10_c_purlin__2000_x_2500_x_3000_": {
     "id": "preset_3_10_c_purlin__2000_x_2500_x_3000_",
-    "label": "3*10 C Purlin (2000 x 2500 x 3000) - HDG C Purlin (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*10 Table With 2000mm*2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (3 Row)",
     "material": "HDG",
     "rowType": "3 Row",
@@ -13407,7 +13407,7 @@
   },
   "preset_1_2_c_purlin__500_x_1000_": {
     "id": "preset_1_2_c_purlin__500_x_1000_",
-    "label": "1*2 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -13537,7 +13537,7 @@
   },
   "preset_1_3_c_purlin__500_x_1000_": {
     "id": "preset_1_3_c_purlin__500_x_1000_",
-    "label": "1*3 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -13667,7 +13667,7 @@
   },
   "preset_1_4_c_purlin__500_x_1000_": {
     "id": "preset_1_4_c_purlin__500_x_1000_",
-    "label": "1*4 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -13797,7 +13797,7 @@
   },
   "preset_1_5_c_purlin__500_x_1000_": {
     "id": "preset_1_5_c_purlin__500_x_1000_",
-    "label": "1*5 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -13927,7 +13927,7 @@
   },
   "preset_1_6_c_purlin__500_x_1000_": {
     "id": "preset_1_6_c_purlin__500_x_1000_",
-    "label": "1*6 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14057,7 +14057,7 @@
   },
   "preset_1_7_c_purlin__500_x_1000_": {
     "id": "preset_1_7_c_purlin__500_x_1000_",
-    "label": "1*7 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14195,7 +14195,7 @@
   },
   "preset_1_8_c_purlin__500_x_1000_": {
     "id": "preset_1_8_c_purlin__500_x_1000_",
-    "label": "1*8 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14325,7 +14325,7 @@
   },
   "preset_1_9_c_purlin__500_x_1000_": {
     "id": "preset_1_9_c_purlin__500_x_1000_",
-    "label": "1*9 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14463,7 +14463,7 @@
   },
   "preset_1_10_c_purlin__500_x_1000_": {
     "id": "preset_1_10_c_purlin__500_x_1000_",
-    "label": "1*10 C Purlin (500 x 1000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 500mm*1000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14593,7 +14593,7 @@
   },
   "preset_1_2_c_purlin__650_x_1300_": {
     "id": "preset_1_2_c_purlin__650_x_1300_",
-    "label": "1*2 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14723,7 +14723,7 @@
   },
   "preset_1_3_c_purlin__650_x_1300_": {
     "id": "preset_1_3_c_purlin__650_x_1300_",
-    "label": "1*3 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14853,7 +14853,7 @@
   },
   "preset_1_4_c_purlin__650_x_1300_": {
     "id": "preset_1_4_c_purlin__650_x_1300_",
-    "label": "1*4 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -14983,7 +14983,7 @@
   },
   "preset_1_5_c_purlin__650_x_1300_": {
     "id": "preset_1_5_c_purlin__650_x_1300_",
-    "label": "1*5 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -15113,7 +15113,7 @@
   },
   "preset_1_6_c_purlin__650_x_1300_": {
     "id": "preset_1_6_c_purlin__650_x_1300_",
-    "label": "1*6 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -15243,7 +15243,7 @@
   },
   "preset_1_7_c_purlin__650_x_1300_": {
     "id": "preset_1_7_c_purlin__650_x_1300_",
-    "label": "1*7 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -15381,7 +15381,7 @@
   },
   "preset_1_8_c_purlin__650_x_1300_": {
     "id": "preset_1_8_c_purlin__650_x_1300_",
-    "label": "1*8 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -15511,7 +15511,7 @@
   },
   "preset_1_9_c_purlin__650_x_1300_": {
     "id": "preset_1_9_c_purlin__650_x_1300_",
-    "label": "1*9 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -15649,7 +15649,7 @@
   },
   "preset_1_10_c_purlin__650_x_1300_": {
     "id": "preset_1_10_c_purlin__650_x_1300_",
-    "label": "1*10 C Purlin (650 x 1300) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 650mm*1300mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -15779,7 +15779,7 @@
   },
   "preset_1_2_c_purlin__900_x_1500_": {
     "id": "preset_1_2_c_purlin__900_x_1500_",
-    "label": "1*2 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -15909,7 +15909,7 @@
   },
   "preset_1_3_c_purlin__900_x_1500_": {
     "id": "preset_1_3_c_purlin__900_x_1500_",
-    "label": "1*3 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16039,7 +16039,7 @@
   },
   "preset_1_4_c_purlin__900_x_1500_": {
     "id": "preset_1_4_c_purlin__900_x_1500_",
-    "label": "1*4 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16169,7 +16169,7 @@
   },
   "preset_1_5_c_purlin__900_x_1500_": {
     "id": "preset_1_5_c_purlin__900_x_1500_",
-    "label": "1*5 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16299,7 +16299,7 @@
   },
   "preset_1_6_c_purlin__900_x_1500_": {
     "id": "preset_1_6_c_purlin__900_x_1500_",
-    "label": "1*6 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16429,7 +16429,7 @@
   },
   "preset_1_7_c_purlin__900_x_1500_": {
     "id": "preset_1_7_c_purlin__900_x_1500_",
-    "label": "1*7 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16567,7 +16567,7 @@
   },
   "preset_1_8_c_purlin__900_x_1500_": {
     "id": "preset_1_8_c_purlin__900_x_1500_",
-    "label": "1*8 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16697,7 +16697,7 @@
   },
   "preset_1_9_c_purlin__900_x_1500_": {
     "id": "preset_1_9_c_purlin__900_x_1500_",
-    "label": "1*9 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16835,7 +16835,7 @@
   },
   "preset_1_10_c_purlin__900_x_1500_": {
     "id": "preset_1_10_c_purlin__900_x_1500_",
-    "label": "1*10 C Purlin (900 x 1500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 900mm*1500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -16965,7 +16965,7 @@
   },
   "preset_1_2_c_purlin__1200_x_1800_": {
     "id": "preset_1_2_c_purlin__1200_x_1800_",
-    "label": "1*2 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -17095,7 +17095,7 @@
   },
   "preset_1_3_c_purlin__1200_x_1800_": {
     "id": "preset_1_3_c_purlin__1200_x_1800_",
-    "label": "1*3 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -17225,7 +17225,7 @@
   },
   "preset_1_4_c_purlin__1200_x_1800_": {
     "id": "preset_1_4_c_purlin__1200_x_1800_",
-    "label": "1*4 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -17355,7 +17355,7 @@
   },
   "preset_1_5_c_purlin__1200_x_1800_": {
     "id": "preset_1_5_c_purlin__1200_x_1800_",
-    "label": "1*5 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -17485,7 +17485,7 @@
   },
   "preset_1_6_c_purlin__1200_x_1800_": {
     "id": "preset_1_6_c_purlin__1200_x_1800_",
-    "label": "1*6 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -17615,7 +17615,7 @@
   },
   "preset_1_7_c_purlin__1200_x_1800_": {
     "id": "preset_1_7_c_purlin__1200_x_1800_",
-    "label": "1*7 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -17753,7 +17753,7 @@
   },
   "preset_1_8_c_purlin__1200_x_1800_": {
     "id": "preset_1_8_c_purlin__1200_x_1800_",
-    "label": "1*8 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -17883,7 +17883,7 @@
   },
   "preset_1_9_c_purlin__1200_x_1800_": {
     "id": "preset_1_9_c_purlin__1200_x_1800_",
-    "label": "1*9 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18021,7 +18021,7 @@
   },
   "preset_1_10_c_purlin__1200_x_1800_": {
     "id": "preset_1_10_c_purlin__1200_x_1800_",
-    "label": "1*10 C Purlin (1200 x 1800) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 1200mm*1800mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18151,7 +18151,7 @@
   },
   "preset_1_2_c_purlin__2000_x_2500_": {
     "id": "preset_1_2_c_purlin__2000_x_2500_",
-    "label": "1*2 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18289,7 +18289,7 @@
   },
   "preset_1_3_c_purlin__2000_x_2500_": {
     "id": "preset_1_3_c_purlin__2000_x_2500_",
-    "label": "1*3 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18427,7 +18427,7 @@
   },
   "preset_1_4_c_purlin__2000_x_2500_": {
     "id": "preset_1_4_c_purlin__2000_x_2500_",
-    "label": "1*4 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18565,7 +18565,7 @@
   },
   "preset_1_5_c_purlin__2000_x_2500_": {
     "id": "preset_1_5_c_purlin__2000_x_2500_",
-    "label": "1*5 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18703,7 +18703,7 @@
   },
   "preset_1_6_c_purlin__2000_x_2500_": {
     "id": "preset_1_6_c_purlin__2000_x_2500_",
-    "label": "1*6 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18841,7 +18841,7 @@
   },
   "preset_1_7_c_purlin__2000_x_2500_": {
     "id": "preset_1_7_c_purlin__2000_x_2500_",
-    "label": "1*7 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -18987,7 +18987,7 @@
   },
   "preset_1_8_c_purlin__2000_x_2500_": {
     "id": "preset_1_8_c_purlin__2000_x_2500_",
-    "label": "1*8 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -19125,7 +19125,7 @@
   },
   "preset_1_9_c_purlin__2000_x_2500_": {
     "id": "preset_1_9_c_purlin__2000_x_2500_",
-    "label": "1*9 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -19279,7 +19279,7 @@
   },
   "preset_1_10_c_purlin__2000_x_2500_": {
     "id": "preset_1_10_c_purlin__2000_x_2500_",
-    "label": "1*10 C Purlin (2000 x 2500) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 2000mm*2500mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -19417,7 +19417,7 @@
   },
   "preset_1_2_c_purlin__2500_x_3000_": {
     "id": "preset_1_2_c_purlin__2500_x_3000_",
-    "label": "1*2 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -19555,7 +19555,7 @@
   },
   "preset_1_3_c_purlin__2500_x_3000_": {
     "id": "preset_1_3_c_purlin__2500_x_3000_",
-    "label": "1*3 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -19693,7 +19693,7 @@
   },
   "preset_1_4_c_purlin__2500_x_3000_": {
     "id": "preset_1_4_c_purlin__2500_x_3000_",
-    "label": "1*4 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -19831,7 +19831,7 @@
   },
   "preset_1_5_c_purlin__2500_x_3000_": {
     "id": "preset_1_5_c_purlin__2500_x_3000_",
-    "label": "1*5 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -19969,7 +19969,7 @@
   },
   "preset_1_6_c_purlin__2500_x_3000_": {
     "id": "preset_1_6_c_purlin__2500_x_3000_",
-    "label": "1*6 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -20107,7 +20107,7 @@
   },
   "preset_1_7_c_purlin__2500_x_3000_": {
     "id": "preset_1_7_c_purlin__2500_x_3000_",
-    "label": "1*7 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -20253,7 +20253,7 @@
   },
   "preset_1_8_c_purlin__2500_x_3000_": {
     "id": "preset_1_8_c_purlin__2500_x_3000_",
-    "label": "1*8 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -20391,7 +20391,7 @@
   },
   "preset_1_9_c_purlin__2500_x_3000_": {
     "id": "preset_1_9_c_purlin__2500_x_3000_",
-    "label": "1*9 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -20545,7 +20545,7 @@
   },
   "preset_1_10_c_purlin__2500_x_3000_": {
     "id": "preset_1_10_c_purlin__2500_x_3000_",
-    "label": "1*10 C Purlin (2500 x 3000) - HDG C Purlin (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 2500mm*3000mm Height)-C Purlin",
     "category": "HDG C Purlin Structures (1 Row)",
     "material": "HDG",
     "rowType": "1 Row",
@@ -21729,7 +21729,7 @@
   },
   "hp_2_2_hp__500_x_1000_": {
     "id": "hp_2_2_hp__500_x_1000_",
-    "label": "2*2 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -21851,7 +21851,7 @@
   },
   "hp_2_3_hp__500_x_1000_": {
     "id": "hp_2_3_hp__500_x_1000_",
-    "label": "2*3 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -21973,7 +21973,7 @@
   },
   "hp_2_4_hp__500_x_1000_": {
     "id": "hp_2_4_hp__500_x_1000_",
-    "label": "2*4 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22103,7 +22103,7 @@
   },
   "hp_2_5_hp__500_x_1000_": {
     "id": "hp_2_5_hp__500_x_1000_",
-    "label": "2*5 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22233,7 +22233,7 @@
   },
   "hp_2_6_hp__500_x_1000_": {
     "id": "hp_2_6_hp__500_x_1000_",
-    "label": "2*6 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22355,7 +22355,7 @@
   },
   "hp_2_7_hp__500_x_1000_": {
     "id": "hp_2_7_hp__500_x_1000_",
-    "label": "2*7 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22485,7 +22485,7 @@
   },
   "hp_2_8_hp__500_x_1000_": {
     "id": "hp_2_8_hp__500_x_1000_",
-    "label": "2*8 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22615,7 +22615,7 @@
   },
   "hp_2_9_hp__500_x_1000_": {
     "id": "hp_2_9_hp__500_x_1000_",
-    "label": "2*9 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22745,7 +22745,7 @@
   },
   "hp_2_10_hp__500_x_1000_": {
     "id": "hp_2_10_hp__500_x_1000_",
-    "label": "2*10 HP (500 x 1000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22867,7 +22867,7 @@
   },
   "hp_2_2_hp__650_x_1300_": {
     "id": "hp_2_2_hp__650_x_1300_",
-    "label": "2*2 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -22989,7 +22989,7 @@
   },
   "hp_2_3_hp__650_x_1300_": {
     "id": "hp_2_3_hp__650_x_1300_",
-    "label": "2*3 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -23111,7 +23111,7 @@
   },
   "hp_2_4_hp__650_x_1300_": {
     "id": "hp_2_4_hp__650_x_1300_",
-    "label": "2*4 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -23241,7 +23241,7 @@
   },
   "hp_2_5_hp__650_x_1300_": {
     "id": "hp_2_5_hp__650_x_1300_",
-    "label": "2*5 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -23371,7 +23371,7 @@
   },
   "hp_2_6_hp__650_x_1300_": {
     "id": "hp_2_6_hp__650_x_1300_",
-    "label": "2*6 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -23493,7 +23493,7 @@
   },
   "hp_2_7_hp__650_x_1300_": {
     "id": "hp_2_7_hp__650_x_1300_",
-    "label": "2*7 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -23623,7 +23623,7 @@
   },
   "hp_2_8_hp__650_x_1300_": {
     "id": "hp_2_8_hp__650_x_1300_",
-    "label": "2*8 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -23753,7 +23753,7 @@
   },
   "hp_2_9_hp__650_x_1300_": {
     "id": "hp_2_9_hp__650_x_1300_",
-    "label": "2*9 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -23883,7 +23883,7 @@
   },
   "hp_2_10_hp__650_x_1300_": {
     "id": "hp_2_10_hp__650_x_1300_",
-    "label": "2*10 HP (650 x 1300) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24005,7 +24005,7 @@
   },
   "hp_2_2_hp__900_x_1500_": {
     "id": "hp_2_2_hp__900_x_1500_",
-    "label": "2*2 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24127,7 +24127,7 @@
   },
   "hp_2_3_hp__900_x_1500_": {
     "id": "hp_2_3_hp__900_x_1500_",
-    "label": "2*3 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24249,7 +24249,7 @@
   },
   "hp_2_4_hp__900_x_1500_": {
     "id": "hp_2_4_hp__900_x_1500_",
-    "label": "2*4 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24379,7 +24379,7 @@
   },
   "hp_2_5_hp__900_x_1500_": {
     "id": "hp_2_5_hp__900_x_1500_",
-    "label": "2*5 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24509,7 +24509,7 @@
   },
   "hp_2_6_hp__900_x_1500_": {
     "id": "hp_2_6_hp__900_x_1500_",
-    "label": "2*6 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24631,7 +24631,7 @@
   },
   "hp_2_7_hp__900_x_1500_": {
     "id": "hp_2_7_hp__900_x_1500_",
-    "label": "2*7 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24761,7 +24761,7 @@
   },
   "hp_2_8_hp__900_x_1500_": {
     "id": "hp_2_8_hp__900_x_1500_",
-    "label": "2*8 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -24891,7 +24891,7 @@
   },
   "hp_2_9_hp__900_x_1500_": {
     "id": "hp_2_9_hp__900_x_1500_",
-    "label": "2*9 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25021,7 +25021,7 @@
   },
   "hp_2_10_hp__900_x_1500_": {
     "id": "hp_2_10_hp__900_x_1500_",
-    "label": "2*10 HP (900 x 1500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25143,7 +25143,7 @@
   },
   "hp_2_2_hp__1200_x_1800_": {
     "id": "hp_2_2_hp__1200_x_1800_",
-    "label": "2*2 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25265,7 +25265,7 @@
   },
   "hp_2_3_hp__1200_x_1800_": {
     "id": "hp_2_3_hp__1200_x_1800_",
-    "label": "2*3 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25387,7 +25387,7 @@
   },
   "hp_2_4_hp__1200_x_1800_": {
     "id": "hp_2_4_hp__1200_x_1800_",
-    "label": "2*4 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25517,7 +25517,7 @@
   },
   "hp_2_5_hp__1200_x_1800_": {
     "id": "hp_2_5_hp__1200_x_1800_",
-    "label": "2*5 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25647,7 +25647,7 @@
   },
   "hp_2_6_hp__1200_x_1800_": {
     "id": "hp_2_6_hp__1200_x_1800_",
-    "label": "2*6 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25769,7 +25769,7 @@
   },
   "hp_2_7_hp__1200_x_1800_": {
     "id": "hp_2_7_hp__1200_x_1800_",
-    "label": "2*7 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -25899,7 +25899,7 @@
   },
   "hp_2_8_hp__1200_x_1800_": {
     "id": "hp_2_8_hp__1200_x_1800_",
-    "label": "2*8 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -26029,7 +26029,7 @@
   },
   "hp_2_9_hp__1200_x_1800_": {
     "id": "hp_2_9_hp__1200_x_1800_",
-    "label": "2*9 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -26159,7 +26159,7 @@
   },
   "hp_2_10_hp__1200_x_1800_": {
     "id": "hp_2_10_hp__1200_x_1800_",
-    "label": "2*10 HP (1200 x 1800) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -26281,7 +26281,7 @@
   },
   "hp_2_2_hp__2000_x_2500_": {
     "id": "hp_2_2_hp__2000_x_2500_",
-    "label": "2*2 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -26427,7 +26427,7 @@
   },
   "hp_2_3_hp__2000_x_2500_": {
     "id": "hp_2_3_hp__2000_x_2500_",
-    "label": "2*3 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -26573,7 +26573,7 @@
   },
   "hp_2_4_hp__2000_x_2500_": {
     "id": "hp_2_4_hp__2000_x_2500_",
-    "label": "2*4 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -26727,7 +26727,7 @@
   },
   "hp_2_5_hp__2000_x_2500_": {
     "id": "hp_2_5_hp__2000_x_2500_",
-    "label": "2*5 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -26881,7 +26881,7 @@
   },
   "hp_2_6_hp__2000_x_2500_": {
     "id": "hp_2_6_hp__2000_x_2500_",
-    "label": "2*6 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -27027,7 +27027,7 @@
   },
   "hp_2_7_hp__2000_x_2500_": {
     "id": "hp_2_7_hp__2000_x_2500_",
-    "label": "2*7 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -27181,7 +27181,7 @@
   },
   "hp_2_8_hp__2000_x_2500_": {
     "id": "hp_2_8_hp__2000_x_2500_",
-    "label": "2*8 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -27335,7 +27335,7 @@
   },
   "hp_2_9_hp__2000_x_2500_": {
     "id": "hp_2_9_hp__2000_x_2500_",
-    "label": "2*9 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -27497,7 +27497,7 @@
   },
   "hp_2_10_hp__2000_x_2500_": {
     "id": "hp_2_10_hp__2000_x_2500_",
-    "label": "2*10 HP (2000 x 2500) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -27643,7 +27643,7 @@
   },
   "hp_2_2_hp__2500_x_3000_": {
     "id": "hp_2_2_hp__2500_x_3000_",
-    "label": "2*2 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*2 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -27789,7 +27789,7 @@
   },
   "hp_2_3_hp__2500_x_3000_": {
     "id": "hp_2_3_hp__2500_x_3000_",
-    "label": "2*3 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*3 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -27935,7 +27935,7 @@
   },
   "hp_2_4_hp__2500_x_3000_": {
     "id": "hp_2_4_hp__2500_x_3000_",
-    "label": "2*4 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*4 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -28089,7 +28089,7 @@
   },
   "hp_2_5_hp__2500_x_3000_": {
     "id": "hp_2_5_hp__2500_x_3000_",
-    "label": "2*5 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*5 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -28243,7 +28243,7 @@
   },
   "hp_2_6_hp__2500_x_3000_": {
     "id": "hp_2_6_hp__2500_x_3000_",
-    "label": "2*6 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*6 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -28389,7 +28389,7 @@
   },
   "hp_2_7_hp__2500_x_3000_": {
     "id": "hp_2_7_hp__2500_x_3000_",
-    "label": "2*7 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*7 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -28543,7 +28543,7 @@
   },
   "hp_2_8_hp__2500_x_3000_": {
     "id": "hp_2_8_hp__2500_x_3000_",
-    "label": "2*8 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*8 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -28697,7 +28697,7 @@
   },
   "hp_2_9_hp__2500_x_3000_": {
     "id": "hp_2_9_hp__2500_x_3000_",
-    "label": "2*9 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*9 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -28859,7 +28859,7 @@
   },
   "hp_2_10_hp__2500_x_3000_": {
     "id": "hp_2_10_hp__2500_x_3000_",
-    "label": "2*10 HP (2500 x 3000) - GAL Hat Purline (2 Row)",
+    "label": "VRMStructures Make HDG Structures (2*10 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (2 Row)",
     "material": "GAL",
     "rowType": "2 Row",
@@ -29005,7 +29005,7 @@
   },
   "hp_3_2_hp__650_x_900_x_1200_": {
     "id": "hp_3_2_hp__650_x_900_x_1200_",
-    "label": "3*2 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*2 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -29175,7 +29175,7 @@
   },
   "hp_3_3_hp__650_x_900_x_1200_": {
     "id": "hp_3_3_hp__650_x_900_x_1200_",
-    "label": "3*3 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*3 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -29345,7 +29345,7 @@
   },
   "hp_3_4_hp__650_x_900_x_1200_": {
     "id": "hp_3_4_hp__650_x_900_x_1200_",
-    "label": "3*4 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*4 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -29523,7 +29523,7 @@
   },
   "hp_3_5_hp__650_x_900_x_1200_": {
     "id": "hp_3_5_hp__650_x_900_x_1200_",
-    "label": "3*5 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*5 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -29701,7 +29701,7 @@
   },
   "hp_3_6_hp__650_x_900_x_1200_": {
     "id": "hp_3_6_hp__650_x_900_x_1200_",
-    "label": "3*6 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*6 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -29871,7 +29871,7 @@
   },
   "hp_3_7_hp__650_x_900_x_1200_": {
     "id": "hp_3_7_hp__650_x_900_x_1200_",
-    "label": "3*7 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*7 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -30049,7 +30049,7 @@
   },
   "hp_3_8_hp__650_x_900_x_1200_": {
     "id": "hp_3_8_hp__650_x_900_x_1200_",
-    "label": "3*8 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*8 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -30227,7 +30227,7 @@
   },
   "hp_3_9_hp__650_x_900_x_1200_": {
     "id": "hp_3_9_hp__650_x_900_x_1200_",
-    "label": "3*9 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*9 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -30405,7 +30405,7 @@
   },
   "hp_3_10_hp__650_x_900_x_1200_": {
     "id": "hp_3_10_hp__650_x_900_x_1200_",
-    "label": "3*10 HP (650 x 900 x 1200) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*10 Table With 650mm*900mm*1200mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -30575,7 +30575,7 @@
   },
   "hp_3_2_hp__900_x_1200_x_1800_": {
     "id": "hp_3_2_hp__900_x_1200_x_1800_",
-    "label": "3*2 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*2 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -30745,7 +30745,7 @@
   },
   "hp_3_3_hp__900_x_1200_x_1800_": {
     "id": "hp_3_3_hp__900_x_1200_x_1800_",
-    "label": "3*3 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*3 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -30915,7 +30915,7 @@
   },
   "hp_3_4_hp__900_x_1200_x_1800_": {
     "id": "hp_3_4_hp__900_x_1200_x_1800_",
-    "label": "3*4 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*4 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -31093,7 +31093,7 @@
   },
   "hp_3_5_hp__900_x_1200_x_1800_": {
     "id": "hp_3_5_hp__900_x_1200_x_1800_",
-    "label": "3*5 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*5 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -31271,7 +31271,7 @@
   },
   "hp_3_6_hp__900_x_1200_x_1800_": {
     "id": "hp_3_6_hp__900_x_1200_x_1800_",
-    "label": "3*6 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*6 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -31441,7 +31441,7 @@
   },
   "hp_3_7_hp__900_x_1200_x_1800_": {
     "id": "hp_3_7_hp__900_x_1200_x_1800_",
-    "label": "3*7 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*7 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -31619,7 +31619,7 @@
   },
   "hp_3_8_hp__900_x_1200_x_1800_": {
     "id": "hp_3_8_hp__900_x_1200_x_1800_",
-    "label": "3*8 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*8 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -31797,7 +31797,7 @@
   },
   "hp_3_9_hp__900_x_1200_x_1800_": {
     "id": "hp_3_9_hp__900_x_1200_x_1800_",
-    "label": "3*9 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*9 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -31975,7 +31975,7 @@
   },
   "hp_3_10_hp__900_x_1200_x_1800_": {
     "id": "hp_3_10_hp__900_x_1200_x_1800_",
-    "label": "3*10 HP (900 x 1200 x 1800) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*10 Table With 900mm*1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -32145,7 +32145,7 @@
   },
   "hp_3_2_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_2_hp__2000_x_2500_x_3000_",
-    "label": "3*2 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*2 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -32323,7 +32323,7 @@
   },
   "hp_3_3_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_3_hp__2000_x_2500_x_3000_",
-    "label": "3*3 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*3 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -32501,7 +32501,7 @@
   },
   "hp_3_4_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_4_hp__2000_x_2500_x_3000_",
-    "label": "3*4 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*4 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -32687,7 +32687,7 @@
   },
   "hp_3_5_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_5_hp__2000_x_2500_x_3000_",
-    "label": "3*5 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*5 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -32873,7 +32873,7 @@
   },
   "hp_3_6_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_6_hp__2000_x_2500_x_3000_",
-    "label": "3*6 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*6 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -33051,7 +33051,7 @@
   },
   "hp_3_7_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_7_hp__2000_x_2500_x_3000_",
-    "label": "3*7 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*7 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -33237,7 +33237,7 @@
   },
   "hp_3_8_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_8_hp__2000_x_2500_x_3000_",
-    "label": "3*8 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*8 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -33423,7 +33423,7 @@
   },
   "hp_3_9_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_9_hp__2000_x_2500_x_3000_",
-    "label": "3*9 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*9 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -33617,7 +33617,7 @@
   },
   "hp_3_10_hp__2000_x_2500_x_3000_": {
     "id": "hp_3_10_hp__2000_x_2500_x_3000_",
-    "label": "3*10 HP (2000 x 2500 x 3000) - GAL Hat Purline (3 Row)",
+    "label": "VRMStructures Make HDG Structures (3*10 Table With 2000mm*2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (3 Row)",
     "material": "GAL",
     "rowType": "3 Row",
@@ -33795,7 +33795,7 @@
   },
   "hp_1_2_hp__500_x_1000_": {
     "id": "hp_1_2_hp__500_x_1000_",
-    "label": "1*2 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -33917,7 +33917,7 @@
   },
   "hp_1_3_hp__500_x_1000_": {
     "id": "hp_1_3_hp__500_x_1000_",
-    "label": "1*3 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34039,7 +34039,7 @@
   },
   "hp_1_4_hp__500_x_1000_": {
     "id": "hp_1_4_hp__500_x_1000_",
-    "label": "1*4 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34169,7 +34169,7 @@
   },
   "hp_1_5_hp__500_x_1000_": {
     "id": "hp_1_5_hp__500_x_1000_",
-    "label": "1*5 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34299,7 +34299,7 @@
   },
   "hp_1_6_hp__500_x_1000_": {
     "id": "hp_1_6_hp__500_x_1000_",
-    "label": "1*6 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34421,7 +34421,7 @@
   },
   "hp_1_7_hp__500_x_1000_": {
     "id": "hp_1_7_hp__500_x_1000_",
-    "label": "1*7 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34551,7 +34551,7 @@
   },
   "hp_1_8_hp__500_x_1000_": {
     "id": "hp_1_8_hp__500_x_1000_",
-    "label": "1*8 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34681,7 +34681,7 @@
   },
   "hp_1_9_hp__500_x_1000_": {
     "id": "hp_1_9_hp__500_x_1000_",
-    "label": "1*9 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34811,7 +34811,7 @@
   },
   "hp_1_10_hp__500_x_1000_": {
     "id": "hp_1_10_hp__500_x_1000_",
-    "label": "1*10 HP (500 x 1000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 500mm*1000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -34933,7 +34933,7 @@
   },
   "hp_1_2_hp__650_x_1300_": {
     "id": "hp_1_2_hp__650_x_1300_",
-    "label": "1*2 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35055,7 +35055,7 @@
   },
   "hp_1_3_hp__650_x_1300_": {
     "id": "hp_1_3_hp__650_x_1300_",
-    "label": "1*3 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35177,7 +35177,7 @@
   },
   "hp_1_4_hp__650_x_1300_": {
     "id": "hp_1_4_hp__650_x_1300_",
-    "label": "1*4 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35307,7 +35307,7 @@
   },
   "hp_1_5_hp__650_x_1300_": {
     "id": "hp_1_5_hp__650_x_1300_",
-    "label": "1*5 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35437,7 +35437,7 @@
   },
   "hp_1_6_hp__650_x_1300_": {
     "id": "hp_1_6_hp__650_x_1300_",
-    "label": "1*6 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35559,7 +35559,7 @@
   },
   "hp_1_7_hp__650_x_1300_": {
     "id": "hp_1_7_hp__650_x_1300_",
-    "label": "1*7 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35689,7 +35689,7 @@
   },
   "hp_1_8_hp__650_x_1300_": {
     "id": "hp_1_8_hp__650_x_1300_",
-    "label": "1*8 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35819,7 +35819,7 @@
   },
   "hp_1_9_hp__650_x_1300_": {
     "id": "hp_1_9_hp__650_x_1300_",
-    "label": "1*9 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -35949,7 +35949,7 @@
   },
   "hp_1_10_hp__650_x_1300_": {
     "id": "hp_1_10_hp__650_x_1300_",
-    "label": "1*10 HP (650 x 1300) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 650mm*1300mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36071,7 +36071,7 @@
   },
   "hp_1_2_hp__900_x_1500_": {
     "id": "hp_1_2_hp__900_x_1500_",
-    "label": "1*2 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36193,7 +36193,7 @@
   },
   "hp_1_3_hp__900_x_1500_": {
     "id": "hp_1_3_hp__900_x_1500_",
-    "label": "1*3 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36315,7 +36315,7 @@
   },
   "hp_1_4_hp__900_x_1500_": {
     "id": "hp_1_4_hp__900_x_1500_",
-    "label": "1*4 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36445,7 +36445,7 @@
   },
   "hp_1_5_hp__900_x_1500_": {
     "id": "hp_1_5_hp__900_x_1500_",
-    "label": "1*5 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36575,7 +36575,7 @@
   },
   "hp_1_6_hp__900_x_1500_": {
     "id": "hp_1_6_hp__900_x_1500_",
-    "label": "1*6 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36697,7 +36697,7 @@
   },
   "hp_1_7_hp__900_x_1500_": {
     "id": "hp_1_7_hp__900_x_1500_",
-    "label": "1*7 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36827,7 +36827,7 @@
   },
   "hp_1_8_hp__900_x_1500_": {
     "id": "hp_1_8_hp__900_x_1500_",
-    "label": "1*8 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -36957,7 +36957,7 @@
   },
   "hp_1_9_hp__900_x_1500_": {
     "id": "hp_1_9_hp__900_x_1500_",
-    "label": "1*9 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37087,7 +37087,7 @@
   },
   "hp_1_10_hp__900_x_1500_": {
     "id": "hp_1_10_hp__900_x_1500_",
-    "label": "1*10 HP (900 x 1500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 900mm*1500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37209,7 +37209,7 @@
   },
   "hp_1_2_hp__1200_x_1800_": {
     "id": "hp_1_2_hp__1200_x_1800_",
-    "label": "1*2 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37331,7 +37331,7 @@
   },
   "hp_1_3_hp__1200_x_1800_": {
     "id": "hp_1_3_hp__1200_x_1800_",
-    "label": "1*3 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37453,7 +37453,7 @@
   },
   "hp_1_4_hp__1200_x_1800_": {
     "id": "hp_1_4_hp__1200_x_1800_",
-    "label": "1*4 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37583,7 +37583,7 @@
   },
   "hp_1_5_hp__1200_x_1800_": {
     "id": "hp_1_5_hp__1200_x_1800_",
-    "label": "1*5 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37713,7 +37713,7 @@
   },
   "hp_1_6_hp__1200_x_1800_": {
     "id": "hp_1_6_hp__1200_x_1800_",
-    "label": "1*6 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37835,7 +37835,7 @@
   },
   "hp_1_7_hp__1200_x_1800_": {
     "id": "hp_1_7_hp__1200_x_1800_",
-    "label": "1*7 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -37965,7 +37965,7 @@
   },
   "hp_1_8_hp__1200_x_1800_": {
     "id": "hp_1_8_hp__1200_x_1800_",
-    "label": "1*8 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -38095,7 +38095,7 @@
   },
   "hp_1_9_hp__1200_x_1800_": {
     "id": "hp_1_9_hp__1200_x_1800_",
-    "label": "1*9 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -38225,7 +38225,7 @@
   },
   "hp_1_10_hp__1200_x_1800_": {
     "id": "hp_1_10_hp__1200_x_1800_",
-    "label": "1*10 HP (1200 x 1800) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 1200mm*1800mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -38347,7 +38347,7 @@
   },
   "hp_1_2_hp__2000_x_2500_": {
     "id": "hp_1_2_hp__2000_x_2500_",
-    "label": "1*2 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -38477,7 +38477,7 @@
   },
   "hp_1_3_hp__2000_x_2500_": {
     "id": "hp_1_3_hp__2000_x_2500_",
-    "label": "1*3 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -38607,7 +38607,7 @@
   },
   "hp_1_4_hp__2000_x_2500_": {
     "id": "hp_1_4_hp__2000_x_2500_",
-    "label": "1*4 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -38745,7 +38745,7 @@
   },
   "hp_1_5_hp__2000_x_2500_": {
     "id": "hp_1_5_hp__2000_x_2500_",
-    "label": "1*5 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -38883,7 +38883,7 @@
   },
   "hp_1_6_hp__2000_x_2500_": {
     "id": "hp_1_6_hp__2000_x_2500_",
-    "label": "1*6 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39013,7 +39013,7 @@
   },
   "hp_1_7_hp__2000_x_2500_": {
     "id": "hp_1_7_hp__2000_x_2500_",
-    "label": "1*7 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39151,7 +39151,7 @@
   },
   "hp_1_8_hp__2000_x_2500_": {
     "id": "hp_1_8_hp__2000_x_2500_",
-    "label": "1*8 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39289,7 +39289,7 @@
   },
   "hp_1_9_hp__2000_x_2500_": {
     "id": "hp_1_9_hp__2000_x_2500_",
-    "label": "1*9 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39435,7 +39435,7 @@
   },
   "hp_1_10_hp__2000_x_2500_": {
     "id": "hp_1_10_hp__2000_x_2500_",
-    "label": "1*10 HP (2000 x 2500) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 2000mm*2500mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39565,7 +39565,7 @@
   },
   "hp_1_2_hp__2500_x_3000_": {
     "id": "hp_1_2_hp__2500_x_3000_",
-    "label": "1*2 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*2 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39695,7 +39695,7 @@
   },
   "hp_1_3_hp__2500_x_3000_": {
     "id": "hp_1_3_hp__2500_x_3000_",
-    "label": "1*3 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*3 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39825,7 +39825,7 @@
   },
   "hp_1_4_hp__2500_x_3000_": {
     "id": "hp_1_4_hp__2500_x_3000_",
-    "label": "1*4 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*4 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -39963,7 +39963,7 @@
   },
   "hp_1_5_hp__2500_x_3000_": {
     "id": "hp_1_5_hp__2500_x_3000_",
-    "label": "1*5 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*5 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -40101,7 +40101,7 @@
   },
   "hp_1_6_hp__2500_x_3000_": {
     "id": "hp_1_6_hp__2500_x_3000_",
-    "label": "1*6 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*6 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -40231,7 +40231,7 @@
   },
   "hp_1_7_hp__2500_x_3000_": {
     "id": "hp_1_7_hp__2500_x_3000_",
-    "label": "1*7 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*7 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -40369,7 +40369,7 @@
   },
   "hp_1_8_hp__2500_x_3000_": {
     "id": "hp_1_8_hp__2500_x_3000_",
-    "label": "1*8 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*8 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -40507,7 +40507,7 @@
   },
   "hp_1_9_hp__2500_x_3000_": {
     "id": "hp_1_9_hp__2500_x_3000_",
-    "label": "1*9 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*9 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
@@ -40653,7 +40653,7 @@
   },
   "hp_1_10_hp__2500_x_3000_": {
     "id": "hp_1_10_hp__2500_x_3000_",
-    "label": "1*10 HP (2500 x 3000) - GAL Hat Purline (1 Row)",
+    "label": "VRMStructures Make HDG Structures (1*10 Table With 2500mm*3000mm Height)-HAT Purlin",
     "category": "GAL Hat Purline Structures (1 Row)",
     "material": "GAL",
     "rowType": "1 Row",
