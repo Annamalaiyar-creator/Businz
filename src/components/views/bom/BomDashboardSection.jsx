@@ -785,7 +785,7 @@ export default function BomDashboardSection({ ctx }) {
                   lifecycle.steps[1]?.isDone ||
                   ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status)
                 );
-                const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
+                const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
 
                 return (
                   <div
@@ -1406,11 +1406,12 @@ export default function BomDashboardSection({ ctx }) {
             const effectiveBom = storeBom || targetRow;
 
             // Reconfirm BOM must strictly NOT be visible if already confirmed and sent to dispatch packing
+            const isExplicitPendingStatus = ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(effectiveBom.status);
             const isAlreadyConfirmedOrSent = Boolean(
               effectiveBom.salesConfirmed ||
               effectiveBom.salesReconfirmed ||
               effectiveBom.salesConfirmedAt ||
-              effectiveBom.stockBlocked ||
+              (!isExplicitPendingStatus && effectiveBom.stockBlocked) ||
               effectiveBom.stockDeducted ||
               effectiveBom.dispatchPackingVerified ||
               effectiveBom.packingStatus === 'PACKING_VERIFIED' ||

@@ -668,7 +668,7 @@ export function createPiActionHandlers(ctx) {
     setDestination('');
     setVehicleNo('');
     setTransportScope('VRM Structures');
-    setPaymentTerms('100% Paid');
+    setPaymentTerms('');
     setCreditDays('');
     setRemarks('');
     setPiItems([]); // Fresh empty default with 0 prefilled items

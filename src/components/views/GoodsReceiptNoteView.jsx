@@ -5624,7 +5624,7 @@ export default function GoodsReceiptNoteView(props) {
                       flexDirection: 'column',
                       gap: '24px',
                       position: 'relative',
-                      borderTop: '4px solid #0E7490',
+                      borderTop: '1px solid #E2E8F0',
                       backgroundColor: '#FFFFFF',
                       border: '1px solid #E2E8F0',
                       width: '100%',

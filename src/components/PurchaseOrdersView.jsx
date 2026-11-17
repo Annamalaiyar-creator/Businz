@@ -2636,7 +2636,7 @@ ${senderName} | VRM Structures India Private Limited`;
               </div>
 
               {/* Official Purchase Order Header Card */}
-              <div id="businz-po-official-document" className="section-card businz-po-document" style={{ padding: '30px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '24px', position: 'relative', borderTop: '4px solid #0E7490', backgroundColor: '#FFFFFF', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+              <div id="businz-po-official-document" className="section-card businz-po-document" style={{ padding: '30px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '24px', position: 'relative', borderTop: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
 
                 {/* Header Row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -3277,7 +3277,6 @@ ${senderName} | VRM Structures India Private Limited`;
             margin: 0 !important;
             padding: 12px !important;
             border: 1px solid #CBD5E1 !important;
-            border-top: 4px solid #0E7490 !important;
             box-shadow: none !important;
             background: #FFFFFF !important;
             page-break-inside: auto !important;
@@ -4623,7 +4622,7 @@ ${senderName} | VRM Structures India Private Limited`;
           {/* Skeleton loader — shown while PO detail is fetching */}
           {poDetailLoading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div className="section-card" style={{ padding: '30px', borderRadius: '16px', borderTop: '4px solid #0E7490', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="section-card" style={{ padding: '30px', borderRadius: '16px', borderTop: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '40%' }}>
                     <div className="skeleton-shimmer" style={{ height: '22px', width: '70%', borderRadius: '6px' }} />

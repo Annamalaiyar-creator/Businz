@@ -1984,7 +1984,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [vehicleNo, setVehicleNo] = useState('');
   const [transportScope, setTransportScope] = useState('VRM Structures');
 
-  const [paymentTerms, setPaymentTerms] = useState('100% Paid');
+  const [paymentTerms, setPaymentTerms] = useState('');
   const [creditDays, setCreditDays] = useState('');
   const [remarks, setRemarks] = useState('');
 

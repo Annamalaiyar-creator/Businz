@@ -18,6 +18,9 @@ import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
 import CeoInventoryAnalyticsSection from './CeoInventoryAnalyticsSection';
 import CeoDispatchAnalyticsSection from './CeoDispatchAnalyticsSection';
 import CeoProductionAnalyticsSection from './CeoProductionAnalyticsSection';
+import CeoProcurementAnalyticsSection from './CeoProcurementAnalyticsSection';
+import CeoAccountsAnalyticsSection from './CeoAccountsAnalyticsSection';
+import CeoSalesAnalyticsSection from './CeoSalesAnalyticsSection';
 import { getBomStageTiming } from './BomOrdersView';
 import { isBomAddressProofPending } from './bom/bomStageHelpers';
 
@@ -39,7 +42,6 @@ export function CeoKpiGrid({ kpis }) {
       }}
     >
       {kpis.map((kpi, kIdx) => {
-        const IconComp = kpi.icon;
         const isUp = kpi.trendUp;
         const isNeutral = kpi.trendNeutral;
         const trendBg = isUp ? '#ECFDF5' : (isNeutral ? '#F1F5F9' : '#FEF2F2');
@@ -93,21 +95,6 @@ export function CeoKpiGrid({ kpis }) {
                 >
                   {kpi.title}
                 </span>
-                {IconComp && (
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '6px',
-                    backgroundColor: kpi.iconBg || '#F1F5F9',
-                    color: kpi.iconColor || '#475569',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <IconComp size={13} />
-                  </div>
-                )}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -296,31 +283,72 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [employeesList, setEmployeesList] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Real date parser across all BUSINZ record formats (ISO, YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, DD MMM YYYY)
+  // Real date parser across all BUSINZ record formats (ISO, YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, DD MMM YYYY, Epoch ms)
   const parseRecordDate = (rec) => {
     if (!rec || typeof rec !== 'object') return null;
-    const candidates = [
-      rec.piDate, rec.bomDate, rec.poDate, rec.invoiceDate, rec.grnDate,
-      rec.paymentDate, rec.dispatchDate, rec.date, rec.salesConfirmedAt,
-      rec.createdAt, rec.created_at, rec.dateTimeObj?.date,
-      rec.accountsVerification?.paymentDate, rec.stockDeductionDate,
-      rec.updatedAt, rec.updated_at
-    ];
+    const isPiOnly = Boolean(rec.piNo || rec.piNumber) && !rec.bomId && !rec.bomNo && !rec.bomNumber && !rec.invoiceNo && !rec.poNo && !rec.poNumber;
+    const isInvoiceRec = Boolean(rec.invoiceNo || rec.invoiceNumber || rec.taxInvoiceNo || rec.invoiceConfirmed || rec.invoiceConfirmedAt) && !rec.poNo && !rec.poNumber && !rec.bomCode && !rec.bomNo;
+    const isInvCompleted = Boolean(
+      rec.invoiceConfirmed ||
+      rec.invoiceConfirmedAt ||
+      rec.invoice_confirmed_at ||
+      rec.invoicedAt ||
+      rec.confirmedAt ||
+      rec.stockDeductionDate ||
+      String(rec.status || '').toLowerCase().includes('confirmed') ||
+      String(rec.status || '').toLowerCase() === 'paid'
+    );
+    const candidates = isInvoiceRec
+      ? (isInvCompleted
+          ? [rec.invoiceConfirmedAt, rec.invoice_confirmed_at, rec.invoicedAt, rec.confirmedAt, rec.stockDeductionDate, rec.updatedAt, rec.updated_at, rec.invoiceDate, rec.date, rec.createdAt, rec.created_at]
+          : [rec.invoiceDate, rec.date, rec.createdAt, rec.created_at, rec.dateTimeObj?.date])
+      : isPiOnly
+        ? [rec.piDate, rec.date, rec.createdAt, rec.created_at, rec.dateTimeObj?.date, rec.updatedAt, rec.updated_at]
+        : [
+            rec.bomDate, rec.poDate, rec.invoiceDate, rec.grnDate,
+            rec.paymentDate, rec.dispatchDate, rec.date, rec.salesConfirmedAt,
+            rec.createdAt, rec.created_at, rec.dateTimeObj?.date,
+            rec.accountsVerification?.paymentDate, rec.stockDeductionDate,
+            rec.piDate, rec.updatedAt, rec.updated_at
+          ];
     for (const raw of candidates) {
-      if (!raw) continue;
-      const s = String(raw).trim();
-      if (!s) continue;
-      // DD/MM/YYYY or DD-MM-YYYY
-      const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-      if (dmy) {
-        const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+      if (raw === null || raw === undefined || raw === '') continue;
+      if (typeof raw === 'number' && Number.isFinite(raw)) {
+        const d = new Date(raw < 1e12 ? raw * 1000 : raw);
         if (!isNaN(d.getTime())) return d;
       }
-      // YYYY-MM-DD
-      const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      const s = String(raw).trim();
+      if (!s) continue;
+      // Numeric epoch timestamp string
+      if (/^\d{10,13}$/.test(s)) {
+        const num = Number(s);
+        const d = new Date(num < 1e12 ? num * 1000 : num);
+        if (!isNaN(d.getTime())) return d;
+      }
+      // Full ISO timestamp with time/timezone (preserve exact timezone conversion)
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+        const parsedIso = new Date(s);
+        if (!isNaN(parsedIso.getTime())) return parsedIso;
+      }
+      // Pure YYYY-MM-DD
+      const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (ymd) {
         const d = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
         if (!isNaN(d.getTime())) return d;
+      }
+      // DD/MM/YYYY or MM/DD/YYYY or DD-MM-YYYY (with optional time suffix)
+      const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (dmy) {
+        const p1 = Number(dmy[1]);
+        const p2 = Number(dmy[2]);
+        const yr = Number(dmy[3]);
+        // If second part > 12, it is MM/DD/YYYY (en-US); otherwise DD/MM/YYYY (en-IN / en-GB)
+        const day = p2 > 12 ? p2 : p1;
+        const month = p2 > 12 ? p1 : p2;
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          const d = new Date(yr, month - 1, day);
+          if (!isNaN(d.getTime())) return d;
+        }
       }
       const parsed = new Date(s);
       if (!isNaN(parsed.getTime())) return parsed;
@@ -1538,13 +1566,16 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     const pendingAccountsBoms = Math.max(0, packedBoms.length - accountsVerifiedBoms.length);
     const accountsVerifiedVal = accountsVerifiedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
 
-    // STEP 05: Billing & Invoicing (Strict Subset of Accounts Verified Orders)
+    // STEP 05: Billing & Invoicing (All Tax Invoices generated in selected period, synced with Company Overview)
     const invoicedBoms = accountsVerifiedBoms.filter(b => {
       const st = String(b.status || '').toLowerCase();
-      return Boolean(b.invoiceConfirmed || b.invoiceNo || st.includes('invoice') || st.includes('loading') || st.includes('dispatched') || st.includes('completed') || b.fullyCompleted);
+      const hasRealInvNo = Boolean(b.invoiceNo && b.invoiceNo !== 'Pending Confirmation' && !String(b.invoiceNo).toLowerCase().includes('pending'));
+      const isInvCompleteStatus = st.includes('invoice generated') || st.includes('invoice confirmed') || st.includes('loading') || st.includes('dispatched') || st.includes('completed');
+      return Boolean(b.invoiceConfirmed || b.invoiceConfirmedAt || b.invoiceGenerated || b.stockDeductionDate || hasRealInvNo || b.taxInvoiceNo || isInvCompleteStatus || b.fullyCompleted);
     });
     const pendingInvoicingBoms = Math.max(0, accountsVerifiedBoms.length - invoicedBoms.length);
-    const invoicedVal = invoicedBoms.reduce((acc, b) => acc + parseAmt(b.grandTotal || b.totalAmount || b.amount || b.value || 0), 0) * multiplier;
+    const billedInvoicesCount = targetInvs.length;
+    const invoicedVal = targetInvs.reduce((acc, inv) => acc + parseAmt(inv.grandTotal || inv.totalAmount || inv.total || inv.amount || 0), 0) * multiplier;
 
     // STEP 06: Final Dispatch (Strict Subset of Invoiced Orders)
     const completedDispatchBoms = invoicedBoms.filter(b => {
@@ -1644,17 +1675,17 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         step: 'STEP 05',
         stage: 'Billing & Invoice',
         subtitle: '3-Way Match & Stock Lock',
-        primaryMetric: `${invoicedBoms.length} Billed`,
+        primaryMetric: `${billedInvoicesCount} Billed`,
         value: fmtCompact(invoicedVal),
         valueLabel: 'GST Invoiced',
         statusBadge: `${pendingInvoicingBoms} Awaiting Billing`,
-        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((invoicedBoms.length / Math.max(1, activeBoms.length)) * 100)) : 0,
+        progressPct: activeBoms.length > 0 ? Math.min(100, Math.round((billedInvoicesCount / Math.max(1, activeBoms.length)) * 100)) : 0,
         icon: FileCheck,
         color: '#2563EB',
         bg: '#EFF6FF',
         border: '#BFDBFE',
-        targetTab: 'BOM Orders',
-        stageType: 'bom',
+        targetTab: 'Invoices',
+        stageType: 'invoice',
         targetKeys: invoicedKeys,
         sourceLabel: 'Billing & Invoice Stage',
         action: 'Tax Invoices'
@@ -2208,10 +2239,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     };
   }, [bomList]);
 
-  // Date range calculator for period filtering navigation
+  // Date range calculator for period filtering navigation (local calendar dates, no UTC shift)
   const getPeriodDateRange = (period) => {
+    const toLocalYmd = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = toLocalYmd(now);
     if (period === 'Today') {
       return { start: todayStr, end: todayStr };
     }
@@ -2220,10 +2252,10 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       const day = d.getDay();
       const diff = day === 0 ? 6 : day - 1;
       d.setDate(d.getDate() - diff);
-      return { start: d.toISOString().slice(0, 10), end: todayStr };
+      return { start: toLocalYmd(d), end: todayStr };
     }
     if (period === 'MTD' || period === 'This Month') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      const start = toLocalYmd(new Date(now.getFullYear(), now.getMonth(), 1));
       return { start, end: todayStr };
     }
     if (period === 'Q2 FY27') {
@@ -2389,6 +2421,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         }
       }));
       if (onNavigateTab) onNavigateTab(stage.targetTab || 'Proforma Invoice');
+    } else if (stage.stageType === 'invoice') {
+      handleNavigateWithInvFilter(selectedPeriod, sourceLabel);
     } else {
       try {
         sessionStorage.setItem('controlroom_bom_initial_date_filter', JSON.stringify({
@@ -3473,70 +3507,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             }
           ]} />
 
-          {/* Recent Leads & Top Customers */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px' }}>
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>Recent CRM Leads</span>
-                <button onClick={() => onNavigateTab && onNavigateTab('Leads')} style={{ border: 'none', background: 'none', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>Open Leads →</button>
-              </div>
-              <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto' }}>
-                <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                      <th style={{ padding: '8px 10px' }}>Lead / Company</th>
-                      <th style={{ padding: '8px 10px' }}>Source</th>
-                      <th style={{ padding: '8px 10px' }}>Assigned To</th>
-                      <th style={{ padding: '8px 10px' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leadsList.length > 0 ? leadsList.slice(0, 6).map((lead, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{lead.company || lead.name || lead.customerName || 'Lead Inquiry'}</td>
-                        <td style={{ padding: '8px 10px', color: '#64748B' }}>{lead.source || 'Direct'}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: '600', color: '#0E7490' }}>{lead.assignedTo || lead.salesPerson || 'Unassigned'}</td>
-                        <td style={{ padding: '8px 10px' }}>
-                          <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490' }}>{lead.status || 'New'}</span>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan={4} style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>No leads found in live store.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>Top Strategic Customers</span>
-                <button onClick={() => onNavigateTab && onNavigateTab('Customers')} style={{ border: 'none', background: 'none', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>View Customers →</button>
-              </div>
-              <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto' }}>
-                <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                      <th style={{ padding: '8px 10px' }}>Client / Developer</th>
-                      <th style={{ padding: '8px 10px' }}>Revenue</th>
-                      <th style={{ padding: '8px 10px' }}>Assigned Rep</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topAccounts.length > 0 ? topAccounts.map((c, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{c.name}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>{c.revenue}</td>
-                        <td style={{ padding: '8px 10px', color: '#475569' }}>{c.salesPerson}</td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan={3} style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>No customer revenue records yet.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <CeoSalesAnalyticsSection
+            leadsList={leadsList}
+            quotesList={quotesList}
+            piList={piList}
+            bomList={bomList}
+            invList={invList}
+            companyTarget={ceoTargetStore?.monthlyCompanyTarget || 18000000}
+            onNavigateTab={onNavigateTab}
+          />
         </div>
       )}
 
@@ -4262,161 +4241,12 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             }
           ]} />
 
-          {/* SCM Officers Scorecard */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #EAEFEF',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                Procurement Officers Spend Allocation
-              </span>
-              <button
-                onClick={() => onNavigateTab && onNavigateTab('Purchase Orders', null, 'WAITING FOR APPROVAL')}
-                style={{
-                  border: 'none',
-                  backgroundColor: '#2563EB',
-                  color: '#FFFFFF',
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                PO Approval <ArrowRight size={12} />
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
-              {teamDirectory.filter(t => t.department === 'Procurement').map(buyer => {
-                const perf = personPerformanceData.find(p => p.code === buyer.code);
-                return (
-                  <div
-                    key={buyer.code}
-                    onClick={() => setActivePersonModal(perf)}
-                    style={{
-                      padding: '14px',
-                      borderRadius: '12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A' }}>{buyer.name}</div>
-                        <div style={{ fontSize: '10.5px', color: '#64748B' }}>{buyer.designation}</div>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: perf?.ratingColor, backgroundColor: perf?.ratingBg, padding: '2px 7px', borderRadius: '6px' }}>
-                        {perf?.rating}
-                      </span>
-                    </div>
-
-                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#2563EB', marginTop: '4px' }}>
-                      ₹ {perf ? (perf.achievedVal / 10000000).toFixed(2) : '0.00'} Cr Managed
-                    </div>
-
-                    <div style={{ width: '100%', height: '5px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${Math.min(100, perf?.targetPct || 0)}%`,
-                        height: '100%',
-                        backgroundColor: '#2563EB'
-                      }} />
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#64748B' }}>
-                      <span>{perf?.recordCount || 0} POs Managed</span>
-                      <span>Budget: ₹ {(buyer.monthlyTarget * periodMultiplier / 10000000).toFixed(2)} Cr</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Live Purchase Orders Table */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #EAEFEF',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                Live Purchase Orders Registry
-              </span>
-              <span style={{ fontSize: '11px', color: '#64748B' }}>Sorted by recent issue date</span>
-            </div>
-
-            <div style={{ border: '1px solid #F1F5F9', borderRadius: '10px', overflowX: 'auto', maxWidth: '100%', minWidth: 0 }}>
-              <table style={{ width: '100%', minWidth: '650px', fontSize: '11.5px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: '700' }}>
-                    <th style={{ padding: '8px 10px' }}>PO Number</th>
-                    <th style={{ padding: '8px 10px' }}>Supplier / Vendor</th>
-                    <th style={{ padding: '8px 10px' }}>Date</th>
-                    <th style={{ padding: '8px 10px' }}>Amount</th>
-                    <th style={{ padding: '8px 10px' }}>Status / Stage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {poList.length > 0 ? (
-                    poList.slice(0, 6).map((po, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2563EB' }}>
-                          {po.poNo || po.poNumber || po.purchaseorder_number || '-'}
-                        </td>
-                        <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
-                          {po.vendor || po.vendorName || po.vendor_name || 'Supplier'}
-                        </td>
-                        <td style={{ padding: '8px 10px', color: '#64748B' }}>
-                          {po.poDate || po.date || '-'}
-                        </td>
-                        <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0F172A' }}>
-                          {po.amount || (po.total ? `₹ ${(parseAmt(po.total) / 100000).toFixed(2)} L` : '₹ 0.00')}
-                        </td>
-                        <td style={{ padding: '8px 10px' }}>
-                          <span style={{
-                            fontSize: '10px',
-                            fontWeight: '800',
-                            padding: '2px 7px',
-                            borderRadius: '8px',
-                            backgroundColor: String(po.status || po.stage).toLowerCase().includes('closed') || String(po.status || po.stage).toLowerCase().includes('received') ? '#DCFCE7' : '#FEF3C7',
-                            color: String(po.status || po.stage).toLowerCase().includes('closed') || String(po.status || po.stage).toLowerCase().includes('received') ? '#16A34A' : '#D97706'
-                          }}>
-                            {po.status || po.stage || 'Issued'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
-                        No Purchase Orders recorded yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <CeoProcurementAnalyticsSection
+            poList={allPoList}
+            grnList={allGrnList}
+            inventoryList={inventoryList}
+            onNavigateTab={onNavigateTab}
+          />
 
         </div>
       )}
@@ -4477,116 +4307,13 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             }
           ]} />
 
-          {/* Accounts Officers Breakdown */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #EAEFEF',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                Accounts & Billing Officers Accountability
-              </span>
-              <button
-                onClick={() => onNavigateTab && onNavigateTab('Billing Dashboard')}
-                style={{
-                  border: 'none',
-                  backgroundColor: '#7C3AED',
-                  color: '#FFFFFF',
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                Go to Billing Dashboard <ArrowRight size={12} />
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
-              {teamDirectory.filter(t => t.department === 'Accounts').map(acc => {
-                const perf = personPerformanceData.find(p => p.code === acc.code);
-                return (
-                  <div
-                    key={acc.code}
-                    onClick={() => setActivePersonModal(perf)}
-                    style={{
-                      padding: '14px',
-                      borderRadius: '12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A' }}>{acc.name}</div>
-                        <div style={{ fontSize: '10.5px', color: '#64748B' }}>{acc.designation}</div>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: perf?.ratingColor, backgroundColor: perf?.ratingBg, padding: '2px 7px', borderRadius: '6px' }}>
-                        {perf?.targetPct}% Target
-                      </span>
-                    </div>
-
-                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#7C3AED', marginTop: '4px' }}>
-                      ₹ {perf ? (perf.achievedVal / 10000000).toFixed(2) : '0.00'} Cr Handled
-                    </div>
-
-                    <div style={{ width: '100%', height: '5px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${Math.min(100, perf?.targetPct || 0)}%`,
-                        height: '100%',
-                        backgroundColor: '#7C3AED'
-                      }} />
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#64748B' }}>
-                      <span>{perf?.recordCount || 0} Records Managed</span>
-                      <span>Target: ₹ {(acc.monthlyTarget * periodMultiplier / 10000000).toFixed(2)} Cr</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Aging Receivables Breakdown Bar */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #EAEFEF',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
-          }}>
-            <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-              Accounts Aging Receivables Portfolio (By Credit Due Days)
-            </span>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-              {agingBuckets.map((bucket, bIdx) => (
-                <div key={bIdx} style={{ backgroundColor: bucket.bg, border: `1px solid ${bucket.color}30`, borderRadius: '10px', padding: '10px 12px' }}>
-                  <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#475569' }}>{bucket.label}</div>
-                  <div style={{ fontSize: '15px', fontWeight: '900', color: bucket.color, marginTop: '2px' }}>{bucket.amount}</div>
-                  <div style={{ fontSize: '10px', fontWeight: '800', color: bucket.color, marginTop: '1px' }}>{bucket.pct} of Total</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <CeoAccountsAnalyticsSection
+            invList={invList}
+            poList={poList}
+            paymentsList={paymentsList}
+            bomList={bomList}
+            onNavigateTab={onNavigateTab}
+          />
 
         </div>
       )}

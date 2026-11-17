@@ -2513,7 +2513,7 @@ export default function ItemsDirectoryView(props) {
               </div>
 
               {/* Document Sheet Card */}
-              <div className="section-card" style={{ padding: '32px', borderRadius: '16px', borderTop: '4px solid #2563EB', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+              <div className="section-card" style={{ padding: '32px', borderRadius: '16px', borderTop: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
                 {/* Header Information */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #F1F5F9', paddingBottom: '20px' }}>

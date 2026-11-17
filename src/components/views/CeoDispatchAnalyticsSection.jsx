@@ -504,7 +504,6 @@ export default function CeoDispatchAnalyticsSection({
                 {analytics.totalOrders} Total Orders
               </span>
             </div>
-            <Truck size={15} color="#0E7490" />
           </div>
 
           <div style={summaryStripStyle}>
@@ -590,7 +589,6 @@ export default function CeoDispatchAnalyticsSection({
                 BOM Expected Date
               </span>
             </div>
-            <Calendar size={15} color="#0E7490" />
           </div>
 
           <div style={summaryStripStyle}>
@@ -675,7 +673,6 @@ export default function CeoDispatchAnalyticsSection({
                 {analytics.delayedOrders.length} Delayed
               </span>
             </div>
-            <Clock size={15} color="#DC2626" />
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
@@ -766,7 +763,6 @@ export default function CeoDispatchAnalyticsSection({
                     <SlidersHorizontal size={12} />
                     Filter ({activeCount}/5)
                   </button>
-                  <Package size={15} color="#0E7490" />
                 </div>
               </div>
               <div style={{ overflowX: 'auto' }}>
@@ -824,7 +820,6 @@ export default function CeoDispatchAnalyticsSection({
               {analytics.todaysPlan.length} Orders
             </span>
           </div>
-          <Truck size={15} color="#059669" />
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
@@ -887,7 +882,6 @@ export default function CeoDispatchAnalyticsSection({
                 Compliance Audit
               </span>
             </div>
-            <CheckCircle size={15} color="#059669" />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, justifyContent: 'center' }}>
@@ -946,7 +940,6 @@ export default function CeoDispatchAnalyticsSection({
                 {analytics.keyAlerts.reduce((s, a) => s + a.orders.length, 0)} Alerts
               </span>
             </div>
-            <AlertTriangle size={15} color="#DC2626" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, justifyContent: 'center' }}>
             {analytics.keyAlerts.map((al, idx) => {

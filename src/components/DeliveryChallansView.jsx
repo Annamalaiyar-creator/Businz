@@ -1350,7 +1350,6 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
             margin: 0 !important;
             padding: 12px !important;
             border: 1px solid #CBD5E1 !important;
-            border-top: 4px solid #0E7490 !important;
             box-shadow: none !important;
             background: #FFFFFF !important;
             page-break-inside: auto !important;
@@ -3257,7 +3256,7 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               flexDirection: 'column',
               gap: '24px',
               position: 'relative',
-              borderTop: '4px solid #0E7490',
+              borderTop: '1px solid #E2E8F0',
               backgroundColor: '#FFFFFF',
               width: '100%',
               maxWidth: '100%',

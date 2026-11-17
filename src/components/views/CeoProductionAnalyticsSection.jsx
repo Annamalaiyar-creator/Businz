@@ -393,7 +393,6 @@ export default function CeoProductionAnalyticsSection({
                 {analytics.totalOrders} Work Orders
               </span>
             </div>
-            <Factory size={15} color="#0E7490" />
           </div>
 
           <div style={summaryStripStyle}>
@@ -480,7 +479,6 @@ export default function CeoProductionAnalyticsSection({
                 Last 7 Days (Nos)
               </span>
             </div>
-            <Calendar size={15} color="#0E7490" />
           </div>
 
           <div style={summaryStripStyle}>
@@ -594,7 +592,6 @@ export default function CeoProductionAnalyticsSection({
                 {analytics.delayedOrders.length} Delayed
               </span>
             </div>
-            <Clock size={15} color="#DC2626" />
           </div>
           <div style={{ overflowX: 'auto', maxHeight: '260px', overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
@@ -673,7 +670,6 @@ export default function CeoProductionAnalyticsSection({
                     <SlidersHorizontal size={12} />
                     Filter ({activeCount}/5)
                   </button>
-                  <Package size={15} color="#0E7490" />
                 </div>
               </div>
               <div style={{ overflowX: 'auto', maxHeight: '260px', overflowY: 'auto' }}>
@@ -734,7 +730,6 @@ export default function CeoProductionAnalyticsSection({
                 Rejection: {analytics.rejectionPct}%
               </span>
             </div>
-            <CheckCircle2 size={15} color="#059669" />
           </div>
 
           <div style={summaryStripStyle}>
@@ -822,7 +817,6 @@ export default function CeoProductionAnalyticsSection({
                 {analytics.keyAlerts.reduce((s, a) => s + a.orders.length, 0)} Alerts
               </span>
             </div>
-            <AlertTriangle size={15} color="#DC2626" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, justifyContent: 'center' }}>
             {analytics.keyAlerts.map((al, idx) => {

@@ -194,27 +194,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                   </p>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setPiConfirmModal('cancel')}
-                style={{
-                  border: '1px solid rgba(255, 255, 255, 0.35)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.14)',
-                  color: '#FFFFFF',
-                  padding: '9px 18px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '7px'
-                }}
-              >
-                <ArrowLeft size={15} />
-                Back
-              </button>
             </div>
 
             {/* SECTION 1: PI DETAILS & DATES */}
@@ -344,8 +323,9 @@ export default function PiCreatorEditorSection({ ctx }) {
                   <select id="performa-invoice-payment-terms" name="paymentTerms" aria-label="Payment Terms"
                     value={paymentTerms}
                     onChange={(e) => setPaymentTerms(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: paymentTerms ? '#0F172A' : '#94A3B8', backgroundColor: 'white', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
                   >
+                    <option value="" disabled>Select Payment Terms</option>
                     <option value="100% Paid">100% Paid</option>
                     <option value="Partial Paid">Partial Paid</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
@@ -838,7 +818,7 @@ export default function PiCreatorEditorSection({ ctx }) {
             </div>
 
             {/* SECTION 3: ORDER ITEMS & BILL OF MATERIALS */}
-            <div id="pi-field-items" style={{ backgroundColor: (piFormErrors?.['pi-field-items'] && piItems.length === 0) ? '#FEF2F2' : 'white', borderRadius: '16px', border: piFormErrors?.['pi-field-items'] ? '2px solid #EF4444' : '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' }}>
+            <div id="pi-field-items" style={{ backgroundColor: (piFormErrors?.['pi-field-items'] && piItems.length === 0) ? '#FEF2F2' : 'white', borderRadius: '16px', border: (piFormErrors?.['pi-field-items'] && piItems.length === 0) ? '2px solid #EF4444' : '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' }}>
               {/* Section 3 Header — Clean Single Row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '18px 24px', gap: '20px', flexWrap: 'wrap', borderBottom: '1px solid #F1F5F9' }}>
                 {/* Left: Badge + Title */}
@@ -1549,7 +1529,13 @@ export default function PiCreatorEditorSection({ ctx }) {
                                         };
                                       }));
                                     }}
-                                    style={{ width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF' }}
+                                    style={{
+                                      width: '100%', minWidth: '88px', height: '38px', borderRadius: '8px',
+                                      border: (piFormErrors?.['pi-field-items'] && (parseFloat(item.qty) || 0) <= 0) ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                                      padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '700',
+                                      color: (piFormErrors?.['pi-field-items'] && (parseFloat(item.qty) || 0) <= 0) ? '#DC2626' : '#0F172A',
+                                      backgroundColor: (piFormErrors?.['pi-field-items'] && (parseFloat(item.qty) || 0) <= 0) ? '#FEF2F2' : '#FFFFFF'
+                                    }}
                                   />
                                 </div>
                               </td>
@@ -1636,18 +1622,35 @@ export default function PiCreatorEditorSection({ ctx }) {
                               <td style={{ padding: '12px 10px' }}>
                                 {isPresetItem ? (
                                   <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>—</span>
-                                ) : (
-                                  <input id={`performa-invoice-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
-                                    type="number"
-                                    value={item.rate}
-                                    placeholder="0.00"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
-                                    }}
-                                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                                  />
-                                )}
+                                ) : (() => {
+                                  const isRateMissing = Boolean(piFormErrors?.['pi-field-items'] && (parseFloat(item.rate) || 0) <= 0);
+                                  return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      <input id={`performa-invoice-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
+                                        type="number"
+                                        value={item.rate}
+                                        placeholder="0.00"
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
+                                        }}
+                                        style={{
+                                          width: '100%', height: '38px', borderRadius: '8px',
+                                          border: isRateMissing ? '2px solid #EF4444' : '1px solid #E2E8F0',
+                                          padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box',
+                                          backgroundColor: isRateMissing ? '#FEF2F2' : 'white',
+                                          color: isRateMissing ? '#DC2626' : '#0F172A',
+                                          fontWeight: isRateMissing ? '800' : '600'
+                                        }}
+                                      />
+                                      {isRateMissing && (
+                                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#EF4444', textAlign: 'right' }}>
+                                          Enter Price
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                                 <select id={`performa-invoice-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
@@ -2105,7 +2108,7 @@ export default function PiCreatorEditorSection({ ctx }) {
               padding: '24px',
               borderRadius: '16px',
               border: '1px solid #E2E8F0',
-              borderTop: '4px solid #0E7490',
+              borderTop: '1px solid #E2E8F0',
               boxShadow: '0 4px 10px rgba(0,0,0,0.03)',
               display: 'flex',
               flexDirection: 'column',

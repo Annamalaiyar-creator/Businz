@@ -611,7 +611,6 @@ export default function CeoInventoryAnalyticsSection({
                   </button>
                 </>
               )}
-              <Layers size={15} color="#0E7490" />
             </div>
           </div>
 
@@ -752,7 +751,6 @@ export default function CeoInventoryAnalyticsSection({
                     Live BOM / Stock Ratio
                   </span>
                 </div>
-                <RefreshCw size={15} color="#0E7490" />
               </div>
 
               {/* 3-Metric Executive Summary Strip */}
@@ -934,7 +932,6 @@ export default function CeoInventoryAnalyticsSection({
                     Live Stock Flow
                   </span>
                 </div>
-                <TrendingUp size={15} color="#0E7490" />
               </div>
 
               {/* 3-Metric Executive Summary Strip */}
@@ -1117,7 +1114,6 @@ export default function CeoInventoryAnalyticsSection({
                     {above180 > 0 ? `180d+ Risk: ${formatINRCompact(above180)}` : `${totalSkus} SKUs Tracked`}
                   </span>
                 </div>
-                <Clock size={15} color="#0E7490" />
               </div>
 
               {/* 3-Metric Summary Strip */}
@@ -1360,7 +1356,6 @@ export default function CeoInventoryAnalyticsSection({
                 2 Locations
               </span>
             </div>
-            <Warehouse size={15} color="#0E7490" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, justifyContent: 'center' }}>
             {analytics.warehouseList.map((w, idx) => {
@@ -1424,7 +1419,6 @@ export default function CeoInventoryAnalyticsSection({
         <div style={cardStyle}>
           <div style={cardHeaderStyle}>
             <span style={cardTitleStyle}>Stock Health &amp; Today&apos;s Snapshot</span>
-            <CheckCircle size={15} color="#059669" />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', textAlign: 'center' }}>
             <div style={{ backgroundColor: '#F8FAFC', borderRadius: '10px', padding: '10px 6px', border: '1px solid #E2E8F0' }}>
@@ -1476,7 +1470,6 @@ export default function CeoInventoryAnalyticsSection({
                 {analytics.outOfStockItems.length + analytics.lowStockItems.length} Alerts
               </span>
             </div>
-            <ShieldAlert size={15} color="#DC2626" />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, justifyContent: 'center' }}>
