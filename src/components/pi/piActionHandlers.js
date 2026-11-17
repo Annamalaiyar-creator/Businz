@@ -400,9 +400,11 @@ export function createPiActionHandlers(ctx) {
           converted.push({
             ...it,
             isPresetItem: true,
+            isCustomSet: true,
             presetGroupId: groupId,
             presetName: cleanName,
             baseQty: baseQ,
+            totalDispatchQty: it.qty,
             rate: '0',
             gstRate: it.gstRate || gst
           });
@@ -453,6 +455,7 @@ export function createPiActionHandlers(ctx) {
       gstRate: setGst,
       hsn: '',
       isPresetItem: true,
+      isCustomSet: true,
       presetGroupId: groupId,
       presetName: cleanName
     };

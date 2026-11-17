@@ -187,9 +187,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
       }
     }
 
-    // If still missing, check if BOM has a global presetName
-    if (!pName && !pGroupId && (b.presetName || matchedPi?.presetName)) {
-      if (it.isPresetItem || (parseFloat(it.rate || 0) === 0 && (b.unitValue || b.orderValue)) || Object.keys(presetGroupsObj).length <= 1) {
+    // If still missing, check if BOM has a global presetName (only for items without a standalone rate or explicitly marked isPresetItem)
+    if (!pName && !pGroupId && it.isPresetItem !== false && (b.presetName || matchedPi?.presetName)) {
+      if (it.isPresetItem || (parseFloat(it.rate || 0) === 0 && (b.unitValue || b.orderValue || Object.keys(presetGroupsObj).length <= 1))) {
         pName = b.presetName || matchedPi?.presetName;
         pGroupId = Object.keys(presetGroupsObj)[0] || 'default_kit';
         isPreset = true;

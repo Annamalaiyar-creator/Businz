@@ -1536,6 +1536,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                                     placeholder="0"
                                     onChange={(e) => {
                                       const val = e.target.value;
+                                      const isCustomGrp = Boolean(item.isCustomSet || currentGroup?.isCustomSet || currentGroup?.presetId === 'custom_set' || String(groupId || '').startsWith('custom_set_'));
                                       setPiItems(prev => prev.map((mat, idx) => {
                                         if (idx !== i) return mat;
                                         const mult = Math.max(0.01, parseFloat(currentGroup?.setCount) || 1);
@@ -1543,7 +1544,8 @@ export default function PiCreatorEditorSection({ ctx }) {
                                         return {
                                           ...mat,
                                           qty: val,
-                                          baseQty: isPresetItem ? (parsedVal / mult) : mat.baseQty
+                                          baseQty: isCustomGrp ? parsedVal : (isPresetItem ? (parsedVal / mult) : mat.baseQty),
+                                          ...(isCustomGrp ? { totalDispatchQty: val, isCustomSet: true } : {})
                                         };
                                       }));
                                     }}
@@ -1557,6 +1559,14 @@ export default function PiCreatorEditorSection({ ctx }) {
                                   if (!isPresetItem) {
                                     return (
                                       <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '13px' }} title="Standalone product; entered quantity is direct total quantity">—</span>
+                                    );
+                                  }
+                                  const isCustomGrp = Boolean(item.isCustomSet || currentGroup?.isCustomSet || currentGroup?.presetId === 'custom_set' || String(groupId || '').startsWith('custom_set_'));
+                                  if (isCustomGrp) {
+                                    return (
+                                      <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '13px' }} title="Custom Set: entered quantity is direct total quantity">
+                                        {item.qty || '0'}
+                                      </span>
                                     );
                                   }
                                   const effectivePresetName = isSub ? item.subPresetName : (currentGroup?.presetName || item.presetName);
