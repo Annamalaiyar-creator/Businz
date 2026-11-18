@@ -34,7 +34,7 @@ const mergeWithCoreEmployees = (incomingList = []) => {
 export const syncEmployeesFromCloud = async () => {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const res = await fetch('/api/store/employees_store', { signal: controller.signal }).catch(() => null);
     clearTimeout(timeoutId);
     if (res && res.ok) {

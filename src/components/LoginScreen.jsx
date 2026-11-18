@@ -477,11 +477,11 @@ export default function LoginScreen({ onLoginSuccess }) {
 
     setIsLoggingIn(true);
 
-    // Sync latest accounts with fast timeout to avoid blocking login
+    // Sync latest accounts before authenticating
     try {
       await Promise.race([
         syncEmployeesFromCloud(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
       ]);
     } catch(e) {}
 

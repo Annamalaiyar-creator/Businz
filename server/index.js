@@ -3379,8 +3379,8 @@ app.post('/api/sessions/register', async (req, res) => {
   // Role, empCode, email, and user name are derived 100% STRICTLY from server-side database verification!
   // Client-submitted `role`, `empCode`, or `user` are COMPLETELY IGNORED.
   // Session ID is generated cryptographically on the server (no client session adoption).
-  // Single-device policy: revoke prior active sessions for the same employee unless concurrent sessions are explicitly enabled.
-  if (process.env.ALLOW_CONCURRENT_SESSIONS !== 'true' && authResult.employee_code) {
+  // Concurrent sessions allowed by default; opt-in single-device policy via SINGLE_DEVICE_SESSION=true
+  if (process.env.SINGLE_DEVICE_SESSION === 'true' && authResult.employee_code) {
     const targetEmpNorm = String(authResult.employee_code).trim().toUpperCase();
     for (const [sid, s] of activeSessionsMap.entries()) {
       if (String(s.empCode || '').trim().toUpperCase() === targetEmpNorm && s.status !== 'revoked') {
@@ -3411,6 +3411,11 @@ app.post('/api/sessions/heartbeat', async (req, res) => {
   const callerEmpCode = req.headers['x-emp-code'] || req.body?.empCode || req.body?.employee_code;
 
   let result = heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode);
+  if (!result.success) {
+    // Reload from disk in case another worker/process registered the session or server restarted
+    loadActiveSessionsFromDisk();
+    result = heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode);
+  }
   if (!result.success) {
     // If not found in memory (e.g. server restart / PM2 reload), rehydrate from verified session or disk
     try {
