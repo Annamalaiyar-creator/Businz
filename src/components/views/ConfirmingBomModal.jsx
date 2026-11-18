@@ -1174,7 +1174,7 @@ export default function ConfirmingBomModal({
                   </div>
                   <div>
                     <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
-                      Dispatch Packed Items Media ({packPhotos.length} Photos, {packVideos.length} Videos)
+                      Dispatch Packed Items Media ({packPhotos.length} Photos)
                     </h4>
                     <span style={{ fontSize: '11px', color: '#64748B' }}>
                       Photos and videos captured by Dispatch Fulfillment Team during packing

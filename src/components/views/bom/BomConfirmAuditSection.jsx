@@ -1139,7 +1139,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                     </div>
                     <div>
                       <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
-                        Dispatch Packed Items Media ({packPhotos.length} Photos, {packVideos.length} Videos)
+                        Dispatch Packed Items Media ({packPhotos.length} Photos)
                       </h4>
                       <span style={{ fontSize: '11px', color: '#64748B' }}>
                         Photos and videos captured by Dispatch Fulfillment Team during packing
@@ -2371,21 +2371,6 @@ export default function BomConfirmAuditSection({ ctx }) {
                   Total Order Value: <strong style={{ color: '#0E7490', fontSize: '17px', fontWeight: '900' }}>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </div>
               </div>
-
-              {!isAlreadyForwarded && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const currentItems = confirmingBomModal.items || [];
-                    const allCheckedItems = currentItems.map(it => ({ ...it, confirmed: true }));
-                    handleConfirmAndSendToDispatch(allCheckedItems);
-                  }}
-                  disabled={isConfirmingForward}
-                  style={{ border: 'none', backgroundColor: '#1E40AF', color: 'white', height: '38px', padding: '0 20px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: isConfirmingForward ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', opacity: isConfirmingForward ? 0.7 : 1 }}
-                >
-                  <CheckSquare style={{ width: '14px', height: '14px' }} /> Confirm and Send
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -2452,33 +2437,47 @@ export default function BomConfirmAuditSection({ ctx }) {
             >
               Print
             </button>
-            <button
-              type="button"
-              onClick={() => setExportFormatRecord(confirmingBomModal)}
-              style={{
-                height: '40px',
-                borderRadius: '8px',
-                border: '1.5px solid #0E7490',
-                backgroundColor: '#ECFEFF',
-                color: '#0E7490',
-                padding: '0 18px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                fontSize: '13px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-              }}
-            >
-              Export
-            </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
-            <strong style={{ fontSize: '15px', color: '#0E7490', fontWeight: '800' }}>
-              ₹{(orderGrandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {!isAlreadyForwarded && (
+              <button
+                type="button"
+                onClick={() => {
+                  const currentItems = confirmingBomModal.items || [];
+                  const allCheckedItems = currentItems.map(it => ({ ...it, confirmed: true }));
+                  handleConfirmAndSendToDispatch(allCheckedItems);
+                }}
+                disabled={isConfirmingForward}
+                style={{
+                  backgroundColor: '#0E7490',
+                  border: 'none',
+                  color: 'white',
+                  height: '40px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 22px',
+                  borderRadius: '50px',
+                  cursor: isConfirmingForward ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
+                  transition: 'all 0.2s ease-in-out',
+                  flexShrink: 0,
+                  opacity: isConfirmingForward ? 0.7 : 1
+                }}
+              >
+                Confirm and Send
+              </button>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>Grand Total:</span>
+              <strong style={{ fontSize: '15px', color: '#0E7490', fontWeight: '800' }}>
+                ₹{(orderGrandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong>
+            </div>
           </div>
         </div>
 

@@ -733,7 +733,7 @@ export default function BomOperationalModals({ ctx }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Camera size={16} style={{ color: '#0E7490' }} />
                       <h4 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                        Dispatch Packed Items Media ({packPhotos.length} Photos, {packVideos.length} Videos)
+                        Dispatch Packed Items Media ({packPhotos.length} Photos)
                       </h4>
                     </div>
                     <span style={{ fontSize: '11px', color: '#64748B' }}>Captured by Dispatch</span>
