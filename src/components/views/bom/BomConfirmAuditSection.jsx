@@ -272,6 +272,209 @@ export default function BomConfirmAuditSection({ ctx }) {
     return <BomConfirmCeoDetailSection ctx={ctx} auditVars={auditVars} />;
   }
 
+  const handleConfirmAndSendToDispatch = (itemsOverride = null) => {
+    const currentItemsList = itemsOverride || (confirmingBomModal.items || []);
+    const unconfirmedItems = currentItemsList.filter(it => !it.confirmed);
+    if (unconfirmedItems.length > 0) {
+      alert(`⚠️ Please confirm all products first!\n\n${unconfirmedItems.length} product(s) still need to be verified with the tick mark (✓) or click "Confirm and Send" below before sending BOM to Dispatch.`);
+      return;
+    }
+
+    const isDcOrder = Boolean(
+      confirmingBomModal.docType === 'DC' ||
+      confirmingBomModal.docType === 'Delivery Challan' ||
+      confirmingBomModal.documentType === 'DC' ||
+      confirmingBomModal.invoiceType === 'DC' ||
+      String(confirmingBomModal.docType || '').toUpperCase().includes('DC') ||
+      String(confirmingBomModal.docType || '').toUpperCase().includes('CHALLAN') ||
+      String(confirmingBomModal.documentType || '').toUpperCase().includes('DC') ||
+      String(confirmingBomModal.documentType || '').toUpperCase().includes('CHALLAN')
+    );
+
+    const currentPayType = confirmingBomModal.paymentType;
+    const is100OrPartial = currentPayType === '100% Paid' || currentPayType === '100% Advance' || currentPayType === 'Partial Paid' || currentPayType === 'Partial Payment';
+    const hasProof = Boolean(
+      confirmingBomModal.paymentProofDoc ||
+      confirmingBomModal.payments?.proofDocObj ||
+      confirmingBomModal.payments?.proofDoc ||
+      confirmingBomModal.proofDoc ||
+      confirmingBomModal.proofDocData
+    );
+    if (!isDcOrder && is100OrPartial && !hasProof) {
+      alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${currentPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
+      return;
+    }
+
+    setIsConfirmingForward(true);
+    try {
+      const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
+      const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
+      const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
+
+      const finalizedItems = currentItemsList.map(i => ({ ...i, confirmed: true }));
+      const packingItems = (confirmingBomModal.dispatchPacking && confirmingBomModal.dispatchPacking.length > 0)
+        ? confirmingBomModal.dispatchPacking
+        : finalizedItems.map(it => ({
+          name: it.name || it.c2 || 'Item',
+          bomQty: it.qty || 1,
+          packed: false
+        }));
+
+      // Ensure inventory is blocked upon verification if not already blocked
+      if (!confirmingBomModal.stockBlocked && !confirmingBomModal.stockDeducted) {
+        blockInventoryForBom(finalizedItems, confirmingBomModal.bomCode);
+      }
+
+      const prevBomRec = (bomStore || []).find(b => b && (b.bomCode === confirmingBomModal.bomCode || b.id === confirmingBomModal.id || b.code === confirmingBomModal.code));
+      const nextEditedFields = { ...(prevBomRec?.editedFields || confirmingBomModal.editedFields || {}) };
+      const normVal = (v) => String(v == null ? '' : v).trim();
+      if (prevBomRec) {
+        if (normVal(prevBomRec.companyName) !== normVal(confirmingBomModal.companyName)) {
+          nextEditedFields.companyName = `${normVal(prevBomRec.companyName) || '—'} → ${normVal(confirmingBomModal.companyName) || '—'}`;
+        }
+        if (normVal(prevBomRec.paymentType) !== normVal(confirmingBomModal.paymentType)) {
+          nextEditedFields.paymentType = `${normVal(prevBomRec.paymentType) || '—'} → ${normVal(confirmingBomModal.paymentType) || '—'}`;
+        }
+        if (normVal(prevBomRec.billingAddress) !== normVal(bStr)) {
+          nextEditedFields.billingAddress = 'Updated during BOM confirmation';
+        }
+        if (normVal(prevBomRec.deliveryAddress) !== normVal(dStr)) {
+          nextEditedFields.deliveryAddress = 'Updated during BOM confirmation';
+        }
+      }
+      const prevItemsMap = new Map();
+      (Array.isArray(prevBomRec?.items) ? prevBomRec.items : []).forEach((it) => {
+        const k = normVal(it?.name || it?.code).toLowerCase();
+        if (k) prevItemsMap.set(k, it);
+      });
+      let anyItemEdited = false;
+      const diffedItems = finalizedItems.map((it) => {
+        const k = normVal(it?.name || it?.code).toLowerCase();
+        const prevIt = k ? prevItemsMap.get(k) : null;
+        const diffs = [];
+        if (prevBomRec) {
+          if (!prevIt) {
+            diffs.push('Added during BOM confirmation');
+          } else {
+            if (Number(prevIt.qty || 0) !== Number(it.qty || 0)) {
+              diffs.push(`Qty: ${prevIt.qty || 0} → ${it.qty || 0}`);
+            }
+            if (Number(prevIt.rate || 0) !== Number(it.rate || 0)) {
+              diffs.push(`Rate: ₹${Number(prevIt.rate || 0).toLocaleString('en-IN')} → ₹${Number(it.rate || 0).toLocaleString('en-IN')}`);
+            }
+            if (normVal(prevIt.uom || prevIt.unit) !== normVal(it.uom || it.unit)) {
+              diffs.push(`UOM: ${normVal(prevIt.uom || prevIt.unit)} → ${normVal(it.uom || it.unit)}`);
+            }
+          }
+        }
+        const itemEdited = Boolean(it.isEdited || diffs.length > 0);
+        if (itemEdited) anyItemEdited = true;
+        const mergedNote = [it.editedNote, ...diffs].filter(Boolean).join(' • ');
+        return itemEdited ? { ...it, isEdited: true, ...(mergedNote ? { editedNote: mergedNote } : {}) } : it;
+      });
+      const hasAnyEdit = Boolean(confirmingBomModal.isEdited || prevBomRec?.isEdited || Object.keys(nextEditedFields).length > 0 || anyItemEdited);
+      const todayIso = new Date().toISOString().split('T')[0];
+
+      const updatedBomData = {
+        ...confirmingBomModal,
+        ...(hasAnyEdit ? { date: todayIso, bomDate: todayIso } : {}),
+        companyName: confirmingBomModal.companyName,
+        docType: confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'),
+        paymentType: confirmingBomModal.paymentType,
+        billingAddress: bStr,
+        billingAddressObj: bObj,
+        deliveryAddress: dStr,
+        deliveryAddressObj: finalDObj,
+        deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
+        items: diffedItems,
+        ...(hasAnyEdit ? {
+          isEdited: true,
+          editedFields: nextEditedFields,
+          lastEditedAt: confirmingBomModal.lastEditedAt || new Date().toISOString(),
+          lastEditedBy: confirmingBomModal.lastEditedBy || defaultSalesPersonName
+        } : {}),
+        dispatchPacking: packingItems,
+        salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
+        status: 'Sales Confirmed - Sent to Dispatch',
+        salesConfirmed: true,
+        salesReconfirmed: true,
+        tabGroup: 'Sent',
+        stBg: '#dcfce7',
+        stFg: '#166534',
+        stBorder: '1px solid #bbf7d0',
+        salesConfirmedAt: new Date().toISOString(),
+        reconfirmedAt: new Date().toISOString(),
+        isSentToDispatch: true,
+        stockBlocked: true,
+        stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
+        stockDeducted: true,
+        addressProofReuploadRequested: false,
+        subTotal: orderSubTotal,
+        gstAmount: orderGstAmount,
+        grandTotal: orderGrandTotal
+      };
+
+      const updatedList = (bomStore || []).map(b => ((b.bomCode && (b.bomCode === confirmingBomModal.bomCode || b.bomCode === confirmingBomModal.id || b.bomCode === confirmingBomModal.code)) || (b.id && (b.id === confirmingBomModal.id || b.id === confirmingBomModal.bomCode)) || (b.code && (b.code === confirmingBomModal.code || b.code === confirmingBomModal.bomCode))) ? {
+        ...b,
+        ...updatedBomData
+      } : b);
+      setBomStore(updatedList);
+      safeSaveBomStoreToLocal(updatedList);
+
+      // Push to Supabase and server immediately so Dispatch sees it in real time
+      saveCloudBomRow(updatedBomData);
+      try {
+        const sesId = typeof window !== 'undefined' && window.localStorage
+          ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+          : null;
+        const curRole = typeof window !== 'undefined' && window.localStorage
+          ? (localStorage.getItem('controlroom_user_role') || userRole || 'Sales')
+          : (userRole || 'Sales');
+        const curEmp = typeof window !== 'undefined' && window.localStorage
+          ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
+          : 'SE-001';
+
+        fetch('/api/boms', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sesId ? { 'x-session-id': sesId } : {}),
+            'x-user-role': curRole,
+            'x-employee-code': curEmp
+          },
+          body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
+        }).then(res => {
+          if (!res.ok) {
+            console.warn('[BomOrdersView] POST /api/boms response not OK:', res.status);
+          }
+        }).catch(err => console.error('Error updating BOM to Dispatch:', err));
+      } catch (_) {}
+
+      try {
+        window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData } }));
+        window.dispatchEvent(new Event('controlroom_storage_update'));
+      } catch (_) {}
+
+      // Trigger Real-time Workflow Notification with synthesized sound & deep-link to Dispatch Orders
+      try {
+        if (typeof notifyBomSentToDispatch === 'function') {
+          notifyBomSentToDispatch({
+            bomCode: confirmingBomModal.bomCode,
+            customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
+            salesPerson: confirmingBomModal.salesPerson
+          });
+        }
+      } catch (nErr) {
+        console.warn('notifyBomSentToDispatch non-fatal:', nErr);
+      }
+
+      setConfirmingBomModal(null);
+      alert(`BOM (${confirmingBomModal.bomCode}) successfully verified by Sales and forwarded to Dispatch!`);
+    } finally {
+      setIsConfirmingForward(false);
+    }
+  };
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC', padding: '24px', borderRadius: '16px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -349,251 +552,6 @@ export default function BomConfirmAuditSection({ ctx }) {
               >
                 <CreditCard style={{ width: '15px', height: '15px' }} /> Update Payment Details
               </button>
-            )}
-
-            {!isAlreadyForwarded && (
-              <button
-                onClick={() => {
-                  const isDeliveryMatching = Boolean(confirmingBomModal.sameAsBilling) || (
-                    ((dObj.address || '').trim() === (bObj.address || '').trim()) &&
-                    ((dObj.city || '').trim() === (bObj.city || '').trim()) &&
-                    ((dObj.state || '').trim() === (bObj.state || '').trim()) &&
-                    ((dObj.pincode || '').trim() === (bObj.pincode || '').trim())
-                  );
-
-
-
-                  const currentItemsList = confirmingBomModal.items || [];
-                  const unconfirmedItems = currentItemsList.filter(it => !it.confirmed);
-                  if (unconfirmedItems.length > 0) {
-                    alert(`⚠️ Please confirm all products first!\n\n${unconfirmedItems.length} product(s) still need to be verified with the tick mark (✓) or click "Confirm All Products" below before sending BOM to Dispatch.`);
-                    return;
-                  }
-
-                  const isDcOrder = Boolean(
-                    confirmingBomModal.docType === 'DC' ||
-                    confirmingBomModal.docType === 'Delivery Challan' ||
-                    confirmingBomModal.documentType === 'DC' ||
-                    confirmingBomModal.invoiceType === 'DC' ||
-                    String(confirmingBomModal.docType || '').toUpperCase().includes('DC') ||
-                    String(confirmingBomModal.docType || '').toUpperCase().includes('CHALLAN') ||
-                    String(confirmingBomModal.documentType || '').toUpperCase().includes('DC') ||
-                    String(confirmingBomModal.documentType || '').toUpperCase().includes('CHALLAN')
-                  );
-
-                  const currentPayType = confirmingBomModal.paymentType;
-                  const is100OrPartial = currentPayType === '100% Paid' || currentPayType === '100% Advance' || currentPayType === 'Partial Paid' || currentPayType === 'Partial Payment';
-                  const hasProof = Boolean(
-                    confirmingBomModal.paymentProofDoc ||
-                    confirmingBomModal.payments?.proofDocObj ||
-                    confirmingBomModal.payments?.proofDoc ||
-                    confirmingBomModal.proofDoc ||
-                    confirmingBomModal.proofDocData
-                  );
-                  if (!isDcOrder && is100OrPartial && !hasProof) {
-                    alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${currentPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
-                    return;
-                  }
-
-                  setIsConfirmingForward(true);
-                  try {
-                    const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
-                    const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
-                    const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
-
-                    const finalizedItems = currentItemsList.map(i => ({ ...i, confirmed: true }));
-                  const packingItems = (confirmingBomModal.dispatchPacking && confirmingBomModal.dispatchPacking.length > 0)
-                    ? confirmingBomModal.dispatchPacking
-                    : finalizedItems.map(it => ({
-                      name: it.name || it.c2 || 'Item',
-                      bomQty: it.qty || 1,
-                      packed: false
-                    }));
-
-                  // Ensure inventory is blocked upon verification if not already blocked
-                  if (!confirmingBomModal.stockBlocked && !confirmingBomModal.stockDeducted) {
-                    blockInventoryForBom(finalizedItems, confirmingBomModal.bomCode);
-                  }
-
-                  const prevBomRec = (bomStore || []).find(b => b && (b.bomCode === confirmingBomModal.bomCode || b.id === confirmingBomModal.id || b.code === confirmingBomModal.code));
-                  const nextEditedFields = { ...(prevBomRec?.editedFields || confirmingBomModal.editedFields || {}) };
-                  const normVal = (v) => String(v == null ? '' : v).trim();
-                  if (prevBomRec) {
-                    if (normVal(prevBomRec.companyName) !== normVal(confirmingBomModal.companyName)) {
-                      nextEditedFields.companyName = `${normVal(prevBomRec.companyName) || '—'} → ${normVal(confirmingBomModal.companyName) || '—'}`;
-                    }
-                    if (normVal(prevBomRec.paymentType) !== normVal(confirmingBomModal.paymentType)) {
-                      nextEditedFields.paymentType = `${normVal(prevBomRec.paymentType) || '—'} → ${normVal(confirmingBomModal.paymentType) || '—'}`;
-                    }
-                    if (normVal(prevBomRec.billingAddress) !== normVal(bStr)) {
-                      nextEditedFields.billingAddress = 'Updated during BOM confirmation';
-                    }
-                    if (normVal(prevBomRec.deliveryAddress) !== normVal(dStr)) {
-                      nextEditedFields.deliveryAddress = 'Updated during BOM confirmation';
-                    }
-                  }
-                  const prevItemsMap = new Map();
-                  (Array.isArray(prevBomRec?.items) ? prevBomRec.items : []).forEach((it) => {
-                    const k = normVal(it?.name || it?.code).toLowerCase();
-                    if (k) prevItemsMap.set(k, it);
-                  });
-                  let anyItemEdited = false;
-                  const diffedItems = finalizedItems.map((it) => {
-                    const k = normVal(it?.name || it?.code).toLowerCase();
-                    const prevIt = k ? prevItemsMap.get(k) : null;
-                    const diffs = [];
-                    if (prevBomRec) {
-                      if (!prevIt) {
-                        diffs.push('Added during BOM confirmation');
-                      } else {
-                        if (Number(prevIt.qty || 0) !== Number(it.qty || 0)) {
-                          diffs.push(`Qty: ${prevIt.qty || 0} → ${it.qty || 0}`);
-                        }
-                        if (Number(prevIt.rate || 0) !== Number(it.rate || 0)) {
-                          diffs.push(`Rate: ₹${Number(prevIt.rate || 0).toLocaleString('en-IN')} → ₹${Number(it.rate || 0).toLocaleString('en-IN')}`);
-                        }
-                        if (normVal(prevIt.uom || prevIt.unit) !== normVal(it.uom || it.unit)) {
-                          diffs.push(`UOM: ${normVal(prevIt.uom || prevIt.unit)} → ${normVal(it.uom || it.unit)}`);
-                        }
-                      }
-                    }
-                    const itemEdited = Boolean(it.isEdited || diffs.length > 0);
-                    if (itemEdited) anyItemEdited = true;
-                    const mergedNote = [it.editedNote, ...diffs].filter(Boolean).join(' • ');
-                    return itemEdited ? { ...it, isEdited: true, ...(mergedNote ? { editedNote: mergedNote } : {}) } : it;
-                  });
-                  const hasAnyEdit = Boolean(confirmingBomModal.isEdited || prevBomRec?.isEdited || Object.keys(nextEditedFields).length > 0 || anyItemEdited);
-                  const todayIso = new Date().toISOString().split('T')[0];
-
-                  const updatedBomData = {
-                    ...confirmingBomModal,
-                    ...(hasAnyEdit ? { date: todayIso, bomDate: todayIso } : {}),
-                    companyName: confirmingBomModal.companyName,
-                    docType: confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'),
-                    paymentType: confirmingBomModal.paymentType,
-                    billingAddress: bStr,
-                    billingAddressObj: bObj,
-                    deliveryAddress: dStr,
-                    deliveryAddressObj: finalDObj,
-                    deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
-                    items: diffedItems,
-                    ...(hasAnyEdit ? {
-                      isEdited: true,
-                      editedFields: nextEditedFields,
-                      lastEditedAt: confirmingBomModal.lastEditedAt || new Date().toISOString(),
-                      lastEditedBy: confirmingBomModal.lastEditedBy || defaultSalesPersonName
-                    } : {}),
-                    dispatchPacking: packingItems,
-                    salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
-                    status: 'Sales Confirmed - Sent to Dispatch',
-                    salesConfirmed: true,
-                    salesReconfirmed: true,
-                    tabGroup: 'Sent',
-                    stBg: '#dcfce7',
-                    stFg: '#166534',
-                    stBorder: '1px solid #bbf7d0',
-                    salesConfirmedAt: new Date().toISOString(),
-                    reconfirmedAt: new Date().toISOString(),
-                    isSentToDispatch: true,
-                    stockBlocked: true,
-                    stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
-                    stockDeducted: true,
-                    addressProofReuploadRequested: false,
-                    subTotal: orderSubTotal,
-                    gstAmount: orderGstAmount,
-                    grandTotal: orderGrandTotal
-                  };
-
-                  const updatedList = (bomStore || []).map(b => ((b.bomCode && (b.bomCode === confirmingBomModal.bomCode || b.bomCode === confirmingBomModal.id || b.bomCode === confirmingBomModal.code)) || (b.id && (b.id === confirmingBomModal.id || b.id === confirmingBomModal.bomCode)) || (b.code && (b.code === confirmingBomModal.code || b.code === confirmingBomModal.bomCode))) ? {
-                    ...b,
-                    ...updatedBomData
-                  } : b);
-                  setBomStore(updatedList);
-                  safeSaveBomStoreToLocal(updatedList);
-
-                  // Push to Supabase and server immediately so Dispatch sees it in real time
-                  saveCloudBomRow(updatedBomData);
-                  try {
-                    const sesId = typeof window !== 'undefined' && window.localStorage
-                      ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
-                      : null;
-                    const curRole = typeof window !== 'undefined' && window.localStorage
-                      ? (localStorage.getItem('controlroom_user_role') || userRole || 'Sales')
-                      : (userRole || 'Sales');
-                    const curEmp = typeof window !== 'undefined' && window.localStorage
-                      ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
-                      : 'SE-001';
-
-                    fetch('/api/boms', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        ...(sesId ? { 'x-session-id': sesId } : {}),
-                        'x-user-role': curRole,
-                        'x-employee-code': curEmp
-                      },
-                      body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
-                    }).then(res => {
-                      if (!res.ok) {
-                        console.warn('[BomOrdersView] POST /api/boms response not OK:', res.status);
-                      }
-                    }).catch(err => console.error('Error updating BOM to Dispatch:', err));
-                  } catch (_) {}
-
-                  try {
-                    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData } }));
-                    window.dispatchEvent(new Event('controlroom_storage_update'));
-                  } catch (_) {}
-
-                  // Trigger Real-time Workflow Notification with synthesized sound & deep-link to Dispatch Orders
-                  try {
-                    if (typeof notifyBomSentToDispatch === 'function') {
-                      notifyBomSentToDispatch({
-                        bomCode: confirmingBomModal.bomCode,
-                        customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
-                        salesPerson: confirmingBomModal.salesPerson
-                      });
-                    }
-                  } catch (nErr) {
-                    console.warn('notifyBomSentToDispatch non-fatal:', nErr);
-                  }
-
-                  setConfirmingBomModal(null);
-                  alert(`BOM (${confirmingBomModal.bomCode}) successfully verified by Sales and forwarded to Dispatch!`);
-                } finally {
-                  setIsConfirmingForward(false);
-                }
-              }}
-              disabled={isConfirmingForward}
-              style={{
-                border: 'none',
-                backgroundColor: '#0E7490',
-                color: 'white',
-                height: '40px',
-                padding: '0 24px',
-                borderRadius: '10px',
-                fontSize: '13px',
-                fontWeight: '800',
-                cursor: isConfirmingForward ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 4px rgba(14,116,144,0.3)',
-                opacity: isConfirmingForward ? 0.7 : 1
-              }}
-            >
-              {isConfirmingForward ? (
-                <>
-                  <RotateCcw style={{ width: '16px', height: '16px', animation: 'spin 0.75s linear infinite' }} />
-                  Forwarding to Dispatch...
-                </>
-              ) : (
-                <>
-                  <CheckCircle style={{ width: '16px', height: '16px' }} />
-                  Confirm BOM & Send to Dispatch
-                </>
-              )}
-            </button>
             )}
           </div>
         </div>
@@ -2420,31 +2378,13 @@ export default function BomConfirmAuditSection({ ctx }) {
 
                     const currentItems = confirmingBomModal.items || [];
                     const allCheckedItems = currentItems.map(it => ({ ...it, confirmed: true }));
-                    const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
-                    const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
-                    const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
-
                     setConfirmingBomModal({ ...confirmingBomModal, items: allCheckedItems });
-                    setBomStore(prev => prev.map(b => b.bomCode === confirmingBomModal.bomCode ? {
-                      ...b,
-                      companyName: confirmingBomModal.companyName || b.companyName,
-                      paymentType: confirmingBomModal.paymentType || b.paymentType,
-                      billingAddress: bStr,
-                      billingAddressObj: bObj,
-                      deliveryAddress: dStr,
-                      deliveryAddressObj: finalDObj,
-                      deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
-                      items: allCheckedItems,
-                      status: 'Pending Confirmation',
-                      subTotal: orderSubTotal,
-                      gstAmount: orderGstAmount,
-                      grandTotal: orderGrandTotal
-                    } : b));
-                    alert('All product specifications confirmed! You can now click Send BOM.');
+                    handleConfirmAndSendToDispatch(allCheckedItems);
                   }}
-                  style={{ border: 'none', backgroundColor: '#1E40AF', color: 'white', height: '38px', padding: '0 20px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  disabled={isConfirmingForward}
+                  style={{ border: 'none', backgroundColor: '#1E40AF', color: 'white', height: '38px', padding: '0 20px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: isConfirmingForward ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', opacity: isConfirmingForward ? 0.7 : 1 }}
                 >
-                  <CheckSquare style={{ width: '14px', height: '14px' }} /> Confirm All Products
+                  <CheckSquare style={{ width: '14px', height: '14px' }} /> Confirm and Send
                 </button>
               )}
             </div>
