@@ -1452,7 +1452,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                   <th style={{ padding: '12px 10px', width: '40px', textAlign: 'center' }}>#</th>
                   <th style={{ padding: '12px 10px', width: '24%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 8px', width: '7%', textAlign: 'center' }}>UOM</th>
-                  <th style={{ padding: '12px 8px', width: '7%', textAlign: 'center' }}>Qty / Set</th>
+                  <th style={{ padding: '12px 8px', width: '7%', textAlign: 'center' }}>{modalPresetGroups.length > 0 ? 'Qty / Set' : 'Qty'}</th>
                   <th style={{ padding: '12px 10px', width: '11%', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                   <th style={{ padding: '12px 8px', width: '9%', textAlign: 'right' }}>Price (₹)</th>
                   <th style={{ padding: '12px 8px', width: '8%', textAlign: 'center' }}>GST Rate</th>

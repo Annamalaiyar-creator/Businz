@@ -533,7 +533,7 @@ export default function BomOperationalModals({ ctx }) {
                         <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
                           <th style={{ padding: '8px 10px' }}>#</th>
                           <th style={{ padding: '8px 10px' }}>Product Description</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center' }}>Qty / Set</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center' }}>{((Array.isArray(quickPreviewRecord.presetGroups) && quickPreviewRecord.presetGroups.length > 0) || quickPreviewRecord.presetName || (quickPreviewRecord.items || []).some(it => it.isPresetItem || it.presetGroupId)) ? 'Qty / Set' : 'Qty'}</th>
                           <th style={{ padding: '8px 10px', textAlign: 'center', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Total Dispatch Qty</th>
                           {hasDispatchPacking && (
                             <th style={{ padding: '8px 10px', textAlign: 'center', color: '#0E7490' }}>Packed Qty</th>

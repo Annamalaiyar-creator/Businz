@@ -848,10 +848,12 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
           <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
             <th style={{ padding: '8px 6px', width: '45px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>S.No</th>
             <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Product / Material Name</th>
-            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{hasAnyKits && kitGroups.every(kg => kg.unit === 'kW') ? 'kW' : (hasAnyKits && kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set')}</th>
+            {hasAnyKits && (
+              <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>{kitGroups.every(kg => kg.unit === 'kW') ? 'kW' : (kitGroups.some(kg => kg.unit === 'kW') ? 'Set / kW' : 'Set')}</th>
+            )}
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
             <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
-              Qty / Set
+              {hasAnyKits ? 'Qty / Set' : 'Qty'}
             </th>
             <th style={{ padding: '8px 6px', width: '125px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Quantity Taken</th>
           </tr>
@@ -859,7 +861,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         <tbody>
           {enrichedItems.length === 0 ? (
             <tr>
-              <td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+              <td colSpan={hasAnyKits ? 6 : 5} style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
                 No itemized materials in this BOM record.
               </td>
             </tr>
@@ -1085,10 +1087,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             </React.Fragment>
           ) : (
             enrichedItems.map((item, idx) => {
-              const fallbackMid = Math.floor(enrichedItems.length / 2);
-              const fallbackSetVal = (b.presetSetCount && Number(b.presetSetCount) > 1)
-                ? b.presetSetCount
-                : (item.setCount || item.sets || b.presetSetCount || extractSetsFromName(b.presetName) || matchedPi?.presetSetCount || '');
               const qty = getItemQty(item);
               const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                 ? item.quantityTaken
@@ -1111,33 +1109,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                   </td>
                   <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', wordBreak: 'break-word' }}>
                     <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
-                  </td>
-                  <td
-                    style={{
-                      padding: (idx === fallbackMid && fallbackSetVal) ? '4px 6px' : '0',
-                      textAlign: 'center',
-                      verticalAlign: 'middle',
-                      color: '#0E7490',
-                      backgroundColor: '#FFFFFF',
-                      borderRight: '1px solid #CBD5E1',
-                      borderLeft: '1px solid #CBD5E1',
-                      borderTop: idx === 0 ? '1px solid #CBD5E1' : '1px hidden transparent',
-                      borderBottom: idx === enrichedItems.length - 1 ? '1px solid #CBD5E1' : '1px hidden transparent',
-                      fontSize: '13px',
-                      fontWeight: '800',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {idx === fallbackMid && fallbackSetVal ? (
-                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
-                          {fallbackSetVal}
-                        </span>
-                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                          {Number(fallbackSetVal) === 1 ? 'Set' : 'Sets'}
-                        </span>
-                      </div>
-                    ) : null}
                   </td>
                   <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', fontSize: '13px', fontWeight: '700' }}>
                     {item.uom || item.unit || 'NOS'}
