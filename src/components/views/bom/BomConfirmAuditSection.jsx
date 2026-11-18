@@ -9,10 +9,10 @@ import { uploadBomDocumentFile, validateClientFile } from '../../../utils/bomSto
 import TypeableProductSelect from '../../TypeableProductSelect';
 import { is5PctSolarProduct } from '../../../utils/hsnCodeService';
 import { PRESET_THEMES, getPresetTheme } from '../../../utils/presetThemes';
-import VRMBomPrintTemplate from '../../VRMBomPrintTemplate';
 import DispatchMediaThumbnail from '../DispatchMediaThumbnail';
 import { notifyBomSentToDispatch } from '../../../services/notificationService';
 import BomConfirmCeoDetailSection from './BomConfirmCeoDetailSection';
+import BomOperationalModals from './BomOperationalModals';
 import { extractGstRate } from '../../../utils/gstHelper';
 
 export default function BomConfirmAuditSection({ ctx }) {
@@ -272,7 +272,7 @@ export default function BomConfirmAuditSection({ ctx }) {
     return <BomConfirmCeoDetailSection ctx={ctx} auditVars={auditVars} />;
   }
 
-  const handleConfirmAndSendToDispatch = (itemsOverride = null) => {
+  const handleConfirmAndSendToDispatch = async (itemsOverride = null) => {
     const currentItemsList = itemsOverride || (confirmingBomModal.items || []);
     const unconfirmedItems = currentItemsList.filter(it => !it.confirmed);
     if (unconfirmedItems.length > 0) {
@@ -434,7 +434,7 @@ export default function BomConfirmAuditSection({ ctx }) {
           ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
           : 'SE-001';
 
-        fetch('/api/boms', {
+        const saveRes = await fetch('/api/boms', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -443,12 +443,15 @@ export default function BomConfirmAuditSection({ ctx }) {
             'x-employee-code': curEmp
           },
           body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
-        }).then(res => {
-          if (!res.ok) {
-            console.warn('[BomOrdersView] POST /api/boms response not OK:', res.status);
-          }
-        }).catch(err => console.error('Error updating BOM to Dispatch:', err));
-      } catch (_) {}
+        }).catch(() => null);
+        if (!saveRes || !saveRes.ok) {
+          const errJson = saveRes ? await saveRes.json().catch(() => null) : null;
+          alert(`⚠️ Failed to confirm & send BOM to Dispatch (HTTP ${saveRes?.status || 'Network Error'}): ${errJson?.error || errJson?.message || 'Please try again.'}`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error updating BOM to Dispatch:', err);
+      }
 
       try {
         window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData } }));
@@ -470,6 +473,9 @@ export default function BomConfirmAuditSection({ ctx }) {
 
       setConfirmingBomModal(null);
       alert(`BOM (${confirmingBomModal.bomCode}) successfully verified by Sales and forwarded to Dispatch!`);
+    } catch (outerErr) {
+      console.error('handleConfirmAndSendToDispatch failed:', outerErr);
+      alert(`⚠️ Could not confirm & send BOM to Dispatch: ${outerErr?.message || 'Unexpected error. Please try again.'}`);
     } finally {
       setIsConfirmingForward(false);
     }
@@ -2368,17 +2374,10 @@ export default function BomConfirmAuditSection({ ctx }) {
 
               {!isAlreadyForwarded && (
                 <button
+                  type="button"
                   onClick={() => {
-                    const isDeliveryMatching = Boolean(confirmingBomModal.sameAsBilling) || (
-                      ((dObj.address || '').trim() === (bObj.address || '').trim()) &&
-                      ((dObj.city || '').trim() === (bObj.city || '').trim()) &&
-                      ((dObj.state || '').trim() === (bObj.state || '').trim()) &&
-                      ((dObj.pincode || '').trim() === (bObj.pincode || '').trim())
-                    );
-
                     const currentItems = confirmingBomModal.items || [];
                     const allCheckedItems = currentItems.map(it => ({ ...it, confirmed: true }));
-                    setConfirmingBomModal({ ...confirmingBomModal, items: allCheckedItems });
                     handleConfirmAndSendToDispatch(allCheckedItems);
                   }}
                   disabled={isConfirmingForward}
@@ -2486,18 +2485,11 @@ export default function BomConfirmAuditSection({ ctx }) {
         {/* EXPORT FORMAT SELECTOR MODAL (PDF / JPG / CSV) */}
         {renderExportFormatModal()}
 
-        {/* PRINTABLE BOM ORDER SHEET TEMPLATE */}
-        {printingBomRecord && (
-          <VRMBomPrintTemplate
-            bomData={printingBomRecord}
-            onClose={() => setPrintingBomRecord(null)}
-            userRole={props.userRole || userRole || 'Sales Executive'}
-            isSales={true}
-          />
-        )}
-
         {/* DOCUMENT PREVIEW MODAL */}
         {renderDocPreviewModal()}
+
+        {/* OPERATIONAL MODALS (Alerts, Print Sheet, Payment Proof Upload) */}
+        <BomOperationalModals ctx={ctx} />
       </div>
     );
 }
