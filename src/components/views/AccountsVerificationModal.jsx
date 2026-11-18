@@ -10,6 +10,7 @@ import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../util
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import { supabase } from "../../supabaseClient";
 import StatusBadge from "../StatusBadge";
+import { extractGstRate } from "../../utils/gstHelper";
 // VRMBomPrintSheet removed per user mandate: strictly display itemized interactive BOM table with centered kit pricing in accounts login
 
 function ResilientDocThumbnail({ docUrl, docName, isPdf, fallbackColor = '#2563EB', alt = 'Document' }) {
@@ -357,7 +358,7 @@ export default function AccountsVerificationModal({
     }
   })();
 
-  const gstRateFallback = cleanNum(accountsVerificationModal?.gstRate, 0) || cleanNum(resolvedMatchedPi?.gstRate, 0) || 18;
+  const gstRateFallback = extractGstRate(accountsVerificationModal?.gstRate ?? resolvedMatchedPi?.gstRate, 18);
   const gstMultFallback = 1 + gstRateFallback / 100;
   const rawSubForOrder = cleanNum(accountsVerificationModal?.subTotal, 0) || cleanNum(accountsVerificationModal?.subtotal, 0) || cleanNum(resolvedMatchedPi?.subTotal, 0);
   const rawGstForOrder = cleanNum(accountsVerificationModal?.gstAmount, 0) || cleanNum(resolvedMatchedPi?.gstAmount, 0);
@@ -365,7 +366,11 @@ export default function AccountsVerificationModal({
     ? (rawGstForOrder > 0 ? rawSubForOrder + rawGstForOrder : Math.round(rawSubForOrder * gstMultFallback * 100) / 100)
     : 0;
   const itemsSumWithGst = Array.isArray(accountsVerificationModal?.items) && accountsVerificationModal.items.length > 0
-    ? Math.round(accountsVerificationModal.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0) * gstMultFallback * 100) / 100
+    ? Math.round(accountsVerificationModal.items.reduce((s, it) => {
+        const lineSub = Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1);
+        const itemRate = extractGstRate(it.gstRate ?? it.tax, gstRateFallback);
+        return s + (lineSub * (1 + itemRate / 100));
+      }, 0) * 100) / 100
     : 0;
   const orderValue =
     cleanNum(accountsVerificationModal?.grandTotal, 0) ||
@@ -584,7 +589,7 @@ export default function AccountsVerificationModal({
         let itemRate = cleanNum(p.rate) || cleanNum(matchingBomItem?.rate) || cleanNum(matchingBomItem?.unitPrice) || cleanNum(matchingBomItem?.price) || 0;
         if (itemRate === 0 && cleanNum(currentTotalAmount) > 0) {
           const totalQty = verifiedBOM.dispatchPacking.reduce((sum, item) => sum + cleanNum(item.bomQty || item.qty, 1), 0);
-          const taxableBase = Math.round((cleanNum(currentTotalAmount) / 1.18) * 100) / 100;
+          const taxableBase = Math.round((cleanNum(currentTotalAmount) / gstMultFallback) * 100) / 100;
           itemRate = totalQty > 0 ? Math.round((taxableBase / totalQty) * 100) / 100 : 1000;
         }
         return {
@@ -1962,7 +1967,8 @@ export default function AccountsVerificationModal({
 
         // Order Subtotal and Grand Total
         const gTotal = cleanNum(accountsVerificationModal?.grandTotal) || cleanNum(matchedPi?.grandTotal) || orderValue || 0;
-        const sTotal = cleanNum(accountsVerificationModal?.subTotal) || cleanNum(accountsVerificationModal?.subtotal) || cleanNum(matchedPi?.subTotal) || cleanNum(matchedPi?.subtotal) || (gTotal > 0 ? Math.round((gTotal / 1.18) * 100) / 100 : 0);
+        const modalGstMult = 1 + (extractGstRate(accountsVerificationModal?.gstRate ?? matchedPi?.gstRate, 18) / 100);
+        const sTotal = cleanNum(accountsVerificationModal?.subTotal) || cleanNum(accountsVerificationModal?.subtotal) || cleanNum(matchedPi?.subTotal) || cleanNum(matchedPi?.subtotal) || (gTotal > 0 ? Math.round((gTotal / modalGstMult) * 100) / 100 : 0);
 
         // Comprehensive Detection of Preset Structure Packages
         const hasPresetMetadata = Boolean(
@@ -2163,7 +2169,7 @@ export default function AccountsVerificationModal({
                                   GST ({safeKitGstPct}%): <strong>₹ {kitGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                                 </span>
                                 <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490' }}>
-                                  Total with GST: <strong>₹ {(kTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                                  Total with GST: <strong>₹ {(kTotal + kitGstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                                 </span>
                               </div>
                             </td>

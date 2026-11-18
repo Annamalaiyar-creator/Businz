@@ -1,6 +1,7 @@
 import { prodModuleEngine, isLegacyWoId } from '../../utils/productionModuleEngine.js';
 import { formatCurrency } from '../../utils/otherViewsShared.js';
 import { compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator.js';
+import { extractGstRate } from '../../utils/gstHelper.js';
 
 export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [], activeTab = null }) {
   const shouldBuild = (tabName) => !activeTab || activeTab === tabName;
@@ -679,7 +680,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const computedItemsSum = Array.isArray(b.items) && b.items.length > 0
                     ? b.items.reduce((sum, it) => sum + ((parseFloat(it.qty || it.bomQty || it.quantity || 0) * parseFloat(it.rate || it.price || it.unitPrice || 0)) || 0), 0)
                     : 0;
-                  const bGstRate = Number(b.gstRate || 18) || 18;
+                  const bGstRate = extractGstRate(b.gstRate, 18);
                   const bGstMult = 1 + bGstRate / 100;
                   const baseSubAmt = Number(b.subTotal || b.subtotal || b.kitSubtotal || b.presetKitPrice || 0);
                   const subWithGstAmt = baseSubAmt > 0

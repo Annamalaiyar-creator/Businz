@@ -11,6 +11,7 @@ import { searchCustomers } from '../../../services/customerService';
 import { is5PctSolarProduct } from '../../../utils/hsnCodeService';
 import { PRESET_THEMES, getPresetTheme } from '../../../utils/presetThemes';
 import BomCreateSubmitModal from './BomCreateSubmitModal';
+import { extractGstRate } from '../../../utils/gstHelper';
 
 export default function BomCreateFormSection({ ctx }) {
   const {
@@ -1068,7 +1069,7 @@ export default function BomCreateFormSection({ ctx }) {
                     const q = parseFloat(item.qty) || 0;
                     const r = parseFloat(item.rate) || 0;
                     const taxable = q * r;
-                    const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+                    const gstPct = extractGstRate(item.gstRate, 18);
                     const gstAmt = taxable * (gstPct / 100);
                     const rowTot = taxable + gstAmt;
                     const isChecked = selectedBomItemIndexes.includes(i);

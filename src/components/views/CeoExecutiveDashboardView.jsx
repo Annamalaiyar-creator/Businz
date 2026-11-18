@@ -14,6 +14,7 @@ import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { resolveDocumentUrl } from '../../utils/documentResolver';
 import { getMediaFromCache } from '../../utils/otherViewsShared';
+import { extractGstRate } from '../../utils/gstHelper';
 import HrKitAnalyticsDashboard from './HrKitAnalyticsDashboard';
 import CeoInventoryAnalyticsSection from './CeoInventoryAnalyticsSection';
 import CeoDispatchAnalyticsSection from './CeoDispatchAnalyticsSection';
@@ -4760,8 +4761,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   {invList.length > 0 ? (
                     invList.slice(0, 6).map((row, idx) => {
                       const tot = parseAmt(row.total || row.grandTotal || row.amount || 0);
-                      const tax = parseAmt(row.taxableAmount || (tot > 0 ? tot / 1.18 : 0));
-                      const gst = tot > 0 ? tot - tax : 0;
+                      const rowRate = extractGstRate(row.gstRate, 18);
+                      const tax = parseAmt(row.taxableAmount || row.subTotal || row.subtotal || (tot > 0 ? tot / (1 + rowRate / 100) : 0));
+                      const gst = parseAmt(row.gstAmount || row.taxAmount || (tot > 0 ? tot - tax : 0));
                       return (
                         <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                           <td style={{ padding: '8px 10px', fontWeight: '800', color: '#9333EA' }}>
@@ -6497,8 +6499,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         const salesPerson = pi.salesPerson || pi.createdBy || 'Sales Team';
         const items = Array.isArray(pi.items) ? pi.items : [];
         const grandTotal = parseAmt(pi.grandTotal || pi.totalAmount || pi.amount || 0);
-        const subtotal = parseAmt(pi.subtotal || pi.taxableAmount || (grandTotal > 0 ? grandTotal / 1.18 : 0));
-        const taxTotal = parseAmt(pi.taxTotal || (grandTotal - subtotal));
+        const piMult = 1 + (extractGstRate(pi.gstRate, 18) / 100);
+        const subtotal = parseAmt(pi.subtotal || pi.subTotal || pi.taxableAmount || (grandTotal > 0 ? grandTotal / piMult : 0));
+        const taxTotal = parseAmt(pi.taxTotal || pi.gstAmount || (grandTotal - subtotal));
         const paymentTerms = pi.paymentTerms || pi.terms || '100% Advance / Net 30';
         const isBOMConverted = Boolean(pi.bomConverted || pi.bomCode);
         const matchingBom = isBOMConverted ? allBomList.find(b => (b.bomCode === pi.bomCode || b.id === pi.bomCode || b.sourcePiNo === piNo)) : null;
@@ -6744,8 +6747,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                     taxable = Math.round(presetTaxablePool / presetSections.length);
                                   }
 
-                                  const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || pi.gstRate || '18%';
-                                  const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                                  const rawGst = grpConfig?.gstRate ?? sec.items[0]?.item?.gstRate ?? pi.gstRate;
+                                  const gstPct = extractGstRate(rawGst, 18);
                                   const kitGst = Math.round(taxable * (gstPct / 100));
                                   const kitTotal = Math.round(taxable + kitGst);
 
@@ -6941,8 +6944,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                     {sec.items.map(({ item: it, originalIndex }, cIdx) => {
                                       const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
                                       const r = parseFloat(it.rate || it.price || 0) || 0;
-                                      const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                                      const taxRate = parseFloat(taxRateStr) || 18;
+                                      const taxRate = extractGstRate(it.gstRate ?? it.gst, 18);
                                       const taxableItem = q * r;
                                       const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
 
@@ -7127,8 +7129,9 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         const matchingPi = linkedPiNo ? allPiList.find(p => (p.piNo === linkedPiNo || p.id === linkedPiNo)) : null;
         const items = Array.isArray(bom.items) && bom.items.length > 0 ? bom.items : (Array.isArray(bom.materials) && bom.materials.length > 0 ? bom.materials : (Array.isArray(matchingPi?.items) ? matchingPi.items : []));
         const grandTotal = parseAmt(bom.grandTotal || bom.totalAmount || bom.amount || bom.value || matchingPi?.grandTotal || 0);
-        const subtotal = parseAmt(bom.subtotal || bom.taxableAmount || bom.unitValue || matchingPi?.subtotal || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0));
-        const taxTotal = parseAmt(bom.taxTotal || matchingPi?.taxTotal || Math.max(0, grandTotal - subtotal));
+        const bomMult = 1 + (extractGstRate(bom.gstRate ?? matchingPi?.gstRate, 18) / 100);
+        const subtotal = parseAmt(bom.subtotal || bom.subTotal || bom.taxableAmount || bom.unitValue || matchingPi?.subtotal || (grandTotal > 0 ? Math.round((grandTotal / bomMult) * 100) / 100 : 0));
+        const taxTotal = parseAmt(bom.taxTotal || bom.gstAmount || matchingPi?.taxTotal || Math.max(0, grandTotal - subtotal));
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
 
@@ -7909,8 +7912,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                     taxable = Math.round(presetTaxablePool / presetSections.length);
                                   }
 
-                                  const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || bom.gstRate || matchingPi?.gstRate || '18%';
-                                  const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                                  const rawGst = grpConfig?.gstRate ?? sec.items[0]?.item?.gstRate ?? bom.gstRate ?? matchingPi?.gstRate;
+                                  const gstPct = extractGstRate(rawGst, 18);
                                   const kitGst = Math.round(taxable * (gstPct / 100));
                                   const kitTotal = Math.round(taxable + kitGst);
 
@@ -8102,8 +8105,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                                     {sec.items.map(({ item: it, originalIndex }, cIdx) => {
                                       const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0));
                                       const r = parseFloat(it.rate || it.price || 0) || 0;
-                                      const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                                      const taxRate = parseFloat(taxRateStr) || 18;
+                                      const taxRate = extractGstRate(it.gstRate ?? it.gst, 18);
                                       const taxableItem = q * r;
                                       const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
 

@@ -3,6 +3,7 @@ import {
   Clock, Truck, Printer, Download, CreditCard, PackageCheck, Boxes, Receipt, Factory
 } from 'lucide-react';
 import VRMBomPrintTemplate from '../../VRMBomPrintTemplate';
+import { extractGstRate } from '../../../utils/gstHelper';
 
 export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
   const {
@@ -479,8 +480,8 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                               taxable = Math.round(presetTaxablePool / presetSections.length);
                             }
 
-                            const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || confirmingBomModal.gstRate || sourcePi?.gstRate || '18%';
-                            const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                            const rawGst = grpConfig?.gstRate ?? sec.items[0]?.item?.gstRate ?? confirmingBomModal.gstRate ?? sourcePi?.gstRate;
+                            const gstPct = extractGstRate(rawGst, 18);
                             const kitGst = Math.round(taxable * (gstPct / 100));
                             const kitTotal = Math.round(taxable + kitGst);
 
@@ -679,8 +680,7 @@ export default function BomConfirmCeoDetailSection({ ctx, auditVars }) {
                               {sec.items.map(({ item: it, originalIndex }, cIdx) => {
                                 const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.quantity || it.bomQty || 0) || 0));
                                 const r = parseFloat(it.rate || it.price || 0) || 0;
-                                const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                                const taxRate = parseFloat(taxRateStr) || 18;
+                                const taxRate = extractGstRate(it.gstRate ?? it.gst, 18);
                                 const taxableItem = q * r;
                                 const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
 

@@ -1948,6 +1948,23 @@ export default function VendorManagementView(props) {
     if (e && e.preventDefault) e.preventDefault();
     if (!vName) return;
 
+    const cleanVendorGst = String(vGST || '').trim().toUpperCase();
+    if (cleanVendorGst) {
+      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstRegex.test(cleanVendorGst)) {
+        alert('⚠️ Invalid Vendor GST Number format. Must be a valid 15-character GSTIN (e.g. 33AABCU9603R1ZM).');
+        return;
+      }
+      const dupVendor = (vendorList || []).find(v => {
+        const vg = String(v.gstin || v.gstNo || v.gstNumber || '').trim().toUpperCase();
+        return vg && vg === cleanVendorGst;
+      });
+      if (dupVendor) {
+        alert(`⚠️ Duplicate Vendor GST: "${cleanVendorGst}" is already registered to "${dupVendor.name || dupVendor.c2 || 'another vendor'}".`);
+        return;
+      }
+    }
+
     let vStatus = 'Active';
     if (vBlacklistedVendor) vStatus = 'Blacklisted';
     else if (!vActiveVendor) vStatus = 'Inactive';

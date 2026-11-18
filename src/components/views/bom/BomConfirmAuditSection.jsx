@@ -13,6 +13,7 @@ import VRMBomPrintTemplate from '../../VRMBomPrintTemplate';
 import DispatchMediaThumbnail from '../DispatchMediaThumbnail';
 import { notifyBomSentToDispatch } from '../../../services/notificationService';
 import BomConfirmCeoDetailSection from './BomConfirmCeoDetailSection';
+import { extractGstRate } from '../../../utils/gstHelper';
 
 export default function BomConfirmAuditSection({ ctx }) {
   const {
@@ -77,7 +78,8 @@ export default function BomConfirmAuditSection({ ctx }) {
     // Fallback: If presetKitsTotal is 0, but the BOM has items with rate 0 and grandTotal > customItemsTotal, compute preset package price
     if (presetKitsTotal === 0 && (confirmingBomModal.items || []).some(it => it.isPresetItem || cleanNum(it.rate || 0) === 0)) {
       const gTotal = cleanNum(confirmingBomModal.grandTotal) || 0;
-      const sTotal = cleanNum(confirmingBomModal.subTotal) || (gTotal > 0 ? (gTotal / 1.18) : 0);
+      const fallbackMult = 1 + (extractGstRate(confirmingBomModal.gstRate, 18) / 100);
+      const sTotal = cleanNum(confirmingBomModal.subTotal) || (gTotal > 0 ? (gTotal / fallbackMult) : 0);
       if (sTotal > customItemsTotal) {
         presetKitsTotal = Math.max(0, Math.round((sTotal - customItemsTotal) * 100) / 100);
         if (modalPresetGroups.length === 0) {
@@ -104,13 +106,28 @@ export default function BomConfirmAuditSection({ ctx }) {
     let orderGrandTotal = 0;
     let orderGstAmount = 0;
 
+    const customItemsGstCalc = (confirmingBomModal.items || []).reduce((acc, it) => {
+      if (it.isPresetItem || it.presetGroupId) return acc;
+      const sub = (cleanNum(it.qty) || 0) * (cleanNum(it.rate) || 0);
+      const rate = extractGstRate(it.gstRate ?? it.tax ?? confirmingBomModal.gstRate, 18);
+      return acc + (sub * (rate / 100));
+    }, 0);
+    const presetGroupsGstCalc = modalPresetGroups.reduce((acc, g) => {
+      const sub = (cleanNum(g.kitPrice) || 0) * (parseFloat(g.setCount) || 1);
+      const rate = extractGstRate(g.gstRate ?? confirmingBomModal.gstRate, 18);
+      return acc + (sub * (rate / 100));
+    }, 0);
+    const computedBomGst = Math.round((customItemsGstCalc + presetGroupsGstCalc) * 100) / 100;
+    const fallbackBomGst = Math.round(orderSubTotal * (extractGstRate(confirmingBomModal.gstRate, 18) / 100) * 100) / 100;
+    const effectiveComputedGst = (customItemsTotal + presetKitsTotal) > 0 ? computedBomGst : fallbackBomGst;
+
     if (hasSubtotalMismatch) {
       // Items were modified or previous PI had ghost unlisted amount -> recompute GST and Grand Total cleanly from actual line items
-      orderGstAmount = Math.round(orderSubTotal * 0.18 * 100) / 100;
+      orderGstAmount = effectiveComputedGst;
       orderGrandTotal = Math.round((orderSubTotal + orderGstAmount) * 100) / 100;
     } else {
       const rawGrand = cleanNum(confirmingBomModal.grandTotal);
-      orderGrandTotal = rawGrand > 0 ? Math.round(rawGrand * 100) / 100 : Math.round(orderSubTotal * 1.18 * 100) / 100;
+      orderGrandTotal = rawGrand > 0 ? Math.round(rawGrand * 100) / 100 : Math.round((orderSubTotal + effectiveComputedGst) * 100) / 100;
       const rawGst = cleanNum(confirmingBomModal.gstAmount);
       orderGstAmount = rawGst > 0 ? Math.round(rawGst * 100) / 100 : Math.max(0, Math.round((orderGrandTotal - orderSubTotal) * 100) / 100);
     }

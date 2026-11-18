@@ -3,6 +3,7 @@ import {
   Trash2, X, AlertTriangle, Info, Layers, FileCheck, AlertCircle, Receipt
 } from 'lucide-react';
 import { resolvePiSalesPersonName } from './piHelpers';
+import { extractGstRate } from '../../utils/gstHelper';
 
 export default function PiDetailsAndConfirmModals({ ctx }) {
   const {
@@ -60,7 +61,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
         };
 
         const grandTotal = parseAmt(pi.grandTotal || pi.totalAmount || pi.amount || pi.orderValue || pi.c5 || 0);
-        const subtotal = parseAmt(pi.subtotal || pi.unitValue || pi.taxableAmount || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0));
+        const subtotal = parseAmt(pi.subtotal || pi.unitValue || pi.taxableAmount || (grandTotal > 0 ? Math.round(grandTotal / (1 + extractGstRate(pi.gstRate, 18) / 100)) : 0));
         const taxTotal = parseAmt(pi.taxTotal || Math.max(0, grandTotal - subtotal));
         const paymentTerms = pi.paymentTerms || pi.paymentType || pi.terms || '100% Paid';
 
@@ -333,8 +334,8 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                                 taxable = Math.round(presetTaxablePool / presetSections.length);
                               }
 
-                              const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || pi.gstRate || '18%';
-                              const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                              const rawGst = grpConfig?.gstRate ?? sec.items[0]?.item?.gstRate ?? pi.gstRate;
+                              const gstPct = extractGstRate(rawGst, 18);
                               const kitGst = Math.round(taxable * (gstPct / 100));
                               const kitTotal = Math.round(taxable + kitGst);
 
@@ -526,8 +527,7 @@ export default function PiDetailsAndConfirmModals({ ctx }) {
                                 {sec.items.map(({ item: it, originalIndex }, cIdx) => {
                                   const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
                                   const r = parseFloat(it.rate || it.price || 0) || 0;
-                                  const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                                  const taxRate = parseFloat(taxRateStr) || 18;
+                                  const taxRate = extractGstRate(it.gstRate ?? it.gst, 18);
                                   const taxableItem = q * r;
                                   const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
 

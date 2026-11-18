@@ -5,7 +5,7 @@ import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAsset
 import { getCachedBranding, fetchMasterBranding } from '../services/brandingService';
 import { numberToWordsINR } from './VRMTaxInvoicePrintTemplate';
 import { exportSmartMultiPagePdf } from '../utils/smartPdfExporter';
-import { isTamilNaduIntra } from '../utils/gstHelper';
+import { isTamilNaduIntra, extractGstRate } from '../utils/gstHelper';
 
 const formatPoDate = (raw) => {
   if (!raw) return '—';
@@ -139,7 +139,7 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
     if (!grp) return;
     const packTotal = Number(grp.kitPrice || 0) * (Number(grp.setCount) || 1);
     const discountedPack = packTotal * (1 - discountPct / 100);
-    const grpRate = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+    const grpRate = extractGstRate(grp.gstRate, 18);
     const grpGstAmt = discountedPack * (grpRate / 100);
     rawSubTotal += packTotal;
     const existing = gstMap.get(grpRate) || { rate: grpRate, taxable: 0, gstAmt: 0 };
@@ -461,7 +461,7 @@ export default function VRMPurchaseOrderPrintTemplate({ po, onClose }) {
                     const grpSetCount = grp ? (Number(grp.setCount) || 1) : 1;
                     const grpRate = grp ? (Number(grp.kitPrice) || 0) : 0;
                     const grpTaxable = (grpRate * grpSetCount) * (1 - discountPct / 100);
-                    const grpGstPct = grp ? (parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18) : 18;
+                    const grpGstPct = grp ? extractGstRate(grp.gstRate, 18) : 18;
                     const grpInclGst = grpTaxable + grpTaxable * (grpGstPct / 100);
 
                     return (

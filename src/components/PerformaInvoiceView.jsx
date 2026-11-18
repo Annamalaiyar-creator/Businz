@@ -11,6 +11,7 @@ import { saveCloudStoreImmediate, subscribeToCloudStore } from '../utils/supabas
 import { notifyPiCreated } from '../services/notificationService';
 import { searchCustomers } from '../services/customerService';
 import { getHsnCode, is5PctSolarProduct } from '../utils/hsnCodeService';
+import { extractGstRate } from '../utils/gstHelper';
 import { PRESET_THEMES, getPresetTheme } from '../utils/presetThemes';
 import {
   defaultSalesPIs,
@@ -1306,13 +1307,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const custName = compName || 'Customer Order';
     const contactPerson = (pi.contactPerson || pi.contact || '').trim();
 
-    const cleanGrand = parseFloat(String(pi.grandTotal || pi.amount || 0).replace(/[^0-9.]/g, '')) || 0;
-    const cleanSub = parseFloat(String(pi.subtotal || pi.unitValue || 0).replace(/[^0-9.]/g, '')) || (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : 0);
-
     const pGroups = pi.presetGroups || {};
     const pGroupList = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
+    const piGstMult = 1 + (extractGstRate(pi.gstRate ?? pGroupList[0]?.gstRate ?? pi.items?.[0]?.gstRate, 18) / 100);
+    const cleanGrand = parseFloat(String(pi.grandTotal || pi.amount || 0).replace(/[^0-9.]/g, '')) || 0;
+    const cleanSub = parseFloat(String(pi.subtotal || pi.unitValue || 0).replace(/[^0-9.]/g, '')) || (cleanGrand > 0 ? Math.round((cleanGrand / piGstMult) * 100) / 100 : 0);
+
     const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} ${g.unit === 'kW' ? 'kW' : (g.setCount > 1 ? 'Sets' : 'Set')})`).join(' + ') : null);
-    const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null));
+    const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : (cleanGrand > 0 ? Math.round((cleanGrand / piGstMult) * 100) / 100 : null));
     // Do NOT aggregate sum multiple kits into a single confusing number:
     const pSetCount = pGroupList.length === 1 ? (parseFloat(pGroupList[0]?.setCount) || 1) : (pi.presetSetCount || null);
 
@@ -1354,7 +1356,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       presetName: pName,
       presetKitPrice: pKitPrice,
       presetSetCount: pSetCount,
-      kitSubtotal: pi.kitSubtotal || (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null),
+      kitSubtotal: pi.kitSubtotal || (cleanGrand > 0 ? Math.round((cleanGrand / piGstMult) * 100) / 100 : null),
       subtotal: cleanSub || null,
       grandTotal: cleanGrand || null,
       amount: pi.amount || ('₹' + Math.round(cleanGrand).toLocaleString('en-IN')),
@@ -1368,7 +1370,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const itQty = parseFloat(it.qty) || 1;
         let itRate = String(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : '0');
         if (!isPreset && (parseFloat(itRate) === 0 || isNaN(parseFloat(itRate))) && cleanGrand > 0) {
-          itRate = String(Math.round(cleanGrand / itQty / 1.18));
+          const itemMult = 1 + (extractGstRate(it.gstRate ?? it.tax ?? pi.gstRate, 18) / 100);
+          itRate = String(Math.round((cleanGrand / itQty / itemMult) * 100) / 100);
         }
         return {
           ...it,

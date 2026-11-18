@@ -757,22 +757,30 @@ export default function DispatchPackingModal({
 
     if (sendPartialToAccounts) {
       // User confirmed partial packing
-      confirmedItems = itemsToPack.map(it => ({
-        ...it,
-        qty: it.bomQty || it.qty || 1,
-        packed: Boolean(it.packed),
-        packedQty: it.packed ? (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '' ? Number(it.packedQty) : (it.bomQty || it.qty || 1)) : 0
-      }));
+      confirmedItems = itemsToPack.map(it => {
+        const rawQty = (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '') ? Number(it.packedQty) : Number(it.bomQty || it.qty || 1);
+        const safePackedQty = it.packed ? (Number.isFinite(rawQty) && rawQty >= 0 ? rawQty : 0) : 0;
+        return {
+          ...it,
+          qty: Number(it.bomQty || it.qty || 1) || 1,
+          packed: Boolean(it.packed),
+          packedQty: safePackedQty
+        };
+      });
       nextStatus = needsSalesPaymentProof ? 'Partially Packed — Awaiting Sales Payment Proof' : 'Partially Packed - Sent to Accounts';
       isFullyConfirmed = false;
     } else if (isPartialSave) {
       // User explicitly saving partial packing progress without sending to Accounts yet
-      confirmedItems = itemsToPack.map(it => ({
-        ...it,
-        qty: it.bomQty || it.qty || 1,
-        packed: Boolean(it.packed),
-        packedQty: it.packed ? (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '' ? Number(it.packedQty) : (it.bomQty || it.qty || 1)) : 0
-      }));
+      confirmedItems = itemsToPack.map(it => {
+        const rawQty = (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '') ? Number(it.packedQty) : Number(it.bomQty || it.qty || 1);
+        const safePackedQty = it.packed ? (Number.isFinite(rawQty) && rawQty >= 0 ? rawQty : 0) : 0;
+        return {
+          ...it,
+          qty: Number(it.bomQty || it.qty || 1) || 1,
+          packed: Boolean(it.packed),
+          packedQty: safePackedQty
+        };
+      });
       nextStatus = 'Partially Packed';
       isFullyConfirmed = false;
     } else {

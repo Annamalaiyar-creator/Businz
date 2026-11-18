@@ -364,7 +364,7 @@ export default function CrmCustomersView({
       const rawCode = String(c.customerCode || c.id || c.code || '').trim();
       const isRealCode = /^VRM-CS-\d{4}-\d+$/i.test(rawCode);
 
-      const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : `code_${rawCode.toLowerCase()}`);
+      const dedupKey = isRealCode ? `code_${rawCode.toLowerCase()}` : (nKey ? `name_${nKey}` : (gKey ? `gst_${gKey}` : `code_${rawCode.toLowerCase()}`));
       if (!dedupMap.has(dedupKey)) {
         dedupMap.set(dedupKey, c);
       } else {
@@ -884,6 +884,26 @@ export default function CrmCustomersView({
     if (!formCust.address1 || !formCust.address1.trim()) {
       alert('⚠️ Billing Address 1 (Building / Street) is mandatory.');
       return;
+    }
+
+    const cleanGstInput = String(formCust.gstNumber || '').trim().toUpperCase();
+    if (cleanGstInput) {
+      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstRegex.test(cleanGstInput)) {
+        alert('⚠️ Invalid GST Number format. Must be a valid 15-character GSTIN (e.g. 33AABCU9603R1ZM).');
+        return;
+      }
+      const editIdNorm = String(editingCustomer?.id || editingCustomer?.customerCode || '').trim().toLowerCase();
+      const dupGstCust = (customers || []).find(c => {
+        const cId = String(c.id || c.customerCode || '').trim().toLowerCase();
+        if (editingCustomer && editIdNorm && cId === editIdNorm) return false;
+        const cGst = String(c.gstNumber || c.gstNo || c.gstin || '').trim().toUpperCase();
+        return cGst && cGst === cleanGstInput;
+      });
+      if (dupGstCust) {
+        alert(`⚠️ Duplicate GST Number: "${cleanGstInput}" is already registered to "${dupGstCust.companyName || dupGstCust.customerName || dupGstCust.name || 'another customer'}".`);
+        return;
+      }
     }
 
     const customerCode = editingCustomer

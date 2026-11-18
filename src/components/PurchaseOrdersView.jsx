@@ -14,6 +14,7 @@ import TypeableProductSelect from './TypeableProductSelect';
 import TypeableVendorSelect from './TypeableVendorSelect';
 import VRMPurchaseOrderPrintTemplate from './VRMPurchaseOrderPrintTemplate';
 import { getHsnCode } from '../utils/hsnCodeService';
+import { extractGstRate } from '../utils/gstHelper';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -929,11 +930,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       const grp = presetGroups[gid];
       if (grp) {
         const grpTaxable = (Number(grp.kitPrice || 0) * (Number(grp.setCount) || 1)) * factor;
-        const grpTaxPct = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+        const grpTaxPct = extractGstRate(grp.gstRate, 18);
         setsTax += grpTaxable * (grpTaxPct / 100);
       }
     });
-    return (standaloneTax + setsTax) / 2;
+    return Math.round(((standaloneTax + setsTax) / 2) * 100) / 100;
   };
   const getSGST = () => {
     return getCGST();
@@ -983,7 +984,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const count = unit === 'kW' ? Math.max(0.01, parseFloat(newSetCount) || 1) : Math.max(1, parseInt(newSetCount, 10) || 1);
     const groupId = 'po_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const setGst = newSetGstRate || '18%';
-    const taxNum = parseFloat(String(setGst).replace('%', '')) || 18;
+    const taxNum = extractGstRate(setGst, 18);
 
     setPresetGroups(prev => ({
       ...prev,
@@ -1026,7 +1027,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const handleAddSetItem = (groupId) => {
     const grp = presetGroups[groupId];
     if (!grp) return;
-    const taxNum = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+    const taxNum = extractGstRate(grp.gstRate, 18);
     const newRow = {
       name: '',
       description: '',
@@ -6370,7 +6371,17 @@ ${senderName} | VRM Structures India Private Limited`;
                   };
                   const stUpper = String(viewingPoStatus || currentPoObj?.status || '').toUpperCase();
                   const isPoClosedOrCancelled = stUpper.includes('CLOSED') || stUpper.includes('FULLY RECEIVED') || stUpper === 'CANCELLED';
-                  if (isPoClosedOrCancelled) return null;
+                  if (isPoClosedOrCancelled) {
+                    const reasonText = currentPoObj?.cancelReason || currentPoObj?.cancellationRemark || currentPoObj?.rejectReason || '';
+                    if (stUpper === 'CANCELLED' && reasonText) {
+                      return (
+                        <div style={{ padding: '6px 12px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontSize: '12px', fontWeight: '700' }}>
+                          Cancelled Reason: {reasonText}
+                        </div>
+                      );
+                    }
+                    return null;
+                  }
                   return (
                     <button
                       type="button"

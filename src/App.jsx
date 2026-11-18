@@ -365,6 +365,38 @@ function App() {
     };
   }, [isAuthenticated]);
 
+  // Auto-logout after 30 minutes of inactivity (Bug-006 / CRM-0011)
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+    let idleTimer = null;
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        try {
+          const sesId = localStorage.getItem('controlroom_device_session_id');
+          if (sesId) revokeSession(sesId);
+        } catch (_) {}
+        localStorage.removeItem('controlroom_is_authenticated');
+        localStorage.removeItem('controlroom_user_role');
+        localStorage.removeItem('controlroom_logged_user');
+        localStorage.removeItem('controlroom_logged_user_name');
+        localStorage.removeItem('controlroom_logged_emp_id');
+        localStorage.removeItem('controlroom_device_session_id');
+        localStorage.removeItem('controlroom_session_start_time');
+        setUserRole('');
+        setIsAuthenticated(false);
+      }, IDLE_TIMEOUT_MS);
+    };
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach(ev => window.addEventListener(ev, resetIdleTimer, { passive: true }));
+    resetIdleTimer();
+    return () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      events.forEach(ev => window.removeEventListener(ev, resetIdleTimer));
+    };
+  }, [isAuthenticated]);
+
   const handleLoginSuccess = (roleName) => {
     setUserRole(roleName);
     setIsAuthenticated(true);
@@ -898,7 +930,7 @@ function App() {
                   purchaseOrders={purchaseOrders}
                 />
               )
-            ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
+            ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing' || (userRole || '').toLowerCase().includes('billing') || (userRole || '').toLowerCase().includes('invoice')))) ? (
               <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts' || userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts' || (userRole || '').toLowerCase().includes('account')))) ? (
               <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />

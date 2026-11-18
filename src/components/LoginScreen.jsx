@@ -211,7 +211,15 @@ export default function LoginScreen({ onLoginSuccess }) {
     const matchedRole = USER_ROLES_CONFIG.find(r => r.prefix === prefix || (r.allowedPrefixes && r.allowedPrefixes.includes(prefix)));
 
     if (!matchedRole) {
-      setErrorMsg(`Invalid prefix "${prefix}". Code must start with a valid department prefix (TA, CEO, SE, DH, PH, FE, PR, AC, AH, BI, DE, TS).`);
+      setErrorMsg(`Invalid prefix "${prefix}". Code must start with a valid department prefix (SE, DH, PH, FE, PR, AC, AH, BI, DE, TS).`);
+      setIsCodeVerified(false);
+      setDetectedRole(null);
+      return;
+    }
+
+    const isPrivilegedSignup = ['Technical Administrator', 'Technical Admin', 'CEO', 'MD', 'Managing Director', 'HR', 'Admin', 'Super Admin'].includes(matchedRole.role) || ['TA', 'CEO', 'MD', 'HR'].includes(prefix);
+    if (isPrivilegedSignup) {
+      setErrorMsg(`Self-registration for "${matchedRole.role}" is not permitted. Executive and Admin accounts must be provisioned by an authorized administrator.`);
       setIsCodeVerified(false);
       setDetectedRole(null);
       return;
@@ -354,7 +362,12 @@ export default function LoginScreen({ onLoginSuccess }) {
       const cleanCode = empIdInput.trim().toUpperCase();
       const cleanEmail = usernameInput.trim().toLowerCase();
 
-      const isDeveloperAccount = roleObj.role === 'Technical Administrator' || roleObj.prefix === 'TA' || cleanCode.startsWith('TA-') || roleObj.role === 'CEO' || roleObj.prefix === 'CEO' || cleanCode.startsWith('CEO-') || roleObj.role === 'HR' || roleObj.prefix === 'HR' || cleanCode.startsWith('HR-');
+      const isPrivilegedSignup = ['Technical Administrator', 'Technical Admin', 'CEO', 'MD', 'Managing Director', 'HR', 'Admin', 'Super Admin'].includes(roleObj.role) || ['TA', 'CEO', 'MD', 'HR'].includes(cleanCode.split('-')[0]);
+      if (isPrivilegedSignup) {
+        setErrorMsg(`Self-registration for "${roleObj.role}" is not permitted. Executive and Admin accounts must be provisioned by an authorized administrator.`);
+        setIsCodeVerified(false);
+        return;
+      }
 
       // Check duplicate Employee Code and duplicate Email
       try {
@@ -381,7 +394,7 @@ export default function LoginScreen({ onLoginSuccess }) {
           return;
         }
 
-        // Developer accounts register as Active directly; all other roles register as Pending Approval
+        // All public self-registrations register strictly as Pending Approval
         const newEmpAccount = {
           employee_code: cleanCode,
           employee_name: signUpFullName.trim(),
@@ -390,27 +403,25 @@ export default function LoginScreen({ onLoginSuccess }) {
           prefix: roleObj.prefix || cleanCode.split('-')[0] || 'FE',
           role: roleObj.role,
           dashboard_type: roleObj.role,
-          status: isDeveloperAccount ? 'Active' : 'Pending Approval',
+          status: 'Pending Approval',
           created_at: new Date().toISOString(),
           last_login: new Date().toISOString()
         };
 
         // Call backend registration endpoint to atomically verify uniqueness
-        try {
-          const regRes = await fetch('/api/auth/register-employee', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newEmpAccount)
-          });
-          if (regRes) {
-            const regJson = await regRes.json().catch(() => ({}));
-            if (!regRes.ok || !regJson.success) {
-              setErrorMsg(regJson.error || `Employee Code "${cleanCode}" is already in use. Please choose a different Employee Code.`);
-              setIsCodeVerified(false);
-              return;
-            }
+        const regRes = await fetch('/api/auth/register-employee', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newEmpAccount)
+        }).catch(() => null);
+        if (regRes) {
+          const regJson = await regRes.json().catch(() => ({}));
+          if (!regRes.ok || !regJson.success) {
+            setErrorMsg(regJson.error || `Registration failed for Employee Code "${cleanCode}".`);
+            setIsCodeVerified(false);
+            return;
           }
-        } catch (_) {}
+        }
 
         const updatedEmpsList = [...existingEmps, newEmpAccount];
         const updatedCodesList = Array.from(new Set([...registeredCodes, cleanCode]));
@@ -436,13 +447,9 @@ export default function LoginScreen({ onLoginSuccess }) {
       setSuccessBannerRole(roleObj.role);
 
       setTimeout(() => {
-        if (isDeveloperAccount) {
-          finalizeSuccessfulLogin(roleObj.role, cleanCode, usernameInput.trim(), signUpFullName.trim());
-        } else {
-          setShowSuccessBanner(false);
-          setIsSignUpMode(false);
-          setErrorMsg(`Account Request Submitted! Employee Code ${cleanCode} is pending approval from the Developer / Technical Administrator (TA-001). Once granted, you can sign in.`);
-        }
+        setShowSuccessBanner(false);
+        setIsSignUpMode(false);
+        setErrorMsg(`Account Request Submitted! Employee Code ${cleanCode} is pending approval from the Technical Administrator (TA-001). Once granted, you can sign in.`);
       }, 2500);
       return;
     }
@@ -458,6 +465,16 @@ export default function LoginScreen({ onLoginSuccess }) {
       return;
     }
 
+    // Enforce failed-attempt cooldown lockout (5 failed attempts -> 60s lockout)
+    try {
+      const lockRaw = JSON.parse(localStorage.getItem('controlroom_login_lockout') || '{}');
+      if (lockRaw.lockedUntil && Date.now() < lockRaw.lockedUntil) {
+        const waitSec = Math.ceil((lockRaw.lockedUntil - Date.now()) / 1000);
+        setErrorMsg(`Too many failed login attempts. Please wait ${waitSec}s before trying again.`);
+        return;
+      }
+    } catch (_) {}
+
     setIsLoggingIn(true);
 
     // Sync latest accounts with fast timeout to avoid blocking login
@@ -471,10 +488,23 @@ export default function LoginScreen({ onLoginSuccess }) {
     const result = authenticateUser(identifier, identifier, passwordInput, selectedRoleObj);
 
     if (!result.success) {
+      try {
+        const prev = JSON.parse(localStorage.getItem('controlroom_login_lockout') || '{}');
+        const activeCount = (prev.lockedUntil && Date.now() >= prev.lockedUntil) ? 0 : (Number(prev.count) || 0);
+        const nextCount = activeCount + 1;
+        const lockedUntil = nextCount >= 5 ? (Date.now() + 60 * 1000) : null;
+        localStorage.setItem('controlroom_login_lockout', JSON.stringify({ count: nextCount, lockedUntil }));
+        if (lockedUntil) {
+          setErrorMsg('Too many failed login attempts. Login is temporarily locked for 60 seconds.');
+          setIsLoggingIn(false);
+          return;
+        }
+      } catch (_) {}
       setErrorMsg(result.error);
       setIsLoggingIn(false);
       return;
     }
+    try { localStorage.removeItem('controlroom_login_lockout'); } catch (_) {}
 
     // Direct successful login transition
     await finalizeSuccessfulLogin(
@@ -619,7 +649,7 @@ export default function LoginScreen({ onLoginSuccess }) {
             </p>
 
             {/* FORM */}
-            <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <form onSubmit={handleLoginSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               
               {/* Full Name field in Sign Up Mode */}
               {isSignUpMode && (
@@ -659,7 +689,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                     aria-label="Emp ID / Email ID" 
                     type="text"
                     required
-                    autoComplete="username"
+                    autoComplete="off"
                     value={empIdInput}
                     onChange={(e) => {
                       setEmpIdInput(e.target.value);
@@ -771,7 +801,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                       type="email"
                       name="username"
                       id="user-email-input"
-                      autoComplete="username"
+                      autoComplete="off"
                       required
                       value={usernameInput}
                       onChange={(e) => setUsernameInput(e.target.value)}
@@ -802,7 +832,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     id="user-password-input"
-                    autoComplete={isSignUpMode ? 'new-password' : 'current-password'}
+                    autoComplete="new-password"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
                     placeholder="Enter your password"

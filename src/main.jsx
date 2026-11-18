@@ -4,6 +4,28 @@ import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.jsx'
 
+// Ensure all same-origin /api/* calls carry the active Businz session token automatically
+if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    try {
+      const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      const isApiCall = urlStr.startsWith('/api/') || (urlStr.startsWith(window.location.origin + '/api/'));
+      if (isApiCall) {
+        const sesId = localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '';
+        if (sesId) {
+          const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined) || {});
+          if (!headers.has('x-session-id')) {
+            headers.set('x-session-id', sesId);
+          }
+          return originalFetch(input, { ...init, headers });
+        }
+      }
+    } catch (_) {}
+    return originalFetch(input, init);
+  };
+}
+
 // Initialize Sentry Error Monitoring if VITE_SENTRY_DSN is configured
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN;
 if (sentryDsn) {

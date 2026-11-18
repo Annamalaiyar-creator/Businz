@@ -12,7 +12,7 @@ import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { prodModuleEngine } from "../../utils/productionModuleEngine";
 import { addLiveNotification } from "../Header";
 import DocPreviewModal from "./DocPreviewModal";
-import { isTamilNaduIntra } from "../../utils/gstHelper";
+import { isTamilNaduIntra, extractGstRate } from "../../utils/gstHelper";
 import { notifyInvoiceCompletedReadyForDispatch } from "../../services/notificationService";
 import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
 import { getHsnCode } from "../../utils/hsnCodeService";
@@ -281,6 +281,7 @@ export default function InvoiceDetailModal({
 
     const qty = it.qty || it.bomQty || 1;
     const rate = it.rate || it.unitPrice || 1000;
+    const itemTaxPct = extractGstRate(it.gstRate ?? it.tax, 18);
     return {
       code: it.code || `PRD-00${idx + 1}`,
       name: it.name || `Product ${idx + 1}`,
@@ -290,8 +291,9 @@ export default function InvoiceDetailModal({
       invQty: qty,
       rate: rate,
       discount: it.discount || 0,
-      tax: it.tax || 18,
-      amt: it.amt || (qty * rate * 1.18),
+      tax: itemTaxPct,
+      gstRate: it.gstRate !== undefined ? it.gstRate : `${itemTaxPct}%`,
+      amt: it.amt ?? (qty * rate * (1 + itemTaxPct / 100)),
       selected: selectedState
     };
   }) : [
@@ -305,7 +307,11 @@ export default function InvoiceDetailModal({
     : baseItemsList;
 
   const computedSubtotal = itemsList.reduce((acc, it) => acc + ((it.qty || it.invQty || it.bomQty || 1) * (it.rate || 0)), 0);
-  const computedTaxGst = computedSubtotal * 0.18;
+  const computedTaxGst = itemsList.reduce((acc, it) => {
+    const lineSub = (it.qty || it.invQty || it.bomQty || 1) * (it.rate || 0);
+    const pct = extractGstRate(it.gstRate ?? it.tax, 18);
+    return acc + (lineSub * (pct / 100));
+  }, 0);
   const computedGrandTotal = computedSubtotal + computedTaxGst;
 
   const cleanAmtNum = (amt) => {
@@ -322,8 +328,21 @@ export default function InvoiceDetailModal({
     ? computedGrandTotal
     : (invAmtNum > 0 ? invAmtNum : (bomTotalAmt > 0 ? bomTotalAmt : (computedGrandTotal > 0 ? computedGrandTotal : 17400)));
 
-  const subtotal = isEditingInvoice ? computedSubtotal : (totalAmtRaw / 1.18);
-  const taxGst = isEditingInvoice ? computedTaxGst : (totalAmtRaw - subtotal);
+  const storedSub = cleanAmtNum(inv.subTotal) || cleanAmtNum(inv.subtotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.subtotal) || 0;
+  const storedGst = cleanAmtNum(inv.gstAmount) || cleanAmtNum(inv.taxAmount) || cleanAmtNum(matchingBom?.gstAmount) || 0;
+  const invFallbackRate = extractGstRate(inv.gstRate ?? matchingBom?.gstRate, 18);
+  const subtotal = isEditingInvoice
+    ? computedSubtotal
+    : (storedSub > 0 && storedSub <= totalAmtRaw
+      ? storedSub
+      : (computedGrandTotal > 0 && Math.abs(computedGrandTotal - totalAmtRaw) < 2
+        ? computedSubtotal
+        : (totalAmtRaw / (1 + invFallbackRate / 100))));
+  const taxGst = isEditingInvoice
+    ? computedTaxGst
+    : (storedGst > 0 && storedSub > 0 && Math.abs((storedSub + storedGst) - totalAmtRaw) < 2
+      ? storedGst
+      : Math.max(0, totalAmtRaw - subtotal));
   const invGst = inv.gstNo || inv.gstin || inv.gst || matchingBom?.gstNo || '';
   const invState = inv.deliveryState || inv.billingState || inv.state || matchingBom?.deliveryState || matchingBom?.billingState || '';
   const isInvIntra = isTamilNaduIntra(invGst, invState);
@@ -1354,8 +1373,8 @@ export default function InvoiceDetailModal({
           const indexedItemsList = itemsList.map((it, idx) => ({ ...it, originalIndex: idx }));
           const packedItems = indexedItemsList.filter(it => it.selected !== false);
           const unpackedItems = indexedItemsList.filter(it => it.selected === false);
-          const packedTotal = packedItems.reduce((acc, it) => acc + (it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18)), 0);
-          const unpackedTotal = unpackedItems.reduce((acc, it) => acc + (it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18)), 0);
+          const packedTotal = packedItems.reduce((acc, it) => acc + (it.amt ?? ((it.qty || 1) * (it.rate || 0) * (1 + extractGstRate(it.gstRate ?? it.tax, 18) / 100))), 0);
+          const unpackedTotal = unpackedItems.reduce((acc, it) => acc + (it.amt ?? ((it.qty || 1) * (it.rate || 0) * (1 + extractGstRate(it.gstRate ?? it.tax, 18) / 100))), 0);
 
           const targetRef = inv.poNo || inv.code || inv.bomCode || bomRefText;
           const foundBom = (bomStore || []).find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));

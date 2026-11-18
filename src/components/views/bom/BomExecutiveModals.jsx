@@ -5,6 +5,7 @@ import {
 import { cleanNum } from '../../../utils/otherViewsShared';
 import { isBomAddressProofPending } from './bomStageHelpers';
 import ExecutiveOrderDossierModal from '../ExecutiveOrderDossierModal';
+import { extractGstRate } from '../../../utils/gstHelper';
 
 export default function BomExecutiveModals({ ctx }) {
   const {
@@ -44,7 +45,8 @@ export default function BomExecutiveModals({ ctx }) {
 
         const items = Array.isArray(bom.items) && bom.items.length > 0 ? bom.items : (Array.isArray(bom.materials) && bom.materials.length > 0 ? bom.materials : (Array.isArray(matchingPi?.items) ? matchingPi.items : []));
         const grandTotal = cleanNum(bom.grandTotal || bom.totalAmount || bom.amount || bom.value || matchingPi?.grandTotal || 0);
-        const subtotal = cleanNum(bom.subtotal || bom.subTotal || bom.taxableAmount || bom.unitValue || matchingPi?.subtotal || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0));
+        const bomMult = 1 + (extractGstRate(bom.gstRate ?? matchingPi?.gstRate, 18) / 100);
+        const subtotal = cleanNum(bom.subtotal || bom.subTotal || bom.taxableAmount || bom.unitValue || matchingPi?.subtotal || (grandTotal > 0 ? Math.round((grandTotal / bomMult) * 100) / 100 : 0));
         const taxTotal = cleanNum(bom.taxTotal || bom.gstAmount || matchingPi?.taxTotal || Math.max(0, grandTotal - subtotal));
         const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.totalDispatchQty || it.qty || it.quantity || 0) || 0), 0);
         const st = String(bom.status || '').toLowerCase();
@@ -841,8 +843,8 @@ export default function BomExecutiveModals({ ctx }) {
                                     taxable = Math.round(presetTaxablePool / presetSections.length);
                                   }
 
-                                  const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || bom.gstRate || matchingPi?.gstRate || '18%';
-                                  const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                                  const rawGst = grpConfig?.gstRate ?? sec.items[0]?.item?.gstRate ?? bom.gstRate ?? matchingPi?.gstRate;
+                                  const gstPct = extractGstRate(rawGst, 18);
                                   const kitGst = Math.round(taxable * (gstPct / 100));
                                   const kitTotal = Math.round(taxable + kitGst);
 
@@ -899,8 +901,7 @@ export default function BomExecutiveModals({ ctx }) {
                                       {sec.items.map(({ item: it, originalIndex }, pIdx) => {
                                         const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0));
                                         const r = parseFloat(it.rate || it.price || 0) || 0;
-                                        const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                                        const taxRate = parseFloat(taxRateStr) || 18;
+                                        const taxRate = extractGstRate(it.gstRate ?? it.gst, 18);
                                         const hasExplicitRate = r > 0;
                                         const taxableItem = q * r;
                                         const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
@@ -1015,8 +1016,7 @@ export default function BomExecutiveModals({ ctx }) {
                                     {sec.items.map(({ item: it, originalIndex }, cIdx) => {
                                       const q = (parseFloat(it.totalDispatchQty) > 0 ? parseFloat(it.totalDispatchQty) : (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0));
                                       const r = parseFloat(it.rate || it.price || 0) || 0;
-                                      const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                                      const taxRate = parseFloat(taxRateStr) || 18;
+                                      const taxRate = extractGstRate(it.gstRate ?? it.gst, 18);
                                       const taxableItem = q * r;
                                       const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
 
@@ -1148,8 +1148,9 @@ export default function BomExecutiveModals({ ctx }) {
         const items = Array.isArray(pi.items) ? pi.items : [];
 
         const grandTotal = cleanNum(pi.grandTotal || pi.totalAmount || pi.amount || pi.orderValue || pi.c5 || 0);
-        const subtotal = cleanNum(pi.subtotal || pi.unitValue || pi.taxableAmount || (grandTotal > 0 ? Math.round(grandTotal / 1.18) : 0));
-        const taxTotal = cleanNum(pi.taxTotal || Math.max(0, grandTotal - subtotal));
+        const piMult = 1 + (extractGstRate(pi.gstRate, 18) / 100);
+        const subtotal = cleanNum(pi.subtotal || pi.subTotal || pi.unitValue || pi.taxableAmount || (grandTotal > 0 ? Math.round((grandTotal / piMult) * 100) / 100 : 0));
+        const taxTotal = cleanNum(pi.taxTotal || pi.gstAmount || Math.max(0, grandTotal - subtotal));
         const paymentTerms = pi.paymentTerms || pi.paymentType || pi.terms || '100% Paid';
 
         let presetGroupsData = pi.presetGroups || {};
@@ -1390,8 +1391,8 @@ export default function BomExecutiveModals({ ctx }) {
                                 taxable = Math.round(presetTaxablePool / presetSections.length);
                               }
 
-                              const rawGst = grpConfig?.gstRate || sec.items[0]?.item?.gstRate || pi.gstRate || '18%';
-                              const gstPct = parseFloat(String(rawGst).replace('%', '').trim()) || 18;
+                              const rawGst = grpConfig?.gstRate ?? sec.items[0]?.item?.gstRate ?? pi.gstRate;
+                              const gstPct = extractGstRate(rawGst, 18);
                               const kitGst = Math.round(taxable * (gstPct / 100));
                               const kitTotal = Math.round(taxable + kitGst);
 
@@ -1577,8 +1578,7 @@ export default function BomExecutiveModals({ ctx }) {
                                 {sec.items.map(({ item: it, originalIndex }, cIdx) => {
                                   const q = parseFloat(it.qty !== undefined ? it.qty : (it.quantity || 0)) || 0;
                                   const r = parseFloat(it.rate || it.price || 0) || 0;
-                                  const taxRateStr = String(it.gstRate || it.gst || '18%').replace('%', '').trim();
-                                  const taxRate = parseFloat(taxRateStr) || 18;
+                                  const taxRate = extractGstRate(it.gstRate ?? it.gst, 18);
                                   const taxableItem = q * r;
                                   const itemTotal = taxableItem + (taxableItem * (taxRate / 100));
 

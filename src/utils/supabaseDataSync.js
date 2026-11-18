@@ -358,7 +358,12 @@ export async function saveCloudOpportunityRow(opp) {
     try {
       fetch('/api/store/crm_opportunities', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
         body: JSON.stringify(consumerOpp)
       }).catch(() => {});
     } catch (_) {}
@@ -538,7 +543,12 @@ export async function saveCloudInvoiceRow(invoice) {
     try {
       fetch('/api/store/invoice_store', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
         body: JSON.stringify(consumerInv)
       }).catch(() => {});
     } catch (_) {}
@@ -1726,7 +1736,12 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
         if (storeData.length > 0) {
           fetch('/api/customers', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
             body: JSON.stringify(storeData)
           }).catch(() => {});
         }
@@ -1737,7 +1752,12 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
         }
         fetch('/api/customers', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
           body: JSON.stringify(storeData)
         }).catch(() => {});
       }
@@ -1781,7 +1801,12 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     try {
       fetch(`/api/store/${storeKey}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
         body: JSON.stringify(storeData)
       }).catch(() => {});
     } catch (_) {}
@@ -1816,7 +1841,12 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     try {
       fetch(`/api/store/${storeKey}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
         body: JSON.stringify(storeData)
       }).catch(() => {});
     } catch (_) {}
@@ -1847,7 +1877,12 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     try {
       fetch(`/api/store/${storeKey}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
         body: JSON.stringify(storeData)
       }).catch(() => {});
     } catch (_) {}
@@ -1877,7 +1912,12 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     try {
       fetch(`/api/store/${storeKey}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
         body: JSON.stringify(storeData)
       }).catch(() => {});
     } catch (_) {}
@@ -1895,7 +1935,12 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
       } else if (storeData && typeof storeData === 'object') {
         fetch('/api/estimates', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && window.localStorage && localStorage.getItem('controlroom_device_session_id')
+            ? { 'x-session-id': localStorage.getItem('controlroom_device_session_id') }
+            : {})
+        },
           body: JSON.stringify(storeData)
         }).catch(() => {});
         safeDispatchWindowEvent('controlroom_store_update', { storeKey, data: storeData });

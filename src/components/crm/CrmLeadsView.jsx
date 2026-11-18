@@ -598,14 +598,37 @@ export default function CrmLeadsView({
   // Submit Lead Creation or Update
   const handleCreateLead = async (e) => {
     e.preventDefault();
+    if ((!createForm.companyName || !createForm.companyName.trim()) && (!createForm.contactPerson || !createForm.contactPerson.trim())) {
+      alert('Company Name or Contact Name is mandatory.');
+      return;
+    }
     if (!createForm.phone || !createForm.phone.trim()) {
       alert('Phone Number is mandatory.');
       return;
     }
 
+    if (!editingLead) {
+      const normPhone = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+      const newPhone10 = normPhone(createForm.phone);
+      const newEmail = String(createForm.email || '').trim().toLowerCase();
+      const dupLead = (dbLeads || []).find(l => {
+        const lPhone10 = normPhone(l.phone || l.mobile);
+        const lEmail = String(l.email || '').trim().toLowerCase();
+        const phoneMatch = newPhone10.length >= 7 && lPhone10 === newPhone10;
+        const emailMatch = newEmail && lEmail && lEmail === newEmail;
+        return phoneMatch || emailMatch;
+      });
+      if (dupLead) {
+        alert(`⚠️ Duplicate Lead Detected: A lead (${dupLead.lead_number || dupLead.company_name || dupLead.contact_person || 'existing record'}) already exists with this phone number or email.`);
+        return;
+      }
+    }
+
     try {
+      const sesId = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('controlroom_device_session_id') || '') : '';
       const headers = {
         'Content-Type': 'application/json',
+        ...(sesId ? { 'x-session-id': sesId } : {}),
         'x-user-role': effectiveRole || userRole,
         'x-user-emp-id': loggedInEmpId,
         'x-user-name': loggedInUserName

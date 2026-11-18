@@ -206,11 +206,18 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
   // Aggregated Metrics
   const metrics = useMemo(() => {
     const rawTotalBilled = confirmedInvoices.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-    const baseTotalBilled = rawTotalBilled > 0 ? (rawTotalBilled * (selectedPeriod === 'MTD' ? 1 : mult / 3.8)) : (38450000 * (mult / 3.8));
-    
-    // Tax calculations (Standard 18% GST)
-    const taxableValue = baseTotalBilled / 1.18;
-    const totalGst = baseTotalBilled - taxableValue;
+    const scaleFactor = selectedPeriod === 'MTD' ? 1 : mult / 3.8;
+    const baseTotalBilled = rawTotalBilled > 0 ? (rawTotalBilled * scaleFactor) : (38450000 * (mult / 3.8));
+    const rawActualGst = confirmedInvoices.reduce((acc, curr) => {
+      const tot = cleanNum(curr.grandTotal ?? curr.amount ?? 0, 0);
+      const sub = cleanNum(curr.subTotal ?? curr.subtotal ?? 0, 0);
+      const explicitGst = cleanNum(curr.gstAmount ?? curr.taxAmount ?? 0, 0);
+      if (explicitGst > 0) return acc + explicitGst;
+      if (sub > 0 && sub < tot) return acc + (tot - sub);
+      return acc + (tot > 0 ? tot - tot / 1.18 : 0);
+    }, 0);
+    const totalGst = rawTotalBilled > 0 ? (rawActualGst * scaleFactor) : (baseTotalBilled - (baseTotalBilled / 1.18));
+    const taxableValue = Math.max(0, baseTotalBilled - totalGst);
     const cgstValue = totalGst / 2;
     const sgstValue = totalGst / 2;
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Printer, Mail, FileText, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAssets';
-import { isTamilNaduIntra } from '../utils/gstHelper';
+import { isTamilNaduIntra, extractGstRate } from '../utils/gstHelper';
 import { getHsnCode } from '../utils/hsnCodeService';
 
 // Helper function to format currency into Indian Rupees words
@@ -232,8 +232,7 @@ export function VRMTaxInvoicePrintSheet({ invoiceData, id = "printable-tax-invoi
     const qty = Number(it.qty || it.quantity || 1);
     const rate = Number(it.rate || it.unitPrice || 0);
     const amount = Number(it.amount || it.taxable || (qty * rate) || 0);
-    const rawRateStr = String(it.gstRate || it.tax || it.gRate || '18').replace('%', '');
-    const gRate = parseFloat(rawRateStr) || 18;
+    const gRate = extractGstRate(it.gstRate ?? it.tax ?? it.gRate, 18);
     const cgstPct = isIntra ? gRate / 2 : 0;
     const sgstPct = isIntra ? gRate / 2 : 0;
     const cgstAmt = isIntra ? amount * (cgstPct / 100) : 0;

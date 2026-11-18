@@ -12,6 +12,7 @@ import { getFullProductsCatalogWithStock } from '../../utils/productCatalogServi
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import { searchCustomers } from '../../services/customerService';
 import { notifyBomCancelledByDispatch, notifyCreditPaymentSettled } from '../../services/notificationService';
+import { extractGstRate } from '../../utils/gstHelper';
 import { getNextSequence, compareBomDescending, normalizeBomCode, getNumericSearchMatchRank } from '../../utils/sequenceGenerator';
 import {
   formatAppliedAtDate, formatBomDateDot, getBomActiveStage, getBomStageTiming,
@@ -1270,8 +1271,8 @@ export default function BomOrdersView(props) {
       const uom = it.uom || it.unit || 'NOS';
       const rate = Number(it.rate || it.unitPrice || it.price || 0);
       const taxable = Number(it.taxableAmount || (qty * rate) || 0);
-      const gstRate = it.gstRate ? `${it.gstRate}%` : (it.gst ? `${it.gst}%` : '18%');
-      const gstPct = Number(String(gstRate).replace('%', '')) || 18;
+      const gstPct = extractGstRate(it.gstRate ?? it.gst, 18);
+      const gstRate = `${gstPct}%`;
       const gstAmount = Number(it.gstAmount || (taxable * gstPct / 100) || 0);
       const total = Number(it.total || it.totalAmount || (taxable + gstAmount) || 0);
 
@@ -1927,14 +1928,15 @@ export default function BomOrdersView(props) {
       // Set primary preset state values
       const cleanGrand = parseFloat(String(pendingPi.grandTotal || pendingPi.amount || 0).replace(/[^0-9.]/g, '')) || 0;
       const firstPresetGroup = Object.values(restoredPresetGroups)[0];
+      const piGstMult = 1 + (extractGstRate(firstPresetGroup?.gstRate ?? pendingPi.gstRate ?? pendingPi.items?.[0]?.gstRate, 18) / 100);
       if (firstPresetGroup) {
         setSelectedPreset(firstPresetGroup.presetName || firstPresetGroup.presetId);
-        setPresetKitPrice(firstPresetGroup.kitPrice != null && String(firstPresetGroup.kitPrice) !== '' ? String(firstPresetGroup.kitPrice) : (cleanGrand > 0 ? String(Math.round(cleanGrand / 1.18)) : ''));
+        setPresetKitPrice(firstPresetGroup.kitPrice != null && String(firstPresetGroup.kitPrice) !== '' ? String(firstPresetGroup.kitPrice) : (cleanGrand > 0 ? String(Math.round((cleanGrand / piGstMult) * 100) / 100) : ''));
         setPresetSetCount(firstPresetGroup.setCount || 1);
         setPresetUnit(firstPresetGroup.unit || firstPresetGroup.unitType || 'Sets');
       } else if (pendingPi.presetName || (cleanGrand > 0 && Array.isArray(pendingPi.items) && pendingPi.items.some(it => it.isPresetItem))) {
         setSelectedPreset(pendingPi.presetName || 'Pre-Engineered Structure Kit Package');
-        const pPrice = pendingPi.presetKitPrice != null ? pendingPi.presetKitPrice : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : '');
+        const pPrice = pendingPi.presetKitPrice != null ? pendingPi.presetKitPrice : (cleanGrand > 0 ? Math.round((cleanGrand / piGstMult) * 100) / 100 : '');
         setPresetKitPrice(String(pPrice));
         const rawCount = parseFloat(pendingPi.presetSetCount || pendingPi.setCount || pendingPi.quantity) || 1;
         setPresetSetCount(rawCount);
@@ -1954,7 +1956,8 @@ export default function BomOrdersView(props) {
           const itQty = parseFloat(it.qty) || 1;
           let rateVal = isPreset ? '0' : String(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : '0');
           if (!isPreset && (parseFloat(rateVal) === 0 || isNaN(parseFloat(rateVal))) && cleanGrand > 0) {
-            rateVal = String(Math.round(cleanGrand / itQty / 1.18));
+            const itemMult = 1 + (extractGstRate(it.gstRate ?? it.tax ?? pendingPi.gstRate, 18) / 100);
+            rateVal = String(Math.round((cleanGrand / itQty / itemMult) * 100) / 100);
           }
           return {
             code: it.code || it.sku || it.itemId || '',
@@ -2501,7 +2504,7 @@ export default function BomOrdersView(props) {
         groupItems.forEach(it => {
           const itQty = cleanNum(it.qty, 1);
           const itemShare = groupTotal * (itQty / totalQty);
-          const itGstRate = cleanNum(String(it.gstRate || grp?.gstRate || '18%').replace('%', ''), 18);
+          const itGstRate = extractGstRate(it.gstRate ?? grp?.gstRate, 18);
           kitGst += itemShare * (itGstRate / 100);
         });
       } else {

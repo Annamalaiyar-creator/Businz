@@ -85,6 +85,18 @@ export function resolveStateName(gstin = '', stateStr = '') {
 }
 
 /**
+ * Safely extracts a numeric GST rate percentage (preserving 0% instead of treating 0 as falsy).
+ * @param {string|number} val - Raw GST rate (e.g. 0, '0%', '5%', 18)
+ * @param {number} fallback - Default rate when val is missing/invalid
+ * @returns {number}
+ */
+export function extractGstRate(val, fallback = 18) {
+  if (val === undefined || val === null || val === '') return fallback;
+  const n = parseFloat(String(val).replace('%', '').trim());
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/**
  * Groups items and calculates detailed GST tier breakdowns with CGST/SGST vs IGST
  * @param {Array} items - List of items with qty, rate/unitPrice, gstRate
  * @param {Object} options - { isIntra, gstin, state, presetGroups }
@@ -109,8 +121,7 @@ export function calculateGstTiers(items = [], options = {}) {
     if (isPreset && r <= 0) return; // Preset component item without custom rate
     const taxable = (isPreset && r <= 0) ? 0 : (it.taxable !== undefined && r > 0 ? parseFloat(it.taxable) : (q * r));
     if (taxable <= 0) return;
-    const rateStr = it.gstRate !== undefined ? it.gstRate : (it.tax !== undefined ? it.tax : '18%');
-    const rate = parseFloat(String(rateStr).replace('%', '')) || 18;
+    const rate = extractGstRate(it.gstRate !== undefined ? it.gstRate : it.tax, 18);
     const amt = taxable * (rate / 100);
 
     if (!gstTiersMap[rate]) {
@@ -129,7 +140,7 @@ export function calculateGstTiers(items = [], options = {}) {
       const unitPrice = parseFloat(grp.kitPrice) || 0;
       const multiplier = parseFloat(grp.setCount) || 1;
       const groupTotal = unitPrice * multiplier;
-      const rate = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+      const rate = extractGstRate(grp.gstRate, 18);
       const amt = groupTotal * (rate / 100);
 
       if (!gstTiersMap[rate]) {

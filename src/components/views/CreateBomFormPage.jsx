@@ -18,6 +18,7 @@ import TypeableProductSelect from "../TypeableProductSelect";
 import { getNextSequence } from "../../utils/sequenceGenerator";
 import { isFixedQuantityPreset, VRM_HDG_PRESETS } from "../../vrmHdgProposalPresets";
 import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
+import { extractGstRate } from "../../utils/gstHelper";
 import { is5PctSolarProduct } from "../../utils/hsnCodeService";
 import { PRESET_THEMES, getPresetTheme } from "../../utils/presetThemes";
 
@@ -346,11 +347,11 @@ export default function CreateBomFormPage(props) {
       const q = cleanNum(item.qty, 0);
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;
-      const pct = cleanNum(String(item.gstRate || newBomGstRate || '18%').replace('%', ''), 18);
+      const pct = extractGstRate(item.gstRate ?? newBomGstRate, 18);
       return acc + (rowTot * (pct / 100));
     }, 0);
     const presetItem = (bomMaterialsList || []).find(it => it.isPresetItem);
-    const presetGstPct = cleanNum(String(presetItem?.gstRate || newBomGstRate || '18%').replace('%', ''), 18);
+    const presetGstPct = extractGstRate(presetItem?.gstRate ?? newBomGstRate, 18);
     const kitGst = kitSubtotal * (presetGstPct / 100);
     const gst = itemsGst + kitGst;
 
@@ -1348,7 +1349,7 @@ export default function CreateBomFormPage(props) {
                   const q = parseFloat(item.qty) || 0;
                   const r = parseFloat(item.rate) || 0;
                   const taxable = q * r;
-                  const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+                  const gstPct = extractGstRate(item.gstRate, 18);
                   const gstAmt = taxable * (gstPct / 100);
                   const rowTot = taxable + gstAmt;
                   const isChecked = selectedBomItemIndexes.includes(i);

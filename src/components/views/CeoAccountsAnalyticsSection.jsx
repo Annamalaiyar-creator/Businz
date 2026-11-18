@@ -193,7 +193,8 @@ export default function CeoAccountsAnalyticsSection({
       const total = parseAmount(inv.grandTotal ?? inv.totalAmount ?? inv.total ?? inv.amount ?? 0);
       const paid = parseAmount(inv.paidAmount ?? inv.amountPaid ?? inv.receivedAmount ?? (String(inv.status || '').toLowerCase() === 'paid' ? total : 0));
       const balance = Math.max(0, total - paid);
-      const gst = parseAmount(inv.gstAmount ?? inv.taxAmount ?? (total > 0 ? total - total / 1.18 : 0));
+      const invSub = parseAmount(inv.subTotal ?? inv.subtotal ?? 0);
+      const gst = parseAmount(inv.gstAmount ?? inv.taxAmount ?? (invSub > 0 && invSub < total ? (total - invSub) : (total > 0 ? total - total / 1.18 : 0)));
       const ageDays = Number.isFinite(dateTs) ? Math.max(0, Math.floor((now - dateTs) / 86400000)) : 0;
       return { docNo, party, dateStr, dateTs, total, paid, balance, gst, ageDays, type: 'Invoice' };
     });
@@ -214,7 +215,8 @@ export default function CeoAccountsAnalyticsSection({
           (stLower.includes('payment processed') || stLower.includes('proceed') || stLower.includes('fully received') || stLower.includes('closed') ? total : 0)
         );
         const balance = Math.max(0, total - paid);
-        const gst = parseAmount(po.taxAmount ?? po.gstAmount ?? (total > 0 ? total - total / 1.18 : 0));
+        const poSub = parseAmount(po.subTotal ?? po.subtotal ?? 0);
+        const gst = parseAmount(po.taxAmount ?? po.gstAmount ?? (poSub > 0 && poSub < total ? (total - poSub) : (total > 0 ? total - total / 1.18 : 0)));
         const ageDays = Number.isFinite(dateTs) ? Math.max(0, Math.floor((now - dateTs) / 86400000)) : 0;
         return { docNo, party, dateStr, dateTs, total, paid, balance, gst, ageDays, type: 'PO' };
       });

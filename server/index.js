@@ -3309,6 +3309,10 @@ export async function authenticateEmployeeCredentials(identifier, password) {
  * Validates employee credentials strictly against the server-side employees store.
  * Generates cryptographic session tokens (sess_...) on the server; never permits session adoption.
  */
+const loginFailedAttemptsMap = new Map();
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCKOUT_MS = 60 * 1000;
+
 app.post('/api/sessions/register', async (req, res) => {
   const { email, empCode, employee_code, password, device, browser } = req.body || {};
 
@@ -3346,18 +3350,46 @@ app.post('/api/sessions/register', async (req, res) => {
     });
   }
 
+  const rateKey = `${req.ip || 'unknown'}:${String(identifier).trim().toLowerCase()}`;
+  const attemptState = loginFailedAttemptsMap.get(rateKey);
+  if (attemptState && attemptState.lockedUntil && Date.now() < attemptState.lockedUntil) {
+    const waitSec = Math.ceil((attemptState.lockedUntil - Date.now()) / 1000);
+    return res.status(429).json({
+      success: false,
+      error: `Too many failed login attempts. Please wait ${waitSec}s before trying again.`
+    });
+  }
+
   const authResult = await authenticateEmployeeCredentials(identifier, password);
   if (!authResult || !authResult.verified) {
+    const prevCount = (attemptState && (!attemptState.lockedUntil || Date.now() >= attemptState.lockedUntil)) ? attemptState.count : 0;
+    const nextCount = prevCount + 1;
+    loginFailedAttemptsMap.set(rateKey, {
+      count: nextCount,
+      lockedUntil: nextCount >= LOGIN_MAX_FAILURES ? (Date.now() + LOGIN_LOCKOUT_MS) : null
+    });
     return res.status(authResult?.status || 401).json({ 
       success: false, 
       error: authResult?.error || 'Authentication failed: Invalid credentials.' 
     });
   }
+  loginFailedAttemptsMap.delete(rateKey);
 
   // 3. CRITICAL SECURITY ENFORCEMENT:
   // Role, empCode, email, and user name are derived 100% STRICTLY from server-side database verification!
   // Client-submitted `role`, `empCode`, or `user` are COMPLETELY IGNORED.
   // Session ID is generated cryptographically on the server (no client session adoption).
+  // Single-device policy: revoke prior active sessions for the same employee unless concurrent sessions are explicitly enabled.
+  if (process.env.ALLOW_CONCURRENT_SESSIONS !== 'true' && authResult.employee_code) {
+    const targetEmpNorm = String(authResult.employee_code).trim().toUpperCase();
+    for (const [sid, s] of activeSessionsMap.entries()) {
+      if (String(s.empCode || '').trim().toUpperCase() === targetEmpNorm && s.status !== 'revoked') {
+        s.status = 'revoked';
+        s.revokedAt = Date.now();
+        activeSessionsMap.set(sid, s);
+      }
+    }
+  }
   const verifiedSession = createSessionRecord(authResult, { device, browser });
   activeSessionsMap.set(verifiedSession.id, verifiedSession);
   saveActiveSessionsToDisk();
@@ -3495,35 +3527,6 @@ export async function getVerifiedUserSession(req) {
   }
 
   if (!sessionId) {
-    const clientRole = req.headers['x-user-role'] || req.cookies?.['controlroom_user_role'] || req.cookies?.['businz_user_role'];
-    const clientEmp = req.headers['x-employee-code'] || req.cookies?.['controlroom_employee_code'] || req.cookies?.['businz_employee_code'];
-    const bomPayload = req.body?.bom || req.body;
-    const fallbackEmp = clientEmp || bomPayload?.salesPersonCode || bomPayload?.createdById || bomPayload?.packedById;
-    const fallbackRole = clientRole || (bomPayload?.packedById ? 'Dispatch' : 'Sales');
-
-    if (fallbackEmp || fallbackRole || bomPayload?.bomCode || bomPayload?.id) {
-      const devEmpPath = getStoreFilePath('employees_store.json');
-      let matched = null;
-      if (fs.existsSync(devEmpPath)) {
-        try {
-          const emps = JSON.parse(fs.readFileSync(devEmpPath, 'utf8'));
-          if (Array.isArray(emps)) {
-            matched = emps.find(e => {
-              const code = String(e.employee_code || e.code || '').trim().toUpperCase();
-              return fallbackEmp && code === String(fallbackEmp).trim().toUpperCase();
-            }) || emps.find(e => (e.role || '').toLowerCase() === String(fallbackRole || '').toLowerCase());
-          }
-        } catch (_) {}
-      }
-      return {
-        valid: true,
-        sessionId: 'AUTOGEN-' + (fallbackEmp || 'EMP') + '-' + Date.now().toString(36),
-        user: matched?.name || matched?.employee_name || bomPayload?.salesPerson || bomPayload?.createdBy || fallbackEmp || 'Businz User',
-        email: matched?.email || bomPayload?.salesPersonEmail || 'user@businz.com',
-        empCode: matched?.employee_code || matched?.code || fallbackEmp || 'EMP',
-        role: matched?.role || fallbackRole || 'Sales'
-      };
-    }
     return { valid: false, error: 'Unauthorized: Active Businz session required (x-session-id)' };
   }
 
@@ -3557,56 +3560,6 @@ export async function getVerifiedUserSession(req) {
       empCode: sessionResult.empCode || sessionResult.employee_code || 'EMP',
       role: sessionResult.role || 'Employee'
     };
-  }
-
-  // 3. Fallback when session validation fails or in local disk persistence mode
-  if (sessionId && (!sessionResult?.valid || !isDbConnected() || !process.env.DATABASE_URL || sessionResult?.error?.includes('relation') || sessionResult?.error?.includes('timeout') || sessionResult?.error?.includes('not found') || sessionResult?.error?.includes('expired'))) {
-    const clientRole = req.headers['x-user-role'] || req.cookies?.['controlroom_user_role'] || req.cookies?.['businz_user_role'];
-    const clientEmp = req.headers['x-employee-code'] || req.cookies?.['controlroom_employee_code'] || req.cookies?.['businz_employee_code'];
-    const bomPayload = req.body?.bom || req.body;
-    const fallbackEmp = clientEmp || bomPayload?.salesPersonCode || bomPayload?.createdById || bomPayload?.packedById;
-    const fallbackRole = clientRole || (bomPayload?.packedById ? 'Dispatch' : 'Sales');
-
-    const devEmpPath = getStoreFilePath('employees_store.json');
-    let matched = null;
-    if (fs.existsSync(devEmpPath)) {
-      try {
-        const emps = JSON.parse(fs.readFileSync(devEmpPath, 'utf8'));
-        if (Array.isArray(emps) && emps.length > 0) {
-          matched = emps.find(e => {
-            const code = String(e.employee_code || e.code || '').trim().toUpperCase();
-            return (fallbackEmp && code === String(fallbackEmp).trim().toUpperCase());
-          }) || emps.find(e => (e.role || '').toLowerCase().includes(String(fallbackRole || 'sale').toLowerCase())) || emps[0];
-        }
-      } catch (_) {}
-    }
-
-    if (matched || fallbackRole || fallbackEmp || bomPayload?.bomCode || bomPayload?.id) {
-      const effectiveEmp = matched?.employee_code || matched?.code || fallbackEmp || 'EMP-SE';
-      const effectiveRole = clientRole || matched?.role || fallbackRole || 'Sales Executive';
-      const effectiveUser = matched?.employee_name || matched?.name || bomPayload?.salesPerson || bomPayload?.createdBy || 'Sales Executive';
-      const effectiveEmail = matched?.email || 'sales@vrmstructures.com';
-
-      const restoredSession = {
-        id: String(sessionId).trim(),
-        user: effectiveUser,
-        email: effectiveEmail,
-        empCode: effectiveEmp,
-        role: effectiveRole,
-        createdAt: Date.now(),
-        lastActiveTimestamp: Date.now()
-      };
-      activeSessionsMap.set(restoredSession.id, restoredSession);
-      saveActiveSessionsToDisk();
-      return {
-        valid: true,
-        sessionId: restoredSession.id,
-        user: restoredSession.user,
-        email: restoredSession.email,
-        empCode: restoredSession.empCode,
-        role: restoredSession.role
-      };
-    }
   }
 
   return { valid: false, error: sessionResult?.error || 'Unauthorized: Invalid or expired session' };
@@ -3661,6 +3614,10 @@ export const requireRole = (allowedRoles = []) => {
 
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
+  const cleanKey = String(key || '').trim();
+  if (!cleanKey || cleanKey.includes('..') || cleanKey.includes('/') || cleanKey.includes('\\') || !/^[a-zA-Z0-9_-]{1,64}$/.test(cleanKey)) {
+    return res.status(400).json({ success: false, error: '[Validation Error] Invalid store key.' });
+  }
   const employeeFilter = req.query.employee;
   if (!isDbConnected()) {
     return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot read store "${key}".` });
@@ -3708,7 +3665,12 @@ app.get('/api/store/:key', async (req, res) => {
 app.get(['/api/employees', '/api/team/members'], async (req, res) => {
   try {
     const data = await getDatabaseStore('employees_store');
-    return res.json({ success: true, data: Array.isArray(data) ? data : [] });
+    const safeList = (Array.isArray(data) ? data : []).map(emp => {
+      if (!emp || typeof emp !== 'object') return emp;
+      const { password, password_hash, pass, token, secret, ...safeEmp } = emp;
+      return safeEmp;
+    });
+    return res.json({ success: true, data: safeList });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -4224,7 +4186,7 @@ app.post('/api/store/:key', async (req, res) => {
   });
 });
 
-app.delete('/api/store/:key/:id', async (req, res) => {
+app.delete('/api/store/:key/:id', requireRole(['Technical Administrator', 'CEO', 'MD', 'Managing Director', 'HR']), async (req, res) => {
   const { key, id } = req.params;
   if (key === 'employees_store') {
     try {
@@ -4534,7 +4496,7 @@ app.post('/api/vendors', async (req, res) => {
 });
 
 // Endpoint to create a new customer in BUSINZ Authoritative Store (Native BUSINZ Store)
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', requireBusinzSession, async (req, res) => {
   const localCustomers = loadLocalCustomers();
   const isBulk = Array.isArray(req.body);
   const incomingList = isBulk ? req.body : [req.body];
@@ -4942,7 +4904,7 @@ app.get('/api/vendors', async (req, res) => {
 
 
 // Endpoint to delete a Vendor in BUSINZ Authoritative Store (Native BUSINZ Store)
-app.delete('/api/vendors/:id', async (req, res) => {
+app.delete('/api/vendors/:id', requireRole(['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Procurement', 'Procurement Head', 'Procurement Manager', 'Purchase']), async (req, res) => {
   const targetId = req.params.id;
 
   // 1. Remove from local store
@@ -5603,6 +5565,32 @@ app.all(['/api/boms/repair-sequence-554-555', '/api/boms/repair-sequence-556-557
     message: 'Disabled: VRMS/BOM/26-27/556-559 are assigned to active production orders.'
   });
 });
+let reservedQuoteLastSeq = 0;
+app.post('/api/quotations/reserve-number', async (req, res) => {
+  try {
+    const existing = await getDatabaseStore('crm_quotations');
+    const list = Array.isArray(existing) ? existing : [];
+    const now = new Date();
+    const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const fy = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
+    let maxSeq = 0;
+    list.forEach(q => {
+      const code = String(q.quoteNumber || q.code || q.id || '');
+      const m = code.match(/(\d+)$/);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (Number.isFinite(num) && num > maxSeq) maxSeq = num;
+      }
+    });
+    const nextSeq = Math.max(reservedQuoteLastSeq, maxSeq) + 1;
+    reservedQuoteLastSeq = nextSeq;
+    const nextCode = `VRMS/QT/${fy}/${String(nextSeq).padStart(3, '0')}`;
+    return res.json({ success: true, nextQuoteNo: nextCode, sequence: nextSeq });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to reserve quotation number' });
+  }
+});
+
 // Protection 4: /api/reset-bom-workflow-data disabled with HTTP 403
 app.post('/api/reset-bom-workflow-data', async (req, res) => {
   return res.status(403).json({
@@ -6286,7 +6274,10 @@ app.get('/api/boms/:id/accounts-verification', async (req, res) => {
   }
 });
 
-app.post('/api/reset-all-testing-data', async (req, res) => {
+app.post('/api/reset-all-testing-data', requireRole(['Technical Administrator']), async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ success: false, error: 'Forbidden: Testing data reset is disabled in production.' });
+  }
   try {
     // 1. Reset invoice store and sequence (Preserve legacy public.leaves BOM_STORE row 2 for rollback)
     await supabase.from('leaves').delete().in('employee', ['INVOICE_STORE', 'BOM_SEQUENCE']);
@@ -7021,7 +7012,7 @@ app.post(['/api/boms/print-status', '/api/boms/:id/print-status'], async (req, r
 });
 
 // Dedicated DELETE /api/boms/:id endpoint
-app.delete('/api/boms/:id', async (req, res) => {
+app.delete('/api/boms/:id', requireRole(['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Sales Head']), async (req, res) => {
   const { id } = req.params;
   try {
     const cleanId = String(id).trim();
@@ -8470,7 +8461,7 @@ app.all('/api/grns/reset-all', async (req, res) => {
 });
 
 // Endpoint to delete a GRN by ID or grnNo
-app.delete('/api/grns/:id', async (req, res) => {
+app.delete('/api/grns/:id', requireRole(['CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Procurement', 'Procurement Head', 'Procurement Manager', 'Stores']), async (req, res) => {
   const targetId = req.params.id;
   let grns = await getDatabaseStore('grn_store');
   if (!Array.isArray(grns)) grns = [];
@@ -10768,21 +10759,10 @@ app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
 });
 
 // Lead Notifications Endpoint for Sales & CRM Users
-app.get('/api/crm/leads/notifications', async (req, res) => {
+app.get('/api/crm/leads/notifications', requireBusinzSession, async (req, res) => {
   try {
-    const empCode = req.query.employeeCode || req.query.empCode || req.query.userId || req.headers['x-user-emp-id'] || req.headers['x-employee-code'] || '';
-    let role = req.query.role || req.headers['x-user-role'] || '';
-
-    // If role is missing but empCode is known, resolve from employees_store
-    if (!role && empCode) {
-      try {
-        const empRes = await query(`SELECT role, designation FROM public.employees_store WHERE emp_id = $1 OR employee_code = $1 LIMIT 1`, [empCode]);
-        if (empRes?.rows?.[0]) {
-          role = empRes.rows[0].role || empRes.rows[0].designation || '';
-        }
-      } catch (_) {}
-    }
-    if (!role) role = 'Sales Executive';
+    const empCode = req.userSession?.empCode || req.query.employeeCode || req.query.empCode || req.query.userId || '';
+    const role = req.userSession?.role || 'Sales Executive';
 
     console.log(`[Leads Notif Route] Query params -> empCode: "${empCode}", role: "${role}"`);
     const result = await getNotificationsForUser({ empCode, role, limit: 50 });
@@ -10885,7 +10865,7 @@ app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
 });
 
 // Update Existing Lead
-app.put(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
+app.put(['/api/crm/leads/:id', '/api/leads/:id'], requireBusinzSession, async (req, res) => {
   try {
     const { id } = req.params;
     const leadData = (req.body && req.body.lead) ? req.body.lead : req.body;
@@ -10906,7 +10886,7 @@ app.put(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
 });
 
 // Centralized Lead Assignment (Only CEO & Tech Support)
-app.post(['/api/crm/leads/:id/assign', '/api/leads/:id/assign'], async (req, res) => {
+app.post(['/api/crm/leads/:id/assign', '/api/leads/:id/assign'], requireBusinzSession, async (req, res) => {
   try {
     const { id } = req.params;
     const { assignedToId, assignedToName, assignedToRole, reason } = req.body;

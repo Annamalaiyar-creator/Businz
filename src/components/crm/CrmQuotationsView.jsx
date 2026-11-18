@@ -18,6 +18,7 @@ import { getFullProductsCatalogWithStock } from '../../utils/productCatalogServi
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 import WhatsAppQrModal from './WhatsAppQrModal';
+import { extractGstRate } from '../../utils/gstHelper';
 import {
   getCleanCurrentUserId,
   getCurrentSalesRepName,
@@ -575,7 +576,7 @@ export default function CrmQuotationsView({
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       const rowTot = q * r;
-      const pct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+      const pct = extractGstRate(item.gstRate, 18);
       return acc + (rowTot * (pct / 100));
     }, 0);
 
@@ -587,8 +588,7 @@ export default function CrmQuotationsView({
         const multiplier = parseFloat(grp.setCount || grp.quantity || 1) || 0;
         const groupTotal = unitPrice * multiplier;
         if (groupTotal <= 0) return;
-        const gRateStr = grp?.gstRate || '18%';
-        const gPct = parseFloat(String(gRateStr).replace('%', '')) || 18;
+        const gPct = extractGstRate(grp?.gstRate, 18);
         kitGst += groupTotal * (gPct / 100);
       }
     });
@@ -1053,7 +1053,7 @@ export default function CrmQuotationsView({
   };
 
   // Submit / Save Quotation (with unlimited revision capability)
-  const handleSaveQuotationRecord = (saveAsStatus = 'Sent') => {
+  const handleSaveQuotationRecord = async (saveAsStatus = 'Sent') => {
     const validation = validateQuotationForm(saveAsStatus === 'Draft');
     if (!validation.isValid) {
       setValidationAlert({
@@ -1065,6 +1065,19 @@ export default function CrmQuotationsView({
 
     const calculated = calculateTotals();
     const isEditing = Boolean(editingQuoteId);
+    let finalQuoteCode = quoteCode;
+    if (!isEditing) {
+      try {
+        const res = await fetch('/api/quotations/reserve-number', { method: 'POST' }).catch(() => null);
+        if (res && res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.nextQuoteNo) {
+            finalQuoteCode = data.nextQuoteNo;
+            setQuoteCode(finalQuoteCode);
+          }
+        }
+      } catch (_) {}
+    }
     const todayIso = new Date().toISOString().split('T')[0];
     const effectiveQuoteDate = isEditing ? todayIso : (quoteDate || todayIso);
     if (isEditing && quoteDate !== todayIso) {
@@ -1074,9 +1087,9 @@ export default function CrmQuotationsView({
     const finalStatus = isEditing && saveAsStatus !== 'Draft' ? 'Revised' : saveAsStatus;
 
     const record = {
-      id: quoteCode,
-      quoteNumber: quoteCode,
-      code: quoteCode,
+      id: finalQuoteCode,
+      quoteNumber: finalQuoteCode,
+      code: finalQuoteCode,
       date: effectiveQuoteDate,
       validUntil: validUntilDate,
       deliveryDate,
@@ -1240,8 +1253,12 @@ export default function CrmQuotationsView({
     // 3. Save to sales PI store without deleting or overwriting any existing PI
     const updatedPIs = [newPI, ...(Array.isArray(existingPIs) ? existingPIs : [])];
     try {
-      await saveCloudStoreImmediate('sales_pi_store', updatedPIs);
-      await saveCloudStoreImmediate('proforma_invoice_store', updatedPIs);
+      await saveCloudStoreImmediate('sales_pi_store', newPI);
+      await saveCloudStoreImmediate('proforma_invoice_store', newPI);
+      try {
+        localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(updatedPIs));
+        localStorage.setItem('controlroom_pi_store', JSON.stringify(updatedPIs));
+      } catch (_) {}
       fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1985,7 +2002,7 @@ export default function CrmQuotationsView({
                       const q = parseFloat(item.qty) || 0;
                       const r = parseFloat(item.rate) || 0;
                       const taxable = q * r;
-                      const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+                      const gstPct = extractGstRate(item.gstRate, 18);
                       const gstAmt = taxable * (gstPct / 100);
                       const rowTot = taxable + gstAmt;
                       const isChecked = selectedItemIndexes.includes(i);
