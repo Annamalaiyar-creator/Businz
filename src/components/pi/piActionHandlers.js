@@ -2,7 +2,7 @@ import { Check } from 'lucide-react';
 import { isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
 import { normalizePaymentTerm, stripDataUrlsFromRecord } from '../../utils/otherViewsShared';
 import { resolveProductCode, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
-import { notifyPiCreated } from '../../services/notificationService';
+import { notifyPiCreated, notifyPiUpdated } from '../../services/notificationService';
 import { isTamilNaduIntra } from '../../utils/gstHelper';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
@@ -1035,10 +1035,32 @@ export function createPiActionHandlers(ctx) {
         updatedList = [...piList];
         updatedList[existingMatchIdx] = newPI;
         setEditIdx(null);
+        try {
+          notifyPiUpdated({
+            piNo: newPI.piNo,
+            customerName: newPI.vendor,
+            salesPerson: newPI.salesPerson,
+            salesPersonCode: newPI.salesPersonCode,
+            amount: newPI.amount
+          });
+        } catch (err) {
+          console.warn('PI voice notification error:', err);
+        }
       } else if (isEditing && editIdx !== null && editIdx >= 0 && editIdx < piList.length) {
         updatedList = [...piList];
         updatedList[editIdx] = newPI;
         setEditIdx(null);
+        try {
+          notifyPiUpdated({
+            piNo: newPI.piNo,
+            customerName: newPI.vendor,
+            salesPerson: newPI.salesPerson,
+            salesPersonCode: newPI.salesPersonCode,
+            amount: newPI.amount
+          });
+        } catch (err) {
+          console.warn('PI voice notification error:', err);
+        }
       } else {
         // ALWAYS PREPEND new PI to list without overwriting any existing PI
         updatedList = [newPI, ...piList];

@@ -3,9 +3,10 @@ import {
   ShieldCheck, Users, Database, Lock, HardDrive, Activity,
   Search, RefreshCw, CheckCircle2, AlertCircle, Trash2, Eye, EyeOff,
   Clock, Server, Check, X, ShieldAlert, ArrowRight, Download, Plus, Key,
-  Cpu, Terminal, Zap, ExternalLink, FileText, CheckCircle, Edit3, Phone, Mail, Briefcase
+  Cpu, Terminal, Zap, ExternalLink, FileText, CheckCircle, Edit3, Phone, Mail, Briefcase, Volume2
 } from 'lucide-react';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate } from '../../utils/supabaseDataSync';
+import { speakNotificationVoice, getVoiceAnnouncementText } from '../../services/notificationService';
 import NotificationToast from '../NotificationToast';
 
 export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', onNavigateTab, userRole = 'Technical Administrator' }) {
@@ -17,6 +18,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
     if (activeTab === 'Backup Vault') return 'backups';
     return 'dashboard'; // Default to Admin Dashboard Overview
   });
+  const [testingVoiceKey, setTestingVoiceKey] = useState(null);
 
   useEffect(() => {
     if (activeTab === 'Dashboard' || activeTab === 'Admin Dashboard') setSubTab('dashboard');
@@ -711,7 +713,8 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
           { id: 'users', parentTab: 'User Management', label: 'User & Access Control', icon: Users, badge: pendingEmployeesCount > 0 ? String(pendingEmployeesCount) : undefined },
           { id: 'health', parentTab: 'System Health', label: 'Database & Table Counts', icon: Database },
           { id: 'sessions', parentTab: 'Active Sessions', label: 'Active Sessions', icon: Lock, badge: activeSessions.length > 0 ? String(activeSessions.length) : undefined },
-          { id: 'backups', parentTab: 'Backup Vault', label: 'System Backups', icon: HardDrive, badge: backupFiles.length > 0 ? String(backupFiles.length) : undefined }
+          { id: 'backups', parentTab: 'Backup Vault', label: 'System Backups', icon: HardDrive, badge: backupFiles.length > 0 ? String(backupFiles.length) : undefined },
+          { id: 'voice_test', parentTab: null, label: 'Voice Alerts Test', icon: Volume2 }
         ].map(tab => {
           const isActive = subTab === tab.id;
           const IconComp = tab.icon;
@@ -1436,6 +1439,151 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
           </div>
         </div>
       )}
+
+      {/* ─── TAB CONTENT: VOICE ALERTS TEST (TA ONLY) ─── */}
+      {subTab === 'voice_test' && (() => {
+        const deptVoiceCatalog = [
+          {
+            dept: 'Sales',
+            color: '#0284C7',
+            bg: '#F0F9FF',
+            items: [
+              { key: 'PI_CREATED', label: 'Performa Invoice Created', payload: { event_type: 'PI_CREATED', document_id: 'PI-TEST-001' } },
+              { key: 'PI_UPDATED', label: 'Performa Invoice Updated / Edited', payload: { event_type: 'PI_UPDATED', document_id: 'PI-TEST-001' } },
+              { key: 'PI_ASSIGNED', label: 'PI Assigned', payload: { event_type: 'PI_ASSIGNED', document_id: 'PI-TEST-001' } },
+              { key: 'LEAD_CREATED', label: 'New Lead Received', payload: { event_type: 'LEAD_CREATED' } },
+              { key: 'LEAD_ASSIGNED', label: 'Lead Assigned', payload: { event_type: 'LEAD_ASSIGNED' } },
+              { key: 'LEAD_REASSIGNED', label: 'Lead Reassigned', payload: { event_type: 'LEAD_REASSIGNED' } },
+              { key: 'ORDER_DISPATCHED', label: 'Order Dispatched', payload: { event_type: 'ORDER_DISPATCHED', document_id: 'BOM-TEST-001' } },
+              { key: 'PRODUCT_PACKED', label: 'Sales Order is packed', payload: { event_type: 'PRODUCT_PACKED', document_id: 'BOM-TEST-001' } },
+              { key: 'PAYMENT_PROOF_PENDING', label: 'Payment Attachment Pending', payload: { event_type: 'PAYMENT_PROOF_PENDING', document_id: 'BOM-TEST-001' } },
+              { key: 'ADDRESS_PROOF_PENDING', label: 'Address Proof Pending', payload: { event_type: 'ADDRESS_PROOF_PENDING', document_id: 'BOM-TEST-001' } },
+              { key: 'BOM_CANCELLED', label: 'Sales Order Cancelled by Dispatch', payload: { event_type: 'BOM_CANCELLED', actor_name: 'Dispatch' } }
+            ]
+          },
+          {
+            dept: 'Dispatch',
+            color: '#0891B2',
+            bg: '#ECFEFF',
+            items: [
+              { key: 'BOM_SUBMITTED', label: 'New BOM Submitted from Sales', payload: { event_type: 'BOM_SUBMITTED', document_id: 'BOM-TEST-001' } },
+              { key: 'INVOICE_COMPLETED', label: 'Invoice Completed (Ready for Loading)', payload: { event_type: 'INVOICE_COMPLETED', document_id: 'INV-TEST-001' } }
+            ]
+          },
+          {
+            dept: 'Accounts',
+            color: '#059669',
+            bg: '#ECFDF5',
+            items: [
+              { key: 'PACKING_VERIFIED', label: 'Packing Verified by Dispatch', payload: { event_type: 'PACKING_VERIFIED', document_id: 'BOM-TEST-001' } },
+              { key: 'CREDIT_PAYMENT_SETTLED', label: 'Credit Payment Settled', payload: { event_type: 'CREDIT_PAYMENT_SETTLED', title: 'Credit Payment Settled: BOM-TEST-001' } }
+            ]
+          },
+          {
+            dept: 'Billing',
+            color: '#4F46E5',
+            bg: '#EEF2FF',
+            items: [
+              { key: 'ACCOUNTS_APPROVED', label: 'Payment Verified by Accounts', payload: { event_type: 'ACCOUNTS_APPROVED', document_id: 'BOM-TEST-001' } },
+              { key: 'ACCOUNTS_REJECTED', label: 'Verification Returned by Accounts', payload: { event_type: 'ACCOUNTS_REJECTED', document_id: 'BOM-TEST-001' } }
+            ]
+          },
+          {
+            dept: 'CEO / MD',
+            color: '#7C3AED',
+            bg: '#F5F3FF',
+            items: [
+              { key: 'PO_SUBMITTED_FOR_APPROVAL', label: 'PO Submitted for Approval', payload: { event_type: 'PO_SUBMITTED_FOR_APPROVAL', document_id: 'PO-00099' } },
+              { key: 'STATUS_UNCHANGED_2H', label: 'Lead Inactivity Alert (2 Hours)', payload: { event_type: 'STATUS_UNCHANGED_2H', title: '⚠️ Lead Inactivity Alert (2 Hours): Acme Corp' } },
+              { key: 'ESCALATION_48H', label: '48-Hour Inactivity After Contact', payload: { event_type: 'ESCALATION_48H', title: '🚨 48-Hour Inactivity After Contact: Acme Corp' } }
+            ]
+          },
+          {
+            dept: 'Procurement',
+            color: '#2563EB',
+            bg: '#EFF6FF',
+            items: [
+              { key: 'PO_APPROVED', label: 'PO Approved by MD', payload: { event_type: 'PO_APPROVED', document_id: 'PO-00099' } },
+              { key: 'PO_REJECTED', label: 'PO Rejected', payload: { event_type: 'PO_REJECTED', document_id: 'PO-00099' } },
+              { key: 'PO_AWAITING_PAYMENT', label: 'PO Awaiting Payment', payload: { event_type: 'PO_AWAITING_PAYMENT', document_id: 'PO-00099' } },
+              { key: 'PO_PAYMENT_COMPLETED', label: 'PO Payment Completed', payload: { event_type: 'PO_PAYMENT_COMPLETED', document_id: 'PO-00099' } }
+            ]
+          },
+          {
+            dept: 'Production',
+            color: '#D97706',
+            bg: '#FFFBEB',
+            items: [
+              { key: 'WORK_ORDER_ASSIGNED', label: 'Work Order Assigned', payload: { event_type: 'WORK_ORDER_ASSIGNED', document_id: 'WO-TEST-001' } }
+            ]
+          }
+        ];
+
+        return (
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', backgroundColor: '#F8FAFC' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Volume2 size={18} color="#0E7490" /> Department Voice Notification Tester
+                  <span style={{ fontSize: '11px', fontWeight: '700', backgroundColor: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '999px' }}>
+                    TA Testing Only
+                  </span>
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  Click any item below to hear the exact chime and spoken voice announcement for that department (local audio test only; does not send notifications to users).
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+              {deptVoiceCatalog.map(group => (
+                <div key={group.dept} style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ padding: '10px 14px', backgroundColor: group.bg, borderBottom: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '800', color: group.color }}>
+                    {group.dept} Department ({group.items.length})
+                  </div>
+                  <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {group.items.map(item => {
+                      const spokenText = getVoiceAnnouncementText(item.payload);
+                      const isPlaying = testingVoiceKey === item.key;
+                      return (
+                        <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '8px 10px', borderRadius: '8px', backgroundColor: isPlaying ? '#ECFEFF' : '#F8FAFC', border: `1px solid ${isPlaying ? '#0E7490' : '#E2E8F0'}` }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#0F172A' }}>{item.label}</div>
+                            <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>"{spokenText}"</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTestingVoiceKey(item.key);
+                              speakNotificationVoice(item.payload);
+                            }}
+                            style={{
+                              flexShrink: 0,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              border: 'none',
+                              backgroundColor: '#0E7490',
+                              color: '#FFFFFF',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Volume2 size={13} /> Play
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── TAB CONTENT 4: BACKUP VAULT ─── */}
       {subTab === 'backups' && (

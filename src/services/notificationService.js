@@ -80,6 +80,10 @@ export function getVoiceAnnouncementText(notif) {
   const actorName = notif.actor_name || notif.actor_role || '';
 
   switch (eventType) {
+    case 'PI_CREATED':
+      return 'Performa Invoice is created';
+    case 'PI_UPDATED':
+      return 'Performa Invoice is updated';
     case 'PI_SAVED':
       return 'Proforma Invoice saved successfully';
     case 'PI_ASSIGNED':
@@ -88,6 +92,8 @@ export function getVoiceAnnouncementText(notif) {
       return 'New BOM submitted from Sales';
     case 'PACKING_VERIFIED':
       return 'Packing verified by Dispatch';
+    case 'PRODUCT_PACKED':
+      return 'Sales Order is packed';
     case 'ACCOUNTS_APPROVED':
       return 'Payment verified by Accounts';
     case 'ACCOUNTS_REJECTED':
@@ -98,12 +104,10 @@ export function getVoiceAnnouncementText(notif) {
     case 'ORDER_DISPATCHED':
       return 'Order dispatched';
     case 'BOM_CANCELLED':
-      return actorName ? `BOM cancelled by ${actorName}` : 'BOM order cancelled';
+      return 'Sales Order is Cancelled by Dispatch';
     case 'PO_SUBMITTED_FOR_APPROVAL':
     case 'PO_PENDING_APPROVAL':
-      return notif.document_id
-        ? `Purchase Order ${notif.document_id} is awaiting your review and approval.`
-        : 'Purchase Order submitted for your review and approval.';
+      return 'Purchase Order Submitted For Approval';
     case 'PO_APPROVED':
       return 'Purchase Order approved by MD';
     case 'PO_REJECTED':
@@ -120,6 +124,16 @@ export function getVoiceAnnouncementText(notif) {
       return 'Lead reassigned to you';
     case 'WORK_ORDER_ASSIGNED':
       return 'Work order assigned';
+    case 'CREDIT_PAYMENT_SETTLED':
+      return 'Credit Payment Settled';
+    case 'STATUS_UNCHANGED_2H':
+      return 'Lead Inactivity Alert 2 Hours';
+    case 'ESCALATION_48H':
+      return '48 Hour Inactivity After Contact';
+    case 'PAYMENT_PROOF_PENDING':
+      return 'Payment Attachment Pending';
+    case 'ADDRESS_PROOF_PENDING':
+      return 'Address Proof Pending';
     default:
       if (notif.title && typeof notif.title === 'string') {
         return notif.title.replace(/[^\w\s.,]/gi, '').trim();
@@ -270,8 +284,8 @@ export function notifyBomSentToDispatch({ bomCode, customerName, salesPerson }) 
   });
 }
 
-export function notifyBomPackedAndSentToAccounts({ bomCode, customerName, actorName }) {
-  return sendServerWorkflowNotification({
+export function notifyBomPackedAndSentToAccounts({ bomCode, customerName, actorName, salesPerson, salesPersonCode }) {
+  const res = sendServerWorkflowNotification({
     recipientRole: 'Accounts Head',
     eventType: 'PACKING_VERIFIED',
     documentType: 'BOM',
@@ -282,9 +296,73 @@ export function notifyBomPackedAndSentToAccounts({ bomCode, customerName, actorN
     targetRecordId: bomCode,
     dedupId: `bom_packing_verified_${bomCode}`
   });
+
+  // Also send real-time "Product is packed" notification + voice to the Salesperson
+  const cleanSalesRep = (salesPerson && salesPerson !== 'Sales Executive' && salesPerson !== 'Sales' && salesPerson !== 'Sales Department') ? salesPerson : null;
+  sendServerWorkflowNotification({
+    recipientEmpCode: salesPersonCode || null,
+    recipientUserName: cleanSalesRep,
+    recipientRole: (salesPersonCode || cleanSalesRep) ? null : 'Sales Executive',
+    eventType: 'PRODUCT_PACKED',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `📦 Sales Order Packed: BOM ${bomCode}`,
+    message: `Sales Order for BOM ${bomCode} (${customerName || 'Customer'}) has been packed by Dispatch and sent to Accounts Verification.`,
+    targetTab: 'Sales BOM',
+    targetRecordId: bomCode,
+    voiceText: 'Sales Order is packed',
+    dedupId: `bom_product_packed_${bomCode}`
+  });
+
+  return res;
 }
 
-export function notifyPiCreated() {
+export function notifyPaymentProofPendingToSales({ bomCode, customerName, paymentType, salesPerson, salesPersonCode }) {
+  const cleanSalesRep = (salesPerson && salesPerson !== 'Sales Executive' && salesPerson !== 'Sales' && salesPerson !== 'Sales Department') ? salesPerson : null;
+  return sendServerWorkflowNotification({
+    recipientEmpCode: salesPersonCode || null,
+    recipientUserName: cleanSalesRep,
+    recipientRole: (salesPersonCode || cleanSalesRep) ? null : 'Sales Executive',
+    eventType: 'PAYMENT_PROOF_PENDING',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `⚠️ Payment Attachment Pending: BOM ${bomCode}`,
+    message: `Goods for BOM ${bomCode} (${customerName || 'Customer'}) are packed (${paymentType || 'Payment on Dispatch'}). Please attach the payment slip so it can proceed to Accounts.`,
+    targetTab: 'BOM Orders',
+    targetRecordId: bomCode,
+    voiceText: 'Payment Attachment Pending',
+    dedupId: `bom_payment_proof_pending_${bomCode}_${Date.now()}`
+  });
+}
+
+export function notifyAddressProofPendingToSales({ bomCode, customerName, salesPerson, salesPersonCode }) {
+  const cleanSalesRep = (salesPerson && salesPerson !== 'Sales Executive' && salesPerson !== 'Sales' && salesPerson !== 'Sales Department') ? salesPerson : null;
+  return sendServerWorkflowNotification({
+    recipientEmpCode: salesPersonCode || null,
+    recipientUserName: cleanSalesRep,
+    recipientRole: (salesPersonCode || cleanSalesRep) ? null : 'Sales Executive',
+    eventType: 'ADDRESS_PROOF_PENDING',
+    documentType: 'BOM',
+    documentId: bomCode,
+    title: `⚠️ Address Proof Pending (1 Hr SLA): BOM ${bomCode}`,
+    message: `Invoice Desk requested verified address proof from Sales (${salesPerson || 'Sales Executive'}) for BOM ${bomCode}${customerName ? ` (${customerName})` : ''}. Please upload within 1 hour.`,
+    targetTab: 'BOM Orders',
+    targetRecordId: bomCode,
+    voiceText: 'Address Proof Pending',
+    dedupId: `bom_address_proof_pending_${bomCode}_${Date.now()}`
+  });
+}
+
+export function notifyPiCreated({ piNo, customerName, title } = {}) {
+  if (title && String(title).toLowerCase().includes('cancel')) {
+    return { success: true };
+  }
+  speakNotificationVoice({ event_type: 'PI_CREATED', document_id: piNo, customer_name: customerName, voice_text: 'Performa Invoice is created' });
+  return { success: true };
+}
+
+export function notifyPiUpdated({ piNo, customerName } = {}) {
+  speakNotificationVoice({ event_type: 'PI_UPDATED', document_id: piNo, customer_name: customerName, voice_text: 'Performa Invoice is updated' });
   return { success: true };
 }
 

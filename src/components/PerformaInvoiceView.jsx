@@ -8,7 +8,7 @@ import { compressAndSaveFile, normalizePaymentTerm, stripDataUrlsFromRecord } fr
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
 import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
 import { saveCloudStoreImmediate, subscribeToCloudStore } from '../utils/supabaseDataSync';
-import { notifyPiCreated } from '../services/notificationService';
+import { notifyPiCreated, notifyPiUpdated } from '../services/notificationService';
 import { searchCustomers } from '../services/customerService';
 import { getHsnCode, is5PctSolarProduct } from '../utils/hsnCodeService';
 import { extractGstRate } from '../utils/gstHelper';
@@ -1209,7 +1209,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const amtStr = targetPi.amount ? `₹${parseFloat(targetPi.amount).toLocaleString('en-IN')}` : (targetPi.totalAmount ? `₹${parseFloat(targetPi.totalAmount).toLocaleString('en-IN')}` : '');
 
     updatePiList(updatedList);
-    notifyPiCreated({
+    notifyPiUpdated({
       piNo: cleanPiNo,
       customerName: safeCustomer,
       salesPerson: cleanSalesPerson,

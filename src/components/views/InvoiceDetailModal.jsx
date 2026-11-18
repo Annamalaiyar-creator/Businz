@@ -13,7 +13,7 @@ import { prodModuleEngine } from "../../utils/productionModuleEngine";
 import { addLiveNotification } from "../Header";
 import DocPreviewModal from "./DocPreviewModal";
 import { isTamilNaduIntra, extractGstRate } from "../../utils/gstHelper";
-import { notifyInvoiceCompletedReadyForDispatch } from "../../services/notificationService";
+import { notifyInvoiceCompletedReadyForDispatch, notifyAddressProofPendingToSales } from "../../services/notificationService";
 import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
 import { getHsnCode } from "../../utils/hsnCodeService";
 
@@ -1720,6 +1720,12 @@ export default function InvoiceDetailModal({
                               title: 'Address Proof Reissue Requested (1 Hr SLA)',
                               message: `Invoice Desk requested verified address proof from Sales (${salesPersonName}) for BOM ${targetCode}. Must be updated within 1 hour.`,
                               type: 'warning'
+                            });
+                            notifyAddressProofPendingToSales({
+                              bomCode: targetCode,
+                              customerName: inv.customerName || inv.party || matchingBom?.customerName,
+                              salesPerson: salesPersonName,
+                              salesPersonCode: matchingBom?.salesPersonEmpCode || matchingBom?.salesPersonId || foundBom?.salesPersonEmpCode
                             });
                             if (updatedBomRecord) {
                               window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomRecord } }));

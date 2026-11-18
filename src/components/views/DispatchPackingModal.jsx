@@ -6,7 +6,7 @@ import {
 import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, getMediaFromCacheAsync, uploadMediaFile } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
-import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
+import { notifyBomPackedAndSentToAccounts, notifyPaymentProofPendingToSales } from "../../services/notificationService";
 import { VRM_PRODUCTS, resolveBomItemDispatchQty } from "../../utils/vrmProductsData";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
@@ -1066,6 +1066,13 @@ export default function DispatchPackingModal({
           salesPersonCode: resolvedSalesPersonCode,
           step: 'ATTACH_PAYMENT_PROOF'
         }
+      });
+      notifyPaymentProofPendingToSales({
+        bomCode: targetBomCode,
+        customerName: resolvedCustomer,
+        paymentType: dispatchPackingModal.paymentType,
+        salesPerson: resolvedSalesPerson,
+        salesPersonCode: resolvedSalesPersonCode
       });
       alert(`📦 Packing Verified!\n\nAll goods are packed. Because payment terms are "${dispatchPackingModal.paymentType}", this order has NOT been sent to Accounts yet.\n\nAn automated indication and alert have been sent to the Salesperson (${resolvedSalesPerson}) to attach the payment proof slip.\n\nOnce Sales attaches the payment proof, this order will automatically forward to the Accounts team.`);
     } else if (isFullyConfirmed || sendPartialToAccounts) {
