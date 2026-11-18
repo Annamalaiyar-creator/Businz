@@ -6,6 +6,7 @@ import { uploadBomDocumentFile } from '../../../utils/bomStorageClient';
 import { notifyBomCreatedToSales } from '../../../services/notificationService';
 import { getNextSequence } from '../../../utils/sequenceGenerator';
 import { resolveBomItemDispatchQty } from '../../../utils/vrmProductsData';
+import { extractGstRate } from '../../../utils/gstHelper';
 
 function buildBomEditChanges(oldBom, nextBom) {
   if (!oldBom || !nextBom) return ['BOM details updated'];
@@ -481,6 +482,9 @@ export default function BomCreateSubmitModal({ ctx }) {
                             if (!bIt.isPresetItem && Number(matchPi.rate || 0) !== Number(bIt.rate || 0)) {
                               diffs.push(`Rate: ₹${Number(matchPi.rate || 0).toLocaleString('en-IN')} → ₹${Number(bIt.rate || 0).toLocaleString('en-IN')}`);
                             }
+                            if (extractGstRate(matchPi.gstRate, 18) !== extractGstRate(bIt.gstRate, 18)) {
+                              diffs.push(`GST: ${extractGstRate(matchPi.gstRate, 18)}% → ${extractGstRate(bIt.gstRate, 18)}%`);
+                            }
                             if (diffs.length > 0) {
                               anyItemEdited = true;
                               return { ...bIt, isEdited: true, editedNote: diffs.join(', ') };
@@ -694,6 +698,8 @@ export default function BomCreateSubmitModal({ ctx }) {
                               ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
                               : null;
                             const syncBody = JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: Boolean(sResOk) });
+                            let bomSavedToServer = false;
+                            let lastBomSyncStatus = null;
                             for (let attempt = 0; attempt < 3; attempt++) {
                               const syncRes = await fetch('/api/boms', {
                                 method: 'POST',
@@ -703,8 +709,19 @@ export default function BomCreateSubmitModal({ ctx }) {
                                 },
                                 body: syncBody
                               }).catch(() => null);
-                              if (syncRes && syncRes.ok) break;
+                              if (syncRes) lastBomSyncStatus = syncRes.status;
+                              if (syncRes && syncRes.ok) {
+                                bomSavedToServer = true;
+                                break;
+                              }
                               if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                            }
+                            if (!bomSavedToServer) {
+                              alert(
+                                lastBomSyncStatus === 401
+                                  ? '⚠️ Session expired (HTTP 401). Your BOM could not be saved to the server. Please log out, log back in, and save again.'
+                                  : `⚠️ Failed to save BOM to the server (HTTP ${lastBomSyncStatus || 'Network Error'}). Please check server connection and try again.`
+                              );
                             }
                           } catch (err) {
                             console.error('Error syncing created BOM to server:', err);

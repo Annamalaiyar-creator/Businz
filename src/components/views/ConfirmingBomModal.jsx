@@ -1760,7 +1760,7 @@ export default function ConfirmingBomModal({
             </span>
             {modalPresetGroups.length > 0 && (
               <span style={{ fontSize: '12px', color: '#0E7490', fontWeight: '600', marginTop: '4px', display: 'block' }}>
-                ℹ️ Hardware components with ₹0.00 rate are physical items included inside the Preset Kit package above.
+                Hardware components with ₹0.00 rate are physical items included inside the Preset Kit package above.
               </span>
             )}
           </div>

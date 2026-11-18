@@ -90,6 +90,7 @@ export default function AccountsVerificationModal({
   const [resolvedAddressProofDataUrl, setResolvedAddressProofDataUrl] = useState(null);
   const [isResolvingProof, setIsResolvingProof] = useState(false);
   const [isResolvingAddressProof, setIsResolvingAddressProof] = useState(false);
+  const [showAdjustPayment, setShowAdjustPayment] = useState(false);
 
   // Dynamic mobile viewport detection
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
@@ -406,6 +407,12 @@ export default function AccountsVerificationModal({
   const currentTotalAmount = (accVerif.totalAmount !== undefined && accVerif.totalAmount !== null && accVerif.totalAmount !== '')
     ? accVerif.totalAmount 
     : (isAlreadyCompleted ? (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || '')) : '');
+  const adjustedAmountRaw = accVerif.adjustedAmount !== undefined && accVerif.adjustedAmount !== null ? accVerif.adjustedAmount : '';
+  const adjustedAmountNum = cleanNum(adjustedAmountRaw, 0);
+  const adjustedFromRef = accVerif.adjustedFromRef || '';
+  const adjustedNote = accVerif.adjustedNote || '';
+  const verifiedSlipAmountNum = cleanNum(currentTotalAmount, 0);
+  const effectiveTotalAmountNum = verifiedSlipAmountNum + adjustedAmountNum;
 
   const payType = accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3 || '';
   const payTypeLower = String(payType).toLowerCase();
@@ -471,11 +478,10 @@ export default function AccountsVerificationModal({
   const isVerified = Boolean(
     currentPayStatus && 
     currentPayDate && 
-    currentTotalAmount !== '' && 
-    cleanNum(currentTotalAmount, 0) > 0 &&
+    effectiveTotalAmountNum > 0 &&
     !isMissingRequiredPaymentProof
   );
-  const isPartialVerified = Boolean(currentPayStatus || currentPayDate || (currentTotalAmount !== '' && cleanNum(currentTotalAmount, 0) > 0)) && !isVerified;
+  const isPartialVerified = Boolean(currentPayStatus || currentPayDate || effectiveTotalAmountNum > 0) && !isVerified;
 
   const payStatusConfig = {
     '100% Paid': { bg: '#DCFCE7', color: '#166534', label: '100% Paid', icon: <CheckCircle style={{ width: '18px', height: '18px' }} /> },
@@ -496,8 +502,12 @@ export default function AccountsVerificationModal({
       alert('⚠️ Please enter the verified Payment Date from the payment slip before completing accounts verification.');
       return;
     }
-    if (currentTotalAmount === '' || cleanNum(currentTotalAmount, 0) <= 0) {
-      alert('⚠️ Please enter the verified Total Amount (₹) from the payment slip before completing accounts verification.');
+    if (effectiveTotalAmountNum <= 0) {
+      alert('⚠️ Please enter the verified Total Amount (₹) from the payment slip (or apply an Adjust Payment amount) before completing accounts verification.');
+      return;
+    }
+    if (adjustedAmountNum > 0 && !String(adjustedFromRef).trim()) {
+      alert('⚠️ Please enter the Previous Order / Receipt Reference for the Adjusted Payment.');
       return;
     }
 
@@ -536,7 +546,7 @@ export default function AccountsVerificationModal({
       invoiceNo: finalInvNo,
       grandTotal: cleanNum(accountsVerificationModal?.grandTotal, 0) > 0
         ? cleanNum(accountsVerificationModal.grandTotal, 0)
-        : (orderValue > 0 ? orderValue : cleanNum(currentTotalAmount, 0)),
+        : (orderValue > 0 ? orderValue : effectiveTotalAmountNum),
       paymentDate: currentPayDate,
       isAccountsDone: true,
       invoiceConfirmed: false,
@@ -544,7 +554,11 @@ export default function AccountsVerificationModal({
         ...(verifiedBOM.accountsVerification || {}),
         paymentStatus: currentPayStatus,
         paymentDate: currentPayDate,
-        totalAmount: cleanNum(currentTotalAmount, 0),
+        totalAmount: effectiveTotalAmountNum,
+        verifiedSlipAmount: verifiedSlipAmountNum,
+        adjustedAmount: adjustedAmountNum,
+        adjustedFromRef: String(adjustedFromRef || '').trim(),
+        adjustedNote: String(adjustedNote || '').trim(),
         hardCopyReceived: true,
         verified: true,
         verifiedBy: verifiedBOM.accountsVerification?.verifiedBy || 'Accounts Executive (Venkatesh)',
@@ -618,9 +632,9 @@ export default function AccountsVerificationModal({
       poNo: targetCode,
       bomCode: targetCode,
       grnNo: 'GRN-VERIFIED',
-      invAmt: formatCurrency(cleanNum(currentTotalAmount, 0)),
-      poVal: formatCurrency(cleanNum(currentTotalAmount, 0)),
-      grnVal: formatCurrency(cleanNum(currentTotalAmount, 0)),
+      invAmt: formatCurrency(effectiveTotalAmountNum),
+      poVal: formatCurrency(effectiveTotalAmountNum),
+      grnVal: formatCurrency(effectiveTotalAmountNum),
       diff: '0.00', match: 'Matched',
       pay: 'Ready for Payment',
       status: 'Ready for Payment',
@@ -635,7 +649,11 @@ export default function AccountsVerificationModal({
       accountsVerification: {
         paymentStatus: currentPayStatus,
         paymentDate: currentPayDate,
-        totalAmount: cleanNum(currentTotalAmount, 0),
+        totalAmount: effectiveTotalAmountNum,
+        verifiedSlipAmount: verifiedSlipAmountNum,
+        adjustedAmount: adjustedAmountNum,
+        adjustedFromRef: String(adjustedFromRef || '').trim(),
+        adjustedNote: String(adjustedNote || '').trim(),
         hardCopyReceived: hardCopy,
         verified: true
       },
@@ -1079,6 +1097,166 @@ export default function AccountsVerificationModal({
                />
             </div>
           </div>
+
+          {/* Adjust Payment (Accounts Only — Previous / Advance Payment Adjustment) */}
+          {(!isAlreadyCompleted || adjustedAmountNum > 0) && (
+            <div style={{ marginTop: '14px' }}>
+              {!showAdjustPayment && adjustedAmountNum <= 0 && !isAlreadyCompleted && !isAccountsViewOnly ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAdjustPayment(true)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    padding: '8px 14px', borderRadius: '8px',
+                    border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
+                    color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
+                  }}
+                >
+                  + Adjust Payment
+                </button>
+              ) : (
+                <div style={{
+                  backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
+                  borderRadius: '12px', padding: '14px',
+                  display: 'flex', flexDirection: 'column', gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0369A1' }}>
+                      Adjust Payment (From Previous Payment / Advance)
+                    </span>
+                    {!isAlreadyCompleted && !isAccountsViewOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAdjustPayment(false);
+                          setAccountsVerificationModal(prev => prev ? ({
+                            ...prev,
+                            accountsVerification: {
+                              ...(prev.accountsVerification || {}),
+                              adjustedAmount: '',
+                              adjustedFromRef: '',
+                              adjustedNote: ''
+                            }
+                          }) : null);
+                        }}
+                        style={{
+                          border: '1px solid #FECACA', backgroundColor: '#FEF2F2',
+                          color: '#DC2626', borderRadius: '6px', padding: '4px 10px',
+                          fontSize: '11px', fontWeight: '700', cursor: 'pointer'
+                        }}
+                      >
+                        Remove Adjustment
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                        Adjusted Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="e.g. 40000"
+                        disabled={isAlreadyCompleted || isAccountsViewOnly}
+                        value={adjustedAmountRaw}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAccountsVerificationModal(prev => prev ? ({
+                            ...prev,
+                            accountsVerification: { ...(prev.accountsVerification || {}), adjustedAmount: val }
+                          }) : null);
+                        }}
+                        style={{
+                          width: '100%', height: '38px', borderRadius: '8px',
+                          border: '1px solid #93C5FD', padding: '0 10px',
+                          fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                          backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                          boxSizing: 'border-box', outline: 'none'
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                        Previous Order / Receipt Ref <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. PI-00045 / UTR-XXXX"
+                        disabled={isAlreadyCompleted || isAccountsViewOnly}
+                        value={adjustedFromRef}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAccountsVerificationModal(prev => prev ? ({
+                            ...prev,
+                            accountsVerification: { ...(prev.accountsVerification || {}), adjustedFromRef: val }
+                          }) : null);
+                        }}
+                        style={{
+                          width: '100%', height: '38px', borderRadius: '8px',
+                          border: '1px solid #93C5FD', padding: '0 10px',
+                          fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                          backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                          boxSizing: 'border-box', outline: 'none'
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                        Note (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Excess from old order"
+                        disabled={isAlreadyCompleted || isAccountsViewOnly}
+                        value={adjustedNote}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAccountsVerificationModal(prev => prev ? ({
+                            ...prev,
+                            accountsVerification: { ...(prev.accountsVerification || {}), adjustedNote: val }
+                          }) : null);
+                        }}
+                        style={{
+                          width: '100%', height: '38px', borderRadius: '8px',
+                          border: '1px solid #93C5FD', padding: '0 10px',
+                          fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                          backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                          boxSizing: 'border-box', outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
+                    const remainingBal = Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
+                    return (
+                      <div style={{
+                        display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
+                        padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF',
+                        border: '1px solid #E0F2FE', fontSize: '12px', fontWeight: '700'
+                      }}>
+                        <span style={{ color: '#475569' }}>Order Total: <strong style={{ color: '#0F172A' }}>₹ {targetOrderAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                        <span style={{ color: '#475569' }}>Paid Now: <strong style={{ color: '#0E7490' }}>₹ {verifiedSlipAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                        <span style={{ color: '#475569' }}>Adjusted: <strong style={{ color: '#0369A1' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                        <span style={{ color: '#475569' }}>Total Settled: <strong style={{ color: '#059669' }}>₹ {effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                        {targetOrderAmt > 0 && (
+                          <span style={{ color: remainingBal <= 0 ? '#059669' : '#B45309' }}>
+                            Balance: <strong>₹ {remainingBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Customer Credit Terms & Credit Amount Notice for Accounts Verification */}
           {(() => {

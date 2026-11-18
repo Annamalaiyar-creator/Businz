@@ -734,19 +734,6 @@ export function createPiActionHandlers(ctx) {
       });
     }
 
-    // 3.5 GST State match validation
-    const checkGstCode = (gstNo || '').trim().substring(0, 2);
-    const expectedGstState = GST_STATE_MAP[checkGstCode];
-    if (gstNo && gstNo.trim().length >= 2 && expectedGstState && billingState && billingState.trim()) {
-      if (expectedGstState.toLowerCase() !== billingState.trim().toLowerCase()) {
-        missingList.push({
-          field: 'GST Number State Mismatch',
-          message: `GSTIN code "${checkGstCode}" is registered to ${expectedGstState}, but Billing State is entered as "${billingState}". Click "Sync to ${expectedGstState}" to resolve.`,
-          targetId: 'pi-field-billingState'
-        });
-      }
-    }
-
     // 4. Delivery Address
     if (!sameAsBilling) {
       if (!deliveryStreet || !deliveryStreet.trim()) {

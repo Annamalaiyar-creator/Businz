@@ -108,7 +108,8 @@ export default function BomCreateFormSection({ ctx }) {
     bomMaterialsList,
     setBomMaterialsList,
     totals,
-    editingBomRecord
+    editingBomRecord,
+    originalPiSnapshot
   } = ctx;
 
     const handleAddMaterialRow = () => {
@@ -891,7 +892,6 @@ export default function BomCreateFormSection({ ctx }) {
               </div>
             )}
 
-            {!newBomSourcePiNo && (
               <>
                 {/* Preset Pill */}
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', backgroundColor: '#ECFEFF', padding: '0 16px', borderRadius: '20px', height: '40px', border: '1px solid #CFFAFE' }}>
@@ -933,7 +933,6 @@ export default function BomCreateFormSection({ ctx }) {
                   <X style={{ width: '18px', height: '18px' }} />
                 </button>
               </>
-            )}
           </div>
 
           {/* Active Preset Badges / Pills */}
@@ -958,7 +957,6 @@ export default function BomCreateFormSection({ ctx }) {
                 >
                   <Layers size={13} style={{ color: '#0E7490' }} />
                   {grp.presetName} (Total Quantity: {grp.setCount || 1} Set{(grp.setCount || 1) > 1 ? 's' : ''})
-                  {!newBomSourcePiNo && (
                     <button
                       type="button"
                       onClick={() => handleRemovePresetGroup(grp.groupId)}
@@ -967,7 +965,6 @@ export default function BomCreateFormSection({ ctx }) {
                     >
                       <X size={13} />
                     </button>
-                  )}
                 </span>
               ))}
             </div>
@@ -975,13 +972,6 @@ export default function BomCreateFormSection({ ctx }) {
 
           {/* Section 3 Content */}
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-          {Boolean(newBomSourcePiNo) && (
-            <div style={{ padding: '12px 18px', backgroundColor: '#FEF3C7', border: '1.5px solid #F59E0B', borderRadius: '10px', color: '#92400E', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Lock style={{ width: '18px', height: '18px', flexShrink: 0, color: '#D97706' }} />
-              <span>Line Items & Pricing locked from Source Proforma Invoice ({newBomSourcePiNo}). Line items, quantities, and prices imported from PI cannot be modified.</span>
-            </div>
-          )}
 
           {/* Clear confirm modal */}
           {showClearConfirmModal && (
@@ -1010,9 +1000,6 @@ export default function BomCreateFormSection({ ctx }) {
               <thead>
                 <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                   <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
-                    {newBomSourcePiNo ? (
-                      <span style={{ color: '#64748B', fontWeight: '700' }}>#</span>
-                    ) : (
                       <input id="bom-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={bomMaterialsList.length > 0 && selectedBomItemIndexes.length === bomMaterialsList.length}
@@ -1025,7 +1012,6 @@ export default function BomCreateFormSection({ ctx }) {
                         }}
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                        />
-                    )}
                   </th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
@@ -1064,8 +1050,33 @@ export default function BomCreateFormSection({ ctx }) {
                     }
                     const customItems = bomMaterialsList.filter(it => !it.isPresetItem);
 
+                    const baselineItems = (newBomSourcePiNo && Array.isArray(originalPiSnapshot?.items))
+                      ? originalPiSnapshot.items
+                      : (Array.isArray(editingBomRecord?.items) ? editingBomRecord.items : null);
+
+                    const getItemEditBadge = (bIt) => {
+                      if (!baselineItems) return null;
+                      const normK = String(bIt?.name || bIt?.code || '').trim().toLowerCase();
+                      const matchBase = normK ? baselineItems.find(p => String(p?.name || p?.code || '').trim().toLowerCase() === normK) : null;
+                      if (!matchBase) {
+                        return { label: 'Edited', detail: 'Added item' };
+                      }
+                      const diffs = [];
+                      if (Number(matchBase.qty || 0) !== Number(bIt.qty || 0)) {
+                        diffs.push(`Qty: ${matchBase.qty || 0} → ${bIt.qty || 0}`);
+                      }
+                      if (!bIt.isPresetItem && Number(matchBase.rate || 0) !== Number(bIt.rate || 0)) {
+                        diffs.push(`Rate: ₹${Number(matchBase.rate || 0).toLocaleString('en-IN')} → ₹${Number(bIt.rate || 0).toLocaleString('en-IN')}`);
+                      }
+                      if (extractGstRate(matchBase.gstRate, 18) !== extractGstRate(bIt.gstRate, 18)) {
+                        diffs.push(`GST: ${extractGstRate(matchBase.gstRate, 18)}% → ${extractGstRate(bIt.gstRate, 18)}%`);
+                      }
+                      return diffs.length > 0 ? { label: 'Edited', detail: diffs.join(', ') } : null;
+                    };
+
                     return bomMaterialsList.map((item, i) => {
-                    const isPiLocked = Boolean(newBomSourcePiNo);
+                    const isPiLocked = false;
+                    const itemEditBadge = getItemEditBadge(item);
                     const q = parseFloat(item.qty) || 0;
                     const r = parseFloat(item.rate) || 0;
                     const taxable = q * r;
@@ -1195,6 +1206,24 @@ export default function BomCreateFormSection({ ctx }) {
                                 <span style={{ fontSize: '10px', fontWeight: '800', color: isPresetItem ? theme.primary : '#64748B' }}>
                                   #{displaySNo}
                                 </span>
+                                {itemEditBadge && (
+                                  <span
+                                    title={itemEditBadge.detail}
+                                    style={{
+                                      fontSize: '9.5px',
+                                      fontWeight: '800',
+                                      backgroundColor: '#FEF3C7',
+                                      color: '#B45309',
+                                      border: '1px solid #FDE68A',
+                                      padding: '1px 5px',
+                                      borderRadius: '4px',
+                                      marginTop: '2px',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {itemEditBadge.label}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </td>
@@ -1688,7 +1717,6 @@ export default function BomCreateFormSection({ ctx }) {
             </table>
           </div>
 
-          {!newBomSourcePiNo && (
             <div>
               <button
                 type="button"
@@ -1698,7 +1726,6 @@ export default function BomCreateFormSection({ ctx }) {
                 Add Product / Item
               </button>
             </div>
-          )}
           </div>
         </div>
 
@@ -1741,7 +1768,7 @@ export default function BomCreateFormSection({ ctx }) {
                   cursor: 'pointer'
                 }}
               >
-                <option value="" disabled hidden>Select transport mode</option>
+                <option value="">Select Mode Of Transport</option>
                 <option value="Transport">Transport</option>
                 <option value="Own Vehicle">Own Vehicle</option>
                 <option value="Porter">Porter</option>
@@ -1935,7 +1962,7 @@ export default function BomCreateFormSection({ ctx }) {
                     </strong>
                   </div>
                   <span style={{ fontSize: '11px', color: '#0F766E', lineHeight: '1.4' }}>
-                    ℹ️ Attach the advance payment slip below. The remaining balance slip can be uploaded after BOM completion / before dispatch.
+                    Attach the advance payment slip below. The remaining balance slip can be uploaded after BOM completion / before dispatch.
                   </span>
                 </div>
               )}

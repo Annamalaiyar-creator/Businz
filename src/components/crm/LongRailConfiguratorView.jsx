@@ -1,14 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Plus, Trash2, Check, Layers, Sliders, Wand2, RotateCcw, Boxes
+  Plus, Trash2, Check, Layers, Sliders, RotateCcw, Boxes
 } from 'lucide-react';
 import {
-  LONG_RAIL_LENGTHS,
   DEFAULT_LONG_RAIL_PARAMS,
   DEFAULT_LONG_RAIL_ROWS,
-  autoFitRailPieces,
+  getLongRailStockMap,
   calculateLongRailStructure
 } from '../../utils/longRailConfigurator';
+import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import MasterStructureProfileDropdown from './MasterStructureProfileDropdown';
 
 const inputStyle = {
@@ -47,11 +47,32 @@ export default function LongRailConfiguratorView({
   onClose
 }) {
   const [params, setParams] = useState(DEFAULT_LONG_RAIL_PARAMS);
-  const [rows, setRows] = useState(DEFAULT_LONG_RAIL_ROWS);
+  const [rows, setRows] = useState([{ id: 'r1', panels: '', rows: '' }]);
   const [insertionMode, setInsertionMode] = useState('group'); // 'group' | 'itemized'
   const [showRatesEditor, setShowRatesEditor] = useState(false);
+  const [stockMap, setStockMap] = useState(() => {
+    try {
+      return getLongRailStockMap(centralInventoryStore.getInventoryItems());
+    } catch (_) {
+      return { 1200: 0, 1800: 0, 2400: 0, 3600: 0, 4800: 0 };
+    }
+  });
 
-  const calcResult = useMemo(() => calculateLongRailStructure(params, rows), [params, rows]);
+  useEffect(() => {
+    const refreshStock = () => {
+      try {
+        setStockMap(getLongRailStockMap(centralInventoryStore.getInventoryItems()));
+      } catch (_) {}
+    };
+    window.addEventListener('central_inventory_updated', refreshStock);
+    window.addEventListener('controlroom_storage_update', refreshStock);
+    return () => {
+      window.removeEventListener('central_inventory_updated', refreshStock);
+      window.removeEventListener('controlroom_storage_update', refreshStock);
+    };
+  }, []);
+
+  const calcResult = useMemo(() => calculateLongRailStructure(params, rows, stockMap), [params, rows, stockMap]);
 
   const updateParam = (field, rawVal) => {
     setParams(prev => ({ ...prev, [field]: rawVal === '' ? '' : Number(rawVal) }));
@@ -69,32 +90,11 @@ export default function LongRailConfiguratorView({
     setRows(prev => prev.map(r => (r.id === rowId ? { ...r, [field]: val } : r)));
   };
 
-  const updateRowPiece = (rowId, lenMm, rawVal) => {
-    const val = rawVal === '' ? '' : Math.max(0, parseInt(rawVal, 10) || 0);
-    setRows(prev =>
-      prev.map(r =>
-        r.id === rowId ? { ...r, pieces: { ...r.pieces, [lenMm]: val } } : r
-      )
-    );
-  };
-
-  const handleAutoFitRow = (rowId) => {
-    const compRow = calcResult.computedRows.find(r => r.id === rowId);
-    if (!compRow) return;
-    const fitted = autoFitRailPieces(compRow.requiredLength);
-    setRows(prev => prev.map(r => (r.id === rowId ? { ...r, pieces: fitted } : r)));
-  };
-
   const handleAddRow = () => {
     const newId = `lr_${Date.now()}`;
-    const defaultPanels = 10;
-    const reqLen =
-      defaultPanels * (Number(params.panelWidth) || 1134) +
-      (defaultPanels + 1) * (Number(params.pnlToPnl) || 26) +
-      (Number(params.clearance) || 44) * 2;
     setRows(prev => [
       ...prev,
-      { id: newId, panels: defaultPanels, rows: 1, pieces: autoFitRailPieces(reqLen) }
+      { id: newId, panels: '', rows: '' }
     ]);
   };
 
@@ -333,12 +333,20 @@ export default function LongRailConfiguratorView({
 
       {/* Row-by-Row Rail Cut Matrix */}
       <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', flexShrink: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <Layers size={14} color="#0E7490" />
             <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
               3. Row Layout &amp; Standard Rail Cut Breakdown (mm)
             </span>
+            <span style={{ fontSize: '10.5px', fontWeight: '700', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '2px 8px', borderRadius: '999px', border: '1px solid #A5F3FC' }}>
+              Auto-fitted from Live Stock
+            </span>
+            {calcResult.hasStockShortage && (
+              <span style={{ fontSize: '10.5px', fontWeight: '700', backgroundColor: '#FEF2F2', color: '#DC2626', padding: '2px 8px', borderRadius: '999px', border: '1px solid #FECACA' }}>
+                Insufficient Stock for some rows
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -368,35 +376,34 @@ export default function LongRailConfiguratorView({
                 <th style={{ padding: '8px' }}>Panels</th>
                 <th style={{ padding: '8px' }}>Rows</th>
                 <th style={{ padding: '8px' }}>Req. Length</th>
-                <th style={{ padding: '8px' }}>1200 mm</th>
-                <th style={{ padding: '8px' }}>1800 mm</th>
-                <th style={{ padding: '8px' }}>2400 mm</th>
-                <th style={{ padding: '8px' }}>3600 mm</th>
-                <th style={{ padding: '8px' }}>4800 mm</th>
+                {[1200, 1800, 2400, 3600, 4800].map(len => (
+                  <th key={len} style={{ padding: '8px' }}>
+                    <div>{len} mm</div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: (stockMap[len] || 0) > 0 ? '#059669' : '#DC2626' }}>
+                      Stock: {stockMap[len] || 0}
+                    </div>
+                  </th>
+                ))}
                 <th style={{ padding: '8px' }}>Prop. Length</th>
                 <th style={{ padding: '8px' }}>Extra</th>
                 <th style={{ padding: '8px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {calcResult.computedRows.map((row) => (
-                <tr key={row.id} style={{ borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>
+              {calcResult.computedRows.map((row, idx) => {
+                const rawRow = rows[idx] || row;
+                return (
+                <tr key={row.id} style={{ borderBottom: '1px solid #F1F5F9', textAlign: 'center', backgroundColor: row.stockShortage ? '#FFFBEB' : 'transparent' }}>
                   <td style={{ padding: '6px' }}>
-                    <input type="number" min="1" value={row.panels} onChange={e => updateRowField(row.id, 'panels', e.target.value)} style={compactNumInputStyle} />
+                    <input type="number" min="1" placeholder="0" value={rawRow.panels} onChange={e => updateRowField(row.id, 'panels', e.target.value)} style={compactNumInputStyle} />
                   </td>
                   <td style={{ padding: '6px' }}>
-                    <input type="number" min="1" value={row.rows} onChange={e => updateRowField(row.id, 'rows', e.target.value)} style={compactNumInputStyle} />
+                    <input type="number" min="1" placeholder="0" value={rawRow.rows} onChange={e => updateRowField(row.id, 'rows', e.target.value)} style={compactNumInputStyle} />
                   </td>
                   <td style={{ padding: '6px', fontWeight: '700', color: '#0F172A' }}>{row.requiredLength}</td>
                   {[1200, 1800, 2400, 3600, 4800].map(len => (
-                    <td key={len} style={{ padding: '6px' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={row.pieces[len]}
-                        onChange={e => updateRowPiece(row.id, len, e.target.value)}
-                        style={{ ...compactNumInputStyle, width: '48px' }}
-                      />
+                    <td key={len} style={{ padding: '6px', fontWeight: '800', color: row.pieces[len] > 0 ? '#0E7490' : '#94A3B8' }}>
+                      {row.pieces[len]}
                     </td>
                   ))}
                   <td style={{ padding: '6px', fontWeight: '700', color: '#0E7490' }}>{row.proposedLength}</td>
@@ -404,15 +411,12 @@ export default function LongRailConfiguratorView({
                     {row.extraLength >= 0 ? `+${row.extraLength}` : row.extraLength}
                   </td>
                   <td style={{ padding: '6px' }}>
-                    <div style={{ display: 'inline-flex', gap: '4px' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleAutoFitRow(row.id)}
-                        title="Auto-fit optimal rail combination"
-                        style={{ border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', color: '#0369A1', borderRadius: '6px', padding: '4px 7px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                      >
-                        <Wand2 size={11} /> Fit
-                      </button>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      {row.stockShortage && (
+                        <span title="Available stock is not enough for this row; showing standard fit" style={{ fontSize: '10px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 5px', borderRadius: '4px' }}>
+                          Low Stock
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleDeleteRow(row.id)}
@@ -425,7 +429,8 @@ export default function LongRailConfiguratorView({
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
             <tfoot>
               <tr style={{ backgroundColor: '#ECFEFF', fontWeight: '800', color: '#0E7490', textAlign: 'center', borderTop: '1px solid #A5F3FC' }}>

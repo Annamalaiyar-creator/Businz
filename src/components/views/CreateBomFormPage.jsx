@@ -406,37 +406,6 @@ export default function CreateBomFormPage(props) {
             </p>
           </div>
         </div>
-
-        {/* TOP HEADER BUTTON BAR */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setBomConfirmModal('cancel')}
-            style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-          >
-            ← Back
-          </button>
-
-          <button
-            onClick={() => {
-              const validation = validateProductionBomForm(false);
-              if (!validation.isValid) {
-                showCustomAlert({
-                  title: `Missing Required Details (${validation.missingList.length} field${validation.missingList.length > 1 ? 's' : ''})`,
-                  message: 'Please complete the highlighted details before creating this BOM order:',
-                  type: 'warning',
-                  details: validation.missingList,
-                  targetFieldId: validation.missingList[0]?.targetId
-                });
-                return;
-              }
-              setBomConfirmModal('create');
-            }}
-            style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <CheckCircle style={{ width: '16px', height: '16px' }} />
-            Complete →
-          </button>
-        </div>
       </div>
 
       {/* SECTION 1: ORDER INFORMATION */}
@@ -1705,7 +1674,7 @@ export default function CreateBomFormPage(props) {
                 cursor: 'pointer'
               }}
             >
-              <option value="">-- Select Transport Mode --</option>
+              <option value="">Select Mode Of Transport</option>
               <option value="Transport">Transport</option>
               <option value="Lorry">Lorry</option>
               <option value="Courier">Courier</option>

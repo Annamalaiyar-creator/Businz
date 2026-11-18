@@ -147,6 +147,16 @@ export async function heartbeatActiveSession() {
         console.log('[SessionService] Session successfully re-registered after server reload.');
         return;
       }
+      const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
+      if ((Date.now() - sessionStartTime) / 1000 > 30) {
+        console.warn('[SessionService] Session expired or invalid. Redirecting to login.');
+        localStorage.removeItem('controlroom_is_authenticated');
+        localStorage.removeItem('controlroom_user_role');
+        localStorage.removeItem('controlroom_device_session_id');
+        localStorage.removeItem('controlroom_session_start_time');
+        window.location.reload();
+        return;
+      }
     }
 
     if (res && res.ok) {

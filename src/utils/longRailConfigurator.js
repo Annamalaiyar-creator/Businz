@@ -104,7 +104,130 @@ export function autoFitRailPieces(targetLengthMm) {
   return best || { 1200: 0, 1800: 0, 2400: 0, 3600: 0, 4800: 0 };
 }
 
-export function calculateLongRailStructure(params = {}, rows = []) {
+/**
+ * Resolve available inventory stock (in pieces) for each standard rail length [4800, 3600, 2400, 1800, 1200] mm.
+ */
+export function getLongRailStockMap(inventoryItems = []) {
+  const stockMap = { 1200: 0, 1800: 0, 2400: 0, 3600: 0, 4800: 0 };
+  if (!Array.isArray(inventoryItems)) return stockMap;
+
+  const lengthMatchers = [
+    { len: 4800, codes: ['CC4.8N', 'CC4.8O', 'LR-4800'], tokens: ['4.8', '4800'] },
+    { len: 3600, codes: ['CC3.6', 'LR-3600'], tokens: ['3.6', '3600'] },
+    { len: 2400, codes: ['CC2.4', 'LR-2400'], tokens: ['2.4', '2400'] },
+    { len: 1800, codes: ['CC1.8', 'LR-1800'], tokens: ['1.8', '1800'] },
+    { len: 1200, codes: ['CC1.2', 'LR-1200'], tokens: ['1.2', '1200'] }
+  ];
+
+  for (const item of inventoryItems) {
+    if (!item) continue;
+    const code = String(item.code || item.sku || '').toUpperCase().trim();
+    const name = String(item.name || '').toLowerCase();
+    const isRailItem =
+      code.startsWith('CC') ||
+      code.startsWith('LR-') ||
+      name.includes('double c rail') ||
+      name.includes('long rail');
+    if (!isRailItem) continue;
+
+    const qty = Math.max(0, Math.floor(Number(item.available ?? item.onHand ?? item.stock ?? 0) || 0));
+    for (const m of lengthMatchers) {
+      const codeHit = m.codes.includes(code);
+      const nameHit = (name.includes('double c rail') || name.includes('long rail')) && m.tokens.some(t => name.includes(t));
+      if (codeHit || nameHit) {
+        stockMap[m.len] += qty;
+        break;
+      }
+    }
+  }
+
+  return stockMap;
+}
+
+/**
+ * Find an optimal combination of [4800, 3600, 2400, 1800, 1200] mm rails
+ * constrained by available stock per slot. Falls back to unconstrained autoFitRailPieces
+ * with stockShortage=true if current stock cannot cover targetLengthMm.
+ */
+export function autoFitRailPiecesWithStock(targetLengthMm, availablePerSlotMap = {}) {
+  const target = Math.max(0, Number(targetLengthMm) || 0);
+  if (target <= 0) {
+    return { pieces: { 1200: 0, 1800: 0, 2400: 0, 3600: 0, 4800: 0 }, stockShortage: false };
+  }
+
+  const cap48 = Math.max(0, Math.floor(Number(availablePerSlotMap[4800]) || 0));
+  const cap36 = Math.max(0, Math.floor(Number(availablePerSlotMap[3600]) || 0));
+  const cap24 = Math.max(0, Math.floor(Number(availablePerSlotMap[2400]) || 0));
+  const cap18 = Math.max(0, Math.floor(Number(availablePerSlotMap[1800]) || 0));
+  const cap12 = Math.max(0, Math.floor(Number(availablePerSlotMap[1200]) || 0));
+
+  let best = null;
+  let bestWaste = Infinity;
+  let bestCount = Infinity;
+
+  const max48 = Math.min(cap48, Math.ceil(target / 4800) + 1);
+  for (let c48 = 0; c48 <= max48; c48++) {
+    const rem48 = target - c48 * 4800;
+    if (rem48 <= 0) {
+      const waste = -rem48;
+      if (waste < bestWaste || (waste === bestWaste && c48 < bestCount)) {
+        bestWaste = waste;
+        bestCount = c48;
+        best = { 1200: 0, 1800: 0, 2400: 0, 3600: 0, 4800: c48 };
+      }
+      break;
+    }
+    const max36 = Math.min(cap36, Math.ceil(rem48 / 3600) + 1);
+    for (let c36 = 0; c36 <= max36; c36++) {
+      const rem36 = rem48 - c36 * 3600;
+      if (rem36 <= 0) {
+        const waste = -rem36;
+        const cnt = c48 + c36;
+        if (waste < bestWaste || (waste === bestWaste && cnt < bestCount)) {
+          bestWaste = waste;
+          bestCount = cnt;
+          best = { 1200: 0, 1800: 0, 2400: 0, 3600: c36, 4800: c48 };
+        }
+        break;
+      }
+      const max24 = Math.min(cap24, Math.ceil(rem36 / 2400) + 1);
+      for (let c24 = 0; c24 <= max24; c24++) {
+        const rem24 = rem36 - c24 * 2400;
+        if (rem24 <= 0) {
+          const waste = -rem24;
+          const cnt = c48 + c36 + c24;
+          if (waste < bestWaste || (waste === bestWaste && cnt < bestCount)) {
+            bestWaste = waste;
+            bestCount = cnt;
+            best = { 1200: 0, 1800: 0, 2400: c24, 3600: c36, 4800: c48 };
+          }
+          break;
+        }
+        const max18 = Math.min(cap18, Math.ceil(rem24 / 1800) + 1);
+        for (let c18 = 0; c18 <= max18; c18++) {
+          const rem18 = rem24 - c18 * 1800;
+          const c12 = rem18 > 0 ? Math.ceil(rem18 / 1200) : 0;
+          if (c12 > cap12) continue;
+          const totalLen = c48 * 4800 + c36 * 3600 + c24 * 2400 + c18 * 1800 + c12 * 1200;
+          const waste = totalLen - target;
+          const cnt = c48 + c36 + c24 + c18 + c12;
+          if (waste >= 0 && (waste < bestWaste || (waste === bestWaste && cnt < bestCount))) {
+            bestWaste = waste;
+            bestCount = cnt;
+            best = { 1200: c12, 1800: c18, 2400: c24, 3600: c36, 4800: c48 };
+          }
+        }
+      }
+    }
+  }
+
+  if (best) {
+    return { pieces: best, stockShortage: false };
+  }
+  return { pieces: autoFitRailPieces(target), stockShortage: true };
+}
+
+export function calculateLongRailStructure(params = {}, rows = [], stockMap = null) {
   const panelWidth = Math.max(1, Number(params.panelWidth) || DEFAULT_LONG_RAIL_PARAMS.panelWidth);
   const clearance = Math.max(0, Number(params.clearance ?? DEFAULT_LONG_RAIL_PARAMS.clearance));
   const pnlToPnl = Math.max(0, Number(params.pnlToPnl ?? DEFAULT_LONG_RAIL_PARAMS.pnlToPnl));
@@ -119,18 +242,50 @@ export function calculateLongRailStructure(params = {}, rows = []) {
   let midClampsQty = 0;
   let joinerPlatesQty = 0;
 
+  const remainingStock = stockMap ? {
+    1200: Math.max(0, Number(stockMap[1200]) || 0),
+    1800: Math.max(0, Number(stockMap[1800]) || 0),
+    2400: Math.max(0, Number(stockMap[2400]) || 0),
+    3600: Math.max(0, Number(stockMap[3600]) || 0),
+    4800: Math.max(0, Number(stockMap[4800]) || 0)
+  } : null;
+  let hasStockShortage = false;
+
   const computedRows = (rows || []).map((row) => {
     const panels = Math.max(0, Number(row.panels) || 0);
     const rowCount = Math.max(0, Number(row.rows) || 0);
-    const pieces = {
-      1200: Math.max(0, Number(row.pieces?.[1200]) || 0),
-      1800: Math.max(0, Number(row.pieces?.[1800]) || 0),
-      2400: Math.max(0, Number(row.pieces?.[2400]) || 0),
-      3600: Math.max(0, Number(row.pieces?.[3600]) || 0),
-      4800: Math.max(0, Number(row.pieces?.[4800]) || 0)
-    };
+    const requiredLength = panels > 0 ? (panels * panelWidth) + ((panels + 1) * pnlToPnl) + (clearance * 2) : 0;
 
-    const requiredLength = (panels * panelWidth) + ((panels + 1) * pnlToPnl) + (clearance * 2);
+    let pieces;
+    let stockShortage = false;
+    if (remainingStock && panels > 0 && rowCount > 0) {
+      const multiplier = rowCount * noOfRails;
+      const perSlotAvail = {
+        1200: Math.floor(remainingStock[1200] / multiplier),
+        1800: Math.floor(remainingStock[1800] / multiplier),
+        2400: Math.floor(remainingStock[2400] / multiplier),
+        3600: Math.floor(remainingStock[3600] / multiplier),
+        4800: Math.floor(remainingStock[4800] / multiplier)
+      };
+      const fitted = autoFitRailPiecesWithStock(requiredLength, perSlotAvail);
+      pieces = fitted.pieces;
+      stockShortage = fitted.stockShortage;
+      if (stockShortage) hasStockShortage = true;
+      for (const len of LONG_RAIL_LENGTHS) {
+        remainingStock[len] = Math.max(0, remainingStock[len] - (pieces[len] * multiplier));
+      }
+    } else if (remainingStock) {
+      pieces = { 1200: 0, 1800: 0, 2400: 0, 3600: 0, 4800: 0 };
+    } else {
+      pieces = {
+        1200: Math.max(0, Number(row.pieces?.[1200]) || 0),
+        1800: Math.max(0, Number(row.pieces?.[1800]) || 0),
+        2400: Math.max(0, Number(row.pieces?.[2400]) || 0),
+        3600: Math.max(0, Number(row.pieces?.[3600]) || 0),
+        4800: Math.max(0, Number(row.pieces?.[4800]) || 0)
+      };
+    }
+
     const proposedLength =
       (pieces[4800] * 4800) +
       (pieces[3600] * 3600) +
@@ -171,7 +326,8 @@ export function calculateLongRailStructure(params = {}, rows = []) {
       requiredLength,
       proposedLength,
       extraLength,
-      rowRailQty
+      rowRailQty,
+      stockShortage
     };
   });
 
@@ -340,6 +496,7 @@ export function calculateLongRailStructure(params = {}, rows = []) {
     subtotal,
     gstAmount,
     grandTotal,
-    items
+    items,
+    hasStockShortage
   };
 }

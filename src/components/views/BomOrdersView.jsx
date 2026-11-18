@@ -1736,7 +1736,7 @@ export default function BomOrdersView(props) {
         });
         if (existingBom) {
           const eCode = existingBom.bomCode || existingBom.code || existingBom.id;
-          alert(`ℹ️ Proforma Invoice (${targetPiNo}) is already converted to BOM (${eCode}). Opening existing BOM order.`, 'BOM Already Exists', 'info');
+          alert(`Proforma Invoice (${targetPiNo}) is already converted to BOM (${eCode}). Opening existing BOM order.`, 'BOM Already Exists', 'info');
           setShowBOMForm(false);
           setActiveSubTab('All');
           setSearchQueryText(eCode);

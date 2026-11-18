@@ -13,6 +13,16 @@ import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { uploadBomDocumentFile, deleteBomDocumentFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
+function getAuthBomHeaders() {
+  const sesId = typeof window !== 'undefined' && window.localStorage
+    ? localStorage.getItem('controlroom_device_session_id')
+    : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(sesId ? { 'x-session-id': sesId } : {})
+  };
+}
+
 /**
  * Helper to deduplicate repeated address segments so delivery address is never printed multiple times
  */
@@ -326,7 +336,7 @@ export default function DispatchPackingModal({
         if (matchedBom) {
           fetch('/api/boms', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthBomHeaders(),
             body: JSON.stringify({ bom: stripDataUrlsFromRecord(matchedBom), isUpdate: true })
           }).catch(() => {});
           window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: matchedBom } }));
@@ -507,7 +517,7 @@ export default function DispatchPackingModal({
         window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
         fetch('/api/boms', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthBomHeaders(),
           body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
         }).catch(() => {});
       }
@@ -678,7 +688,7 @@ export default function DispatchPackingModal({
       try {
         fetch('/api/boms', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthBomHeaders(),
           body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedDraftBom), isUpdate: true })
         }).catch(() => {});
       } catch (_) {}
@@ -691,7 +701,7 @@ export default function DispatchPackingModal({
     }
   };
 
-  const savePackingData = (isPartialSave = false, proceedToLoading = false, sendPartialToAccounts = false) => {
+  const savePackingData = async (isPartialSave = false, proceedToLoading = false, sendPartialToAccounts = false) => {
     if (uploadingCount > 0) {
       alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
       return;
@@ -997,12 +1007,20 @@ export default function DispatchPackingModal({
 
     // 5. Push to server immediately so Accounts sees it across browsers and devices
     try {
-      fetch('/api/boms', {
+      const saveRes = await fetch('/api/boms', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthBomHeaders(),
         body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedPackedBom), isUpdate: true })
-      }).catch(() => {});
-    } catch (_) {}
+      }).catch(() => null);
+      if (!saveRes || !saveRes.ok) {
+        const errPayload = saveRes ? await saveRes.json().catch(() => null) : null;
+        alert(`⚠️ Failed to save packing status to server (HTTP ${saveRes?.status || 'Network Error'}): ${errPayload?.error || errPayload?.message || 'Please refresh or re-login and try again.'}`);
+        return;
+      }
+    } catch (netErr) {
+      alert(`⚠️ Failed to save packing status to server: ${netErr?.message || 'Network Error'}`);
+      return;
+    }
 
     const targetBomCode = dispatchPackingModal.bomCode || dispatchPackingModal.code;
     if (targetBomCode && typeof setInvoiceList === 'function') {

@@ -594,11 +594,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                     <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', margin: 0 }}>
                       Customer GSTIN
                     </label>
-                    {Boolean(gstNo && gstNo.trim().length >= 2 && GST_STATE_MAP[gstNo.trim().substring(0, 2)]) && (
-                      <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700' }}>
-                        State: {GST_STATE_MAP[gstNo.trim().substring(0, 2)]}
-                      </span>
-                    )}
                   </div>
                   <input id="performa-invoice-33aabcv1234f1z5" name="33AABCV1234F1Z5" aria-label="33AABCV1234F1Z5"
                     type="text"
@@ -620,7 +615,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                       width: '100%',
                       height: '42px',
                       borderRadius: '10px',
-                      border: (gstNo && gstNo.trim().length >= 2 && GST_STATE_MAP[gstNo.trim().substring(0, 2)] && billingState && billingState.trim() && GST_STATE_MAP[gstNo.trim().substring(0, 2)].toLowerCase() !== billingState.trim().toLowerCase()) ? '1.5px solid #F87171' : '1px solid #E2E8F0',
+                      border: '1px solid #E2E8F0',
                       padding: '0 14px',
                       fontSize: '13px',
                       fontWeight: '700',
@@ -629,27 +624,6 @@ export default function PiCreatorEditorSection({ ctx }) {
                       boxSizing: 'border-box'
                     }}
                    />
-                  {Boolean(
-                    gstNo && gstNo.trim().length >= 2 &&
-                    GST_STATE_MAP[gstNo.trim().substring(0, 2)] &&
-                    billingState && billingState.trim() &&
-                    GST_STATE_MAP[gstNo.trim().substring(0, 2)].toLowerCase() !== billingState.trim().toLowerCase()
-                  ) && (
-                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#B91C1C', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', padding: '6px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span>GST code ({gstNo.trim().substring(0, 2)}) is for <strong>{GST_STATE_MAP[gstNo.trim().substring(0, 2)]}</strong>, but Billing State is <strong>{billingState}</strong>.</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const correct = GST_STATE_MAP[gstNo.trim().substring(0, 2)];
-                          setBillingState(correct);
-                          if (sameAsBilling) setDeliveryState(correct);
-                        }}
-                        style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', borderRadius: '5px', padding: '3px 8px', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >
-                        Sync to {GST_STATE_MAP[gstNo.trim().substring(0, 2)]}
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
 

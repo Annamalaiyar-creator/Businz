@@ -6586,7 +6586,15 @@ app.post('/api/boms', async (req, res) => {
           if (fs.existsSync(diskPath)) {
             try { currentList = JSON.parse(fs.readFileSync(diskPath, 'utf8')); } catch (_) {}
           }
-          if (!Array.isArray(currentList)) currentList = [];
+          if (!Array.isArray(currentList) || currentList.length === 0) {
+            if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+              currentList = supabaseMemoryStore.bom_store;
+            } else if (Array.isArray(cachedBomsResult) && cachedBomsResult.length > 0) {
+              currentList = cachedBomsResult;
+            } else {
+              currentList = [];
+            }
+          }
 
           let targetCode = incomingCode;
           if (!targetCode || isNew || !currentList.some(b => (b.bomCode || b.code || b.id) === targetCode)) {

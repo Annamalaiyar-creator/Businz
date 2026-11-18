@@ -1033,7 +1033,7 @@ export default function ProductionViewsEngine(props) {
   const [newBomDeliveryProofDoc, setNewBomDeliveryProofDoc] = useState(null);
   const [newBomPaymentProofDoc, setNewBomPaymentProofDoc] = useState(null);
   const [newBomRemarks, setNewBomRemarks] = useState('');
-  const [newBomTransportMode, setNewBomTransportMode] = useState('Transport');
+  const [newBomTransportMode, setNewBomTransportMode] = useState('');
   const [newBomTransporterName, setNewBomTransporterName] = useState('');
   const [newBomDestination, setNewBomDestination] = useState('');
   const [newBomVehicleNo, setNewBomVehicleNo] = useState('');
