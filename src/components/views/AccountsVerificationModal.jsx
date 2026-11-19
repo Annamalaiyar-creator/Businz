@@ -404,16 +404,23 @@ export default function AccountsVerificationModal({
   const currentPayDate = (accVerif.paymentDate !== undefined && accVerif.paymentDate !== null && accVerif.paymentDate !== '')
     ? accVerif.paymentDate 
     : (isAlreadyCompleted ? (accountsVerificationModal?.paymentDate || '') : '');
-  const currentTotalAmount = (accVerif.totalAmount !== undefined && accVerif.totalAmount !== null && accVerif.totalAmount !== '')
-    ? accVerif.totalAmount 
-    : (isAlreadyCompleted ? (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || '')) : '');
+  const hasSavedSlipAmount = isAlreadyCompleted && accVerif.verifiedSlipAmount !== undefined && accVerif.verifiedSlipAmount !== null && accVerif.verifiedSlipAmount !== '';
+  const currentTotalAmount = hasSavedSlipAmount
+    ? accVerif.verifiedSlipAmount
+    : ((accVerif.totalAmount !== undefined && accVerif.totalAmount !== null && accVerif.totalAmount !== '')
+      ? accVerif.totalAmount
+      : (isAlreadyCompleted ? (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || '')) : ''));
   const adjustedAmountRaw = (accVerif.adjustedAmount !== undefined && accVerif.adjustedAmount !== null && accVerif.adjustedAmount !== '')
     ? accVerif.adjustedAmount
     : (accountsVerificationModal?.adjustedAmount !== undefined && accountsVerificationModal?.adjustedAmount !== null ? accountsVerificationModal.adjustedAmount : '');
   const adjustedAmountNum = cleanNum(adjustedAmountRaw, 0);
   const adjustedFromRef = accVerif.adjustedFromRef || accountsVerificationModal?.adjustedFromRef || '';
   const adjustedNote = accVerif.adjustedNote || accountsVerificationModal?.adjustedNote || '';
-  const verifiedSlipAmountNum = cleanNum(currentTotalAmount, 0);
+  const verifiedSlipAmountNum = hasSavedSlipAmount
+    ? cleanNum(accVerif.verifiedSlipAmount, 0)
+    : (isAlreadyCompleted && adjustedAmountNum > 0 && cleanNum(currentTotalAmount, 0) >= adjustedAmountNum
+      ? Math.max(0, cleanNum(currentTotalAmount, 0) - adjustedAmountNum)
+      : cleanNum(currentTotalAmount, 0));
   const effectiveTotalAmountNum = verifiedSlipAmountNum + adjustedAmountNum;
 
   const payType = accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3 || '';
