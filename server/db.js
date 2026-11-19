@@ -781,6 +781,22 @@ export async function initPostgresDatabase() {
       } else {
         console.log('✅ [PostgreSQL] Tables verified. Database is ready.');
       }
+
+      // Ensure CEO Credit Approval columns exist on public.customers
+      try {
+        await client.query(`
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_approved BOOLEAN DEFAULT FALSE;
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_status TEXT DEFAULT 'none';
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_requested_limit NUMERIC DEFAULT 0;
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_requested_by TEXT DEFAULT '';
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_requested_at TIMESTAMPTZ;
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_approved_by TEXT DEFAULT '';
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_approved_at TIMESTAMPTZ;
+          ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS credit_rejection_reason TEXT DEFAULT '';
+        `);
+      } catch (creditColErr) {
+        console.warn('⚠️ [PostgreSQL Credit Columns Notice]:', creditColErr.message);
+      }
     } catch (schemaErr) {
       console.warn('⚠️ [PostgreSQL Schema Notice]:', schemaErr.message);
     }

@@ -7,6 +7,7 @@ import { isTamilNaduIntra } from '../../utils/gstHelper';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
 import { resolvePiSalesPersonName } from './piHelpers';
+import { findMatchingCustomerRecord, evaluateCreditEligibility } from '../../utils/creditCustomerHelper';
 
 export function createPiActionHandlers(ctx) {
   const {
@@ -796,6 +797,25 @@ export function createPiActionHandlers(ctx) {
           field: 'Incomplete Item Details',
           message: invalid.join(' • '),
           targetId: 'pi-field-items'
+        });
+      }
+    }
+
+    if (normalizePaymentTerm(paymentTerms) === 'Credit Payment') {
+      const custRecord = findMatchingCustomerRecord(ctx.uniqueCustomerList || [], {
+        companyName: vendorName,
+        gstNo
+      });
+      const creditEval = evaluateCreditEligibility({
+        customer: custRecord,
+        bomStore: bomList || [],
+        orderTotal: calculatePiTotals?.()?.grand || 0
+      });
+      if (!creditEval.canUseCredit) {
+        missingList.push({
+          field: 'Credit Payment Not Allowed',
+          message: creditEval.reason,
+          targetId: 'performa-invoice-payment-terms'
         });
       }
     }

@@ -7,6 +7,7 @@ import { notifyBomCreatedToSales } from '../../../services/notificationService';
 import { getNextSequence } from '../../../utils/sequenceGenerator';
 import { resolveBomItemDispatchQty } from '../../../utils/vrmProductsData';
 import { extractGstRate } from '../../../utils/gstHelper';
+import { findMatchingCustomerRecord, evaluateCreditEligibility } from '../../../utils/creditCustomerHelper';
 
 function buildBomEditChanges(oldBom, nextBom) {
   if (!oldBom || !nextBom) return ['BOM details updated'];
@@ -243,6 +244,24 @@ export default function BomCreateSubmitModal({ ctx }) {
                       setNewBomPaymentProofDoc(null);
                       setNewBomDeliveryProofDoc(null);
                     } else if (bomConfirmModal === 'draft' || bomConfirmModal === 'create') {
+                      if (newBomDocType !== 'DC' && normalizePaymentTerm(newBomPaymentType) === 'Credit Payment') {
+                        const creditCust = findMatchingCustomerRecord(customerList, {
+                          companyName: newBomCompanyName,
+                          customerName: newBomProductName,
+                          gstNo: newBomGstNo
+                        });
+                        const creditEval = evaluateCreditEligibility({
+                          customer: creditCust,
+                          bomStore: bomStore || [],
+                          orderTotal: cleanNum(totals?.grand, 0),
+                          excludeBomCode: editingBomRecord?.bomCode || editingBomRecord?.code || null
+                        });
+                        if (!creditEval.canUseCredit) {
+                          setBomConfirmModal(null);
+                          alert(`⛔ Credit Payment Blocked\n\n${creditEval.reason}`);
+                          return;
+                        }
+                      }
                       // MULTI-CLICK MUTEX GUARD: Drop any secondary clicks while submitting
                       if (isSubmittingBomRef.current) {
                         console.warn('BOM creation already in progress. Ignoring duplicate click.');

@@ -22,6 +22,7 @@ import CeoProductionAnalyticsSection from './CeoProductionAnalyticsSection';
 import CeoProcurementAnalyticsSection from './CeoProcurementAnalyticsSection';
 import CeoAccountsAnalyticsSection from './CeoAccountsAnalyticsSection';
 import CeoSalesAnalyticsSection from './CeoSalesAnalyticsSection';
+import CeoCreditApprovalsCard from './CeoCreditApprovalsCard';
 import { getBomStageTiming } from './BomOrdersView';
 import { isBomAddressProofPending } from './bom/bomStageHelpers';
 
@@ -5146,6 +5147,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               </table>
             </div>
           </div>
+
+          <CeoCreditApprovalsCard />
         </div>
       )}
 

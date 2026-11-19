@@ -332,7 +332,9 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
           gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
           dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
           same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
-          source, primary_contact, email, phone, status, notes, created_at, updated_at
+          source, primary_contact, email, phone, status, notes, created_at, updated_at,
+          credit_approved, credit_status, credit_requested_limit, credit_requested_by,
+          credit_requested_at, credit_approved_by, credit_approved_at, credit_rejection_reason
         FROM public.customers
         ORDER BY created_at DESC NULLS LAST, company_name ASC
       `);
@@ -406,6 +408,14 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
           sameAsBilling: Boolean(c.same_as_billing),
           creditLimit: Number(c.credit_limit || 0),
           creditDays: Number(c.credit_days || 0),
+          creditApproved: Boolean(c.credit_approved || String(c.credit_status || '').toLowerCase() === 'approved'),
+          creditStatus: String(c.credit_status || (c.credit_approved ? 'approved' : 'none')).toLowerCase(),
+          creditRequestedLimit: Number(c.credit_requested_limit || 0),
+          creditRequestedBy: c.credit_requested_by || '',
+          creditRequestedAt: c.credit_requested_at || null,
+          creditApprovedBy: c.credit_approved_by || '',
+          creditApprovedAt: c.credit_approved_at || null,
+          creditRejectionReason: c.credit_rejection_reason || '',
           paymentTerms: c.payment_terms || 'Due on Receipt',
           assignedSalesperson: c.assigned_salesperson || 'Sales Rep',
           salesPerson: c.assigned_salesperson || 'Sales Rep',
@@ -4772,9 +4782,65 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
                          '';
     const effectiveEmail = String(incoming.email || incoming.primaryContact?.email || matchedExisting?.email || matchedExisting?.primaryContact?.email || '').trim();
     const effectivePhone = String(incoming.phone || incoming.mobile || incoming.primaryContact?.phone || matchedExisting?.phone || matchedExisting?.primaryContact?.phone || '').trim();
-    const safeCreditLimit = parseSafeNumber(incoming.creditLimit ?? matchedExisting?.creditLimit, 2500000);
-    const safeCreditDays = Math.trunc(parseSafeNumber(incoming.creditDays ?? matchedExisting?.creditDays, 30));
-    const { isNew: _omitIsNew, ...incomingRest } = incoming;
+    const isCallerExecutive = isExecutiveOrAdminRole(req.userSession?.role);
+    const prevCreditApproved = Boolean(matchedExisting?.creditApproved || String(matchedExisting?.creditStatus || '').toLowerCase() === 'approved');
+    const prevCreditStatus = String(matchedExisting?.creditStatus || (prevCreditApproved ? 'approved' : 'none')).toLowerCase();
+    const prevCreditLimit = parseSafeNumber(matchedExisting?.creditLimit, 0);
+    const wantsCreditRequest = Boolean(
+      incoming.requestCreditApproval === true ||
+      String(incoming.creditStatus || '').toLowerCase() === 'pending_ceo_approval'
+    );
+    const incomingReqLimit = parseSafeNumber(incoming.creditRequestedLimit ?? incoming.creditLimit, 0);
+
+    let finalCreditApproved = prevCreditApproved;
+    let finalCreditStatus = prevCreditStatus;
+    let finalCreditLimit = prevCreditLimit;
+    let finalCreditRequestedLimit = parseSafeNumber(matchedExisting?.creditRequestedLimit, 0);
+    let finalCreditRequestedBy = matchedExisting?.creditRequestedBy || '';
+    let finalCreditRequestedAt = matchedExisting?.creditRequestedAt || null;
+    let finalCreditApprovedBy = matchedExisting?.creditApprovedBy || '';
+    let finalCreditApprovedAt = matchedExisting?.creditApprovedAt || null;
+    let finalCreditRejectionReason = matchedExisting?.creditRejectionReason || '';
+    let notifyCeoCreditRequest = false;
+
+    if (isCallerExecutive) {
+      if (incoming.creditApproved === true || String(incoming.creditStatus || '').toLowerCase() === 'approved') {
+        finalCreditApproved = true;
+        finalCreditStatus = 'approved';
+        finalCreditLimit = parseSafeNumber(incoming.creditLimit ?? incoming.creditRequestedLimit ?? prevCreditLimit, 0);
+        finalCreditApprovedBy = req.userSession?.user || req.userSession?.empCode || 'CEO';
+        finalCreditApprovedAt = new Date().toISOString();
+        finalCreditRejectionReason = '';
+      } else if (String(incoming.creditStatus || '').toLowerCase() === 'rejected') {
+        finalCreditApproved = false;
+        finalCreditStatus = 'rejected';
+        finalCreditLimit = 0;
+        finalCreditApprovedBy = req.userSession?.user || req.userSession?.empCode || 'CEO';
+        finalCreditApprovedAt = new Date().toISOString();
+        finalCreditRejectionReason = String(incoming.creditRejectionReason || '').trim();
+      } else if (incoming.creditApproved === false && String(incoming.creditStatus || '').toLowerCase() === 'none') {
+        finalCreditApproved = false;
+        finalCreditStatus = 'none';
+        finalCreditLimit = 0;
+        finalCreditRejectionReason = '';
+      } else if (incoming.creditLimit !== undefined && finalCreditApproved) {
+        finalCreditLimit = parseSafeNumber(incoming.creditLimit, prevCreditLimit);
+      }
+    } else if (wantsCreditRequest && !prevCreditApproved) {
+      finalCreditApproved = false;
+      finalCreditStatus = 'pending_ceo_approval';
+      finalCreditRequestedLimit = 0;
+      finalCreditRequestedBy = req.userSession?.user || req.userSession?.empCode || incoming.assignedSalesperson || 'Sales';
+      finalCreditRequestedAt = new Date().toISOString();
+      finalCreditRejectionReason = '';
+      notifyCeoCreditRequest = prevCreditStatus !== 'pending_ceo_approval';
+    }
+
+    const safeCreditLimit = finalCreditLimit;
+    const safeCreditDays = isCallerExecutive
+      ? Math.trunc(parseSafeNumber(incoming.creditDays ?? matchedExisting?.creditDays, 30))
+      : Math.trunc(parseSafeNumber(matchedExisting?.creditDays, 0));
+    const { isNew: _omitIsNew, requestCreditApproval: _omitReqFlag, ...incomingRest } = incoming;
 
     const localCustomerRecord = {
       ...(matchedExisting || {}),
@@ -4808,6 +4874,15 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
       sameAsBilling: incoming.sameAsBilling !== undefined ? incoming.sameAsBilling : (matchedExisting?.sameAsBilling ?? true),
       creditLimit: safeCreditLimit,
       creditDays: safeCreditDays,
+      creditApproved: finalCreditApproved,
+      creditStatus: finalCreditStatus,
+      creditRequestedLimit: finalCreditRequestedLimit,
+      creditRequestedBy: finalCreditRequestedBy,
+      creditRequestedAt: finalCreditRequestedAt,
+      creditApprovedBy: finalCreditApprovedBy,
+      creditApprovedAt: finalCreditApprovedAt,
+      creditRejectionReason: finalCreditRejectionReason,
+      _notifyCeoCreditRequest: notifyCeoCreditRequest,
       paymentTerms: incoming.paymentTerms || matchedExisting?.paymentTerms || '50% Advance + 50% Dispatch',
       assignedSalesperson: incoming.assignedSalesperson || incoming.salesPerson || incoming.salesperson || incoming.salesRep || incoming.c8 || incoming.createdBy || matchedExisting?.assignedSalesperson || '',
       salesPerson: incoming.salesPerson || incoming.assignedSalesperson || incoming.salesperson || incoming.salesRep || incoming.createdBy || matchedExisting?.salesPerson || '',
@@ -4886,13 +4961,18 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
           gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
           dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
           same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
-          source, primary_contact, email, phone, status, notes, created_at, updated_at
+          source, primary_contact, email, phone, status, notes,
+          credit_approved, credit_status, credit_requested_limit, credit_requested_by,
+          credit_requested_at, credit_approved_by, credit_approved_at, credit_rejection_reason,
+          created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6,
           $7, $8, $9, $10, $11, $12, $13,
           $14, $15, $16, $17, $18,
           $19, $20, $21, $22, $23,
-          $24, $25, $26, $27, $28, $29, NOW(), NOW()
+          $24, $25, $26, $27, $28, $29,
+          $30, $31, $32, $33, $34, $35, $36, $37,
+          NOW(), NOW()
         )
         ON CONFLICT (customer_code) DO UPDATE SET
           company_name = EXCLUDED.company_name,
@@ -4922,6 +5002,14 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
           phone = EXCLUDED.phone,
           status = EXCLUDED.status,
           notes = EXCLUDED.notes,
+          credit_approved = EXCLUDED.credit_approved,
+          credit_status = EXCLUDED.credit_status,
+          credit_requested_limit = EXCLUDED.credit_requested_limit,
+          credit_requested_by = EXCLUDED.credit_requested_by,
+          credit_requested_at = EXCLUDED.credit_requested_at,
+          credit_approved_by = EXCLUDED.credit_approved_by,
+          credit_approved_at = EXCLUDED.credit_approved_at,
+          credit_rejection_reason = EXCLUDED.credit_rejection_reason,
           updated_at = NOW()
       `, [
         dbRowId,
@@ -4952,8 +5040,34 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
         record.email || '',
         record.phone || '',
         record.status,
-        record.notes || ''
+        record.notes || '',
+        Boolean(record.creditApproved),
+        record.creditStatus || 'none',
+        parseSafeNumber(record.creditRequestedLimit, 0),
+        record.creditRequestedBy || '',
+        record.creditRequestedAt || null,
+        record.creditApprovedBy || '',
+        record.creditApprovedAt || null,
+        record.creditRejectionReason || ''
       ]);
+      if (record._notifyCeoCreditRequest) {
+        delete record._notifyCeoCreditRequest;
+        createInternalNotification({
+          eventType: 'CUSTOMER_CREDIT_APPROVAL_REQUESTED',
+          documentType: 'CUSTOMER',
+          documentId: record.customerCode,
+          title: 'Credit Approval Requested',
+          message: `${record.creditRequestedBy || 'Sales'} requested Credit Facility approval for ${record.companyName} (${record.customerCode}). Please review and set the Credit Limit.`,
+          actorEmpCode: req.userSession?.empCode || '',
+          actorName: req.userSession?.user || 'Sales',
+          actorRole: req.userSession?.role || 'Sales',
+          targetRoles: ['CEO', 'MD', 'Managing Director', 'Technical Administrator'],
+          targetTab: 'CEO Dashboard',
+          targetRecordId: record.customerCode
+        }).catch(() => {});
+      } else {
+        delete record._notifyCeoCreditRequest;
+      }
     } catch (pgErr) {
       console.error('[POST /api/customers Postgres write error]:', pgErr.message);
       if (isDbConnected()) {
@@ -5079,8 +5193,16 @@ app.get('/api/customers', async (req, res) => {
         source: c.source || 'Direct',
         notes: c.notes || '',
         paymentTerms: c.paymentTerms || '',
-        creditLimit: c.creditLimit || 0,
-        creditDays: c.creditDays || 0,
+        creditLimit: Number(c.creditLimit || 0),
+        creditDays: Number(c.creditDays || 0),
+        creditApproved: Boolean(c.creditApproved || String(c.creditStatus || '').toLowerCase() === 'approved'),
+        creditStatus: String(c.creditStatus || (c.creditApproved ? 'approved' : 'none')).toLowerCase(),
+        creditRequestedLimit: Number(c.creditRequestedLimit || 0),
+        creditRequestedBy: c.creditRequestedBy || '',
+        creditRequestedAt: c.creditRequestedAt || null,
+        creditApprovedBy: c.creditApprovedBy || '',
+        creditApprovedAt: c.creditApprovedAt || null,
+        creditRejectionReason: c.creditRejectionReason || '',
         assignedSalesperson: c.assignedSalesperson || c.salesPerson || 'Sales Rep',
         status: (c.status || 'Active').toUpperCase(),
         createdAt: c.createdAt || c.created_at || '',
@@ -5116,6 +5238,213 @@ app.get('/api/customers', async (req, res) => {
   } catch (err) {
     console.error('Error in GET /api/customers:', err);
     return res.json([]);
+  }
+});
+
+// CEO Credit Customer Approval Endpoints (Single-row PostgreSQL updates per Rule 2 & Rule 4)
+app.get('/api/customers/credit-requests', requireBusinzSession, async (req, res) => {
+  try {
+    const customers = await loadDatabaseCustomers();
+    const rawAll = (customers && customers.length > 0) ? customers : loadLocalCustomers();
+    const all = deduplicateCustomerRecords(rawAll);
+    const summarize = (c) => ({
+      customerCode: c.customerCode || c.code || c.id || '',
+      companyName: c.companyName || c.name || c.c2 || '',
+      contactPerson: c.contactPerson || c.contact || c.primaryContact?.name || '',
+      phone: c.phone || c.mobile || c.primaryContact?.phone || '',
+      gstNo: c.gstNumber || c.gstNo || '',
+      city: c.city || '',
+      assignedSalesperson: c.assignedSalesperson || c.salesPerson || '',
+      creditApproved: Boolean(c.creditApproved || String(c.creditStatus || '').toLowerCase() === 'approved'),
+      creditStatus: String(c.creditStatus || (c.creditApproved ? 'approved' : 'none')).toLowerCase(),
+      creditLimit: Number(c.creditLimit || 0),
+      creditDays: Number(c.creditDays || 30),
+      creditRequestedLimit: Number(c.creditRequestedLimit || 0),
+      creditRequestedBy: c.creditRequestedBy || '',
+      creditRequestedAt: c.creditRequestedAt || null,
+      creditApprovedBy: c.creditApprovedBy || '',
+      creditApprovedAt: c.creditApprovedAt || null,
+      creditRejectionReason: c.creditRejectionReason || ''
+    });
+
+    const pending = all
+      .filter(c => String(c.creditStatus || '').toLowerCase() === 'pending_ceo_approval')
+      .map(summarize)
+      .slice(0, 200);
+    const approved = all
+      .filter(c => Boolean(c.creditApproved) || String(c.creditStatus || '').toLowerCase() === 'approved')
+      .map(summarize)
+      .slice(0, 500);
+
+    return res.json({ success: true, pending, approved });
+  } catch (err) {
+    console.error('[GET /api/customers/credit-requests] error:', err?.message || err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to load credit requests' });
+  }
+});
+
+app.post('/api/customers/:customerCode/credit-decision', requireRole(['ceo', 'md', 'managing director', 'technical administrator', 'admin']), async (req, res) => {
+  try {
+    const rawCode = decodeURIComponent(String(req.params.customerCode || '')).trim();
+    if (!rawCode) {
+      return res.status(400).json({ success: false, error: 'Customer code is required' });
+    }
+    const { decision, creditLimit, creditDays, rejectionReason } = req.body || {};
+    const normDecision = String(decision || '').trim().toLowerCase();
+    if (!['approve', 'approved', 'reject', 'rejected', 'revoke'].includes(normDecision)) {
+      return res.status(400).json({ success: false, error: 'decision must be approve, reject, or revoke' });
+    }
+
+    const isApprove = normDecision === 'approve' || normDecision === 'approved';
+    const isRevoke = normDecision === 'revoke';
+    const finalApproved = isApprove;
+    const finalStatus = isApprove ? 'approved' : (isRevoke ? 'none' : 'rejected');
+    const finalLimit = isApprove ? parseSafeNumber(creditLimit, 0) : 0;
+    const finalDays = Math.max(1, Math.min(365, Math.trunc(parseSafeNumber(creditDays, 30)) || 30));
+    if (isApprove && finalLimit <= 0) {
+      return res.status(400).json({ success: false, error: 'Please enter an approved Credit Limit greater than ₹0.' });
+    }
+    const approverName = req.userSession?.user || req.userSession?.empCode || 'CEO';
+    const cleanReason = isApprove ? '' : String(rejectionReason || '').trim();
+    const nowIso = new Date().toISOString();
+
+    if (isDbConnected()) {
+      const upd = await query(
+        `UPDATE public.customers
+         SET credit_approved = $1,
+             credit_status = $2,
+             credit_limit = $3,
+             credit_days = $4,
+             credit_approved_by = $5,
+             credit_approved_at = NOW(),
+             credit_rejection_reason = $6,
+             updated_at = NOW()
+         WHERE LOWER(customer_code) = LOWER($7) OR LOWER(id) = LOWER($7)
+         RETURNING customer_code, company_name, credit_requested_by, assigned_salesperson`,
+        [finalApproved, finalStatus, finalLimit, finalDays, approverName, cleanReason, rawCode]
+      );
+      if (!upd || upd.rowCount === 0) {
+        return res.status(404).json({ success: false, error: `Customer "${rawCode}" not found in database.` });
+      }
+    }
+
+    // Update in-memory customer cache & local JSON cache in place (single matching record)
+    let updatedCustomer = null;
+    const updateListInPlace = (arr) => {
+      if (!Array.isArray(arr)) return;
+      for (let i = 0; i < arr.length; i++) {
+        const c = arr[i];
+        const codeMatch = String(c?.customerCode || c?.code || c?.id || '').trim().toLowerCase() === rawCode.toLowerCase();
+        if (codeMatch) {
+          arr[i] = {
+            ...c,
+            creditApproved: finalApproved,
+            creditStatus: finalStatus,
+            creditLimit: finalLimit,
+            creditDays: finalDays,
+            creditApprovedBy: approverName,
+            creditApprovedAt: nowIso,
+            creditRejectionReason: cleanReason,
+            updatedAt: nowIso
+          };
+          updatedCustomer = arr[i];
+        }
+      }
+    };
+    updateListInPlace(supabaseMemoryStore.customer_store);
+    const diskCustomers = loadLocalCustomers();
+    updateListInPlace(diskCustomers);
+    try { saveLocalCustomers(diskCustomers); } catch (_) {}
+
+    if (updatedCustomer) {
+      createInternalNotification({
+        eventType: isApprove ? 'CUSTOMER_CREDIT_APPROVED' : 'CUSTOMER_CREDIT_REJECTED',
+        documentType: 'CUSTOMER',
+        documentId: updatedCustomer.customerCode || rawCode,
+        title: isApprove ? 'Credit Approved by CEO' : (isRevoke ? 'Credit Facility Revoked' : 'Credit Request Rejected'),
+        message: isApprove
+          ? `CEO approved Credit Facility for ${updatedCustomer.companyName} (${rawCode}) with limit ₹${finalLimit.toLocaleString('en-IN')} (${finalDays} days).`
+          : `Credit request for ${updatedCustomer.companyName} (${rawCode}) was ${isRevoke ? 'revoked' : 'rejected'}${cleanReason ? `: ${cleanReason}` : '.'}`,
+        actorEmpCode: req.userSession?.empCode || '',
+        actorName: approverName,
+        actorRole: req.userSession?.role || 'CEO',
+        targetRoles: ['Sales', 'Sales Executive', 'Sales Head', 'Accounts'],
+        targetTab: 'Customers',
+        targetRecordId: updatedCustomer.customerCode || rawCode
+      }).catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      customer: updatedCustomer || {
+        customerCode: rawCode,
+        creditApproved: finalApproved,
+        creditStatus: finalStatus,
+        creditLimit: finalLimit,
+        creditDays: finalDays,
+        creditApprovedBy: approverName,
+        creditApprovedAt: nowIso,
+        creditRejectionReason: cleanReason
+      }
+    });
+  } catch (err) {
+    console.error('[POST /api/customers/:customerCode/credit-decision] error:', err?.message || err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to update credit decision' });
+  }
+});
+
+app.post('/api/customers/credit-bulk-approve', requireRole(['ceo', 'md', 'managing director', 'technical administrator', 'admin']), async (req, res) => {
+  try {
+    const entries = Array.isArray(req.body?.customers) ? req.body.customers : [];
+    if (entries.length === 0) {
+      return res.status(400).json({ success: false, error: 'customers array is required' });
+    }
+    const approverName = req.userSession?.user || req.userSession?.empCode || 'CEO';
+    const nowIso = new Date().toISOString();
+    const approvedCodes = [];
+    const notFound = [];
+
+    for (const item of entries) {
+      const code = String(item?.customerCode || item?.code || '').trim();
+      const name = String(item?.companyName || item?.name || '').trim();
+      const limitVal = parseSafeNumber(item?.creditLimit, 0);
+      const daysVal = Math.max(1, Math.min(365, Math.trunc(parseSafeNumber(item?.creditDays, 30)) || 30));
+      if (!code && !name) continue;
+
+      if (isDbConnected()) {
+        const upd = code
+          ? await query(
+              `UPDATE public.customers
+               SET credit_approved = TRUE, credit_status = 'approved', credit_limit = $1, credit_days = $2,
+                   credit_approved_by = $3, credit_approved_at = NOW(), credit_rejection_reason = '', updated_at = NOW()
+               WHERE LOWER(customer_code) = LOWER($4) OR LOWER(id) = LOWER($4)
+               RETURNING customer_code`,
+              [limitVal, daysVal, approverName, code]
+            )
+          : await query(
+              `UPDATE public.customers
+               SET credit_approved = TRUE, credit_status = 'approved', credit_limit = $1, credit_days = $2,
+                   credit_approved_by = $3, credit_approved_at = NOW(), credit_rejection_reason = '', updated_at = NOW()
+               WHERE LOWER(TRIM(company_name)) = LOWER(TRIM($4))
+               RETURNING customer_code`,
+              [limitVal, daysVal, approverName, name]
+            );
+        if (upd && upd.rowCount > 0) {
+          approvedCodes.push(upd.rows[0].customer_code);
+        } else {
+          notFound.push(code || name);
+        }
+      }
+    }
+
+    if (approvedCodes.length > 0) {
+      await loadDatabaseCustomers(true).catch(() => {});
+    }
+
+    return res.json({ success: true, approvedCount: approvedCodes.length, approvedCodes, notFound });
+  } catch (err) {
+    console.error('[POST /api/customers/credit-bulk-approve] error:', err?.message || err);
+    return res.status(500).json({ success: false, error: err?.message || 'Bulk credit approval failed' });
   }
 });
 
@@ -8640,6 +8969,31 @@ app.get('/api/purchaseorders/{*id}', async (req, res) => {
 
 
 
+
+// Endpoint to parse an uploaded digital PO PDF and extract form fields (never overwrites BUSINZ PO Number)
+app.post('/api/po/parse-pdf', async (req, res) => {
+  try {
+    const rawBase64 = String(req.body?.fileBase64 || '').trim();
+    if (!rawBase64) {
+      return res.status(400).json({ ok: false, error: 'Missing PDF file data (fileBase64).' });
+    }
+    const base64Body = rawBase64.includes(',') ? rawBase64.split(',').pop() : rawBase64;
+    const pdfBuffer = Buffer.from(base64Body, 'base64');
+    if (pdfBuffer.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: 'PDF file exceeds the 10 MB size limit.' });
+    }
+
+    const { parsePoPdfBuffer } = await import('./poPdfParser.js');
+    const result = await parsePoPdfBuffer(pdfBuffer);
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[PO PDF Parse Error]', err?.message || err);
+    return res.status(400).json({
+      ok: false,
+      error: err?.message || 'Unable to parse the uploaded PO PDF.'
+    });
+  }
+});
 
 // Endpoint to fetch receiving history & cumulative totals for a specific PO
 app.get('/api/po-receiving-history/{*poRef}', async (req, res) => {

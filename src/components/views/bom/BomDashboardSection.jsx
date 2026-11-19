@@ -1069,6 +1069,68 @@ export default function BomDashboardSection({ ctx }) {
                       </div>
                     )}
 
+                    {/* Action Required Banner for Accounts-Requested Address Proof Re-upload */}
+                    {!isCeo && !isCancelled && (row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales') && (
+                      <div style={{
+                        backgroundColor: '#FEF2F2',
+                        border: '1px solid #FCA5A5',
+                        borderRadius: '8px',
+                        padding: '8px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                        marginLeft: '23px',
+                        marginBottom: '8px',
+                        boxShadow: '0 1px 2px rgba(220, 38, 38, 0.08)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: '#DC2626',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <AlertCircle size={12} style={{ color: '#FFFFFF' }} />
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#991B1B' }}>
+                            Action Required: Address Proof Re-upload Requested by Accounts
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#B91C1C' }}>
+                            Upload a verified address proof document (GST / Electricity Bill / Lease Agreement) to clear Accounts hold.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingBomModal({ ...row });
+                          }}
+                          style={{
+                            backgroundColor: '#DC2626',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '5px 12px',
+                            fontSize: '11.5px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            boxShadow: '0 1px 3px rgba(220, 38, 38, 0.25)'
+                          }}
+                        >
+                          <Upload size={12} style={{ color: '#FFFFFF' }} /> Upload Address Proof
+                        </button>
+                      </div>
+                    )}
+
                     {/* Line 3: Stepper Pipeline Card Box or Red Cancelled Info Box */}
                     {isCancelled ? (
                       <div style={{

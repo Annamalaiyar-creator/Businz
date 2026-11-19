@@ -20,6 +20,7 @@ import { uploadBomDocumentFile, validateClientFile } from '../../../utils/bomSto
 import TypeableProductSelect from '../../TypeableProductSelect';
 import SearchablePresetSelector from '../../SearchablePresetSelector';
 import { searchCustomers } from '../../../services/customerService';
+import { findMatchingCustomerRecord, evaluateCreditEligibility } from '../../../utils/creditCustomerHelper';
 import { is5PctSolarProduct } from '../../../utils/hsnCodeService';
 import { PRESET_THEMES, getPresetTheme } from '../../../utils/presetThemes';
 import DispatchMediaThumbnail from '../DispatchMediaThumbnail';
@@ -181,6 +182,18 @@ export default function BomConfirmAuditSection({ ctx }) {
       orderGstAmount = rawGst > 0 ? Math.round(rawGst * 100) / 100 : Math.max(0, Math.round((orderGrandTotal - orderSubTotal) * 100) / 100);
     }
     const grandTotalCalc = orderGrandTotal;
+
+    const reconfirmCreditCustomer = findMatchingCustomerRecord(customerList, {
+      companyName: confirmingBomModal.companyName,
+      customerName: confirmingBomModal.customerName,
+      gstNo: confirmingBomModal.gstNo || confirmingBomModal.gstin
+    });
+    const reconfirmCreditEval = evaluateCreditEligibility({
+      customer: reconfirmCreditCustomer,
+      bomStore: bomStore || [],
+      orderTotal: orderGrandTotal || 0,
+      excludeBomCode: confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id || null
+    });
 
     let sourcePi = null;
     const piNum = confirmingBomModal.sourcePiNo || confirmingBomModal.piNo;
@@ -549,6 +562,8 @@ export default function BomConfirmAuditSection({ ctx }) {
       deliveryAddressProofDoc: savedDeliveryDocs[0] || null,
       deliveryAddressProofDocs: savedDeliveryDocs,
       paymentType: normalizedPayType,
+      paymentTerms: normalizedPayType,
+      piPaymentTerms: normalizedPayType,
       partialAmount: partialAmtVal,
       balanceAmount: balanceAmtVal,
       creditDays: resolvedCreditDays,
@@ -735,32 +750,52 @@ export default function BomConfirmAuditSection({ ctx }) {
           uploadedAt: new Date().toISOString()
         });
       }
-      setConfirmingBomModal(prev => {
-        const prevSingle = prev.deliveryAddressProofDoc;
-        const prevDocs = Array.isArray(prev.deliveryAddressProofDocs) && prev.deliveryAddressProofDocs.length > 0
-          ? prev.deliveryAddressProofDocs
-          : (prevSingle ? [prevSingle] : []);
-        const existingHistory = Array.isArray(prevSingle?.history) ? prevSingle.history : [];
-        const updatedHistory = prevSingle && existingHistory.length === 0 && uploaded.length > 0
-          ? [{
-              name: prevSingle.name || prevSingle.originalName,
-              size: prevSingle.size,
-              storageBucket: prevSingle.storageBucket,
-              storagePath: prevSingle.storagePath,
-              uploadedAt: prevSingle.uploadedAt || new Date().toISOString()
-            }]
-          : existingHistory;
-        const nextDocs = [...prevDocs, ...uploaded];
-        return {
-          ...prev,
-          addressProofReuploadRequested: false,
-          deliveryAddressProofDocs: nextDocs,
-          deliveryAddressProofDoc: {
-            ...nextDocs[0],
-            history: updatedHistory
-          }
-        };
-      });
+      const prevSingle = confirmingBomModal.deliveryAddressProofDoc;
+      const prevDocs = Array.isArray(confirmingBomModal.deliveryAddressProofDocs) && confirmingBomModal.deliveryAddressProofDocs.length > 0
+        ? confirmingBomModal.deliveryAddressProofDocs
+        : (prevSingle ? [prevSingle] : []);
+      const existingHistory = Array.isArray(prevSingle?.history) ? prevSingle.history : [];
+      const updatedHistory = prevSingle && existingHistory.length === 0 && uploaded.length > 0
+        ? [{
+            name: prevSingle.name || prevSingle.originalName,
+            size: prevSingle.size,
+            storageBucket: prevSingle.storageBucket,
+            storagePath: prevSingle.storagePath,
+            uploadedAt: prevSingle.uploadedAt || new Date().toISOString()
+          }]
+        : existingHistory;
+      const nextDocs = [...prevDocs, ...uploaded];
+      const latestDoc = uploaded[uploaded.length - 1] || nextDocs[0];
+      const nextStatus = confirmingBomModal.status === 'Address Proof Requested from Sales'
+        ? (confirmingBomModal.previousStatusBeforeAddressProof || 'Sales Confirmed - Sent to Dispatch')
+        : confirmingBomModal.status;
+      const nextModalRecord = {
+        ...confirmingBomModal,
+        status: nextStatus,
+        addressProofReuploadRequested: false,
+        addressProofUpdatedAt: new Date().toISOString(),
+        deliveryAddressProofDocs: nextDocs,
+        deliveryAddressProofDoc: {
+          ...latestDoc,
+          history: updatedHistory
+        }
+      };
+      setConfirmingBomModal(nextModalRecord);
+
+      if (isAlreadyForwarded) {
+        updateBomInStores(nextModalRecord);
+        const saveRes = await persistBomToServer(nextModalRecord);
+        if (!saveRes || !saveRes.ok) {
+          const errJson = saveRes ? await saveRes.json().catch(() => null) : null;
+          alert(`⚠️ Address proof uploaded, but failed to update BOM on server (HTTP ${saveRes?.status || 'Network Error'}): ${errJson?.error || errJson?.message || 'Please try again.'}`);
+          return;
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: nextModalRecord } }));
+          window.dispatchEvent(new Event('controlroom_storage_update'));
+        } catch (_) {}
+        alert(`✅ Verified Address Proof uploaded and updated for BOM (${bCode})!`);
+      }
     } catch (err) {
       alert(`⚠️ Cannot Proceed: ${err.message}`);
     } finally {
@@ -851,6 +886,10 @@ export default function BomConfirmAuditSection({ ctx }) {
       alert('⚠️ Please keep at least one product or preset item in the BOM before saving.');
       return;
     }
+    if (!isDcOrder && normalizedPayType === 'Credit Payment' && !reconfirmCreditEval.canUseCredit) {
+      alert(`⛔ Credit Payment Blocked\n\n${reconfirmCreditEval.reason}`);
+      return;
+    }
     setIsSavingDraft(true);
     try {
       const { updatedBomData } = buildUpdatedBomPayload(confirmingBomModal.items || [], { confirmAndSend: false });
@@ -896,6 +935,10 @@ export default function BomConfirmAuditSection({ ctx }) {
     );
     if (!isDcOrder && is100OrPartial && !hasProof) {
       alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${normalizedPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
+      return;
+    }
+    if (!isDcOrder && normalizedPayType === 'Credit Payment' && !reconfirmCreditEval.canUseCredit) {
+      alert(`⛔ Credit Payment Blocked\n\n${reconfirmCreditEval.reason}`);
       return;
     }
 
@@ -1594,6 +1637,55 @@ export default function BomConfirmAuditSection({ ctx }) {
                           ))}
                         </div>
                       ) : null}
+
+                      {!isCeo && (confirmingBomModal.addressProofReuploadRequested || confirmingBomModal.status === 'Address Proof Requested from Sales') && (
+                        <div style={{ marginTop: '10px', padding: '12px 14px', backgroundColor: '#FEF2F2', border: '1.5px dashed #F87171', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#991B1B', fontSize: '12px', fontWeight: '800' }}>
+                              <AlertCircle style={{ width: '14px', height: '14px', color: '#DC2626' }} />
+                              <span>Accounts Requested Verified Address Proof Re-upload</span>
+                            </div>
+                            {(() => {
+                              const reqAt = confirmingBomModal.addressProofReuploadRequestedAt || confirmingBomModal.reuploadRequestedAt || confirmingBomModal.reissueRequestedAt;
+                              let mLeft = null;
+                              if (reqAt) {
+                                const ONE_HOUR_MS = 60 * 60 * 1000;
+                                mLeft = Math.max(0, Math.ceil((ONE_HOUR_MS - (Date.now() - new Date(reqAt).getTime())) / 60000));
+                              }
+                              return (
+                                <span style={{ fontSize: '11px', fontWeight: '800', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 8px', borderRadius: '12px', border: '1px solid #FCA5A5' }}>
+                                  ⏱️ 1-Hr SLA: {mLeft !== null ? `${mLeft}m remaining` : 'Active'}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <span style={{ fontSize: '11px', color: '#B91C1C' }}>
+                            Upload the updated GST certificate, Electricity Bill, or Lease Agreement to clear the Accounts re-upload request.
+                          </span>
+                          <div>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#DC2626', color: '#FFFFFF', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: isUploadingProof ? 'wait' : 'pointer', opacity: isUploadingProof ? 0.7 : 1 }}>
+                              <Upload style={{ width: '13px', height: '13px' }} />
+                              {isUploadingProof ? 'Uploading Address Proof...' : 'Upload / Update Address Proof'}
+                              <input
+                                id="bom-reupload-address-proof-input"
+                                name="reuploadAddressProof"
+                                aria-label="Upload Updated Address Proof"
+                                type="file"
+                                multiple
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                style={{ display: 'none' }}
+                                disabled={isUploadingProof}
+                                onChange={async (e) => {
+                                  if (e.target.files && e.target.files.length > 0) {
+                                    await handleUploadReconfirmDeliveryProofs(e.target.files);
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1701,7 +1793,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                     </div>
                   </div>
 
-                  {!isDeliveryMatching ? (
+                  {(!isDeliveryMatching || confirmingBomModal.addressProofReuploadRequested || confirmingBomModal.status === 'Address Proof Requested from Sales') ? (
                     <div style={{ marginTop: '6px', padding: '14px 16px', backgroundColor: '#FEF2F2', border: '1px dashed #F87171', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3434,8 +3526,33 @@ export default function BomConfirmAuditSection({ ctx }) {
                     <option value="100% Paid">100% Paid</option>
                     <option value="Partial Paid">Partial Paid</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
-                    <option value="Credit Payment">Credit Payment</option>
+                    {reconfirmCreditEval.approved && (
+                      <option value="Credit Payment">Credit Payment</option>
+                    )}
                   </select>
+                )}
+                {!isAlreadyForwarded && !isDcOrder && reconfirmCreditEval.approved && normalizedPayType === 'Credit Payment' && (
+                  <div style={{
+                    marginTop: '6px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    backgroundColor: reconfirmCreditEval.exceedsLimit ? '#FEF2F2' : '#F5F3FF',
+                    color: reconfirmCreditEval.exceedsLimit ? '#B91C1C' : '#5B21B6',
+                    border: `1px solid ${reconfirmCreditEval.exceedsLimit ? '#FCA5A5' : '#DDD6FE'}`
+                  }}>
+                    {reconfirmCreditEval.exceedsLimit
+                      ? `⛔ ${reconfirmCreditEval.reason}`
+                      : `✓ Credit Limit: ₹${reconfirmCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${reconfirmCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${reconfirmCreditEval.availableCredit.toLocaleString('en-IN')}`}
+                  </div>
+                )}
+                {!isAlreadyForwarded && !isDcOrder && reconfirmCreditCustomer && !reconfirmCreditEval.approved && (
+                  <div style={{ marginTop: '4px', fontSize: '10.5px', color: '#64748B', fontWeight: '600' }}>
+                    {reconfirmCreditEval.status === 'pending_ceo_approval'
+                      ? '⏳ Credit Payment pending CEO approval for this customer.'
+                      : 'Credit Payment is restricted to CEO-approved credit customers.'}
+                  </div>
                 )}
               </div>
 

@@ -157,26 +157,68 @@ export default function CeoProcurementAnalyticsSection({
       if (key) invCatLookup.set(key, it.category || it.group || 'General Material');
     });
 
+    const CORE_MATERIAL_CATEGORIES = [
+      'Galvalume',
+      'Aluminium Profiles',
+      'HDG Steel',
+      'Fasteners & Accessories',
+      'Solar & BOS',
+      'Others'
+    ];
+    const CORE_MATERIAL_SET = new Set(CORE_MATERIAL_CATEGORIES);
+
+    const normalizeMaterialCategory = (rawText = '') => {
+      const clean = String(rawText || '').trim();
+      if (CORE_MATERIAL_SET.has(clean)) return clean;
+      const lower = clean.toLowerCase();
+      if (!lower) return 'Others';
+      if (
+        lower.includes('galvalume') ||
+        lower.includes('aluzinc') ||
+        lower.includes('az150') ||
+        /\bgal\b/.test(lower) ||
+        lower.includes('(gal)') ||
+        (lower.includes('hat') && lower.includes('purlin'))
+      ) {
+        return 'Galvalume';
+      }
+      if (lower.includes('alu') || lower.includes('6063') || lower.includes('rail') || lower.includes('clamp')) {
+        return 'Aluminium Profiles';
+      }
+      if (lower.includes('hdg') || lower.includes('purlin') || lower.includes('rafter') || lower.includes('leg') || lower.includes('steel') || lower.includes('bracing')) {
+        return 'HDG Steel';
+      }
+      if (lower.includes('bolt') || lower.includes('nut') || lower.includes('washer') || lower.includes('screw') || lower.includes('fastener')) {
+        return 'Fasteners & Accessories';
+      }
+      if (
+        lower.includes('panel') ||
+        lower.includes('inverter') ||
+        lower.includes('cable') ||
+        lower.includes('solar') ||
+        /\bbos\b/.test(lower) ||
+        lower.includes('acdb') ||
+        lower.includes('dcdb') ||
+        lower.includes('earthing') ||
+        lower.includes('lightning') ||
+        lower.includes('spd') ||
+        lower.includes('mcb')
+      ) {
+        return 'Solar & BOS';
+      }
+      return 'Others';
+    };
+
     const inferCategory = (items = []) => {
       if (!Array.isArray(items) || items.length === 0) return 'Others';
       const counts = new Map();
       for (const it of items) {
         const nm = String(it.name || it.itemName || it.description || '').trim();
         const lower = nm.toLowerCase();
-        let cat = invCatLookup.get(lower) || it.category || '';
-        if (!cat) {
-          if (lower.includes('alu') || lower.includes('rail') || lower.includes('clamp')) {
-            cat = 'Aluminium Profiles';
-          } else if (lower.includes('hdg') || lower.includes('purlin') || lower.includes('rafter') || lower.includes('leg') || lower.includes('steel') || lower.includes('bracing')) {
-            cat = 'HDG Steel';
-          } else if (lower.includes('bolt') || lower.includes('nut') || lower.includes('washer') || lower.includes('screw') || lower.includes('fastener')) {
-            cat = 'Fasteners & Accessories';
-          } else if (lower.includes('panel') || lower.includes('inverter') || lower.includes('cable') || lower.includes('solar')) {
-            cat = 'Solar & BOS';
-          } else {
-            cat = 'Others';
-          }
-        }
+        const rawCat = String(it.category || invCatLookup.get(lower) || '').trim();
+        const cat = CORE_MATERIAL_SET.has(rawCat)
+          ? rawCat
+          : normalizeMaterialCategory(`${nm} ${rawCat}`);
         counts.set(cat, (counts.get(cat) || 0) + 1);
       }
       let best = 'Others';
@@ -266,7 +308,7 @@ export default function CeoProcurementAnalyticsSection({
       rawPOs = [
         { poNo: 'PO-00086', vendorName: 'AKEYEM SONS', date: isoDaysAgo(1), deliveryDate: isoDaysAgo(-4), grandTotal: 5248000, status: 'WAITING FOR APPROVAL', items: [{ name: 'Alu. Rail 100 mm', category: 'Aluminium Profiles', qty: 1000, unit: 'NOS', rate: 4447.46, tax: 18 }] },
         { poNo: 'PO-00085', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(2), deliveryDate: isoDaysAgo(-3), grandTotal: 2875600, status: 'MD Approved', items: [{ name: 'LEG 2500 mm (HDG)', category: 'HDG Steel', qty: 800, unit: 'NOS', rate: 3046.19, tax: 18 }] },
-        { poNo: 'PO-00084', vendorName: 'VAIBOV POLES', date: isoDaysAgo(4), deliveryDate: isoDaysAgo(-6), grandTotal: 2164400, status: 'Proceed PO', items: [{ name: 'RAFTER 3900 mm (GAL)', category: 'HDG Steel', qty: 600, unit: 'NOS', rate: 3057.06, tax: 18 }] },
+        { poNo: 'PO-00084', vendorName: 'VAIBOV POLES', date: isoDaysAgo(4), deliveryDate: isoDaysAgo(-6), grandTotal: 2164400, status: 'Proceed PO', items: [{ name: 'RAFTER 3900 mm (GAL)', category: 'Galvalume', qty: 600, unit: 'NOS', rate: 3057.06, tax: 18 }] },
         {
           poNo: 'PO-00083', vendorName: 'KPR Mill', date: isoDaysAgo(6), deliveryDate: isoDaysAgo(1), grandTotal: 1788000, status: 'Partially Received',
           totalOrderedQty: 2000, totalReceivedQty: 1200, grnCount: 1,
@@ -347,7 +389,8 @@ export default function CeoProcurementAnalyticsSection({
           delayDays = ageDays - 15;
         }
       }
-      const category = po.category || inferCategory(po.items);
+      const poItems = Array.isArray(po.items) ? po.items : (Array.isArray(po.lineItems) ? po.lineItems : (Array.isArray(po.line_items) ? po.line_items : []));
+      const category = po.category ? normalizeMaterialCategory(po.category) : inferCategory(poItems);
 
       return {
         id: po.id || poNo,
@@ -474,24 +517,27 @@ export default function CeoProcurementAnalyticsSection({
       };
     });
 
-    // 5. Material Category Wise Purchase
+    // 5. Material Category Wise Purchase (Exact 6 canonical sub-headings)
     const catColors = ['#0E7490', '#059669', '#2563EB', '#D97706', '#7C3AED', '#64748B'];
     const catMap = new Map();
+    CORE_MATERIAL_CATEGORIES.forEach((name) => {
+      catMap.set(name, { name, value: 0, count: 0, orders: [] });
+    });
     normalizedPOs.forEach(p => {
-      const prev = catMap.get(p.category) || { name: p.category, value: 0, count: 0, orders: [] };
+      const bucketName = CORE_MATERIAL_SET.has(p.category) ? p.category : normalizeMaterialCategory(p.category);
+      const prev = catMap.get(bucketName) || catMap.get('Others');
       prev.value += p.value;
       prev.count += 1;
       prev.orders.push(p);
-      catMap.set(p.category, prev);
     });
-    const categorySegments = Array.from(catMap.values())
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6)
-      .map((c, idx) => ({
+    const categorySegments = CORE_MATERIAL_CATEGORIES.map((name, idx) => {
+      const c = catMap.get(name);
+      return {
         ...c,
         color: catColors[idx % catColors.length],
         pct: totalValue > 0 ? ((c.value / totalValue) * 100).toFixed(1) : '0.0'
-      }));
+      };
+    });
 
     // 6. Recently Raised POs
     const recentlyRaised = [...normalizedPOs]
@@ -958,7 +1004,7 @@ export default function CeoProcurementAnalyticsSection({
             <div>
               <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Top Category</div>
               <div style={{ fontSize: '13px', fontWeight: '900', color: '#059669', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {analytics.categorySegments[0]?.name || '—'}
+                {([...analytics.categorySegments].filter(c => c.value > 0).sort((a, b) => b.value - a.value)[0]?.name) || '—'}
               </div>
             </div>
             <div>
@@ -1019,7 +1065,7 @@ export default function CeoProcurementAnalyticsSection({
                     </div>
                   </div>
                   <div style={{ width: '100%', height: '5px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(100, Math.max(2, Number(c.pct)))}%`, height: '100%', backgroundColor: c.color, borderRadius: '999px' }} />
+                    <div style={{ width: `${c.value > 0 ? Math.min(100, Math.max(2, Number(c.pct))) : 0}%`, height: '100%', backgroundColor: c.color, borderRadius: '999px' }} />
                   </div>
                 </button>
               )) : (

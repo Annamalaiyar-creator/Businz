@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Check, Trash2, Eye, FileText, AlertCircle, AlertTriangle, X, CheckCircle, Clock, UploadCloud, Truck, ShoppingCart, Upload, Layers, FileCheck, Image, Lock, Save, Boxes, ArrowLeft
 } from 'lucide-react';
+import { findMatchingCustomerRecord, evaluateCreditEligibility } from '../../../utils/creditCustomerHelper';
 import { isFixedQuantityPreset } from '../../../vrmHdgProposalPresets';
 import {
   VRM_PRODUCTS,
@@ -120,6 +121,24 @@ export default function BomCreateFormSection({ ctx }) {
     editingBomRecord,
     originalPiSnapshot
   } = ctx;
+
+  const createBomCreditCustomer = findMatchingCustomerRecord(customerList, {
+    companyName: newBomCompanyName,
+    customerName: newBomProductName,
+    gstNo: newBomGstNo
+  });
+  const createBomCreditEval = evaluateCreditEligibility({
+    customer: createBomCreditCustomer,
+    bomStore: ctx.bomStore || [],
+    orderTotal: totals?.grand || 0,
+    excludeBomCode: editingBomRecord?.bomCode || editingBomRecord?.code || null
+  });
+
+  useEffect(() => {
+    if (newBomPaymentType === 'Credit Payment' && !createBomCreditEval.approved) {
+      setNewBomPaymentType('100% Paid');
+    }
+  }, [newBomPaymentType, createBomCreditEval.approved, setNewBomPaymentType]);
 
     const handleAddMaterialRow = () => {
       setBomMaterialsList(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', unit: 'NOS', qty: '1', wastage: '0%', rate: '', gstRate: '18%' }]);
@@ -1969,8 +1988,33 @@ export default function BomCreateFormSection({ ctx }) {
                     <option value="100% Paid">100% Paid</option>
                     <option value="Partial Paid">Partial Paid</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
-                    <option value="Credit Payment">Credit Payment</option>
+                    {createBomCreditEval.approved && (
+                      <option value="Credit Payment">Credit Payment</option>
+                    )}
                   </select>
+                )}
+                {newBomDocType !== 'DC' && createBomCreditEval.approved && newBomPaymentType === 'Credit Payment' && (
+                  <div style={{
+                    marginTop: '6px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    backgroundColor: createBomCreditEval.exceedsLimit ? '#FEF2F2' : '#F5F3FF',
+                    color: createBomCreditEval.exceedsLimit ? '#B91C1C' : '#5B21B6',
+                    border: `1px solid ${createBomCreditEval.exceedsLimit ? '#FCA5A5' : '#DDD6FE'}`
+                  }}>
+                    {createBomCreditEval.exceedsLimit
+                      ? `⛔ ${createBomCreditEval.reason}`
+                      : `✓ Credit Limit: ₹${createBomCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${createBomCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${createBomCreditEval.availableCredit.toLocaleString('en-IN')}`}
+                  </div>
+                )}
+                {newBomDocType !== 'DC' && createBomCreditCustomer && !createBomCreditEval.approved && (
+                  <div style={{ marginTop: '4px', fontSize: '10.5px', color: '#64748B', fontWeight: '600' }}>
+                    {createBomCreditEval.status === 'pending_ceo_approval'
+                      ? '⏳ Credit Payment pending CEO approval for this customer.'
+                      : 'Credit Payment is restricted to CEO-approved credit customers.'}
+                  </div>
                 )}
               </div>
 

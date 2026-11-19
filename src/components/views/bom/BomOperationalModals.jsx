@@ -194,9 +194,9 @@ export default function BomOperationalModals({ ctx }) {
               const email = quickPreviewRecord.email || sourcePi?.email || '';
               const gstNo = quickPreviewRecord.gstNo || quickPreviewRecord.gstin || sourcePi?.gstNo || sourcePi?.gst || '—';
 
-              // Payment Terms
+              // Payment Terms (BOM's own paymentType takes precedence over source PI)
               const paymentType = normalizePaymentTerm(
-                sourcePi?.paymentTerms || sourcePi?.paymentType || quickPreviewRecord.paymentType || quickPreviewRecord.paymentTerms || '100% Paid'
+                quickPreviewRecord.paymentType || quickPreviewRecord.paymentTerms || sourcePi?.paymentTerms || sourcePi?.paymentType || '100% Paid'
               );
 
               // Grand Total / Order Value

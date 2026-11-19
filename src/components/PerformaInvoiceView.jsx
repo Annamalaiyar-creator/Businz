@@ -2130,7 +2130,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       setEmail(emailVal);
 
       const termsVal = found.paymentTerms || found.terms || '';
-      if (termsVal) setPaymentTerms(termsVal);
+      if (!paymentTerms && termsVal && String(termsVal).trim() !== '0' && String(termsVal).trim().toLowerCase() !== 'due on receipt') {
+        setPaymentTerms(normalizePaymentTerm(termsVal));
+      }
 
       const bAddrObj = found.billingAddressObj || {};
       const street = (found.billingAddress && found.billingAddress !== '—' ? found.billingAddress : '') ||

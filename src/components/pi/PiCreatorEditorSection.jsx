@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
+import { findMatchingCustomerRecord, evaluateCreditEligibility } from '../../utils/creditCustomerHelper';
 import {
   resolveProductCode,
   isRailPreset,
@@ -116,6 +117,22 @@ export default function PiCreatorEditorSection({ ctx }) {
     triggerSaveConfirm,
     triggerDraftConfirm
   } = ctx;
+
+  const piMatchedCustomer = findMatchingCustomerRecord(uniqueCustomerList, {
+    companyName: vendorName,
+    gstNo
+  });
+  const piCreditEval = evaluateCreditEligibility({
+    customer: piMatchedCustomer,
+    bomStore: ctx.bomList || [],
+    orderTotal: calculatePiTotals?.()?.grand || 0
+  });
+
+  useEffect(() => {
+    if (paymentTerms === 'Credit Payment' && !piCreditEval.approved) {
+      setPaymentTerms('100% Paid');
+    }
+  }, [paymentTerms, piCreditEval.approved, setPaymentTerms]);
 
   // Smooth viewport auto-scroll while dragging a product row near top/bottom edges
   useEffect(() => {
@@ -338,8 +355,33 @@ export default function PiCreatorEditorSection({ ctx }) {
                     <option value="100% Paid">100% Paid</option>
                     <option value="Partial Paid">Partial Paid</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
-                    <option value="Credit Payment">Credit Payment</option>
+                    {piCreditEval.approved && (
+                      <option value="Credit Payment">Credit Payment</option>
+                    )}
                   </select>
+                  {piCreditEval.approved && paymentTerms === 'Credit Payment' && (
+                    <div style={{
+                      marginTop: '6px',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      backgroundColor: piCreditEval.exceedsLimit ? '#FEF2F2' : '#F5F3FF',
+                      color: piCreditEval.exceedsLimit ? '#B91C1C' : '#5B21B6',
+                      border: `1px solid ${piCreditEval.exceedsLimit ? '#FCA5A5' : '#DDD6FE'}`
+                    }}>
+                      {piCreditEval.exceedsLimit
+                        ? `⛔ ${piCreditEval.reason}`
+                        : `✓ Credit Limit: ₹${piCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${piCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${piCreditEval.availableCredit.toLocaleString('en-IN')}`}
+                    </div>
+                  )}
+                  {piMatchedCustomer && !piCreditEval.approved && (
+                    <div style={{ marginTop: '4px', fontSize: '10.5px', color: '#64748B', fontWeight: '600' }}>
+                      {piCreditEval.status === 'pending_ceo_approval'
+                        ? '⏳ Credit Payment pending CEO approval for this customer.'
+                        : 'Credit Payment is restricted to CEO-approved credit customers.'}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
