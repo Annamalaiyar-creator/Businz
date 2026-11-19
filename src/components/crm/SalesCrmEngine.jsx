@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Users, Briefcase, Calendar, MessageSquare, FileText,
   Boxes, BarChart3, Search, Plus, Bell, RefreshCw, ChevronRight, Check, Globe
@@ -14,6 +14,7 @@ import CrmProductCatalog from './CrmProductCatalog';
 import CrmReportsView from './CrmReportsView';
 import IndiaMartSettingsView from './IndiaMartSettingsView';
 import { getNextSequence } from '../../utils/sequenceGenerator';
+import { invalidateCustomerCache } from '../../services/customerService';
 
 import {
   getCrmStore,
@@ -27,6 +28,61 @@ import {
   INITIAL_CRM_QUOTATIONS
 } from '../../services/crmStore';
 import { fetchCloudStore, saveCloudStore, saveCloudOpportunityRow, deleteCloudOpportunityRow } from '../../utils/supabaseDataSync';
+
+const normCustNameKey = (n) => String(n || '')
+  .toLowerCase()
+  .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
+  .replace(/[^a-z0-9]/g, '')
+  .trim();
+
+function toLightweightCustomers(list = []) {
+  return list.slice(0, 500).map(c => ({
+    id: c.id,
+    customerCode: c.customerCode || c.code,
+    code: c.customerCode || c.code,
+    companyName: c.companyName || c.name || c.c2 || '',
+    customerName: c.customerName || c.name || '',
+    contactPerson: c.contactPerson || c.primaryContact?.name || c.customerName || '',
+    contact: c.contact || c.contactPerson || c.primaryContact?.name || c.customerName || '',
+    phone: c.phone || c.c4 || c.primaryContact?.phone || '',
+    email: c.email || c.c5 || c.primaryContact?.email || '',
+    city: c.city || c.billingAddressObj?.city || '',
+    state: c.state || c.billingAddressObj?.state || '',
+    pincode: c.pincode || c.billingAddressObj?.pincode || '',
+    address: c.address || c.billingAddress || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+    address1: c.address1 || c.billingAddress || c.address || c.c6 || c.billingAddressObj?.address1 || '',
+    billingAddress: c.billingAddress || c.address || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+    dispatchAddress: c.dispatchAddress || c.deliveryAddress || c.c7 || c.deliveryAddressObj?.address || '',
+    deliveryAddress: c.deliveryAddress || c.dispatchAddress || c.c7 || c.deliveryAddressObj?.address || '',
+    dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || '',
+    dispatchState: c.dispatchState || c.deliveryAddressObj?.state || '',
+    dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || '',
+    paymentTerms: c.paymentTerms || '',
+    gst: c.gst || c.gstNumber || c.gstNo || '',
+    gstNumber: c.gstNumber || c.gstNo || c.gst || '',
+    gstNo: c.gstNumber || c.gstNo || c.gst || '',
+    status: c.status || 'ACTIVE'
+  }));
+}
+
+function mergeSingleCustomerIntoList(prev = [], customer) {
+  const list = Array.isArray(prev) ? prev : [];
+  if (!customer || typeof customer !== 'object') return list;
+  const custKey = String(customer.customerCode || customer.id || customer.code || '').trim().toLowerCase();
+  const custGst = String(customer.gstNumber || customer.gstNo || customer.gstin || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+  const custName = normCustNameKey(customer.companyName || customer.customerName || customer.name);
+
+  return [customer, ...list.filter(c => {
+    if (!c) return false;
+    const cKey = String(c.customerCode || c.id || c.code || '').trim().toLowerCase();
+    if (custKey && cKey === custKey) return false;
+    const cGst = String(c.gstNumber || c.gstNo || c.gstin || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    if (custGst && cGst && custGst.length >= 10 && custGst === cGst) return false;
+    const cName = normCustNameKey(c.companyName || c.customerName || c.name);
+    if (custName && cName && custName === cName) return false;
+    return true;
+  })];
+}
 
 // Fast shallow list equality check to prevent unnecessary re-renders and flickering
 function areListsEqual(a, b, idKey = 'id') {
@@ -117,6 +173,8 @@ export default function SalesCrmEngine({
 
   // Synchronized States
   const [customers, setCustomers] = useState(() => getCrmStore('customers', INITIAL_CRM_CUSTOMERS));
+  const customersRef = useRef(customers);
+  customersRef.current = customers;
   const [leads, setLeads] = useState(() => getCrmStore('leads', INITIAL_CRM_LEADS));
   const [opportunities, setOpportunities] = useState(() => getCrmStore('opportunities', INITIAL_CRM_OPPORTUNITIES));
   const [followups, setFollowups] = useState(() => getCrmStore('followups', INITIAL_CRM_FOLLOWUPS));
@@ -208,25 +266,30 @@ export default function SalesCrmEngine({
             if (idKey) map.set(idKey, merged);
           };
 
-          // 1. Local browser storage caches
-          try {
-            const storages = [
-              localStorage.getItem('controlroom_customer_store'),
-              localStorage.getItem('businz_crm_customers'),
-              localStorage.getItem('controlroom_crm_customers'),
-              localStorage.getItem('controlroom_customer_list')
-            ];
-            storages.forEach(s => {
-              if (s) {
-                const parsed = JSON.parse(s);
-                if (Array.isArray(parsed)) parsed.forEach(registerCust);
-              }
-            });
-          } catch (_) {}
+          // 1. Authoritative cloud & backend customers first (newest-first order preserved; database wins over cache)
+          const serverCustomers = (Array.isArray(liveList) && liveList.length > 0) ? liveList : (cloudCust || []);
+          serverCustomers.forEach(registerCust);
+          if (serverCustomers !== cloudCust && Array.isArray(cloudCust)) {
+            cloudCust.forEach(registerCust);
+          }
 
-          // 2. Cloud and live backend customers
-          (cloudCust || []).forEach(registerCust);
-          (liveList || []).forEach(registerCust);
+          // 2. Fallback to local browser storage caches ONLY when server/cloud returned no records
+          if (serverCustomers.length === 0) {
+            try {
+              const storages = [
+                localStorage.getItem('controlroom_customer_store'),
+                localStorage.getItem('businz_crm_customers'),
+                localStorage.getItem('controlroom_crm_customers'),
+                localStorage.getItem('controlroom_customer_list')
+              ];
+              storages.forEach(s => {
+                if (s) {
+                  const parsed = JSON.parse(s);
+                  if (Array.isArray(parsed)) parsed.forEach(registerCust);
+                }
+              });
+            } catch (_) {}
+          }
 
           // Canonical deduplication helpers
           const normName = (n) => {
@@ -279,35 +342,10 @@ export default function SalesCrmEngine({
           }
           const unified = Array.from(finalMap.values());
           if (unified.length > 0) {
+            customersRef.current = unified;
             setCustomers(prev => areListsEqual(prev, unified, 'customerCode') ? prev : unified);
             try {
-              const lightweight = unified.map(c => ({
-                id: c.id,
-                customerCode: c.customerCode || c.code,
-                code: c.customerCode || c.code,
-                companyName: c.companyName || c.name || c.c2 || '',
-                customerName: c.customerName || c.name || '',
-                contactPerson: c.contactPerson || c.primaryContact?.name || c.customerName || '',
-                contact: c.contact || c.contactPerson || c.primaryContact?.name || c.customerName || '',
-                phone: c.phone || c.c4 || c.primaryContact?.phone || '',
-                email: c.email || c.c5 || c.primaryContact?.email || '',
-                city: c.city || c.billingAddressObj?.city || '',
-                state: c.state || c.billingAddressObj?.state || '',
-                pincode: c.pincode || c.billingAddressObj?.pincode || '',
-                address: c.address || c.billingAddress || c.address1 || c.c6 || c.billingAddressObj?.address || '',
-                address1: c.address1 || c.billingAddress || c.address || c.c6 || c.billingAddressObj?.address1 || '',
-                billingAddress: c.billingAddress || c.address || c.address1 || c.c6 || c.billingAddressObj?.address || '',
-                dispatchAddress: c.dispatchAddress || c.deliveryAddress || c.c7 || c.deliveryAddressObj?.address || '',
-                deliveryAddress: c.deliveryAddress || c.dispatchAddress || c.c7 || c.deliveryAddressObj?.address || '',
-                dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || '',
-                dispatchState: c.dispatchState || c.deliveryAddressObj?.state || '',
-                dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || '',
-                paymentTerms: c.paymentTerms || '',
-                gst: c.gst || c.gstNumber || c.gstNo || '',
-                gstNumber: c.gstNumber || c.gstNo || c.gst || '',
-                gstNo: c.gstNumber || c.gstNo || c.gst || '',
-                status: c.status || 'ACTIVE'
-              }));
+              const lightweight = toLightweightCustomers(unified);
               localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
               localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
             } catch (_) {}
@@ -381,11 +419,24 @@ export default function SalesCrmEngine({
       }
     };
 
+    // Targeted single-row listener for Customer creates/updates (Rule 5: zero full-table reloads)
+    const handleCustomerRealtime = (e) => {
+      const incoming = e?.detail?.customer || (e?.detail && (e.detail.customerCode || e.detail.companyName || e.detail.id) && !e.detail.type ? e.detail : null);
+      if (!incoming) return;
+      invalidateCustomerCache();
+      const nextList = mergeSingleCustomerIntoList(customersRef.current, incoming);
+      customersRef.current = nextList;
+      setCustomers(nextList);
+      saveCrmStore('customers', nextList);
+    };
+
+    window.addEventListener('controlroom_customer_update', handleCustomerRealtime);
     window.addEventListener('controlroom_opportunity_update', handleOppRealtime);
     window.addEventListener('controlroom_whatsapp_message', handleCrmPush);
 
     return () => {
       isMounted = false;
+      window.removeEventListener('controlroom_customer_update', handleCustomerRealtime);
       window.removeEventListener('controlroom_opportunity_update', handleOppRealtime);
       window.removeEventListener('controlroom_whatsapp_message', handleCrmPush);
     };
@@ -406,40 +457,15 @@ export default function SalesCrmEngine({
       }
     });
     const unified = Array.from(map.values());
+    customersRef.current = unified;
     setCustomers(unified);
     saveCrmStore('customers', unified);
     // User Rule #2 & #3: Save only the changed customer records to cloud store
     saveCloudStore('customer_store', customerList);
     try {
-      const lightweight = unified.map(c => ({
-        id: c.id,
-        customerCode: c.customerCode || c.code,
-        code: c.customerCode || c.code,
-        companyName: c.companyName || c.name || c.c2 || '',
-        customerName: c.customerName || c.name || '',
-        contactPerson: c.contactPerson || c.primaryContact?.name || c.customerName || '',
-        contact: c.contact || c.contactPerson || c.primaryContact?.name || c.customerName || '',
-        phone: c.phone || c.c4 || c.primaryContact?.phone || '',
-        email: c.email || c.c5 || c.primaryContact?.email || '',
-        city: c.city || c.billingAddressObj?.city || '',
-        state: c.state || c.billingAddressObj?.state || '',
-        pincode: c.pincode || c.billingAddressObj?.pincode || '',
-        address: c.address || c.billingAddress || c.address1 || c.c6 || c.billingAddressObj?.address || '',
-        address1: c.address1 || c.billingAddress || c.address || c.c6 || c.billingAddressObj?.address1 || '',
-        billingAddress: c.billingAddress || c.address || c.address1 || c.c6 || c.billingAddressObj?.address || '',
-        dispatchAddress: c.dispatchAddress || c.deliveryAddress || c.c7 || c.deliveryAddressObj?.address || '',
-        deliveryAddress: c.deliveryAddress || c.dispatchAddress || c.c7 || c.deliveryAddressObj?.address || '',
-        dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || '',
-        dispatchState: c.dispatchState || c.deliveryAddressObj?.state || '',
-        dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || '',
-        paymentTerms: c.paymentTerms || '',
-        gst: c.gst || c.gstNumber || c.gstNo || '',
-        gstNumber: c.gstNumber || c.gstNo || c.gst || '',
-        gstNo: c.gstNumber || c.gstNo || c.gst || '',
-        status: c.status || 'ACTIVE'
-      }));
-      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight.slice(0, 500)));
-      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight.slice(0, 500)));
+      const lightweight = toLightweightCustomers(unified);
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
       window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: unified }));
     } catch (e) {}
   };
@@ -521,70 +547,27 @@ export default function SalesCrmEngine({
     });
   };
 
-  const handleSaveCustomer = async (customer) => {
-    const custKey = String(customer.customerCode || customer.id || customer.code || '').trim().toLowerCase();
-    const custGst = String(customer.gstNumber || customer.gstNo || customer.gstin || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
-    const custName = String(customer.companyName || customer.customerName || customer.name || '')
-      .toLowerCase()
-      .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
-      .replace(/[^a-z0-9]/g, '')
-      .trim();
-
-    const updated = [customer, ...customers.filter(c => {
-      const cKey = String(c.customerCode || c.id || c.code || '').trim().toLowerCase();
-      if (custKey && cKey === custKey) return false;
-      const cGst = String(c.gstNumber || c.gstNo || c.gstin || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
-      if (custGst && cGst && custGst.length >= 10 && cGst === custGst) return false;
-      const cName = String(c.companyName || c.customerName || c.name || '')
-        .toLowerCase()
-        .replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '')
-        .replace(/[^a-z0-9]/g, '')
-        .trim();
-      if (custName && cName && custName === cName) return false;
-      return true;
-    })];
+  const handleSaveCustomer = async (customer, options = {}) => {
+    const updated = mergeSingleCustomerIntoList(customersRef.current, customer);
+    customersRef.current = updated;
     setCustomers(updated);
     saveCrmStore('customers', updated);
+    invalidateCustomerCache();
 
-    // Also sync to Supabase canonical customers table so BOM creation and all views pick it up immediately
     try {
-      saveCloudStore('customer_store', customer);
-      const lightweight = updated.map(c => ({
-        id: c.id,
-        customerCode: c.customerCode || c.code,
-        code: c.customerCode || c.code,
-        companyName: c.companyName || c.name || c.c2 || '',
-        customerName: c.customerName || c.name || '',
-        contactPerson: c.contactPerson || c.primaryContact?.name || c.customerName || '',
-        contact: c.contact || c.contactPerson || c.primaryContact?.name || c.customerName || '',
-        phone: c.phone || c.c4 || c.primaryContact?.phone || '',
-        email: c.email || c.c5 || c.primaryContact?.email || '',
-        city: c.city || c.billingAddressObj?.city || '',
-        state: c.state || c.billingAddressObj?.state || '',
-        pincode: c.pincode || c.billingAddressObj?.pincode || '',
-        address: c.address || c.billingAddress || c.address1 || c.c6 || c.billingAddressObj?.address || '',
-        address1: c.address1 || c.billingAddress || c.address || c.c6 || c.billingAddressObj?.address1 || '',
-        billingAddress: c.billingAddress || c.address || c.address1 || c.c6 || c.billingAddressObj?.address || '',
-        dispatchAddress: c.dispatchAddress || c.deliveryAddress || c.c7 || c.deliveryAddressObj?.address || '',
-        deliveryAddress: c.deliveryAddress || c.dispatchAddress || c.c7 || c.deliveryAddressObj?.address || '',
-        dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || '',
-        dispatchState: c.dispatchState || c.deliveryAddressObj?.state || '',
-        dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || '',
-        paymentTerms: c.paymentTerms || '',
-        gst: c.gst || c.gstNumber || c.gstNo || '',
-        gstNumber: c.gstNumber || c.gstNo || c.gst || '',
-        gstNo: c.gstNumber || c.gstNo || c.gst || '',
-        status: c.status || 'ACTIVE'
-      }));
-      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight.slice(0, 500)));
-      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight.slice(0, 500)));
-      window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: customer }));
+      const lightweight = toLightweightCustomers(updated);
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
       window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: updated }));
     } catch (e) {
-      console.warn('Error syncing customer to cloud store:', e);
+      console.warn('Error syncing customer to local cache:', e);
     }
 
-    // Automatically synchronize to Central Store
+    if (options?.skipNetworkSync) {
+      return;
+    }
+
+    // Single targeted Central Store persistence when caller has not already persisted to /api/customers
     try {
       const res = await fetch('/api/customers', {
         method: 'POST',
@@ -594,17 +577,12 @@ export default function SalesCrmEngine({
       if (res.ok) {
         const resJson = await res.json();
         const savedCustomer = resJson?.customer || customer;
-        const withCust = {
-          ...customer,
-          ...savedCustomer
-        };
-        setCustomers(prev => prev.map(c => 
-          (c.customerCode || c.id) === custKey ? withCust : c
-        ));
-        const refreshed = updated.map(c => 
-          (c.customerCode || c.id) === custKey ? withCust : c
-        );
+        const withCust = { ...customer, ...savedCustomer };
+        const refreshed = mergeSingleCustomerIntoList(customersRef.current, withCust);
+        customersRef.current = refreshed;
+        setCustomers(refreshed);
         saveCrmStore('customers', refreshed);
+        invalidateCustomerCache();
       }
     } catch (err) {
       console.warn('Customer background sync notice:', err);

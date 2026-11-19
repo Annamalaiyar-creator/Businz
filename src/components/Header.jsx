@@ -161,6 +161,7 @@ export default function Header({
         padding: '0 16px',
         boxShadow: '0 6px 22px rgba(14, 116, 144, 0.25)',
         position: 'relative',
+        zIndex: 1000,
         color: '#FFFFFF',
         fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
       }}
@@ -328,7 +329,8 @@ export default function Header({
                 border: '1px solid #E2E8F0',
                 boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.25), 0 2px 6px rgba(15, 23, 42, 0.05)',
                 zIndex: 99999,
-                overflow: 'hidden',
+                maxHeight: 'calc(100vh - 84px)',
+                overflowY: 'auto',
                 cursor: 'default',
                 color: '#0F172A',
                 fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
@@ -424,6 +426,7 @@ export default function Header({
                   className="bz-menu-item"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setSavedAccounts(getSavedAccounts());
                     setShowAccountSwitcher((prev) => !prev);
                   }}
                 >

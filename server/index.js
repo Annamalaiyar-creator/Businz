@@ -67,6 +67,7 @@ import {
   getNextSequence
 } from './sequenceService.js';
 import {
+  SESSION_TTL_MS,
   verifyPasswordVerifier,
   hashPassword,
   generateSecureSessionId,
@@ -160,6 +161,16 @@ export const safeWriteJsonFileAsync = (filePath, data) => {
 };
 
 // Canonical Deduplication Helper for Customer Catalogs
+const isValidCustomerCode = (val) => /^(?:VRM-CS-\d{4}-\d+|VRMS\/CS\/\d{2}-\d{2}\/\d+)$/i.test(String(val || '').trim());
+
+const parseSafeNumber = (val, fallback = 0) => {
+  if (typeof val === 'number') return Number.isFinite(val) ? val : fallback;
+  const cleaned = String(val ?? '').replace(/[^0-9.-]/g, '');
+  if (!cleaned) return fallback;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 const deduplicateCustomerRecords = (list) => {
   if (!Array.isArray(list)) return [];
   const normName = (n) => {
@@ -182,7 +193,7 @@ const deduplicateCustomerRecords = (list) => {
     const gKey = normGst(val.gstNumber || val.gstin || val.gstNo);
     const nKey = normName(val.companyName || val.customerName || val.name);
     const rawCode = String(val.customerCode || val.id || val.code || '').trim();
-    const isRealCode = /^VRM-CS-\d{4}-\d+$/i.test(rawCode);
+    const isRealCode = isValidCustomerCode(rawCode);
 
     const dedupKey = gKey ? `gst_${gKey}` : (nKey ? `name_${nKey}` : (isRealCode ? `code_${rawCode.toLowerCase()}` : `fallback_${normName(val.companyName || val.customerName || val.id)}`));
 
@@ -190,7 +201,7 @@ const deduplicateCustomerRecords = (list) => {
       finalMap.set(dedupKey, val);
     } else {
       const existing = finalMap.get(dedupKey);
-      const existingHasRealCode = /^VRM-CS-\d{4}-\d+$/i.test(String(existing.customerCode || existing.code || existing.id || '').trim());
+      const existingHasRealCode = isValidCustomerCode(existing.customerCode || existing.code || existing.id);
       const existingHasGst = normGst(existing.gstNumber || existing.gstin || existing.gstNo);
       const valHasGst = normGst(val.gstNumber || val.gstin || val.gstNo);
 
@@ -205,27 +216,26 @@ const deduplicateCustomerRecords = (list) => {
         gstNo: (existingHasGst || valHasGst || existing.gstNo || val.gstNo || ''),
         companyName: existing.companyName || val.companyName,
         customerName: existing.customerName || val.customerName || existing.companyName || val.companyName,
-        createdAt: existing.createdAt || val.createdAt || new Date().toISOString()
+        customerType: val.customerType || existing.customerType || 'EPC Contractor',
+        industry: val.industry || existing.industry || '',
+        source: val.source || existing.source || 'Direct',
+        email: (val.email && val.email !== '—' ? val.email : '') || (existing.email && existing.email !== '—' ? existing.email : '') || '',
+        phone: (val.phone && val.phone !== '—' ? val.phone : '') || (existing.phone && existing.phone !== '—' ? existing.phone : '') || '',
+        createdAt: existing.createdAt || val.createdAt || new Date().toISOString(),
+        updatedAt: val.updatedAt || existing.updatedAt || new Date().toISOString()
       };
       finalMap.set(dedupKey, merged);
     }
   }
 
-  // Ensure all deduplicated customers strictly follow the VRM-CS-YYYY-XX structure
+  // Ensure all deduplicated customers strictly follow either VRM-CS-YYYY-XX or VRMS/CS/YY-YY/XXX structure
   const result = Array.from(finalMap.values());
   const fy = getFinancialYear();
-  let maxSeq = 0;
-  result.forEach(c => {
-    const m = String(c.customerCode || c.id || c.code || '').match(new RegExp(`^VRM-CS-${fy}-(\\d+)$`, 'i'));
-    if (m && m[1]) {
-      const n = parseInt(m[1], 10);
-      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
-    }
-  });
+  let maxSeq = extractMaxSequence('CS', fy, result);
 
   result.forEach(c => {
     const raw = String(c.customerCode || c.id || c.code || '').trim();
-    if (!/^VRM-CS-\d{4}-\d+$/i.test(raw)) {
+    if (!isValidCustomerCode(raw)) {
       maxSeq++;
       const assigned = `VRM-CS-${fy}-${String(maxSeq).padStart(2, '0')}`;
       c.id = assigned;
@@ -324,7 +334,7 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
           same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
           source, primary_contact, email, phone, status, notes, created_at, updated_at
         FROM public.customers
-        ORDER BY company_name ASC
+        ORDER BY created_at DESC NULLS LAST, company_name ASC
       `);
       if (dbRes && Array.isArray(dbRes.rows) && dbRes.rows.length > 0) {
         data = dbRes.rows;
@@ -341,7 +351,7 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
           same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
           source, primary_contact, email, phone, status, notes, created_at, updated_at
         `)
-        .order('company_name', { ascending: true });
+        .order('created_at', { ascending: false });
       if (!error && Array.isArray(sbData) && sbData.length > 0) {
         data = sbData;
       }
@@ -453,7 +463,7 @@ const loadLocalCustomers = () => {
     const k = name.toLowerCase();
     const idKey = (c.customerCode || c.id || '').toLowerCase().trim();
     const existing = custMap.get(k) || (idKey ? custMap.get(idKey) : null) || {};
-    const validCode = (/^VRM-CS-\d{4}-\d+$/i.test(c.customerCode || c.id || c.code || '')) ? (c.customerCode || c.id || c.code) : (existing.customerCode || '');
+    const validCode = isValidCustomerCode(c.customerCode || c.id || c.code) ? (c.customerCode || c.id || c.code) : (existing.customerCode || '');
     const merged = {
       ...existing,
       ...c,
@@ -1285,77 +1295,88 @@ const saveLocalCustomers = async (customers) => {
   // 1. Fetch current full database customers to merge against (ensuring existing records are NEVER lost)
   const currentDbCustomers = await loadDatabaseCustomers();
   const custMap = new Map();
-  
+
   // Register existing database customers
   (currentDbCustomers || []).forEach(c => {
     const k = String(c.customerCode || c.id || c.code || '').toLowerCase().trim();
     if (k) custMap.set(k, c);
   });
 
-  // Merge or append incoming customer records
+  // Put incoming/updated records at the front so newest entries stay at index 0
+  const fullListMap = new Map();
+  const recordsToUpsert = [];
   incoming.forEach(c => {
     const k = String(c.customerCode || c.id || c.code || '').toLowerCase().trim();
     if (k) {
-      const existing = custMap.get(k) || {};
-      custMap.set(k, { ...existing, ...c });
+      const existing = custMap.get(k);
+      const merged = { ...(existing || {}), ...c };
+      fullListMap.set(k, merged);
+      if (incoming.length <= 50 || !existing) {
+        recordsToUpsert.push(merged);
+      }
     }
   });
+  custMap.forEach((v, k) => {
+    if (!fullListMap.has(k)) fullListMap.set(k, v);
+  });
 
-  const fullList = Array.from(custMap.values());
+  const fullList = Array.from(fullListMap.values());
   supabaseMemoryStore.customer_store = fullList;
   supabaseMemoryStore.crm_customers = fullList;
 
-  // 2. Persist full list to disk files for zero data loss
+  // 2. Persist full list to disk files asynchronously for zero data loss
   try {
     const custPath = getStoreFilePath('customer_store.json');
-    fs.writeFileSync(custPath, JSON.stringify(fullList, null, 2), 'utf8');
+    safeWriteJsonFileAsync(custPath, fullList);
     const crmPath = getStoreFilePath('crm_customers.json');
-    fs.writeFileSync(crmPath, JSON.stringify(fullList, null, 2), 'utf8');
+    safeWriteJsonFileAsync(crmPath, fullList);
   } catch (diskErr) {
     console.warn('[saveLocalCustomers disk write error]:', diskErr?.message);
   }
 
-  // 3. Upsert incoming records to canonical public.customers table (Zero data loss, 1 record changed = 1 write)
-  try {
-    const rows = incoming.map(c => ({
-      id: c.customerCode || c.id || c.code,
-      customer_code: c.customerCode || c.id || c.code,
-      company_name: c.companyName || c.c2 || c.customerName || 'Customer',
-      customer_name: c.customerName || c.c3 || c.companyName || 'Customer',
-      customer_type: c.customerType || 'Customer',
-      industry: c.industry || 'Solar Energy / Infrastructure',
-      gst_number: c.gstNumber || c.gstNo || '—',
-      pan_number: c.panNumber || '—',
-      billing_address: c.billingAddress || c.c6 || c.address || '',
-      city: c.city || (c.billingAddressObj && c.billingAddressObj.city) || '',
-      state: c.state || (c.billingAddressObj && c.billingAddressObj.state) || '',
-      pincode: c.pincode || (c.billingAddressObj && c.billingAddressObj.pincode) || '',
-      billing_address_obj: c.billingAddressObj || {},
-      dispatch_address: c.dispatchAddress || c.c7 || c.deliveryAddress || '',
-      dispatch_city: c.dispatchCity || (c.deliveryAddressObj && c.deliveryAddressObj.city) || '',
-      dispatch_state: c.dispatchState || (c.deliveryAddressObj && c.deliveryAddressObj.state) || '',
-      dispatch_pincode: c.dispatch_pincode || (c.deliveryAddressObj && c.deliveryAddressObj.pincode) || '',
-      delivery_address_obj: c.deliveryAddressObj || {},
-      same_as_billing: Boolean(c.sameAsBilling),
-      credit_limit: Number(c.creditLimit || 0),
-      credit_days: Number(c.creditDays || 0),
-      payment_terms: c.paymentTerms || 'Due on Receipt',
-      assigned_salesperson: c.assignedSalesperson || c.salesPerson || c.c8 || 'Sales Rep',
-      source: c.source || 'Manual',
-      primary_contact: c.primaryContact || {},
-      email: c.email || c.c5 || '—',
-      phone: c.phone || c.c4 || '—',
-      status: (c.status || 'Active').toUpperCase(),
-      notes: c.notes || '',
-      updated_at: new Date().toISOString()
-    }));
+  // 3. Targeted upsert ONLY changed/new incoming records to canonical public.customers (Rule 2 & Rule 3)
+  if (recordsToUpsert.length > 0) {
+    try {
+      const rows = recordsToUpsert.map(c => ({
+        id: c.customerCode || c.id || c.code,
+        customer_code: c.customerCode || c.id || c.code,
+        company_name: c.companyName || c.c2 || c.customerName || 'Customer',
+        customer_name: c.customerName || c.c3 || c.companyName || 'Customer',
+        customer_type: c.customerType || 'Customer',
+        industry: c.industry || 'Solar Energy / Infrastructure',
+        gst_number: c.gstNumber || c.gstNo || '—',
+        pan_number: c.panNumber || '—',
+        billing_address: c.billingAddress || c.c6 || c.address || '',
+        city: c.city || (c.billingAddressObj && c.billingAddressObj.city) || '',
+        state: c.state || (c.billingAddressObj && c.billingAddressObj.state) || '',
+        pincode: c.pincode || (c.billingAddressObj && c.billingAddressObj.pincode) || '',
+        billing_address_obj: c.billingAddressObj || {},
+        dispatch_address: c.dispatchAddress || c.c7 || c.deliveryAddress || '',
+        dispatch_city: c.dispatchCity || (c.deliveryAddressObj && c.deliveryAddressObj.city) || '',
+        dispatch_state: c.dispatchState || (c.deliveryAddressObj && c.deliveryAddressObj.state) || '',
+        dispatch_pincode: c.dispatchPincode || c.dispatch_pincode || (c.deliveryAddressObj && c.deliveryAddressObj.pincode) || '',
+        delivery_address_obj: c.deliveryAddressObj || {},
+        same_as_billing: Boolean(c.sameAsBilling),
+        credit_limit: parseSafeNumber(c.creditLimit, 0),
+        credit_days: Math.trunc(parseSafeNumber(c.creditDays, 0)),
+        payment_terms: c.paymentTerms || 'Due on Receipt',
+        assigned_salesperson: c.assignedSalesperson || c.salesPerson || c.c8 || 'Sales Rep',
+        source: c.source || 'Manual',
+        primary_contact: c.primaryContact || {},
+        email: c.email || c.c5 || '—',
+        phone: c.phone || c.c4 || '—',
+        status: (c.status || 'Active').toUpperCase(),
+        notes: c.notes || '',
+        updated_at: new Date().toISOString()
+      }));
 
-    for (let i = 0; i < rows.length; i += 20) {
-      const batch = rows.slice(i, i + 20);
-      await supabase.from('customers').upsert(batch, { onConflict: 'customer_code' });
+      for (let i = 0; i < rows.length; i += 20) {
+        const batch = rows.slice(i, i + 20);
+        await supabase.from('customers').upsert(batch, { onConflict: 'customer_code' });
+      }
+    } catch (sbErr) {
+      console.warn('[saveLocalCustomers Supabase upsert notice]:', sbErr?.message || sbErr);
     }
-  } catch (sbErr) {
-    console.warn('[saveLocalCustomers Supabase upsert notice]:', sbErr?.message || sbErr);
   }
 
   // 4. Broadcast via SSE to all connected clients (lightweight targeted event)
@@ -1831,6 +1852,8 @@ app.use(cors({
     'X-File-Name',
     'x-session-id',
     'X-Session-Id',
+    'x-emp-code',
+    'X-Emp-Code',
     'x-employee-code',
     'x-user-name',
     'x-user-role',
@@ -3256,12 +3279,23 @@ app.post('/api/workflow-notifications', async (req, res) => {
 
 // ⚡ Lightweight Native Active Session Management with Strict Server-Side Authentication
 export const activeSessionsMap = new Map();
+let activeSessionsWriteQueue = Promise.resolve();
 
 export const saveActiveSessionsToDisk = () => {
   try {
     const diskPath = getStoreFilePath('active_sessions.json');
-    const list = Array.from(activeSessionsMap.values());
-    safeWriteJsonFileAsync(diskPath, list);
+    const list = Array.from(activeSessionsMap.values()).map(({ _lastPersistedAt, ...rest }) => rest);
+    const serialized = JSON.stringify(list, null, 2);
+    activeSessionsWriteQueue = activeSessionsWriteQueue.then(async () => {
+      const tmpPath = `${diskPath}.tmp.${process.pid}`;
+      try {
+        await fs.promises.writeFile(tmpPath, serialized, 'utf8');
+        await fs.promises.rename(tmpPath, diskPath);
+      } catch (err) {
+        try { await fs.promises.unlink(tmpPath); } catch (_) {}
+        console.warn(`[saveActiveSessionsToDisk] Failed to write ${diskPath}:`, err?.message || err);
+      }
+    }).catch(() => {});
   } catch (_) {}
 };
 
@@ -3272,7 +3306,27 @@ export const loadActiveSessionsFromDisk = () => {
       const list = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
       if (Array.isArray(list)) {
         list.forEach(s => {
-          if (s && s.id) activeSessionsMap.set(String(s.id).trim(), s);
+          if (!s || !s.id) return;
+          const sid = String(s.id).trim();
+          if (!sid) return;
+          const cur = activeSessionsMap.get(sid);
+          if (!cur) {
+            activeSessionsMap.set(sid, s);
+            return;
+          }
+          // Never resurrect an in-memory revoked session from stale disk state
+          if (cur.status === 'revoked') return;
+          if (s.status === 'revoked') {
+            activeSessionsMap.set(sid, s);
+            return;
+          }
+          const diskLast = Number(s.lastActiveTimestamp || 0);
+          const memLast = Number(cur.lastActiveTimestamp || 0);
+          const diskExp = Number(s.expiresAt || 0);
+          const memExp = Number(cur.expiresAt || 0);
+          if (diskLast > memLast || diskExp > memExp) {
+            activeSessionsMap.set(sid, s);
+          }
         });
       }
     }
@@ -3420,30 +3474,45 @@ app.post('/api/sessions/heartbeat', async (req, res) => {
   const callerEmpCode = req.headers['x-emp-code'] || req.body?.empCode || req.body?.employee_code;
 
   let result = heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode);
-  if (!result.success) {
+  if (!result.success && result.status !== 'revoked' && result.status !== 'forbidden') {
     // Reload from disk in case another worker/process registered the session or server restarted
     loadActiveSessionsFromDisk();
     result = heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode);
   }
-  if (!result.success) {
-    // If not found in memory (e.g. server restart / PM2 reload), rehydrate from verified session or disk
+  if (!result.success && result.status !== 'revoked' && result.status !== 'forbidden') {
+    // If not found in memory (e.g. server restart / PM2 reload), rehydrate from verified persistent session
     try {
       const verified = await getVerifiedUserSession(req);
       if (verified && verified.valid) {
+        const now = Date.now();
+        const restoredId = String(sessionId || verified.sessionId).trim();
         const restored = {
-          id: String(sessionId || verified.sessionId).trim(),
+          id: restoredId,
+          sessionId: restoredId,
           user: verified.user,
           email: verified.email,
           empCode: verified.empCode,
           role: verified.role,
-          lastActiveTimestamp: Date.now(),
+          lastActiveTimestamp: now,
+          expiresAt: now + SESSION_TTL_MS,
           status: 'active'
         };
         activeSessionsMap.set(restored.id, restored);
-        saveActiveSessionsToDisk();
-        result = { success: true, status: 'active', lastActiveTimestamp: restored.lastActiveTimestamp };
+        result = heartbeatSessionInMap(restored.id, activeSessionsMap, callerEmpCode);
+        if (result.success) {
+          restored._lastPersistedAt = Date.now();
+          saveActiveSessionsToDisk();
+        }
       }
     } catch (_) {}
+  }
+
+  if (result.success) {
+    const liveRec = activeSessionsMap.get(String(sessionId || '').trim());
+    if (liveRec && (!liveRec._lastPersistedAt || (Date.now() - liveRec._lastPersistedAt) >= 60000)) {
+      liveRec._lastPersistedAt = Date.now();
+      saveActiveSessionsToDisk();
+    }
   }
 
   if (!result.success) {
@@ -3512,6 +3581,7 @@ app.post('/api/sessions/revoke', async (req, res) => {
     return res.status(403).json(result);
   }
 
+  saveActiveSessionsToDisk();
   return res.json(result);
 });
 
@@ -4514,7 +4584,8 @@ app.post('/api/vendors', async (req, res) => {
 
 // Endpoint to create a new customer in BUSINZ Authoritative Store (Native BUSINZ Store)
 app.post('/api/customers', requireBusinzSession, async (req, res) => {
-  const localCustomers = loadLocalCustomers();
+  const loadedCustomers = await loadDatabaseCustomers();
+  const localCustomers = Array.isArray(loadedCustomers) ? loadedCustomers : [];
   const isBulk = Array.isArray(req.body);
   const incomingList = isBulk ? req.body : [req.body];
 
@@ -4566,6 +4637,7 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
   });
 
   const savedRecords = [];
+  const dbRowIdByCode = new Map();
   let nextCounter = localCustomers.length + 1;
 
   incomingList.forEach(incoming => {
@@ -4577,17 +4649,17 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
     const incPhone = normalizeCustPhone(incoming.phone || incoming.mobile || incoming.primaryContact?.phone || '');
     const rawIncCode = String(incoming.customerCode || incoming.id || incoming.code || '').trim();
     const incCode = rawIncCode.toLowerCase();
-    const isFakeCode = !rawIncCode || !/^VRM-CS-\d{4}-\d+$/i.test(rawIncCode);
+    const isFakeCode = !rawIncCode || !isValidCustomerCode(rawIncCode);
 
     // Strict Multi-field Deduplication Matching:
     // 1. GST match (highest priority, globally unique in India)
-    // 2. Official Customer Code match (VRM-CS-...)
+    // 2. Official Customer Code match (VRM-CS-... or VRMS/CS/...) when not explicitly creating a brand new record
     // 3. Normalized Company Name match
     // 4. Primary Phone match
     let matchedExisting = null;
     if (incGst && byGst.has(incGst)) {
       matchedExisting = byGst.get(incGst);
-    } else if (rawIncCode && !isFakeCode && byCode.has(incCode)) {
+    } else if (!incoming.isNew && rawIncCode && !isFakeCode && byCode.has(incCode)) {
       matchedExisting = byCode.get(incCode);
     } else if (incNormName && byName.has(incNormName)) {
       matchedExisting = byName.get(incNormName);
@@ -4596,12 +4668,17 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
     }
 
     let customerId = matchedExisting ? (matchedExisting.customerCode || matchedExisting.id || matchedExisting.code) : null;
-    if (!customerId || !/^VRM-CS-\d{4}-\d+$/i.test(customerId)) {
-      if (rawIncCode && !isFakeCode) {
+    if (!customerId || !isValidCustomerCode(customerId)) {
+      if (rawIncCode && !isFakeCode && !byCode.has(incCode)) {
         customerId = rawIncCode;
       } else {
-        const { code } = getNextSequence('CS', localCustomers);
-        customerId = code || `VRM-CS-${getFinancialYear()}-${String(nextCounter++).padStart(2, '0')}`;
+        const currentPool = Array.from(existingMap.values());
+        let { code: seqCode, nextNum, financialYear } = getNextSequence('CS', currentPool);
+        while (seqCode && byCode.has(String(seqCode).trim().toLowerCase())) {
+          nextNum++;
+          seqCode = formatSequenceCode('CS', nextNum);
+        }
+        customerId = seqCode || `VRM-CS-${financialYear || getFinancialYear()}-${String(nextCounter++).padStart(2, '0')}`;
       }
     }
 
@@ -4609,9 +4686,15 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
                          (incoming.gstin && incoming.gstin !== '—' ? incoming.gstin : '') ||
                          (matchedExisting?.gstNumber && matchedExisting.gstNumber !== '—' ? matchedExisting.gstNumber : '') ||
                          '';
+    const effectiveEmail = String(incoming.email || incoming.primaryContact?.email || matchedExisting?.email || matchedExisting?.primaryContact?.email || '').trim();
+    const effectivePhone = String(incoming.phone || incoming.mobile || incoming.primaryContact?.phone || matchedExisting?.phone || matchedExisting?.primaryContact?.phone || '').trim();
+    const safeCreditLimit = parseSafeNumber(incoming.creditLimit ?? matchedExisting?.creditLimit, 2500000);
+    const safeCreditDays = Math.trunc(parseSafeNumber(incoming.creditDays ?? matchedExisting?.creditDays, 30));
+    const { isNew: _omitIsNew, ...incomingRest } = incoming;
 
     const localCustomerRecord = {
       ...(matchedExisting || {}),
+      ...incomingRest,
       id: customerId,
       customerCode: customerId,
       code: customerId,
@@ -4639,8 +4722,8 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
       dispatchState: incoming.dispatchState || incoming.state || matchedExisting?.dispatchState || '',
       dispatchPincode: incoming.dispatchPincode || incoming.pincode || matchedExisting?.dispatchPincode || '',
       sameAsBilling: incoming.sameAsBilling !== undefined ? incoming.sameAsBilling : (matchedExisting?.sameAsBilling ?? true),
-      creditLimit: incoming.creditLimit || matchedExisting?.creditLimit || 2500000,
-      creditDays: incoming.creditDays || matchedExisting?.creditDays || 30,
+      creditLimit: safeCreditLimit,
+      creditDays: safeCreditDays,
       paymentTerms: incoming.paymentTerms || matchedExisting?.paymentTerms || '50% Advance + 50% Dispatch',
       assignedSalesperson: incoming.assignedSalesperson || incoming.salesPerson || incoming.salesperson || incoming.salesRep || incoming.c8 || incoming.createdBy || matchedExisting?.assignedSalesperson || '',
       salesPerson: incoming.salesPerson || incoming.assignedSalesperson || incoming.salesperson || incoming.salesRep || incoming.createdBy || matchedExisting?.salesPerson || '',
@@ -4648,20 +4731,23 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
       salesPersonCode: incoming.salesPersonCode || incoming.createdById || matchedExisting?.salesPersonCode || '',
       createdById: incoming.createdById || incoming.salesPersonCode || matchedExisting?.createdById || '',
       source: incoming.source || matchedExisting?.source || 'Direct',
+      email: effectiveEmail,
+      phone: effectivePhone,
+      mobile: effectivePhone,
       altPhone: incoming.altPhone || incoming.altNumber || incoming.primaryContact?.altPhone || matchedExisting?.altPhone || '',
       altNumber: incoming.altNumber || incoming.altPhone || incoming.primaryContact?.altPhone || matchedExisting?.altNumber || '',
       primaryContact: {
         name: incoming.contactPerson || incoming.contactName || incoming.primaryContact?.name || matchedExisting?.primaryContact?.name || '',
-        phone: incoming.phone || incoming.mobile || incoming.primaryContact?.phone || matchedExisting?.primaryContact?.phone || '',
+        phone: effectivePhone,
         altPhone: incoming.altPhone || incoming.altNumber || incoming.primaryContact?.altPhone || matchedExisting?.primaryContact?.altPhone || '',
-        whatsapp: incoming.whatsapp || incoming.phone || incoming.mobile || incoming.primaryContact?.whatsapp || matchedExisting?.primaryContact?.whatsapp || '',
-        email: incoming.email || incoming.primaryContact?.email || matchedExisting?.primaryContact?.email || ''
+        whatsapp: incoming.whatsapp || effectivePhone || matchedExisting?.primaryContact?.whatsapp || '',
+        email: effectiveEmail
       },
-      code: customerId,
+      notes: incoming.notes ?? matchedExisting?.notes ?? '',
       c2: incoming.companyName || incoming.customerName || matchedExisting?.companyName || 'New Customer',
       c3: incoming.primaryContact?.name || incoming.contactPerson || matchedExisting?.c3 || '',
-      c4: incoming.primaryContact?.phone || incoming.phone || incoming.mobile || matchedExisting?.c4 || '',
-      c5: incoming.primaryContact?.email || incoming.email || matchedExisting?.c5 || '',
+      c4: effectivePhone,
+      c5: effectiveEmail,
       c6: incoming.billingAddress || incoming.address || matchedExisting?.c6 || '',
       billingAddressObj: incoming.billingAddressObj || matchedExisting?.billingAddressObj || {
         address1: incoming.address1 || incoming.billingAddress1 || '',
@@ -4687,6 +4773,7 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
 
     const k = String(customerId).trim().toLowerCase();
     existingMap.set(k, localCustomerRecord);
+    dbRowIdByCode.set(k, matchedExisting?.id || customerId);
 
     // If a previous dummy code key existed in existingMap, remove it so only the official record persists
     if (matchedExisting && matchedExisting.id && matchedExisting.id.toLowerCase() !== k) {
@@ -4707,6 +4794,7 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
 
   // Targeted INSERT/UPSERT each customer into authoritative PostgreSQL public.customers (Rule 2)
   for (const record of savedRecords) {
+    const dbRowId = dbRowIdByCode.get(String(record.customerCode).trim().toLowerCase()) || record.id || record.customerCode;
     try {
       await query(`
         INSERT INTO public.customers (
@@ -4752,7 +4840,7 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
           notes = EXCLUDED.notes,
           updated_at = NOW()
       `, [
-        record.id,
+        dbRowId,
         record.customerCode,
         record.companyName,
         record.customerName,
@@ -4771,24 +4859,53 @@ app.post('/api/customers', requireBusinzSession, async (req, res) => {
         record.dispatchPincode,
         JSON.stringify(record.deliveryAddressObj || {}),
         Boolean(record.sameAsBilling),
-        Number(record.creditLimit || 0),
-        Number(record.creditDays || 0),
+        parseSafeNumber(record.creditLimit, 0),
+        Math.trunc(parseSafeNumber(record.creditDays, 0)),
         record.paymentTerms,
         record.assignedSalesperson,
         record.source,
         JSON.stringify(record.primaryContact || {}),
-        record.email,
-        record.phone,
+        record.email || '',
+        record.phone || '',
         record.status,
         record.notes || ''
       ]);
     } catch (pgErr) {
-      console.warn('[POST /api/customers Postgres write notice]:', pgErr.message);
+      console.error('[POST /api/customers Postgres write error]:', pgErr.message);
+      if (isDbConnected()) {
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to save customer to PostgreSQL: ' + pgErr.message
+        });
+      }
     }
   }
 
-  const updatedCustomers = Array.from(existingMap.values());
-  saveLocalCustomers(updatedCustomers);
+  // Update authoritative in-memory cache synchronously BEFORE returning so immediate GETs include the new customer at the top
+  const savedKeys = new Set(savedRecords.map(r => String(r.customerCode || r.id || '').trim().toLowerCase()).filter(Boolean));
+  const remainingCustomers = Array.from(existingMap.values()).filter(c => {
+    const k = String(c.customerCode || c.id || '').trim().toLowerCase();
+    return k && !savedKeys.has(k);
+  });
+  const updatedCustomers = [...savedRecords, ...remainingCustomers];
+  supabaseMemoryStore.customer_store = updatedCustomers;
+  supabaseMemoryStore.crm_customers = updatedCustomers;
+
+  safeWriteJsonFileAsync(getStoreFilePath('customer_store.json'), updatedCustomers);
+  safeWriteJsonFileAsync(getStoreFilePath('crm_customers.json'), updatedCustomers);
+
+  try {
+    const primary = savedRecords[0];
+    if (primary) {
+      broadcastRealtimeEvent('crm_updated', {
+        type: 'customer_updated',
+        action: 'upsert',
+        recordId: primary.customerCode || primary.id,
+        customer: primary,
+        count: savedRecords.length
+      });
+    }
+  } catch (_) {}
 
   return res.json({
     success: true,
@@ -4873,11 +4990,17 @@ app.get('/api/customers', async (req, res) => {
           pincode: c.dispatchPincode || c.pincode || ''
         },
         sameAsBilling: c.sameAsBilling !== false,
+        customerType: c.customerType || c.customer_type || 'EPC Contractor',
+        industry: c.industry || '',
+        source: c.source || 'Direct',
+        notes: c.notes || '',
         paymentTerms: c.paymentTerms || '',
         creditLimit: c.creditLimit || 0,
         creditDays: c.creditDays || 0,
         assignedSalesperson: c.assignedSalesperson || c.salesPerson || 'Sales Rep',
-        status: (c.status || 'Active').toUpperCase()
+        status: (c.status || 'Active').toUpperCase(),
+        createdAt: c.createdAt || c.created_at || '',
+        updatedAt: c.updatedAt || c.updated_at || ''
       };
     };
 
@@ -11783,7 +11906,16 @@ if (fs.existsSync(distPath)) {
   if (hasRootAssets) {
     app.use('/assets', express.static(rootAssets, { maxAge: '1y', immutable: true }));
   }
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    index: false,
+    setHeaders: (res, filePath) => {
+      if (path.basename(filePath) === 'index.html') {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
+  }));
   app.use((req, res, next) => {
     if (req.method === 'GET' && req.path.startsWith('/assets/')) {
       return res.status(404).end();

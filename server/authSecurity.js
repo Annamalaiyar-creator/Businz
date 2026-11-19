@@ -187,7 +187,8 @@ export function authenticateEmployeeRecord(employeeRecord, password) {
     return { verified: false, error: 'Invalid password', status: 401 };
   }
 
-  if (employeeRecord.status && employeeRecord.status !== 'Active') {
+  const normalizedStatus = String(employeeRecord.status || '').trim().toLowerCase();
+  if (normalizedStatus && normalizedStatus !== 'active' && normalizedStatus !== 'approved') {
     return { verified: false, error: `Account is ${employeeRecord.status}`, status: 403 };
   }
 
@@ -238,13 +239,13 @@ export function validateSessionInMap(sessionId, activeSessionsMap) {
 
   const s = activeSessionsMap.get(cleanId);
   if (!s || s.status === 'revoked') {
-    return { valid: false, error: 'Session has been revoked' };
+    return { valid: false, revoked: true, error: 'Session has been revoked' };
   }
 
   const now = Date.now();
   if ((now - (s.lastActiveTimestamp || 0)) > SESSION_TTL_MS || (s.expiresAt && now > s.expiresAt)) {
     activeSessionsMap.delete(cleanId);
-    return { valid: false, error: 'Session has expired' };
+    return { valid: false, expired: true, error: 'Session has expired' };
   }
 
   return { valid: true, session: s };
@@ -256,13 +257,19 @@ export function validateSessionInMap(sessionId, activeSessionsMap) {
 export function heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode = null) {
   const validation = validateSessionInMap(sessionId, activeSessionsMap);
   if (!validation.valid) {
-    return { success: false, status: 'invalid', error: validation.error };
+    return { success: false, status: validation.revoked ? 'revoked' : 'invalid', error: validation.error };
   }
 
   const s = validation.session;
 
   if (callerEmpCode) {
-    if (normalizeEmployeeCode(callerEmpCode) !== normalizeEmployeeCode(s.empCode)) {
+    const sessionEmpNorm = normalizeEmployeeCode(s.empCode);
+    const callerEmpNorm = normalizeEmployeeCode(callerEmpCode);
+    const sessionEmailNorm = String(s.email || '').trim().toLowerCase();
+    const callerLower = String(callerEmpCode).trim().toLowerCase();
+    const matchesEmp = Boolean(sessionEmpNorm && callerEmpNorm === sessionEmpNorm);
+    const matchesEmailFallback = Boolean(!sessionEmpNorm && sessionEmailNorm && callerLower === sessionEmailNorm);
+    if (!matchesEmp && !matchesEmailFallback) {
       return { success: false, status: 'forbidden', error: 'Forbidden: Cannot refresh another employee session' };
     }
   }
@@ -278,7 +285,9 @@ export function heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCod
     sessionId: s.id,
     lastActiveTimestamp: s.lastActiveTimestamp,
     role: s.role,
-    empCode: s.empCode
+    empCode: s.empCode,
+    email: s.email,
+    user: s.user
   };
 }
 

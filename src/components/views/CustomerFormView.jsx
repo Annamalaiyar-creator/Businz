@@ -1,6 +1,7 @@
 import React from "react";
 import { Check, FileText, ChevronLeft, Save, Truck, Users } from "lucide-react";
 import { getNextSequence } from "../../utils/sequenceGenerator";
+import { invalidateCustomerCache } from "../../services/customerService";
 
 export default function CustomerFormView({
   showCustomerForm,
@@ -82,16 +83,16 @@ export default function CustomerFormView({
             Cancel
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               const name = custFormName.trim();
               if (!name) {
                 alert('Please enter Customer / Display Name');
                 return;
               }
               const company = custFormCompany.trim() || name;
-              const gstNo = custFormGstNo.trim() || '33AABCU9603R1ZM';
-              const mobile = custFormMobile.trim() || '+91 98000 00000';
-              const email = custFormEmail.trim() || 'contact@client.com';
+              const gstNo = custFormGstNo.trim();
+              const mobile = custFormMobile.trim();
+              const email = custFormEmail.trim();
 
               const formatAddr = (addr, city, state, pin) => {
                 const parts = [];
@@ -139,121 +140,130 @@ export default function CustomerFormView({
                 pincode: custFormDeliveryPincode.trim()
               };
 
-              if (editingCustomer) {
-                setCustomerList(prev => prev.map(c => c.code === editingCustomer.originalCode ? {
-                  ...c,
-                  code: name,
-                  c2: company,
-                  gstNo: gstNo,
-                  c4: mobile,
-                  altPhone: custFormAltPhone,
-                  altNumber: custFormAltPhone,
-                  c5: email,
-                  address1: b1,
-                  address2: b2,
-                  billingAddress1: b1,
-                  billingAddress2: b2,
-                  dispatchAddress1: custFormSameAsBilling ? b1 : d1,
-                  dispatchAddress2: custFormSameAsBilling ? b2 : d2,
-                  shippingAddress1: custFormSameAsBilling ? b1 : d1,
-                  shippingAddress2: custFormSameAsBilling ? b2 : d2,
-                  address: billingStreet,
-                  dispatchAddress: deliveryStreet,
-                  c6: billingStr,
-                  billingAddress: billingStr,
-                  billingAddressObj: billingObj,
-                  c7: deliveryStr,
-                  deliveryAddress: deliveryStr,
-                  deliveryAddressObj: deliveryObj
-                } : c));
-                setEditingCustomer(null);
-              } else {
-                // Generate sequential customer code (VRM-CS-...)
-                const seq = getNextSequence('CS', customerList);
-                const assignedCode = seq?.code || `VRM-CS-${new Date().getFullYear()}-${String(customerList.length + 1).padStart(2, '0')}`;
+              const loggedInUserName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || '';
+              const loggedInEmpId = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
+              const activeUserRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '';
+              const repName = (loggedInUserName && loggedInUserName !== 'undefined' && loggedInUserName !== 'null') ? loggedInUserName : (activeUserRole.toLowerCase().includes('sales') ? 'Annamalaiyar' : 'Sales Executive');
 
-                const normStr = (s) => String(s || '').toLowerCase().replace(/\b(private|pvt|limited|ltd|llp|inc|corp)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
-                const cleanGst = String(gstNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
-                const targetNorm = normStr(company);
+              const normStr = (s) => String(s || '').toLowerCase().replace(/\b(private|pvt|limited|ltd|llp|inc|corp)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
+              const cleanGst = String(gstNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+              const targetNorm = normStr(company);
 
-                const loggedInUserName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || '';
-                const loggedInEmpId = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
-                const activeUserRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '';
-                const repName = (loggedInUserName && loggedInUserName !== 'undefined' && loggedInUserName !== 'null') ? loggedInUserName : (activeUserRole.toLowerCase().includes('sales') ? 'Annamalaiyar' : 'Sales Executive');
+              const assignedCode = editingCustomer
+                ? editingCustomer.originalCode
+                : (getNextSequence('CS', customerList)?.code || `VRM-CS-${new Date().getFullYear()}-${String(customerList.length + 1).padStart(2, '0')}`);
 
-                const newCustObj = {
-                  id: assignedCode,
-                  customerCode: assignedCode,
-                  code: assignedCode,
-                  companyName: company,
-                  c2: company,
-                  gstNo: gstNo,
-                  gstNumber: gstNo,
-                  c3: name || 'Primary Contact',
-                  customerName: name,
-                  c4: mobile,
+              const targetCustObj = {
+                id: assignedCode,
+                customerCode: assignedCode,
+                code: assignedCode,
+                companyName: company,
+                c2: company,
+                gstNo: gstNo,
+                gstNumber: gstNo,
+                c3: name || 'Primary Contact',
+                customerName: name,
+                c4: mobile,
+                phone: mobile,
+                altPhone: custFormAltPhone,
+                altNumber: custFormAltPhone,
+                c5: email,
+                email: email,
+                address1: b1,
+                address2: b2,
+                billingAddress1: b1,
+                billingAddress2: b2,
+                dispatchAddress1: custFormSameAsBilling ? b1 : d1,
+                dispatchAddress2: custFormSameAsBilling ? b2 : d2,
+                shippingAddress1: custFormSameAsBilling ? b1 : d1,
+                shippingAddress2: custFormSameAsBilling ? b2 : d2,
+                address: billingStreet,
+                dispatchAddress: deliveryStreet,
+                city: billingObj.city,
+                state: billingObj.state,
+                pincode: billingObj.pincode,
+                dispatchCity: deliveryObj.city,
+                dispatchState: deliveryObj.state,
+                dispatchPincode: deliveryObj.pincode,
+                sameAsBilling: custFormSameAsBilling,
+                c6: billingStr,
+                billingAddress: billingStr,
+                billingAddressObj: billingObj,
+                c7: deliveryStr,
+                deliveryAddress: deliveryStr,
+                deliveryAddressObj: deliveryObj,
+                primaryContact: {
+                  name: name,
                   phone: mobile,
                   altPhone: custFormAltPhone,
-                  altNumber: custFormAltPhone,
-                  c5: email,
-                  email: email,
-                  address1: b1,
-                  address2: b2,
-                  billingAddress1: b1,
-                  billingAddress2: b2,
-                  dispatchAddress1: custFormSameAsBilling ? b1 : d1,
-                  dispatchAddress2: custFormSameAsBilling ? b2 : d2,
-                  shippingAddress1: custFormSameAsBilling ? b1 : d1,
-                  shippingAddress2: custFormSameAsBilling ? b2 : d2,
-                  address: billingStreet,
-                  dispatchAddress: deliveryStreet,
-                  c6: billingStr,
-                  billingAddress: billingStr,
-                  billingAddressObj: billingObj,
-                  c7: deliveryStr,
-                  deliveryAddress: deliveryStr,
-                  deliveryAddressObj: deliveryObj,
-                  status: 'ACTIVE',
-                  stBg: '#dcfce7',
-                  stFg: '#166534',
-                  stBorder: '1px solid #bbf7d0',
-                  tabGroup: 'Active',
-                  assignedSalesperson: repName,
-                  salesPerson: repName,
-                  salesperson: repName,
-                  salesRep: repName,
-                  createdBy: repName,
-                  c8: repName,
-                  createdById: loggedInEmpId || 'SE-1000',
-                  salesPersonCode: loggedInEmpId || 'SE-1000',
-                  createdAt: new Date().toISOString()
-                };
+                  email: email
+                },
+                status: 'ACTIVE',
+                stBg: '#dcfce7',
+                stFg: '#166534',
+                stBorder: '1px solid #bbf7d0',
+                tabGroup: 'Active',
+                assignedSalesperson: repName,
+                salesPerson: repName,
+                salesperson: repName,
+                salesRep: repName,
+                createdBy: repName,
+                c8: repName,
+                createdById: loggedInEmpId || 'SE-1000',
+                salesPersonCode: loggedInEmpId || 'SE-1000',
+                createdAt: editingCustomer?.createdAt || new Date().toISOString()
+              };
 
-                // Deduplicate in local state: update existing if company or GST matches, otherwise prepend
+              // Persist via single awaited /api/customers call and verify before updating UI
+              let resJson = {};
+              try {
+                const res = await fetch('/api/customers', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-emp-id': loggedInEmpId || 'SE-1000',
+                    'x-user-name': repName,
+                    'x-user-role': activeUserRole || 'Sales Executive'
+                  },
+                  body: JSON.stringify({ ...targetCustObj, isNew: !editingCustomer })
+                });
+                resJson = await res.json().catch(() => ({}));
+                if (!res.ok || resJson?.success === false) {
+                  alert(res.status === 401
+                    ? 'Your login session expired. Please sign in again to save this customer.'
+                    : (resJson?.error || 'Failed to save customer to database. Please try again.'));
+                  return;
+                }
+              } catch (_) {
+                alert('Unable to reach server to save customer. Please check your connection and try again.');
+                return;
+              }
+
+              const finalCustObj = resJson?.customer ? { ...targetCustObj, ...resJson.customer } : targetCustObj;
+              invalidateCustomerCache();
+
+              if (editingCustomer) {
+                setCustomerList(prev => (prev || []).map(c =>
+                  (c.code === editingCustomer.originalCode || c.customerCode === editingCustomer.originalCode)
+                    ? { ...c, ...finalCustObj }
+                    : c
+                ));
+                setEditingCustomer(null);
+              } else {
+                // Deduplicate in local state: replace matching company or GST, otherwise prepend
                 setCustomerList(prev => {
+                  const finalCode = String(finalCustObj.customerCode || finalCustObj.code || '').toLowerCase();
                   const filtered = (prev || []).filter(c => {
+                    const cCode = String(c.customerCode || c.code || '').toLowerCase();
+                    if (finalCode && cCode === finalCode) return false;
                     const cGst = String(c.gstNo || c.gstNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
                     if (cleanGst && cGst && cleanGst.length >= 10 && cleanGst === cGst) return false;
                     const cNorm = normStr(c.c2 || c.companyName || c.customerName);
                     if (targetNorm && cNorm && targetNorm === cNorm) return false;
                     return true;
                   });
-                  return [newCustObj, ...filtered];
+                  return [finalCustObj, ...filtered];
                 });
-
-                // Sync new customer to central API database
-                try {
-                  fetch('/api/customers', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'x-user-emp-id': loggedInEmpId || 'SE-1000',
-                      'x-user-name': repName,
-                      'x-user-role': activeUserRole || 'Sales Executive'
-                    },
-                    body: JSON.stringify(newCustObj)
-                  }).catch(() => {});
-                } catch (_) {}
 
                 setNewBomProductName(company || name);
                 if (deliveryStr) {
@@ -262,47 +272,11 @@ export default function CustomerFormView({
                   setNewBomDeliveryAddress(billingStr);
                   setSameAsBilling(true);
                 }
-
-                // Synchronize to BUSINZ Native Catalog in the background
-                try {
-                  fetch('/api/customers', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      id: assignedCode,
-                      customerCode: assignedCode,
-                      companyName: company,
-                      customerName: name,
-                      gstNumber: gstNo,
-                      address1: b1,
-                      address2: b2,
-                      billingAddress1: b1,
-                      billingAddress2: b2,
-                      dispatchAddress1: custFormSameAsBilling ? b1 : d1,
-                      dispatchAddress2: custFormSameAsBilling ? b2 : d2,
-                      shippingAddress1: custFormSameAsBilling ? b1 : d1,
-                      shippingAddress2: custFormSameAsBilling ? b2 : d2,
-                      address: billingStreet,
-                      dispatchAddress: deliveryStreet,
-                      billingAddress: billingStr,
-                      deliveryAddress: deliveryStr,
-                      billingAddressObj: billingObj,
-                      deliveryAddressObj: deliveryObj,
-                      city: custFormBillingCity,
-                      state: custFormBillingState,
-                      pincode: custFormBillingPincode,
-                      altPhone: custFormAltPhone,
-                      altNumber: custFormAltPhone,
-                      primaryContact: {
-                        name: name,
-                        phone: mobile,
-                        altPhone: custFormAltPhone,
-                        email: email
-                      }
-                    })
-                  }).catch(() => {});
-                } catch (e) {}
               }
+
+              try {
+                window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: finalCustObj }));
+              } catch (_) {}
 
               // Reset form fields
               setCustFormName('');

@@ -327,6 +327,7 @@ function App() {
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginModalPrefill, setLoginModalPrefill] = useState('');
+  const [loginModalNotice, setLoginModalNotice] = useState('');
   const [accountVersion, setAccountVersion] = useState(0);
 
   // Ensure the currently authenticated account is persisted in browser saved accounts
@@ -504,34 +505,7 @@ function App() {
     } catch (_) {}
   };
 
-  const handleOpenAddAccount = (prefillIdentifier = '') => {
-    setLoginModalPrefill(typeof prefillIdentifier === 'string' ? prefillIdentifier : '');
-    setShowLoginModal(true);
-  };
-
-  const handleRemoveSavedAccount = (targetAccount) => {
-    if (!targetAccount) return;
-    try {
-      if (targetAccount.sessionId) {
-        revokeSession(targetAccount.sessionId);
-      }
-    } catch (_) {}
-    removeSavedAccount(targetAccount.key || targetAccount);
-    setAccountVersion((v) => v + 1);
-  };
-
-  const handleSwitchAccount = async (targetAccount) => {
-    if (!targetAccount) return;
-    const currentEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toLowerCase();
-    const currentEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
-    const targetEmp = String(targetAccount.empCode || '').trim().toLowerCase();
-    const targetEmail = String(targetAccount.email || '').trim().toLowerCase();
-
-    if ((targetEmp && currentEmp && targetEmp === currentEmp) || (!targetEmp && targetEmail && targetEmail === currentEmail)) {
-      return;
-    }
-
-    // Keep current account saved before switching
+  const persistCurrentAccountSnapshot = () => {
     try {
       const curRole = userRole || localStorage.getItem('controlroom_user_role') || '';
       const curName = localStorage.getItem('controlroom_logged_user_name') || '';
@@ -550,15 +524,66 @@ function App() {
         });
       }
     } catch (_) {}
+  };
+
+  const handleOpenAddAccount = (prefillIdentifier = '', notice = '') => {
+    persistCurrentAccountSnapshot();
+    setLoginModalPrefill(typeof prefillIdentifier === 'string' ? prefillIdentifier : '');
+    setLoginModalNotice(typeof notice === 'string' ? notice : '');
+    setShowLoginModal(true);
+  };
+
+  const handleRemoveSavedAccount = (targetAccount) => {
+    if (!targetAccount) return;
+    try {
+      if (targetAccount.sessionId) {
+        revokeSession(targetAccount.sessionId, { useTargetSessionAuth: true });
+      }
+    } catch (_) {}
+    removeSavedAccount(targetAccount.key || targetAccount);
+    setAccountVersion((v) => v + 1);
+  };
+
+  const handleSwitchAccount = async (targetAccount) => {
+    if (!targetAccount) return;
+    const currentEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toLowerCase();
+    const currentEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
+    const targetEmp = String(targetAccount.empCode || '').trim().toLowerCase();
+    const targetEmail = String(targetAccount.email || '').trim().toLowerCase();
+
+    if ((targetEmp && currentEmp && targetEmp === currentEmp) || (!targetEmp && targetEmail && targetEmail === currentEmail)) {
+      return;
+    }
+
+    // Keep current account saved before switching
+    persistCurrentAccountSnapshot();
 
     const check = await verifySavedAccountSession(targetAccount);
     if (!check.valid) {
-      removeSavedAccount(targetAccount.key || targetAccount);
-      setAccountVersion((v) => v + 1);
-      setLoginModalPrefill(targetAccount.empCode || targetAccount.email || '');
-      setShowLoginModal(true);
+      const targetLabel = targetAccount.name || targetAccount.empCode || targetAccount.email || 'this account';
+      if (check.reason === 'revoked') {
+        removeSavedAccount(targetAccount.key || targetAccount);
+        setAccountVersion((v) => v + 1);
+        handleOpenAddAccount(
+          targetAccount.empCode || targetAccount.email || '',
+          `Session for ${targetLabel} was signed out or revoked. Enter your password to sign in again.`
+        );
+      } else {
+        handleOpenAddAccount(
+          targetAccount.empCode || targetAccount.email || '',
+          `Session for ${targetLabel} expired after server restart or inactivity. Enter your password once to re-enable instant switching.`
+        );
+      }
       return;
     }
+
+    const resolvedTarget = check.session?.empCode
+      ? {
+          ...targetAccount,
+          empCode: check.session.empCode,
+          email: check.session.email || targetAccount.email
+        }
+      : targetAccount;
 
     localStorage.removeItem('controlroom_active_tab');
     localStorage.removeItem('controlroom_sidebar_active_item');
@@ -569,8 +594,8 @@ function App() {
     setTargetPoTab(null);
     setTargetCustomerCode(null);
     setConvertingPiData(null);
-    activateSavedAccountLocal(targetAccount);
-    handleRoleSwitch(targetAccount.role);
+    activateSavedAccountLocal(resolvedTarget);
+    handleRoleSwitch(resolvedTarget.role);
     setAccountVersion((v) => v + 1);
     try {
       realtimeNotificationService.start(true);
@@ -587,7 +612,7 @@ function App() {
     const currentRole = userRole || localStorage.getItem('controlroom_user_role') || '';
     try {
       if (currentSesId) {
-        revokeSession(currentSesId);
+        revokeSession(currentSesId, { useTargetSessionAuth: true });
       }
     } catch (e) {}
 
@@ -609,6 +634,7 @@ function App() {
     setToastAlert(null);
     setShowLoginModal(false);
     setLoginModalPrefill('');
+    setLoginModalNotice('');
     setTargetPoNo(null);
     setTargetBomCode(null);
     setTargetPiNo(null);
@@ -1097,15 +1123,20 @@ function App() {
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: '#F5F5FA',
           zIndex: 999999,
+          overflowY: 'auto',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'center'
         }}>
-          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+          <div style={{ position: 'relative', width: '100%', minHeight: '100%' }}>
             <button
-              onClick={() => setShowLoginModal(false)}
+              onClick={() => {
+                setShowLoginModal(false);
+                setLoginModalPrefill('');
+                setLoginModalNotice('');
+              }}
               style={{
-                position: 'absolute',
+                position: 'fixed',
                 top: '20px',
                 right: '24px',
                 zIndex: 1000000,
@@ -1129,6 +1160,7 @@ function App() {
             <LoginScreen 
               initialIdentifier={loginModalPrefill}
               isAddAccountMode={true}
+              infoMessage={loginModalNotice}
               onLoginSuccess={(role) => {
                 setToastAlert(null);
                 setTargetPoNo(null);
@@ -1138,6 +1170,7 @@ function App() {
                 setTargetCustomerCode(null);
                 setConvertingPiData(null);
                 setLoginModalPrefill('');
+                setLoginModalNotice('');
                 handleRoleSwitch(role);
                 setAccountVersion((v) => v + 1);
                 setShowLoginModal(false);

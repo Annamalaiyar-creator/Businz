@@ -12,6 +12,7 @@ import NotificationToast from '../NotificationToast';
 import { addLiveNotification } from '../Header';
 import { saveCloudStore, fetchCloudStore } from '../../utils/supabaseDataSync';
 import { getNextSequence, formatSequenceCode } from '../../utils/sequenceGenerator';
+import { invalidateCustomerCache } from '../../services/customerService';
 
 export default function CrmCustomersView({
   customers = [],
@@ -362,14 +363,14 @@ export default function CrmCustomersView({
       const gKey = normGst(c.gstNumber || c.gstNo || c.gstin);
       const nKey = normName(c.companyName || c.customerName || c.name);
       const rawCode = String(c.customerCode || c.id || c.code || '').trim();
-      const isRealCode = /^VRM-CS-\d{4}-\d+$/i.test(rawCode);
+      const isRealCode = /^(?:VRM-CS-\d{4}-\d+|VRMS\/CS\/\d{2}-\d{2}\/\d+)$/i.test(rawCode);
 
       const dedupKey = isRealCode ? `code_${rawCode.toLowerCase()}` : (nKey ? `name_${nKey}` : (gKey ? `gst_${gKey}` : `code_${rawCode.toLowerCase()}`));
       if (!dedupMap.has(dedupKey)) {
         dedupMap.set(dedupKey, c);
       } else {
         const existing = dedupMap.get(dedupKey);
-        const existingHasRealCode = /^VRM-CS-\d{4}-\d+$/i.test(String(existing.customerCode || existing.id || '').trim());
+        const existingHasRealCode = /^(?:VRM-CS-\d{4}-\d+|VRMS\/CS\/\d{2}-\d{2}\/\d+)$/i.test(String(existing.customerCode || existing.id || '').trim());
         const existingHasGst = normGst(existing.gstNumber || existing.gstNo || existing.gstin);
         const cHasGst = normGst(c.gstNumber || c.gstNo || c.gstin);
 
@@ -427,7 +428,7 @@ export default function CrmCustomersView({
 
       return matchesSearch && matchesTab && matchesTypeFilter;
     });
-  }, [customers, searchTerm, activeSubTab, filterCustomerType]);
+  }, [canonicalCustomers, searchTerm, activeSubTab, filterCustomerType]);
 
   // Pagination calculation strictly matching BOM Table Rules
   const totalPages = Math.ceil(filteredCustomers.length / rowsPerPage) || 1;
@@ -960,7 +961,7 @@ export default function CrmCustomersView({
       ...formCust,
       customerName: resolvedName,
       companyName: resolvedName,
-      code: resolvedName,
+      code: customerCode,
       c2: resolvedName,
       c3: formCust.primaryContact?.name || '',
       c4: formCust.primaryContact?.phone || '',
@@ -994,46 +995,58 @@ export default function CrmCustomersView({
       record.createdAt = new Date().toISOString();
     }
 
-    // 1. Immediately save to CRM store
-    onSaveCustomer(record);
-
-    // 2. Also save to Supabase canonical customers table so BOM Creation & whole app picks it up
-    try {
-      saveCloudStore('customer_store', record);
-      window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: record }));
-    } catch (e) {
-      console.error('Error syncing customer to cloud store:', e);
-    }
-
-    // 3. Post to Central Customers API
+    // 1. Persist to Central Customers API first and verify server confirmation before updating UI
+    let resJson = {};
     try {
       const response = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(record)
+        body: JSON.stringify({ ...record, isNew: !editingCustomer })
       });
-      const resJson = await response.json();
-      if (resJson.customer) {
-        const mergedFinal = { ...record, ...resJson.customer };
-        onSaveCustomer(mergedFinal);
-        saveCloudStore('customer_store', mergedFinal);
+      resJson = await response.json().catch(() => ({}));
+      if (!response.ok || resJson?.success === false) {
+        const errMsg = response.status === 401
+          ? 'Your login session expired. Please sign in again to save this customer.'
+          : (resJson?.error || 'Failed to save customer to database. Please try again.');
+        setDupError(errMsg);
+        setSyncMessage({
+          type: 'error',
+          title: 'Customer Save Failed',
+          message: errMsg
+        });
+        return;
       }
-      setSyncMessage({
-        type: 'success',
-        text: resJson.message || 'Customer created and synchronized successfully!'
-      });
     } catch (err) {
-      console.warn('Customer Sync warning:', err);
+      const errMsg = 'Unable to reach server to save customer. Please check your connection and try again.';
+      setDupError(errMsg);
       setSyncMessage({
-        type: 'info',
-        text: 'Customer created locally in Businz. Central sync will retry automatically.'
+        type: 'error',
+        title: 'Customer Save Failed',
+        message: errMsg
       });
+      return;
     }
 
-    setViewMode('details');
+    const mergedFinal = resJson?.customer ? { ...record, ...resJson.customer } : record;
+    invalidateCustomerCache();
+    onSaveCustomer(mergedFinal, { skipNetworkSync: true });
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: mergedFinal }));
+    } catch (_) {}
+
+    setSearchTerm('');
+    setActiveSubTab('All');
+    setFilterCustomerType('All');
+    setCurrentPage(1);
+    setSyncMessage({
+      type: 'success',
+      title: editingCustomer ? 'Customer Updated' : 'Customer Added',
+      message: resJson?.message || 'Customer created and synchronized successfully!'
+    });
+    setViewMode('table');
     setEditingCustomer(null);
     setDupError(null);
-    setSelectedCustomer(record);
+    setSelectedCustomer(null);
   };
 
   // Center Workspace Tabs (matching reference video dealclosure-crm.web.app)

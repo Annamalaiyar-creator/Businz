@@ -133,16 +133,9 @@ export async function heartbeatActiveSession() {
       })
     }).catch(() => null);
 
-    if (res && res.status === 401) {
-      // Server may have restarted (e.g. PM2 reload or update) clearing in-memory sessions.
-      // Do not force-logout the user on transient 401 heartbeat; only explicit 'revoked' logs out.
-      console.warn('[SessionService] Session heartbeat returned 401; keeping local session active.');
-      return;
-    }
-
-    if (res && res.ok) {
+    if (res) {
       const json = await res.json().catch(() => null);
-      if (json && json.status === 'revoked') {
+      if (json && (json.status === 'revoked' || /revoked/i.test(json.error || ''))) {
         const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
         if ((Date.now() - sessionStartTime) / 1000 > 30) {
           console.warn('Session has been revoked remotely by administrator. Logging out.');
@@ -160,6 +153,13 @@ export async function heartbeatActiveSession() {
           localStorage.removeItem('controlroom_session_start_time');
           window.location.reload();
         }
+        return;
+      }
+      if (res.status === 401) {
+        // Server may have restarted (e.g. PM2 reload or update) clearing in-memory sessions.
+        // Do not force-logout the user on transient 401 heartbeat; only explicit 'revoked' logs out.
+        console.warn('[SessionService] Session heartbeat returned 401; keeping local session active.');
+        return;
       }
     }
   } catch (_) {
@@ -222,11 +222,15 @@ export async function fetchLiveActiveSessions() {
 /**
  * Revoke a specific session (forces logout on target device)
  */
-export async function revokeSession(sessionId) {
+export async function revokeSession(sessionId, options = {}) {
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (options?.useTargetSessionAuth && sessionId) {
+      headers['x-session-id'] = String(sessionId).trim();
+    }
     await fetch('/api/sessions/revoke', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ sessionId })
     }).catch(() => null);
     return true;
@@ -288,9 +292,15 @@ export function getSavedAccounts() {
 }
 
 function writeSavedAccounts(list) {
+  const payload = JSON.stringify(list.slice(0, MAX_SAVED_ACCOUNTS));
   try {
-    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(list.slice(0, MAX_SAVED_ACCOUNTS)));
-  } catch (_) {}
+    localStorage.setItem(SAVED_ACCOUNTS_KEY, payload);
+  } catch (_) {
+    try {
+      localStorage.removeItem('controlroom_raw_materials_store');
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, payload);
+    } catch (__) {}
+  }
 }
 
 /**
@@ -300,8 +310,21 @@ export function upsertSavedAccount(account = {}) {
   const key = normalizeAccountKey(account.empCode, account.email, account.role);
   if (!key) return getSavedAccounts();
 
+  const normEmail = String(account.email || '').trim().toLowerCase();
+  const isSameAccount = (item) => {
+    if (item.key === key) return true;
+    const itemEmail = String(item.email || '').trim().toLowerCase();
+    if (normEmail && itemEmail === normEmail) {
+      const itemEmp = String(item.empCode || '').trim().toUpperCase();
+      const accEmp = String(account.empCode || '').trim().toUpperCase();
+      if (!itemEmp || !accEmp) return true;
+      if (itemEmp.replace(/[-_\s]/g, '') === accEmp.replace(/[-_\s]/g, '')) return true;
+    }
+    return false;
+  };
+
   const existing = getSavedAccounts();
-  const prev = existing.find((item) => item.key === key) || {};
+  const prev = existing.find(isSameAccount) || {};
   const nextEntry = {
     key,
     empCode: String(account.empCode ?? prev.empCode ?? '').trim(),
@@ -313,7 +336,7 @@ export function upsertSavedAccount(account = {}) {
     lastUsedAt: Number(account.lastUsedAt || Date.now())
   };
 
-  const filtered = existing.filter((item) => item.key !== key);
+  const filtered = existing.filter((item) => !isSameAccount(item));
   const updated = [nextEntry, ...filtered].slice(0, MAX_SAVED_ACCOUNTS);
   writeSavedAccounts(updated);
   return updated;
@@ -395,17 +418,24 @@ export async function verifySavedAccountSession(account) {
       })
     });
 
-    if (res.status === 401 || res.status === 403) {
-      return { valid: false, reason: 'unauthorized' };
+    const json = await res.json().catch(() => null);
+
+    if (res.status === 401) {
+      if (json?.status === 'revoked' || /revoked/i.test(json?.error || '')) {
+        return { valid: false, reason: 'revoked', error: json?.error || 'Session revoked' };
+      }
+      return { valid: false, reason: 'expired', error: json?.error || 'Session expired' };
+    }
+    if (res.status === 403) {
+      return { valid: false, reason: 'forbidden', error: json?.error || 'Session mismatch' };
     }
     if (!res.ok) {
       return { valid: true, offlineFallback: true };
     }
-    const json = await res.json().catch(() => null);
     if (json && json.status === 'revoked') {
-      return { valid: false, reason: 'revoked' };
+      return { valid: false, reason: 'revoked', error: json.error || 'Session revoked' };
     }
-    return { valid: true };
+    return { valid: true, session: json };
   } catch (_) {
     return { valid: true, offlineFallback: true };
   }

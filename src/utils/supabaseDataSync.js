@@ -1746,11 +1746,7 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
           }).catch(() => {});
         }
       } else if (storeData && typeof storeData === 'object') {
-        const row = toDatabaseCustomerRow(storeData);
-        if (row) {
-          await supabase.from('customers').upsert(row, { onConflict: 'customer_code' });
-        }
-        fetch('/api/customers', {
+        const res = await fetch('/api/customers', {
           method: 'POST',
           headers: {
           'Content-Type': 'application/json',
@@ -1759,7 +1755,10 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
             : {})
         },
           body: JSON.stringify(storeData)
-        }).catch(() => {});
+        }).catch(() => null);
+        if (res && !res.ok) {
+          console.warn('[SupabaseSync] Customer save rejected by server:', res.status);
+        }
       }
 
       // Broadcast update locally to all listening React components in current window

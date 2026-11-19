@@ -141,16 +141,18 @@ export const USER_ROLES_CONFIG = [
   }
 ];
 
-export default function LoginScreen({ onLoginSuccess, initialIdentifier = '', isAddAccountMode = false }) {
+export default function LoginScreen({ onLoginSuccess, initialIdentifier = '', isAddAccountMode = false, infoMessage = '' }) {
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [selectedRoleObj, setSelectedRoleObj] = useState(USER_ROLES_CONFIG[0]);
-  const [empIdInput, setEmpIdInput] = useState('');
+  const [empIdInput, setEmpIdInput] = useState(initialIdentifier || '');
   const [usernameInput, setUsernameInput] = useState(initialIdentifier || '');
 
   useEffect(() => {
     if (initialIdentifier) {
+      setEmpIdInput(initialIdentifier);
       setUsernameInput(initialIdentifier);
       setIsSignUpMode(false);
+      setErrorMsg('');
     }
   }, [initialIdentifier]);
   const [passwordInput, setPasswordInput] = useState('');
@@ -273,27 +275,34 @@ export default function LoginScreen({ onLoginSuccess, initialIdentifier = '', is
     // Generate fresh session token so we never inherit a previously revoked session ID
     createNewSessionId();
 
-    localStorage.setItem('controlroom_is_authenticated', 'true');
-    localStorage.setItem('controlroom_user_role', roleName);
-    localStorage.setItem('controlroom_logged_emp_id', empCode);
-    localStorage.setItem('controlroom_logged_user', emailStr);
-    localStorage.setItem('controlroom_logged_user_email', emailStr);
-    localStorage.setItem('controlroom_logged_user_name', displayNameStr);
-
     let registered = null;
     try {
       registered = await registerActiveSession(emailStr, empCode, displayNameStr, roleName, passwordStr || passwordInput);
     } catch (e) {}
 
+    const serverSession = (registered && registered.id)
+      ? registered
+      : (registered?.session?.id ? registered.session : null);
+    const canonicalEmpCode = (serverSession && serverSession.empCode) ? serverSession.empCode : empCode;
+    const canonicalEmail = (serverSession && serverSession.email) ? serverSession.email : emailStr;
+    const canonicalName = displayNameStr || (serverSession && serverSession.user) || canonicalEmpCode || canonicalEmail;
+
+    localStorage.setItem('controlroom_is_authenticated', 'true');
+    localStorage.setItem('controlroom_user_role', roleName);
+    localStorage.setItem('controlroom_logged_emp_id', canonicalEmpCode);
+    localStorage.setItem('controlroom_logged_user', canonicalEmail);
+    localStorage.setItem('controlroom_logged_user_email', canonicalEmail);
+    localStorage.setItem('controlroom_logged_user_name', canonicalName);
+
     const activeSessionId =
-      (registered && (registered.id || registered?.session?.id)) ||
+      (serverSession && serverSession.id) ||
       localStorage.getItem('controlroom_device_session_id') ||
       getOrCreateSessionId();
     const activeStartTime = Number(localStorage.getItem('controlroom_session_start_time')) || Date.now();
     upsertSavedAccount({
-      empCode,
-      email: emailStr,
-      name: displayNameStr,
+      empCode: canonicalEmpCode,
+      email: canonicalEmail,
+      name: canonicalName,
       role: roleName,
       sessionId: activeSessionId,
       sessionStartTime: activeStartTime,
@@ -671,19 +680,19 @@ export default function LoginScreen({ onLoginSuccess, initialIdentifier = '', is
                 ? 'Enter your details below to register your employee account & security verification.'
                 : 'Enter your Emp ID or Email ID and password to log into your account portal.'}
             </p>
-            {isAddAccountMode && !isSignUpMode && (
+            {(isAddAccountMode || infoMessage) && !isSignUpMode && (
               <div style={{
                 marginBottom: '12px',
                 padding: '8px 12px',
                 borderRadius: '10px',
-                backgroundColor: '#ECFEFF',
-                border: '1px solid #A5F3FC',
-                color: '#0E7490',
+                backgroundColor: infoMessage ? '#FFFBEB' : '#ECFEFF',
+                border: infoMessage ? '1px solid #FCD34D' : '1px solid #A5F3FC',
+                color: infoMessage ? '#92400E' : '#0E7490',
                 fontSize: '12px',
                 fontWeight: '600',
                 lineHeight: '1.35'
               }}>
-                Sign in to add another BUSINZ account to this browser. Your existing signed-in accounts stay saved.
+                {infoMessage || 'Sign in to add another BUSINZ account to this browser. Your existing signed-in accounts stay saved.'}
               </div>
             )}
 
