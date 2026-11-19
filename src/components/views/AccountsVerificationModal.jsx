@@ -407,10 +407,12 @@ export default function AccountsVerificationModal({
   const currentTotalAmount = (accVerif.totalAmount !== undefined && accVerif.totalAmount !== null && accVerif.totalAmount !== '')
     ? accVerif.totalAmount 
     : (isAlreadyCompleted ? (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || '')) : '');
-  const adjustedAmountRaw = accVerif.adjustedAmount !== undefined && accVerif.adjustedAmount !== null ? accVerif.adjustedAmount : '';
+  const adjustedAmountRaw = (accVerif.adjustedAmount !== undefined && accVerif.adjustedAmount !== null && accVerif.adjustedAmount !== '')
+    ? accVerif.adjustedAmount
+    : (accountsVerificationModal?.adjustedAmount !== undefined && accountsVerificationModal?.adjustedAmount !== null ? accountsVerificationModal.adjustedAmount : '');
   const adjustedAmountNum = cleanNum(adjustedAmountRaw, 0);
-  const adjustedFromRef = accVerif.adjustedFromRef || '';
-  const adjustedNote = accVerif.adjustedNote || '';
+  const adjustedFromRef = accVerif.adjustedFromRef || accountsVerificationModal?.adjustedFromRef || '';
+  const adjustedNote = accVerif.adjustedNote || accountsVerificationModal?.adjustedNote || '';
   const verifiedSlipAmountNum = cleanNum(currentTotalAmount, 0);
   const effectiveTotalAmountNum = verifiedSlipAmountNum + adjustedAmountNum;
 
@@ -504,10 +506,6 @@ export default function AccountsVerificationModal({
     }
     if (effectiveTotalAmountNum <= 0) {
       alert('⚠️ Please enter the verified Total Amount (₹) from the payment slip (or apply an Adjust Payment amount) before completing accounts verification.');
-      return;
-    }
-    if (adjustedAmountNum > 0 && !String(adjustedFromRef).trim()) {
-      alert('⚠️ Please enter the Previous Order / Receipt Reference for the Adjusted Payment.');
       return;
     }
 
@@ -1098,165 +1096,177 @@ export default function AccountsVerificationModal({
             </div>
           </div>
 
-          {/* Adjust Payment (Accounts Only — Previous / Advance Payment Adjustment) */}
-          {(!isAlreadyCompleted || adjustedAmountNum > 0) && (
-            <div style={{ marginTop: '14px' }}>
-              {!showAdjustPayment && adjustedAmountNum <= 0 && !isAlreadyCompleted && !isAccountsViewOnly ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAdjustPayment(true)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    padding: '8px 14px', borderRadius: '8px',
-                    border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
-                    color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
-                  }}
-                >
-                  + Adjust Payment
-                </button>
-              ) : (
-                <div style={{
-                  backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
-                  borderRadius: '12px', padding: '14px',
-                  display: 'flex', flexDirection: 'column', gap: '12px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          {/* Adjust Payment (Accounts Only — Always visible in both Verification & View modes) */}
+          <div style={{ marginTop: '14px' }}>
+            {!showAdjustPayment && adjustedAmountNum <= 0 && !isAlreadyCompleted && !isAccountsViewOnly ? (
+              <button
+                type="button"
+                onClick={() => setShowAdjustPayment(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: '8px',
+                  border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
+                  color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
+                }}
+              >
+                + Adjust Payment
+              </button>
+            ) : (
+              <div style={{
+                backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
+                borderRadius: '12px', padding: '14px',
+                display: 'flex', flexDirection: 'column', gap: '12px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0369A1' }}>
                       Adjust Payment (From Previous Payment / Advance)
                     </span>
-                    {!isAlreadyCompleted && !isAccountsViewOnly && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAdjustPayment(false);
-                          setAccountsVerificationModal(prev => prev ? ({
-                            ...prev,
-                            accountsVerification: {
-                              ...(prev.accountsVerification || {}),
-                              adjustedAmount: '',
-                              adjustedFromRef: '',
-                              adjustedNote: ''
-                            }
-                          }) : null);
-                        }}
-                        style={{
-                          border: '1px solid #FECACA', backgroundColor: '#FEF2F2',
-                          color: '#DC2626', borderRadius: '6px', padding: '4px 10px',
-                          fontSize: '11px', fontWeight: '700', cursor: 'pointer'
-                        }}
-                      >
-                        Remove Adjustment
-                      </button>
+                    {(isAlreadyCompleted || isAccountsViewOnly) && (
+                      <span style={{
+                        fontSize: '11px', fontWeight: '800', padding: '2px 9px', borderRadius: '999px',
+                        backgroundColor: adjustedAmountNum > 0 ? '#DCFCE7' : '#F1F5F9',
+                        color: adjustedAmountNum > 0 ? '#166534' : '#64748B',
+                        border: adjustedAmountNum > 0 ? '1px solid #BBF7D0' : '1px solid #CBD5E1'
+                      }}>
+                        {adjustedAmountNum > 0
+                          ? `Adjusted: ₹ ${adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                          : 'No Adjustment Applied (₹ 0.00)'}
+                      </span>
                     )}
                   </div>
+                  {!isAlreadyCompleted && !isAccountsViewOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAdjustPayment(false);
+                        setAccountsVerificationModal(prev => prev ? ({
+                          ...prev,
+                          accountsVerification: {
+                            ...(prev.accountsVerification || {}),
+                            adjustedAmount: '',
+                            adjustedFromRef: '',
+                            adjustedNote: ''
+                          }
+                        }) : null);
+                      }}
+                      style={{
+                        border: '1px solid #FECACA', backgroundColor: '#FEF2F2',
+                        color: '#DC2626', borderRadius: '6px', padding: '4px 10px',
+                        fontSize: '11px', fontWeight: '700', cursor: 'pointer'
+                      }}
+                    >
+                      Remove Adjustment
+                    </button>
+                  )}
+                </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                        Adjusted Amount (₹)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="e.g. 40000"
-                        disabled={isAlreadyCompleted || isAccountsViewOnly}
-                        value={adjustedAmountRaw}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setAccountsVerificationModal(prev => prev ? ({
-                            ...prev,
-                            accountsVerification: { ...(prev.accountsVerification || {}), adjustedAmount: val }
-                          }) : null);
-                        }}
-                        style={{
-                          width: '100%', height: '38px', borderRadius: '8px',
-                          border: '1px solid #93C5FD', padding: '0 10px',
-                          fontSize: '13px', fontWeight: '700', color: '#0F172A',
-                          backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                          boxSizing: 'border-box', outline: 'none'
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                        Previous Order / Receipt Ref <span style={{ color: '#EF4444' }}>*</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. PI-00045 / UTR-XXXX"
-                        disabled={isAlreadyCompleted || isAccountsViewOnly}
-                        value={adjustedFromRef}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setAccountsVerificationModal(prev => prev ? ({
-                            ...prev,
-                            accountsVerification: { ...(prev.accountsVerification || {}), adjustedFromRef: val }
-                          }) : null);
-                        }}
-                        style={{
-                          width: '100%', height: '38px', borderRadius: '8px',
-                          border: '1px solid #93C5FD', padding: '0 10px',
-                          fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
-                          backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                          boxSizing: 'border-box', outline: 'none'
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                        Note (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Excess from old order"
-                        disabled={isAlreadyCompleted || isAccountsViewOnly}
-                        value={adjustedNote}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setAccountsVerificationModal(prev => prev ? ({
-                            ...prev,
-                            accountsVerification: { ...(prev.accountsVerification || {}), adjustedNote: val }
-                          }) : null);
-                        }}
-                        style={{
-                          width: '100%', height: '38px', borderRadius: '8px',
-                          border: '1px solid #93C5FD', padding: '0 10px',
-                          fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
-                          backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                          boxSizing: 'border-box', outline: 'none'
-                        }}
-                      />
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                      Adjusted Amount (₹)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="e.g. 40000"
+                      disabled={isAlreadyCompleted || isAccountsViewOnly}
+                      value={adjustedAmountRaw}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAccountsVerificationModal(prev => prev ? ({
+                          ...prev,
+                          accountsVerification: { ...(prev.accountsVerification || {}), adjustedAmount: val }
+                        }) : null);
+                      }}
+                      style={{
+                        width: '100%', height: '38px', borderRadius: '8px',
+                        border: '1px solid #93C5FD', padding: '0 10px',
+                        fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                        backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                        boxSizing: 'border-box', outline: 'none'
+                      }}
+                    />
                   </div>
 
-                  {(() => {
-                    const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
-                    const remainingBal = Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
-                    return (
-                      <div style={{
-                        display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
-                        padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF',
-                        border: '1px solid #E0F2FE', fontSize: '12px', fontWeight: '700'
-                      }}>
-                        <span style={{ color: '#475569' }}>Order Total: <strong style={{ color: '#0F172A' }}>₹ {targetOrderAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                        <span style={{ color: '#475569' }}>Paid Now: <strong style={{ color: '#0E7490' }}>₹ {verifiedSlipAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                        <span style={{ color: '#475569' }}>Adjusted: <strong style={{ color: '#0369A1' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                        <span style={{ color: '#475569' }}>Total Settled: <strong style={{ color: '#059669' }}>₹ {effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                        {targetOrderAmt > 0 && (
-                          <span style={{ color: remainingBal <= 0 ? '#059669' : '#B45309' }}>
-                            Balance: <strong>₹ {remainingBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                      Previous Order / Receipt Ref (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Optional — e.g. PI-00045 / UTR-XXXX"
+                      disabled={isAlreadyCompleted || isAccountsViewOnly}
+                      value={adjustedFromRef}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAccountsVerificationModal(prev => prev ? ({
+                          ...prev,
+                          accountsVerification: { ...(prev.accountsVerification || {}), adjustedFromRef: val }
+                        }) : null);
+                      }}
+                      style={{
+                        width: '100%', height: '38px', borderRadius: '8px',
+                        border: '1px solid #93C5FD', padding: '0 10px',
+                        fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                        backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                        boxSizing: 'border-box', outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                      Note (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Excess from old order"
+                      disabled={isAlreadyCompleted || isAccountsViewOnly}
+                      value={adjustedNote}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAccountsVerificationModal(prev => prev ? ({
+                          ...prev,
+                          accountsVerification: { ...(prev.accountsVerification || {}), adjustedNote: val }
+                        }) : null);
+                      }}
+                      style={{
+                        width: '100%', height: '38px', borderRadius: '8px',
+                        border: '1px solid #93C5FD', padding: '0 10px',
+                        fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                        backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                        boxSizing: 'border-box', outline: 'none'
+                      }}
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {(() => {
+                  const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
+                  const remainingBal = Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
+                  return (
+                    <div style={{
+                      display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
+                      padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF',
+                      border: '1px solid #E0F2FE', fontSize: '12px', fontWeight: '700'
+                    }}>
+                      <span style={{ color: '#475569' }}>Order Total: <strong style={{ color: '#0F172A' }}>₹ {targetOrderAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                      <span style={{ color: '#475569' }}>Paid Now: <strong style={{ color: '#0E7490' }}>₹ {verifiedSlipAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                      <span style={{ color: '#475569' }}>Adjusted: <strong style={{ color: '#0369A1' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                      <span style={{ color: '#475569' }}>Total Settled: <strong style={{ color: '#059669' }}>₹ {effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                      {targetOrderAmt > 0 && (
+                        <span style={{ color: remainingBal <= 0 ? '#059669' : '#B45309' }}>
+                          Balance: <strong>₹ {remainingBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
 
           {/* Customer Credit Terms & Credit Amount Notice for Accounts Verification */}
           {(() => {
@@ -2049,7 +2059,21 @@ export default function AccountsVerificationModal({
 
         const dynamicAccItems = rawAccItems.map((it, idx) => {
           const q = parseFloat(it.qty || it.bomQty || 1) || 1;
-          const matchingPacked = (accountsVerificationModal.dispatchPacking || []).find(p => (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code));
+          const packedArr = Array.isArray(accountsVerificationModal.dispatchPacking) ? accountsVerificationModal.dispatchPacking : [];
+          const origItemsArr = Array.isArray(accountsVerificationModal.items) ? accountsVerificationModal.items : [];
+          const sameIdxOrig = origItemsArr[idx] && (
+            (origItemsArr[idx].code && it.code && origItemsArr[idx].code === it.code) ||
+            (origItemsArr[idx].name && it.name && origItemsArr[idx].name.toLowerCase().trim() === it.name.toLowerCase().trim())
+          ) ? origItemsArr[idx] : null;
+          const sameIdxPacked = packedArr[idx] && (
+            (packedArr[idx].code && it.code && packedArr[idx].code === it.code) ||
+            (packedArr[idx].name && it.name && packedArr[idx].name.toLowerCase().trim() === it.name.toLowerCase().trim())
+          ) ? packedArr[idx] : null;
+          const resolvedGroupId = it.presetGroupId || sameIdxOrig?.presetGroupId || sameIdxPacked?.presetGroupId || null;
+          const matchingPacked = sameIdxPacked || packedArr.find(p =>
+            (!resolvedGroupId || !p.presetGroupId || String(p.presetGroupId) === String(resolvedGroupId)) &&
+            ((p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code))
+          );
           const pQty = (it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== '')
             ? it.packedQty
             : (matchingPacked && matchingPacked.packedQty !== undefined && matchingPacked.packedQty !== null && matchingPacked.packedQty !== '' ? matchingPacked.packedQty : (it.packed ? q : 0));
@@ -2131,16 +2155,17 @@ export default function AccountsVerificationModal({
             rate: r,
             amt: q * r,
             packed: it.packed !== undefined ? Boolean(it.packed) : (matchingPacked ? Boolean(matchingPacked.packed) : true),
-            isPresetItem: Boolean(it.isPresetItem || matchingPacked?.isPresetItem),
-            presetGroupId: it.presetGroupId || matchingPacked?.presetGroupId || null
+            isPresetItem: Boolean(it.isPresetItem || sameIdxOrig?.isPresetItem || matchingPacked?.isPresetItem || resolvedGroupId),
+            presetGroupId: resolvedGroupId || matchingPacked?.presetGroupId || null,
+            presetName: it.presetName || sameIdxOrig?.presetName || matchingPacked?.presetName || ''
           };
         });
 
         const rawPresetGroups = accountsVerificationModal.presetGroups || matchedPi?.presetGroups || {};
         let pGroups = (Array.isArray(rawPresetGroups) && rawPresetGroups.length > 0)
-          ? rawPresetGroups
+          ? rawPresetGroups.map((g, i) => ({ ...g, groupId: g?.groupId || g?.id || `preset-${i + 1}` }))
           : (typeof rawPresetGroups === 'object' && Object.keys(rawPresetGroups).length > 0)
-            ? Object.values(rawPresetGroups)
+            ? Object.entries(rawPresetGroups).map(([key, val]) => ({ ...val, groupId: val?.groupId || val?.id || key }))
             : [];
 
         // Order Subtotal and Grand Total
@@ -2229,10 +2254,54 @@ export default function AccountsVerificationModal({
           { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', tagBg: '#EDE9FE', tagText: '#5B21B6', badge: 'SET 5' },
         ];
 
-        const accSubTotal = dynamicAccItems.reduce((acc, curr) => acc + curr.amt, 0) + presetKitsTotal;
-        const accCgst = accSubTotal * 0.09;
-        const accSgst = accSubTotal * 0.09;
-        const accGrandTotal = accSubTotal + accCgst + accSgst;
+        // Strictly assign each BOM item to at most ONE preset group (never merge all presets into SET 1)
+        const assignedItemIndices = new Set();
+        const kitItemsByGroup = pGroups.map((grp, gIdx) => {
+          const grpId = grp.groupId || grp.id || null;
+          const grpNameLower = String(grp.presetName || '').trim().toLowerCase();
+          const matched = [];
+          dynamicAccItems.forEach((it, itemIdx) => {
+            if (assignedItemIndices.has(itemIdx)) return;
+            const byGroupId = Boolean(grpId && it.presetGroupId && String(it.presetGroupId) === String(grpId));
+            const byPresetName = Boolean(!it.presetGroupId && grpNameLower && String(it.presetName || '').trim().toLowerCase() === grpNameLower);
+            const legacyUnlabeledFirstGroup = Boolean(!it.presetGroupId && !it.presetName && it.isPresetItem && gIdx === 0);
+            if (byGroupId || byPresetName || legacyUnlabeledFirstGroup) {
+              assignedItemIndices.add(itemIdx);
+              matched.push(it);
+            }
+          });
+          return matched;
+        });
+        if (pGroups.length === 1 && kitItemsByGroup[0].length === 0) {
+          dynamicAccItems.forEach((it, itemIdx) => {
+            assignedItemIndices.add(itemIdx);
+            kitItemsByGroup[0].push(it);
+          });
+        }
+
+        const looseAccItems = pGroups.length > 0
+          ? dynamicAccItems.filter((it, itemIdx) => !assignedItemIndices.has(itemIdx) && !it.presetGroupId && !it.isPresetItem)
+          : dynamicAccItems;
+
+        // Compute subtotal & GST without double-counting preset components and using each preset's actual GST rate
+        const standaloneSubTotal = looseAccItems.reduce((acc, curr) => acc + curr.amt, 0);
+        const accSubTotal = standaloneSubTotal + presetKitsTotal;
+        const defaultOrderGstPct = extractGstRate(accountsVerificationModal?.gstRate ?? matchedPi?.gstRate, 18);
+        const presetGstTotal = pGroups.reduce((acc, grp, gIdx) => {
+          const gItems = kitItemsByGroup[gIdx] || [];
+          const kTotal = (parseFloat(grp.setCount) || 1) * (cleanNum(grp.kitPrice) || 0);
+          const rawGst = grp.gstRate || gItems[0]?.gstRate || (String(grp.presetName || '').toLowerCase().includes('bos') && String(grp.presetName || '').toLowerCase().includes('dcr') ? 5 : defaultOrderGstPct);
+          const pct = parseFloat(String(rawGst).replace('%', ''));
+          const safePct = Number.isFinite(pct) ? pct : defaultOrderGstPct;
+          return acc + (kTotal * safePct / 100);
+        }, 0);
+        const standaloneGstTotal = looseAccItems.reduce((acc, curr) => {
+          const pct = parseFloat(String(curr.gstRate ?? defaultOrderGstPct).replace('%', ''));
+          const safePct = Number.isFinite(pct) ? pct : defaultOrderGstPct;
+          return acc + (curr.amt * safePct / 100);
+        }, 0);
+        const accTotalGst = presetGstTotal + standaloneGstTotal;
+        const accGrandTotal = accSubTotal + accTotalGst;
 
         return (
           <div style={{
@@ -2307,10 +2376,7 @@ export default function AccountsVerificationModal({
                       const kTotal = sCount * kPrice;
                       const unitType = grp.unit || grp.unitType || (grp.isKwBased || String(grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
 
-                      const explicitKitItems = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
-                      const kitItems = explicitKitItems.length > 0
-                        ? explicitKitItems
-                        : (pGroups.length === 1 ? dynamicAccItems : []);
+                      const kitItems = kitItemsByGroup[gIdx] || [];
 
                       const rawGst = grp.gstRate || kitItems[0]?.gstRate || (pGroups.length === 1 && Number(accountsVerificationModal.subTotal) > 0 && Number(accountsVerificationModal.gstAmount) >= 0
                         ? Math.round((Number(accountsVerificationModal.gstAmount) / Number(accountsVerificationModal.subTotal)) * 100)
@@ -2445,16 +2511,7 @@ export default function AccountsVerificationModal({
 
                     {/* Loose / Individual Products */}
                     {(() => {
-                      const allKitItemSet = new Set();
-                      pGroups.forEach((grp, gIdx) => {
-                        const explicit = dynamicAccItems.filter(it => it.presetGroupId === grp.groupId || (it.isPresetItem && gIdx === 0));
-                        const itemsForGrp = explicit.length > 0 ? explicit : (pGroups.length === 1 ? dynamicAccItems : []);
-                        itemsForGrp.forEach(it => allKitItemSet.add(it));
-                      });
-
-                      const looseItems = pGroups.length > 0
-                        ? dynamicAccItems.filter(it => !allKitItemSet.has(it) && !it.presetGroupId && !it.isPresetItem)
-                        : dynamicAccItems;
+                      const looseItems = looseAccItems;
 
                       if (looseItems.length === 0 && pGroups.length > 0) return null;
 
