@@ -16,6 +16,7 @@ import { getVendors, getItems } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
+import { isMtrDefaultCable, resolveDefaultUom } from '../../utils/vrmProductsData';
 
 const ITEM_IMPORT_FIELDS = [
   { key: 'name', label: 'Item Name', required: true, description: 'Product or item title (Zoho: Item Name)' },
@@ -1215,6 +1216,7 @@ export default function ItemsDirectoryView(props) {
     purchaseDescription: '',
     productType: 'goods'
   });
+  const [newItemUnitTouched, setNewItemUnitTouched] = useState(false);
   const [itemsCurrentPage, setItemsCurrentPage] = useState(1);
   const [itemsRowsPerPage, setItemsRowsPerPage] = useState(10);
   const [itemsGoToPageInput, setItemsGoToPageInput] = useState('');
@@ -1233,7 +1235,7 @@ export default function ItemsDirectoryView(props) {
         sku: (item.sku || '').toString().trim(),
         rate: Number(item.rate) || 0,
         purchaseRate: Number(item.purchaseRate) || 0,
-        unit: (item.unit || 'NOS').toString().trim().toUpperCase(),
+        unit: resolveDefaultUom({ name: item.name, code: item.sku }, item.unit, 'NOS').toUpperCase(),
         description: (item.description || '').toString().trim(),
         purchaseDescription: (item.purchaseDescription || '').toString().trim(),
         productType: (item.productType || 'goods').toString().trim().toLowerCase(),
@@ -1339,7 +1341,7 @@ export default function ItemsDirectoryView(props) {
 
       const cleanCode = newItemData.sku && newItemData.sku.trim() ? newItemData.sku.trim() : (newItemData.code && newItemData.code.trim() ? newItemData.code.trim() : ('ITM-' + Date.now().toString().slice(-6)));
       const cleanRate = Number(newItemData.rate) || 0;
-      const cleanUnit = newItemData.unit || 'NOS';
+      const cleanUnit = resolveDefaultUom({ name: newItemData.name.trim(), code: cleanCode }, newItemData.unit, 'NOS').toUpperCase();
       const cleanCat = newItemData.category || (newItemData.productType === 'service' ? 'Services' : 'Finished Goods');
 
       const payload = {
@@ -1409,6 +1411,7 @@ export default function ItemsDirectoryView(props) {
       setTimeout(() => {
         setIsCreatingItem(false);
         setCreateStatus(null);
+        setNewItemUnitTouched(false);
         setNewItemData({
           name: '',
           sku: '',
@@ -1425,7 +1428,7 @@ export default function ItemsDirectoryView(props) {
       console.error("Error creating product:", err);
       const cleanCode = newItemData.sku && newItemData.sku.trim() ? newItemData.sku.trim() : ('ITM-' + Date.now().toString().slice(-6));
       const cleanRate = Number(newItemData.rate) || 0;
-      const cleanUnit = newItemData.unit || 'NOS';
+      const cleanUnit = resolveDefaultUom({ name: newItemData.name.trim(), code: cleanCode }, newItemData.unit, 'NOS').toUpperCase();
       const cleanCat = newItemData.category || (newItemData.productType === 'service' ? 'Services' : 'Finished Goods');
 
       const fallback = {
@@ -2197,7 +2200,16 @@ export default function ItemsDirectoryView(props) {
                         type="text"
                         placeholder="e.g. Solar Panel 540W Monocrystalline"
                         value={newItemData.name}
-                        onChange={(e) => setNewItemData({ ...newItemData, name: e.target.value })}
+                        onChange={(e) => {
+                          const nextName = e.target.value;
+                          setNewItemData((prev) => ({
+                            ...prev,
+                            name: nextName,
+                            unit: !newItemUnitTouched
+                              ? (isMtrDefaultCable(nextName) ? 'MTR' : 'NOS')
+                              : prev.unit
+                          }));
+                        }}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
                        />
                     </div>
@@ -2279,7 +2291,10 @@ export default function ItemsDirectoryView(props) {
                         type="text"
                         placeholder="e.g. NOS, KG, MTR, SET"
                         value={newItemData.unit}
-                        onChange={(e) => setNewItemData({ ...newItemData, unit: e.target.value })}
+                        onChange={(e) => {
+                          setNewItemUnitTouched(true);
+                          setNewItemData({ ...newItemData, unit: e.target.value });
+                        }}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
                        />
                     </div>
@@ -2640,6 +2655,7 @@ export default function ItemsDirectoryView(props) {
 
                   <button
                     onClick={() => {
+                      setNewItemUnitTouched(false);
                       setNewItemData({
                         name: '',
                         sku: '',
@@ -2939,7 +2955,7 @@ export default function ItemsDirectoryView(props) {
                                 </td>
                                 <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                                   <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', backgroundColor: '#F8FAFC', padding: '2px 8px', borderRadius: '6px', border: '1px solid #CBD5E1' }}>
-                                    {item.unit || 'NOS'}
+                                    {resolveDefaultUom(item, item.unit || item.uom, 'NOS')}
                                   </span>
                                 </td>
                                 <td style={{ padding: '14px 16px', color: '#64748B', fontSize: '12.5px' }}>

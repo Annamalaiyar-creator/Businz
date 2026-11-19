@@ -37,6 +37,14 @@ import * as vrmDataModule from '../src/utils/vrmProductsData.js';
 const VRM_PRODUCTS = vrmDataModule.VRM_PRODUCTS || vrmDataModule.default?.VRM_PRODUCTS || [];
 const wordFingerprint = vrmDataModule.wordFingerprint || vrmDataModule.default?.wordFingerprint || ((w) => String(w || '').toLowerCase().trim());
 const resolveProductCode = vrmDataModule.resolveProductCode || vrmDataModule.default?.resolveProductCode || ((c) => c);
+const resolveDefaultUom = vrmDataModule.resolveDefaultUom || vrmDataModule.default?.resolveDefaultUom || ((_it, u, fb = 'NOS') => u || fb);
+const applyDefaultCableUom = (item) => {
+  if (!item || typeof item !== 'object') return item;
+  const fallback = item.unit || item.uom || 'NOS';
+  const resolved = resolveDefaultUom(item, item.unit || item.uom, fallback);
+  if (item.unit === resolved && item.uom === resolved) return item;
+  return { ...item, unit: resolved, uom: resolved };
+};
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -2931,7 +2939,7 @@ const loadLocalItems = () => {
     const key = c ? `c:${c}` : `n:${n}`;
     if (seen.has(key)) return;
     seen.add(key);
-    unified.push(it);
+    unified.push(applyDefaultCableUom(it));
   });
 
   supabaseMemoryStore.item_store = unified;
@@ -2961,7 +2969,7 @@ const loadLocalRawMaterials = () => {
     return !isDeletedOrInvalid(m.code, m.sku, m.name) && !isDeletedOrInvalid(m.itemId, m.id, m.name);
   });
   if (Array.isArray(memMats) && memMats.length >= diskMats.length && memMats.length > 0) {
-    return memMats;
+    return memMats.map(applyDefaultCableUom);
   }
   if (Array.isArray(diskMats) && diskMats.length > 0) {
     if (Array.isArray(memMats) && memMats.length > 0) {
@@ -2978,14 +2986,15 @@ const loadLocalRawMaterials = () => {
           map.set(k, { ...m });
         }
       });
-      const unified = Array.from(map.values()).filter(m => !isDeletedOrInvalid(m.code, m.sku, m.name));
+      const unified = Array.from(map.values()).filter(m => !isDeletedOrInvalid(m.code, m.sku, m.name)).map(applyDefaultCableUom);
       supabaseMemoryStore.raw_materials_store = unified;
       return unified;
     }
-    supabaseMemoryStore.raw_materials_store = diskMats;
-    return diskMats;
+    const normalizedDisk = diskMats.map(applyDefaultCableUom);
+    supabaseMemoryStore.raw_materials_store = normalizedDisk;
+    return normalizedDisk;
   }
-  return memMats || [];
+  return (memMats || []).map(applyDefaultCableUom);
 };
 
 const saveLocalItems = (items) => {
@@ -3660,6 +3669,9 @@ app.get('/api/store/:key', async (req, res) => {
     }
 
     const data = await getDatabaseStore(key);
+    if ((cleanKey === 'item_store' || cleanKey === 'raw_materials_store') && Array.isArray(data)) {
+      return res.json({ success: true, data: data.map(applyDefaultCableUom) });
+    }
     return res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message, message: err.message });
@@ -5207,12 +5219,13 @@ app.post('/api/purchaseorders', async (req, res) => {
     let calcTotalOrdered = 0;
     const processedItems = rawItems.map(item => {
       const q = Number(item.qty || item.quantity || 1);
+      const parsedRate = parseFloat(String(item.rate ?? item.unitPrice ?? item.unit_price ?? item.item_rate ?? item.purchaseRate ?? item.price ?? 0).replace(/[^0-9.-]/g, '')) || 0;
       calcTotalOrdered += q;
       return {
         ...item,
         name: item.itemName || item.name || item.description || 'General Item',
         qty: q,
-        rate: Number(item.unitPrice || item.rate || item.price || 0),
+        rate: parsedRate,
         tax: Number(item.tax !== undefined && item.tax !== '' ? item.tax : 18),
         previouslyReceived: Number(item.previouslyReceived || 0),
         remainingQty: Number(item.remainingQty !== undefined ? item.remainingQty : q)
@@ -7297,6 +7310,13 @@ app.get('/api/purchaseorders', async (req, res) => {
       statusText = 'OPEN / PARTIALLY RECEIVED';
     }
 
+    const grnStamps = matchingGRNs
+      .map(g => g.createdAt || g.created_at || g.updatedAt || g.grnDate || g.receiptDate || g.date)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const firstGrnAt = grnStamps[0] || po.firstGrnAt || null;
+    const lastGrnAt = grnStamps[grnStamps.length - 1] || po.lastGrnAt || null;
+
     return {
       ...po,
       id: po.id || po.poNo,
@@ -7308,6 +7328,8 @@ app.get('/api/purchaseorders', async (req, res) => {
       receivingProgressPct: totalOrdered > 0 ? ((totalReceived / totalOrdered) * 100).toFixed(1) : (isFullyReceived ? '100.0' : (po.receivingProgressPct || '0.0')),
       grnCount: matchingGRNs.length > 0 ? matchingGRNs.length : (po.grnCount || 0),
       totalReceived: totalReceived > 0 ? totalReceived : (Number(po.totalReceived) || 0),
+      firstGrnAt,
+      lastGrnAt,
       status: statusText,
       statusType: statusType,
       items: Array.isArray(po.items) ? po.items : []
@@ -8791,8 +8813,8 @@ app.post('/api/purchaseorders/:id/approve', async (req, res) => {
   const approver = req.body.approver || 'Velmurugan Rathinam (CEO)';
 
   const now = new Date();
-  const approvedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const approvedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const approvedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+  const approvedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 
   // Update local PO store
   const localPOs = loadLocalPOs();
@@ -8807,6 +8829,9 @@ app.post('/api/purchaseorders/:id/approve', async (req, res) => {
     localPOs[matchedIdx].status = 'MD Approved';
     localPOs[matchedIdx].statusType = 'md_approved';
     localPOs[matchedIdx].approvedBy = approver;
+    localPOs[matchedIdx].approvedAt = now.toISOString();
+    localPOs[matchedIdx].approvedDate = approvedDate;
+    localPOs[matchedIdx].approvedTime = approvedTime;
     localPOs[matchedIdx].approvalDate = approvedDate;
     localPOs[matchedIdx].approvalTime = approvedTime;
     localPOs[matchedIdx].approvalRemarks = remarks;
@@ -8818,6 +8843,9 @@ app.post('/api/purchaseorders/:id/approve', async (req, res) => {
       status: 'MD Approved',
       statusType: 'md_approved',
       approvedBy: approver,
+      approvedAt: now.toISOString(),
+      approvedDate,
+      approvedTime,
       approvalDate: approvedDate,
       approvalTime: approvedTime,
       approvalRemarks: remarks
@@ -8907,8 +8935,8 @@ app.post('/api/purchaseorders/:id/process-payment', async (req, res) => {
   const creditTerms = req.body.creditTerms || 'Net 30 Days';
 
   const now = new Date();
-  const paymentDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const paymentTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const paymentDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+  const paymentTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 
   // Handle multiple payment proof images (up to 4 images)
   const incomingImages = Array.isArray(req.body.paymentImages) ? req.body.paymentImages.slice(0, 4) : [];
@@ -8938,6 +8966,7 @@ app.post('/api/purchaseorders/:id/process-payment', async (req, res) => {
     amount: amountPaid || (matchedIdx !== -1 ? localPOs[matchedIdx].amount : ''),
     date: paymentDate,
     time: paymentTime,
+    paidAt: now.toISOString(),
     remarks,
     isCredit,
     creditTerms,
@@ -9024,8 +9053,8 @@ app.post('/api/purchaseorders/:id/proceed', async (req, res) => {
   const vendorPhone = req.body.vendorPhone || req.body.phone || '';
 
   const now = new Date();
-  const proceedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const proceedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const proceedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+  const proceedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 
   const localPOs = loadLocalPOs();
   const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
@@ -9043,6 +9072,7 @@ app.post('/api/purchaseorders/:id/proceed', async (req, res) => {
   const proceedDetails = {
     date: proceedDate,
     time: proceedTime,
+    proceededAt: now.toISOString(),
     remarks,
     authorizedBy,
     vendorEmail,
@@ -9420,7 +9450,7 @@ app.get('/api/raw-materials', async (req, res) => {
 
     // Optional filtering
     const { category, search, page, limit } = req.query;
-    let filtered = rawMats;
+    let filtered = rawMats.map(applyDefaultCableUom);
     if (category) {
       const catLower = String(category).toLowerCase().trim();
       filtered = filtered.filter(it => 
@@ -9988,8 +10018,9 @@ app.post('/api/items', async (req, res) => {
         const newItemId = it.itemId || it.id || it.sku || `ITEM-${Date.now()}-${idx + 1}`;
         const reqStatus = (it.status && String(it.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
         const cleanCode = String(it.code || it.sku || newItemId).trim();
+        const cleanName = String(it.name || it.description || newItemId).trim();
         const cleanRate = Number(it.rate || it.price || 0) || 0;
-        const cleanUnit = it.unit || it.uom || 'NOS';
+        const cleanUnit = resolveDefaultUom({ name: cleanName, code: cleanCode }, it.unit || it.uom, 'NOS');
         const cleanCat = it.category || it.cat || (it.productType === 'service' ? 'Services' : 'Finished Goods');
         const cleanStock = it.stock !== undefined ? Number(it.stock) : 0;
 
@@ -9998,7 +10029,7 @@ app.post('/api/items', async (req, res) => {
           id: newItemId,
           code: cleanCode,
           sku: cleanCode,
-          name: String(it.name || it.description || newItemId).trim(),
+          name: cleanName,
           rate: cleanRate,
           price: cleanRate,
           status: reqStatus,
@@ -10055,8 +10086,9 @@ app.post('/api/items', async (req, res) => {
     const newItemId = req.body.itemId || req.body.id || ('ITEM-' + Date.now());
     const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
     const cleanCode = String(req.body.code || req.body.sku || newItemId).trim();
+    const cleanName = String(req.body.name || '').trim();
     const cleanRate = Number(req.body.rate || req.body.price || 0) || 0;
-    const cleanUnit = req.body.unit || req.body.uom || 'NOS';
+    const cleanUnit = resolveDefaultUom({ name: cleanName, code: cleanCode }, req.body.unit || req.body.uom, 'NOS');
     const cleanCat = req.body.category || req.body.cat || (req.body.productType === 'service' ? 'Services' : 'Finished Goods');
     const cleanStock = req.body.stock !== undefined ? Number(req.body.stock) : 0;
 
@@ -10065,7 +10097,7 @@ app.post('/api/items', async (req, res) => {
       id: newItemId,
       code: cleanCode,
       sku: cleanCode,
-      name: String(req.body.name || '').trim(),
+      name: cleanName,
       rate: cleanRate,
       price: cleanRate,
       status: reqStatus,
@@ -10139,6 +10171,7 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
     (VRM_PRODUCTS || []).forEach(p => {
       const code = p.code || resolveProductCode(p) || p.name;
       const key = String(code).toUpperCase().trim();
+      const baseUnit = resolveDefaultUom(p, p.uom, 'Nos');
       itemMap.set(key, {
         code: p.code || code,
         sku: p.code || code,
@@ -10146,8 +10179,8 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
         name: p.name,
         cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
-        unit: p.uom || 'Nos',
-        uom: p.uom || 'Nos',
+        unit: baseUnit,
+        uom: baseUnit,
         price: p.price || p.rate || 0,
         rate: p.price || p.rate || 0,
         gstRate: p.gst || '18%',
@@ -10167,6 +10200,11 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
       if (!code) return;
       const key = String(code).toUpperCase().trim();
       const existing = itemMap.get(key) || {};
+      const resolvedUnit = resolveDefaultUom(
+        { ...existing, ...rm },
+        rm.unit || rm.uom || existing.unit,
+        'Nos'
+      );
       itemMap.set(key, {
         ...existing,
         ...rm,
@@ -10174,7 +10212,8 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
         name: rm.name || existing.name,
         cat: rm.cat || rm.category || existing.cat || 'Aluminium',
         category: rm.cat || rm.category || existing.cat || 'Aluminium',
-        unit: rm.unit || rm.uom || existing.unit || 'Nos'
+        unit: resolvedUnit,
+        uom: resolvedUnit
       });
     });
 
@@ -10184,6 +10223,11 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
       if (!code) return;
       const key = String(code).toUpperCase().trim();
       const existing = itemMap.get(key) || {};
+      const resolvedUnit = resolveDefaultUom(
+        { ...existing, ...it },
+        it.unit || it.uom || existing.unit,
+        'Nos'
+      );
       itemMap.set(key, {
         ...existing,
         ...it,
@@ -10191,7 +10235,8 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
         name: it.name || existing.name,
         cat: it.category || it.material || existing.cat || 'General',
         category: it.category || it.material || existing.cat || 'General',
-        unit: it.unit || it.uom || existing.unit || 'Nos'
+        unit: resolvedUnit,
+        uom: resolvedUnit
       });
     });
 
@@ -10257,6 +10302,7 @@ app.all('/api/inventory/reset-to-zero', async (req, res) => {
     (VRM_PRODUCTS || []).forEach(p => {
       const code = p.code || resolveProductCode(p) || p.name;
       const key = String(code).toUpperCase().trim();
+      const baseUnit = resolveDefaultUom(p, p.uom, 'Nos');
       itemMap.set(key, {
         code: p.code || code,
         sku: p.code || code,
@@ -10264,8 +10310,8 @@ app.all('/api/inventory/reset-to-zero', async (req, res) => {
         name: p.name,
         cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
-        unit: p.uom || 'Nos',
-        uom: p.uom || 'Nos',
+        unit: baseUnit,
+        uom: baseUnit,
         price: p.price || p.rate || 0,
         rate: p.price || p.rate || 0,
         gstRate: p.gst || '18%',
@@ -10284,6 +10330,11 @@ app.all('/api/inventory/reset-to-zero', async (req, res) => {
       if (!code) return;
       const key = String(code).toUpperCase().trim();
       const existing = itemMap.get(key) || {};
+      const resolvedUnit = resolveDefaultUom(
+        { ...existing, ...rm },
+        rm.unit || rm.uom || existing.unit,
+        'Nos'
+      );
       itemMap.set(key, {
         ...existing,
         ...rm,
@@ -10291,7 +10342,8 @@ app.all('/api/inventory/reset-to-zero', async (req, res) => {
         name: rm.name || existing.name,
         cat: rm.cat || rm.category || existing.cat || 'Aluminium',
         category: rm.cat || rm.category || existing.cat || 'Aluminium',
-        unit: rm.unit || rm.uom || existing.unit || 'Nos'
+        unit: resolvedUnit,
+        uom: resolvedUnit
       });
     });
 
@@ -10300,6 +10352,11 @@ app.all('/api/inventory/reset-to-zero', async (req, res) => {
       if (!code) return;
       const key = String(code).toUpperCase().trim();
       const existing = itemMap.get(key) || {};
+      const resolvedUnit = resolveDefaultUom(
+        { ...existing, ...it },
+        it.unit || it.uom || existing.unit,
+        'Nos'
+      );
       itemMap.set(key, {
         ...existing,
         ...it,
@@ -10307,7 +10364,8 @@ app.all('/api/inventory/reset-to-zero', async (req, res) => {
         name: it.name || existing.name,
         cat: it.category || it.material || existing.cat || 'General',
         category: it.category || it.material || existing.cat || 'General',
-        unit: it.unit || it.uom || existing.unit || 'Nos'
+        unit: resolvedUnit,
+        uom: resolvedUnit
       });
     });
 

@@ -1,5 +1,6 @@
 import basePresets from "./data/vrmPresetsData.json";
 import { fetchCloudStore, saveCloudStoreImmediate } from "./utils/supabaseDataSync";
+import { resolveDefaultUom } from "./utils/vrmProductsData";
 
 /**
  * VRM_HDG_PRESETS
@@ -29,13 +30,15 @@ const normalizePreset = (preset) => {
       const rawName = (it.name || '').trim();
       if (!rawName) return;
       const cleanName = rawName.replace(/\s*\*\s*/g, '*');
+      const resolvedUom = resolveDefaultUom({ ...it, name: cleanName }, it.uom || it.unit, 'NOS');
       if (map.has(cleanName)) {
         const ex = map.get(cleanName);
         const q1 = parseFloat(ex.qty) || 0;
         const q2 = parseFloat(it.qty) || 0;
         ex.qty = String(q1 + q2);
+        if (!ex.uom) ex.uom = resolvedUom;
       } else {
-        map.set(cleanName, { ...it, name: cleanName });
+        map.set(cleanName, { ...it, name: cleanName, uom: resolvedUom });
       }
     });
     items = Array.from(map.values());

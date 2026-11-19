@@ -4,7 +4,16 @@ import {
 } from 'lucide-react';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
-import { resolveProductCode, isRailPreset, isKwPreset, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
+import {
+  resolveProductCode,
+  isRailPreset,
+  isKwPreset,
+  isTriangleDirectPreset,
+  SALES_UOM_OPTIONS,
+  isSalesLoginRole,
+  normalizeSalesUomValue,
+  calculateTotalDispatchQty
+} from '../../utils/vrmProductsData';
 import { searchCustomers } from '../../services/customerService';
 import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
 import { PRESET_THEMES, getPresetTheme } from '../../utils/presetThemes';
@@ -1438,8 +1447,11 @@ export default function PiCreatorEditorSection({ ctx }) {
                               </td>
                               <td style={{ padding: '12px 4px', textAlign: 'center', width: '105px', minWidth: '105px', whiteSpace: 'nowrap' }}>
                                 {(() => {
-                                  const currentUom = String(item.uom || item.unit || 'NOS').trim().toUpperCase() || 'NOS';
+                                  const isSalesUser = isSalesLoginRole(ctx?.userRole);
+                                  const rawCurrentUom = String(item.uom || item.unit || 'NOS').trim().toUpperCase() || 'NOS';
+                                  const currentUom = isSalesUser ? normalizeSalesUomValue(rawCurrentUom) : rawCurrentUom;
                                   const standardUoms = ['NOS', 'SET', 'KW', 'KG', 'MTR', 'PCS', 'BOX', 'PKT', 'PAIR', 'LOT', 'TON'];
+                                  const salesAllowedValues = SALES_UOM_OPTIONS.map((o) => o.value);
                                   return (
                                     <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
                                       value={currentUom}
@@ -1464,20 +1476,33 @@ export default function PiCreatorEditorSection({ ctx }) {
                                         textAlign: 'center'
                                       }}
                                     >
-                                      {!standardUoms.includes(currentUom) && (
-                                        <option value={currentUom}>{currentUom}</option>
+                                      {isSalesUser ? (
+                                        <>
+                                          {!salesAllowedValues.includes(currentUom) && (
+                                            <option value={currentUom}>{currentUom}</option>
+                                          )}
+                                          {SALES_UOM_OPTIONS.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                          ))}
+                                        </>
+                                      ) : (
+                                        <>
+                                          {!standardUoms.includes(currentUom) && (
+                                            <option value={currentUom}>{currentUom}</option>
+                                          )}
+                                          <option value="NOS">NOS</option>
+                                          <option value="SET">SET</option>
+                                          <option value="KW">KW</option>
+                                          <option value="KG">KG</option>
+                                          <option value="MTR">MTR</option>
+                                          <option value="PCS">PCS</option>
+                                          <option value="BOX">BOX</option>
+                                          <option value="PKT">PKT</option>
+                                          <option value="PAIR">PAIR</option>
+                                          <option value="LOT">LOT</option>
+                                          <option value="TON">TON</option>
+                                        </>
                                       )}
-                                      <option value="NOS">NOS</option>
-                                      <option value="SET">SET</option>
-                                      <option value="KW">KW</option>
-                                      <option value="KG">KG</option>
-                                      <option value="MTR">MTR</option>
-                                      <option value="PCS">PCS</option>
-                                      <option value="BOX">BOX</option>
-                                      <option value="PKT">PKT</option>
-                                      <option value="PAIR">PAIR</option>
-                                      <option value="LOT">LOT</option>
-                                      <option value="TON">TON</option>
                                     </select>
                                   );
                                 })()}
@@ -1493,13 +1518,20 @@ export default function PiCreatorEditorSection({ ctx }) {
                                       const isCustomGrp = Boolean(item.isCustomSet || currentGroup?.isCustomSet || currentGroup?.presetId === 'custom_set' || String(groupId || '').startsWith('custom_set_'));
                                       setPiItems(prev => prev.map((mat, idx) => {
                                         if (idx !== i) return mat;
+                                        const effectivePresetName = mat.isSubPreset ? mat.subPresetName : (currentGroup?.presetName || mat.presetName);
+                                        const effectiveUnit = mat.isSubPreset ? (mat.subUnit || mat.unit || 'Sets') : (currentGroup?.unit || currentGroup?.unitType || mat.unit || mat.uom);
+                                        const isDirectPreset = isCustomGrp ||
+                                          isKwPreset(effectivePresetName, effectiveUnit, mat) ||
+                                          isRailPreset(effectivePresetName, currentGroup?.category || mat.category, mat.subPresetName, mat.name) ||
+                                          isTriangleDirectPreset(effectivePresetName, currentGroup?.category || mat.category, mat.subPresetName, currentGroup?.presetId || mat.presetId);
                                         const mult = Math.max(0.01, parseFloat(currentGroup?.setCount) || 1);
                                         const parsedVal = parseFloat(val) || 0;
                                         return {
                                           ...mat,
                                           qty: val,
-                                          baseQty: isCustomGrp ? parsedVal : (isPresetItem ? (parsedVal / mult) : mat.baseQty),
-                                          ...(isCustomGrp ? { totalDispatchQty: val, isCustomSet: true } : {})
+                                          baseQty: isDirectPreset ? parsedVal : (isPresetItem ? (parsedVal / mult) : mat.baseQty),
+                                          ...(isDirectPreset && isPresetItem ? { totalDispatchQty: val } : {}),
+                                          ...(isCustomGrp ? { isCustomSet: true } : {})
                                         };
                                       }));
                                     }}
@@ -1536,12 +1568,18 @@ export default function PiCreatorEditorSection({ ctx }) {
 
                                   const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
                                   const isRail = isRailPreset(effectivePresetName, item.category, item.subPresetName, item.name);
+                                  const isTriangle = isTriangleDirectPreset(
+                                    effectivePresetName,
+                                    currentGroup?.category || item.category,
+                                    item.subPresetName,
+                                    currentGroup?.presetId || item.presetId
+                                  );
 
                                   const calcDispQty = calculateTotalDispatchQty(
-                                    item,
+                                    { ...item, presetId: currentGroup?.presetId || item.presetId },
                                     effectiveSetCount,
                                     effectivePresetName,
-                                    item.category,
+                                    currentGroup?.category || item.category,
                                     effectiveUnit
                                   );
                                   const dispVal = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')
@@ -1585,8 +1623,8 @@ export default function PiCreatorEditorSection({ ctx }) {
                                         </span>
                                       </div>
                                       {isPresetItem && (
-                                        <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600', letterSpacing: '0.2px' }}>
-                                          {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${effectiveSetCount}`)}
+                                        <span style={{ fontSize: '9px', color: (isKw || isRail || isTriangle) ? '#059669' : '#64748B', fontWeight: '600', letterSpacing: '0.2px' }}>
+                                          {isKw ? 'Direct kW Qty' : (isTriangle ? 'Direct Triangle Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${effectiveSetCount}`))}
                                         </span>
                                       )}
                                     </div>

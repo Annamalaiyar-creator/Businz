@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { X, Check, Boxes, Package, ShieldCheck } from 'lucide-react';
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import { saveCloudStore } from '../../utils/supabaseDataSync';
+import { isMtrDefaultCable, resolveDefaultUom } from '../../utils/vrmProductsData';
 
 export default function CreateProductModal({ isOpen, onClose, onProductCreated, defaultCategory = 'Raw Material' }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [category, setCategory] = useState(defaultCategory); // 'Raw Material' or 'Finished Goods'
   const [unit, setUnit] = useState(defaultCategory === 'Raw Material' ? 'MT' : 'NOS');
+  const [unitTouched, setUnitTouched] = useState(false);
   const [purchaseRate, setPurchaseRate] = useState('');
   const [salesRate, setSalesRate] = useState('');
   const [hsn, setHsn] = useState('73089090');
@@ -36,7 +38,7 @@ export default function CreateProductModal({ isOpen, onClose, onProductCreated, 
       const cleanRate = Number(salesRate) || Number(purchaseRate) || 0;
       const cleanPurchaseRate = Number(purchaseRate) || 0;
       const cleanStock = Number(openingStock) || 0;
-      const cleanUnit = (unit || 'NOS').toUpperCase();
+      const cleanUnit = resolveDefaultUom({ name: trimmedName, code: generatedCode }, unit, 'NOS').toUpperCase();
 
       const itemPayload = {
         name: trimmedName,
@@ -119,6 +121,7 @@ export default function CreateProductModal({ isOpen, onClose, onProductCreated, 
         onProductCreated(itemPayload);
       }
 
+      setUnitTouched(false);
       onClose();
     } catch (err) {
       console.error('[CreateProductModal] Error saving product:', err);
@@ -274,7 +277,9 @@ export default function CreateProductModal({ isOpen, onClose, onProductCreated, 
                     checked={category === 'Raw Material'}
                     onChange={() => {
                       setCategory('Raw Material');
-                      if (unit === 'NOS') setUnit('MT');
+                      if (!unitTouched) {
+                        setUnit(isMtrDefaultCable(name) ? 'MTR' : (unit === 'NOS' ? 'MT' : unit));
+                      }
                     }}
                     style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                   />
@@ -302,7 +307,9 @@ export default function CreateProductModal({ isOpen, onClose, onProductCreated, 
                     checked={category === 'Finished Goods'}
                     onChange={() => {
                       setCategory('Finished Goods');
-                      if (unit === 'MT') setUnit('NOS');
+                      if (!unitTouched) {
+                        setUnit(isMtrDefaultCable(name) ? 'MTR' : (unit === 'MT' ? 'NOS' : unit));
+                      }
                     }}
                     style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                   />
@@ -324,7 +331,13 @@ export default function CreateProductModal({ isOpen, onClose, onProductCreated, 
                   type="text"
                   required
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    const nextName = e.target.value;
+                    setName(nextName);
+                    if (!unitTouched) {
+                      setUnit(isMtrDefaultCable(nextName) ? 'MTR' : (category === 'Raw Material' ? 'MT' : 'NOS'));
+                    }
+                  }}
                   placeholder="e.g. GI Steel Coil 2mm / Solar MMS Kit"
                   style={{
                     height: '40px',
@@ -374,7 +387,10 @@ export default function CreateProductModal({ isOpen, onClose, onProductCreated, 
                 </label>
                 <select
                   value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
+                  onChange={(e) => {
+                    setUnitTouched(true);
+                    setUnit(e.target.value);
+                  }}
                   style={{
                     height: '40px',
                     borderRadius: '8px',

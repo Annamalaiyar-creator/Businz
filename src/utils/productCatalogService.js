@@ -1,4 +1,4 @@
-import { resolveProductCode, wordFingerprint, normalizeProductName } from './vrmProductsData.js';
+import { resolveProductCode, wordFingerprint, normalizeProductName, resolveDefaultUom } from './vrmProductsData.js';
 import { centralInventoryStore } from './centralInventoryStore.js';
 import { getHsnCode, is5PctSolarProduct } from './hsnCodeService.js';
 
@@ -223,6 +223,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       return;
     }
 
+    const resolvedUom = resolveDefaultUom({ name: rawName, code: rawCode }, ci.uom || ci.unit, 'NOS');
     const itemRecord = {
       id: ci.id || ci.itemId || rawCode || `ITM-${Date.now()}`,
       itemId: ci.itemId || ci.id || rawCode || '',
@@ -230,8 +231,8 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       sku: ci.sku || rawCode,
       name: rawName,
       category: ci.category || ci.cat || ci.description || 'Finished Goods',
-      uom: ci.uom || ci.unit || 'NOS',
-      unit: ci.unit || ci.uom || 'NOS',
+      uom: resolvedUom,
+      unit: resolvedUom,
       rate: String(ci.rate || ci.price || '0'),
       price: String(ci.price || ci.rate || '0'),
       gstRate: is5PctSolarProduct(rawName, ci.category || ci.cat || '', ci.hsn || ci.hsn_or_sac || ci.hsnCode || '') ? '5%' : (ci.gstRate || ci.gst || '18%'),

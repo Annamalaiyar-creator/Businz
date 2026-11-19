@@ -30,7 +30,14 @@ const TechnicalAdminDashboardView = lazy(() => import('./components/views/Techni
 const DeveloperPortalView = lazy(() => import('./components/DeveloperPortalView'));
 
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
-import { heartbeatActiveSession, revokeSession } from './services/sessionService';
+import {
+  heartbeatActiveSession,
+  revokeSession,
+  upsertSavedAccount,
+  removeSavedAccount,
+  activateSavedAccountLocal,
+  verifySavedAccountSession
+} from './services/sessionService';
 import { getPurchaseOrders, getItems } from './services/businzDataService';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
@@ -319,6 +326,31 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginModalPrefill, setLoginModalPrefill] = useState('');
+  const [accountVersion, setAccountVersion] = useState(0);
+
+  // Ensure the currently authenticated account is persisted in browser saved accounts
+  useEffect(() => {
+    if (!isAuthenticated || !userRole) return;
+    try {
+      const empCode = localStorage.getItem('controlroom_logged_emp_id') || '';
+      const email = localStorage.getItem('controlroom_logged_user_email') || localStorage.getItem('controlroom_logged_user') || '';
+      const name = localStorage.getItem('controlroom_logged_user_name') || '';
+      const sessionId = localStorage.getItem('controlroom_device_session_id') || '';
+      const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time')) || Date.now();
+      if (empCode || email || userRole) {
+        upsertSavedAccount({
+          empCode,
+          email,
+          name,
+          role: userRole,
+          sessionId,
+          sessionStartTime,
+          lastUsedAt: Date.now()
+        });
+      }
+    } catch (_) {}
+  }, [isAuthenticated, userRole, accountVersion]);
 
   useEffect(() => {
     const handleCustomNavigate = (e) => {
@@ -407,7 +439,7 @@ function App() {
       localStorage.removeItem('controlroom_sidebar_active_item');
       if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
         const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('tab', defaultTab);
+        currentUrl.searchParams.delete('tab');
         window.history.replaceState({ tab: defaultTab, isBusinzNavigation: true }, '', currentUrl.toString());
       }
     } catch (_) {}
@@ -466,29 +498,105 @@ function App() {
       localStorage.removeItem('controlroom_sidebar_active_item');
       if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
         const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('tab', defaultTab);
+        currentUrl.searchParams.delete('tab');
         window.history.replaceState({ tab: defaultTab, isBusinzNavigation: true }, '', currentUrl.toString());
       }
     } catch (_) {}
   };
 
-  const handleSignOut = () => {
+  const handleOpenAddAccount = (prefillIdentifier = '') => {
+    setLoginModalPrefill(typeof prefillIdentifier === 'string' ? prefillIdentifier : '');
+    setShowLoginModal(true);
+  };
+
+  const handleRemoveSavedAccount = (targetAccount) => {
+    if (!targetAccount) return;
+    try {
+      if (targetAccount.sessionId) {
+        revokeSession(targetAccount.sessionId);
+      }
+    } catch (_) {}
+    removeSavedAccount(targetAccount.key || targetAccount);
+    setAccountVersion((v) => v + 1);
+  };
+
+  const handleSwitchAccount = async (targetAccount) => {
+    if (!targetAccount) return;
+    const currentEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toLowerCase();
+    const currentEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
+    const targetEmp = String(targetAccount.empCode || '').trim().toLowerCase();
+    const targetEmail = String(targetAccount.email || '').trim().toLowerCase();
+
+    if ((targetEmp && currentEmp && targetEmp === currentEmp) || (!targetEmp && targetEmail && targetEmail === currentEmail)) {
+      return;
+    }
+
+    // Keep current account saved before switching
+    try {
+      const curRole = userRole || localStorage.getItem('controlroom_user_role') || '';
+      const curName = localStorage.getItem('controlroom_logged_user_name') || '';
+      const curEmail = localStorage.getItem('controlroom_logged_user_email') || localStorage.getItem('controlroom_logged_user') || '';
+      const curEmp = localStorage.getItem('controlroom_logged_emp_id') || '';
+      const curSes = localStorage.getItem('controlroom_device_session_id') || '';
+      const curStart = Number(localStorage.getItem('controlroom_session_start_time')) || Date.now();
+      if (curRole && (curEmp || curEmail)) {
+        upsertSavedAccount({
+          empCode: curEmp,
+          email: curEmail,
+          name: curName,
+          role: curRole,
+          sessionId: curSes,
+          sessionStartTime: curStart
+        });
+      }
+    } catch (_) {}
+
+    const check = await verifySavedAccountSession(targetAccount);
+    if (!check.valid) {
+      removeSavedAccount(targetAccount.key || targetAccount);
+      setAccountVersion((v) => v + 1);
+      setLoginModalPrefill(targetAccount.empCode || targetAccount.email || '');
+      setShowLoginModal(true);
+      return;
+    }
+
+    localStorage.removeItem('controlroom_active_tab');
+    localStorage.removeItem('controlroom_sidebar_active_item');
+    setToastAlert(null);
+    setTargetPoNo(null);
+    setTargetBomCode(null);
+    setTargetPiNo(null);
+    setTargetPoTab(null);
+    setTargetCustomerCode(null);
+    setConvertingPiData(null);
+    activateSavedAccountLocal(targetAccount);
+    handleRoleSwitch(targetAccount.role);
+    setAccountVersion((v) => v + 1);
+    try {
+      realtimeNotificationService.start(true);
+    } catch (_) {}
+  };
+
+  const handleSignOut = async () => {
     try {
       realtimeNotificationService.stop();
     } catch (_) {}
+    const currentSesId = localStorage.getItem('controlroom_device_session_id');
+    const currentEmpId = localStorage.getItem('controlroom_logged_emp_id') || '';
+    const currentUser = localStorage.getItem('controlroom_logged_user') || '';
+    const currentRole = userRole || localStorage.getItem('controlroom_user_role') || '';
     try {
-      const sesId = localStorage.getItem('controlroom_device_session_id');
-      if (sesId) {
-        revokeSession(sesId);
+      if (currentSesId) {
+        revokeSession(currentSesId);
       }
     } catch (e) {}
-    localStorage.removeItem('controlroom_is_authenticated');
-    localStorage.removeItem('controlroom_user_role');
-    localStorage.removeItem('controlroom_logged_user');
-    localStorage.removeItem('controlroom_logged_user_name');
-    localStorage.removeItem('controlroom_logged_emp_id');
-    localStorage.removeItem('controlroom_device_session_id');
-    localStorage.removeItem('controlroom_session_start_time');
+
+    const remaining = removeSavedAccount({
+      empCode: currentEmpId,
+      email: currentUser,
+      role: currentRole
+    });
+
     localStorage.removeItem('controlroom_active_tab');
     localStorage.removeItem('controlroom_sidebar_active_item');
     try {
@@ -499,10 +607,43 @@ function App() {
       }
     } catch (_) {}
     setToastAlert(null);
+    setShowLoginModal(false);
+    setLoginModalPrefill('');
+    setTargetPoNo(null);
+    setTargetBomCode(null);
+    setTargetPiNo(null);
+    setTargetPoTab(null);
+    setTargetCustomerCode(null);
+    setConvertingPiData(null);
+
+    if (remaining.length > 0) {
+      for (const candidate of remaining) {
+        const check = await verifySavedAccountSession(candidate);
+        if (check.valid) {
+          activateSavedAccountLocal(candidate);
+          handleRoleSwitch(candidate.role);
+          setAccountVersion((v) => v + 1);
+          try {
+            realtimeNotificationService.start(true);
+          } catch (_) {}
+          return;
+        }
+        removeSavedAccount(candidate.key || candidate);
+      }
+    }
+
+    localStorage.removeItem('controlroom_is_authenticated');
+    localStorage.removeItem('controlroom_user_role');
+    localStorage.removeItem('controlroom_logged_user');
+    localStorage.removeItem('controlroom_logged_user_email');
+    localStorage.removeItem('controlroom_logged_user_name');
+    localStorage.removeItem('controlroom_logged_emp_id');
+    localStorage.removeItem('controlroom_device_session_id');
+    localStorage.removeItem('controlroom_session_start_time');
     setUserRole('');
     setIsAuthenticated(false);
     setActiveTab('Dashboard');
-    setShowLoginModal(false);
+    setAccountVersion((v) => v + 1);
   };
 
   const handleTabChange = (tab, targetPo = null, poTabTarget = null, targetCustomer = null, options = {}) => {
@@ -541,9 +682,9 @@ function App() {
     if (!skipPush && typeof window !== 'undefined' && window.history && window.history.pushState) {
       try {
         const currentUrl = new URL(window.location.href);
-        const currentTabInUrl = currentUrl.searchParams.get('tab');
-        if (currentTabInUrl !== tab) {
-          currentUrl.searchParams.set('tab', tab);
+        const hasTabParam = currentUrl.searchParams.has('tab');
+        if (window.history.state?.tab !== tab || hasTabParam) {
+          currentUrl.searchParams.delete('tab');
           window.history.pushState(
             { tab, isBusinzNavigation: true },
             '',
@@ -562,9 +703,7 @@ function App() {
     try {
       if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
         const currentUrl = new URL(window.location.href);
-        if (!currentUrl.searchParams.has('tab')) {
-          currentUrl.searchParams.set('tab', activeTab);
-        }
+        currentUrl.searchParams.delete('tab');
         window.history.replaceState(
           { tab: activeTab, isBusinzNavigation: true },
           '',
@@ -647,7 +786,7 @@ function App() {
       }, 25000);
       return () => clearInterval(interval);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, accountVersion]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -832,6 +971,7 @@ function App() {
     <div className="app-container">
       {/* Sidebar Navigation */}
       <Sidebar 
+        key={`sidebar-${userRole}-${accountVersion}`}
         collapsed={sidebarCollapsed} 
         onToggle={toggleSidebar} 
         activeTab={activeTab} 
@@ -863,12 +1003,17 @@ function App() {
           userRole={userRole}
           onSwitchRole={handleRoleSwitch}
           onOpenLoginModal={handleSignOut}
+          onLogout={handleSignOut}
+          onAddAccount={() => handleOpenAddAccount('')}
+          onSwitchAccount={handleSwitchAccount}
+          onRemoveAccount={handleRemoveSavedAccount}
+          accountVersion={accountVersion}
           onSelectTab={handleTabChange}
           onToggleSidebar={toggleSidebar}
         />
 
         {/* Scrollable Center Content Pane */}
-        <div className={`content-pane ${(!activeTab.includes('Dashboard')) ? 'procurement-layout' : ''} ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''} ${(activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') ? 'dashboard-view-pane' : ''}`}>
+        <div key={`pane-${userRole}-${accountVersion}`} className={`content-pane ${(!activeTab.includes('Dashboard')) ? 'procurement-layout' : ''} ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''} ${(activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') ? 'dashboard-view-pane' : ''}`}>
           <Suspense fallback={<AppViewLoadingFallback activeTab={activeTab} />}>
             {(((userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer') && (activeTab === 'Dashboard' || activeTab === 'Admin Dashboard' || activeTab === 'Developer Console' || activeTab === 'Developer Portal')) || (['User Management', 'System Health', 'Active Sessions', 'Backup Vault', 'Developer Console', 'Developer Portal'].includes(activeTab) && (userRole === 'Technical Administrator' || userRole === 'Technical Admin' || (userRole || '').startsWith('TA') || userRole === 'Developer' || userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Admin' || userRole === 'Super Admin'))) ? (
               <TechnicalAdminDashboardView userRole={userRole} activeTab={activeTab} onNavigateTab={handleTabChange} />
@@ -982,9 +1127,23 @@ function App() {
               ✕
             </button>
             <LoginScreen 
+              initialIdentifier={loginModalPrefill}
+              isAddAccountMode={true}
               onLoginSuccess={(role) => {
+                setToastAlert(null);
+                setTargetPoNo(null);
+                setTargetBomCode(null);
+                setTargetPiNo(null);
+                setTargetPoTab(null);
+                setTargetCustomerCode(null);
+                setConvertingPiData(null);
+                setLoginModalPrefill('');
                 handleRoleSwitch(role);
+                setAccountVersion((v) => v + 1);
                 setShowLoginModal(false);
+                try {
+                  realtimeNotificationService.start(true);
+                } catch (_) {}
               }} 
             />
           </div>

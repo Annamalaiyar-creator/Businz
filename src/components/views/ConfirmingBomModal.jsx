@@ -8,7 +8,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { resolveDocumentUrl } from "../../utils/documentResolver";
 import DispatchMediaThumbnail from "./DispatchMediaThumbnail";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
-import { isRailPreset, calculateTotalDispatchQty, resolveBomItemDispatchQty } from "../../utils/vrmProductsData";
+import { isRailPreset, SALES_UOM_OPTIONS, isSalesLoginRole, normalizeSalesUomValue, calculateTotalDispatchQty, resolveBomItemDispatchQty } from "../../utils/vrmProductsData";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
 import { extractGstRate } from "../../utils/gstHelper";
@@ -1636,17 +1636,47 @@ export default function ConfirmingBomModal({
                        />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input id={`confirming-bom-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
-                        type="text"
-                        placeholder="UOM"
-                        value={item.uom || item.unit || 'NOS'}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
-                          setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                        }}
-                        style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', outline: 'none' }}
-                       />
+                      {(() => {
+                        const isSalesUser = isSalesLoginRole();
+                        if (isSalesUser) {
+                          const currentUom = normalizeSalesUomValue(item.uom || item.unit || 'NOS');
+                          const salesAllowedValues = SALES_UOM_OPTIONS.map((o) => o.value);
+                          return (
+                            <select
+                              id={`confirming-bom-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                              name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                              aria-label="UOM"
+                              value={currentUom}
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase();
+                                const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
+                                setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                              }}
+                              style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
+                            >
+                              {!salesAllowedValues.includes(currentUom) && (
+                                <option value={currentUom}>{currentUom}</option>
+                              )}
+                              {SALES_UOM_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          );
+                        }
+                        return (
+                          <input id={`confirming-bom-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
+                            type="text"
+                            placeholder="UOM"
+                            value={item.uom || item.unit || 'NOS'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
+                              setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                            }}
+                            style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', outline: 'none' }}
+                           />
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       <input id={`confirming-bom-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty / Set"

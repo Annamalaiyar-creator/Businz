@@ -26,7 +26,7 @@ import {
   sendDirectWhatsApp
 } from '../../utils/whatsappDispatchService';
 import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
-import { isRailPreset, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
+import { isRailPreset, SALES_UOM_OPTIONS, isSalesLoginRole, normalizeSalesUomValue, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
 export { is5PctSolarProduct };
 
 const QUOTATION_TERMS_PRESETS = [
@@ -2211,30 +2211,61 @@ export default function CrmQuotationsView({
                              />
                            </td>
                            <td style={{ padding: '12px 10px' }}>
-                             <input id={`crm-quotations-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
-                               type="text"
-                               list={`uom-list-${i}`}
-                               placeholder="UOM"
-                               value={item.uom || item.unit || 'NOS'}
-                               onChange={(e) => {
-                                 const val = e.target.value;
-                                 setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
-                               }}
-                               style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700', cursor: 'text' }}
-                              />
-                             <datalist id={`uom-list-${i}`}>
-                               <option value="NOS" />
-                               <option value="SET" />
-                               <option value="KW" />
-                               <option value="KG" />
-                               <option value="MTR" />
-                               <option value="PCS" />
-                               <option value="BOX" />
-                               <option value="PKT" />
-                               <option value="PAIR" />
-                               <option value="LOT" />
-                               <option value="TON" />
-                             </datalist>
+                             {(() => {
+                               const isSalesUser = isSalesLoginRole(userRole);
+                               if (isSalesUser) {
+                                 const currentUom = normalizeSalesUomValue(item.uom || item.unit || 'NOS');
+                                 const salesAllowedValues = SALES_UOM_OPTIONS.map((o) => o.value);
+                                 return (
+                                   <select
+                                     id={`crm-quotations-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                     name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                     aria-label="UOM"
+                                     value={currentUom}
+                                     onChange={(e) => {
+                                       const val = e.target.value.toUpperCase();
+                                       setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
+                                     }}
+                                     style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 6px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700', cursor: 'pointer', color: '#0F172A' }}
+                                   >
+                                     {!salesAllowedValues.includes(currentUom) && (
+                                       <option value={currentUom}>{currentUom}</option>
+                                     )}
+                                     {SALES_UOM_OPTIONS.map((opt) => (
+                                       <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                     ))}
+                                   </select>
+                                 );
+                               }
+                               return (
+                                 <>
+                                   <input id={`crm-quotations-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
+                                     type="text"
+                                     list={`uom-list-${i}`}
+                                     placeholder="UOM"
+                                     value={item.uom || item.unit || 'NOS'}
+                                     onChange={(e) => {
+                                       const val = e.target.value;
+                                       setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
+                                     }}
+                                     style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700', cursor: 'text' }}
+                                    />
+                                   <datalist id={`uom-list-${i}`}>
+                                     <option value="NOS" />
+                                     <option value="SET" />
+                                     <option value="KW" />
+                                     <option value="KG" />
+                                     <option value="MTR" />
+                                     <option value="PCS" />
+                                     <option value="BOX" />
+                                     <option value="PKT" />
+                                     <option value="PAIR" />
+                                     <option value="LOT" />
+                                     <option value="TON" />
+                                   </datalist>
+                                 </>
+                               );
+                             })()}
                            </td>
                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
@@ -2246,7 +2277,13 @@ export default function CrmQuotationsView({
                                    const val = e.target.value;
                                    const numVal = parseFloat(val) || 0;
                                    const setCount = parseFloat(currentGroup?.setCount || 1) || 1;
-                                   const calculatedDisp = calculateTotalDispatchQty({ ...item, qty: numVal }, setCount, currentGroup?.presetName || item.presetName, item.category);
+                                   const calculatedDisp = calculateTotalDispatchQty(
+                                     { ...item, qty: numVal, presetId: currentGroup?.presetId || item.presetId },
+                                     setCount,
+                                     currentGroup?.presetName || item.presetName,
+                                     currentGroup?.category || item.category,
+                                     currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom
+                                   );
                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? {
                                      ...mat,
                                      qty: val,
@@ -2265,10 +2302,10 @@ export default function CrmQuotationsView({
                                }
                                const setCount = parseFloat(currentGroup?.setCount || 1) || 1;
                                const calculatedDisp = calculateTotalDispatchQty(
-                                 item,
+                                 { ...item, presetId: currentGroup?.presetId || item.presetId },
                                  setCount,
                                  currentGroup?.presetName || item.presetName,
-                                 item.category,
+                                 currentGroup?.category || item.category,
                                  currentGroup?.unit || currentGroup?.unitType || item.unit || item.uom
                                );
                                const dispQty = (item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== '')

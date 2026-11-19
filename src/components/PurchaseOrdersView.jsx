@@ -1135,7 +1135,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [proceedPhoneInput, setProceedPhoneInput] = useState('');
   const [proceedMessageContent, setProceedMessageContent] = useState('');
 
-  const getMissingPoFields = () => {
+  const getMissingPoFields = (isDraft = false) => {
     const missingFields = [];
     if (!vendorName || String(vendorName).trim() === '') missingFields.push('Vendor Name');
     const effDelAddress = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: deliveryPincode }) || (deliveryAddress || '').trim();
@@ -1151,6 +1151,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const validItems = (items || []).filter(it => it && String(it.name || '').trim() !== '' && Number(it.qty) > 0);
     if (validItems.length === 0) {
       missingFields.push('Line Items (Must add at least 1 valid item with Name and Quantity)');
+    } else if (!isDraft) {
+      const zeroRateItems = validItems.filter(it => !it.isPresetItem && !(Number(it.rate) > 0));
+      if (zeroRateItems.length > 0) {
+        missingFields.push('Item Rate (₹) must be greater than 0 for all line items');
+      }
     }
     return missingFields;
   };
@@ -1158,7 +1163,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const triggerSaveConfirm = (e) => {
     if (e) e.preventDefault();
     if (isSubmittingPO) return;
-    const missingFields = getMissingPoFields();
+    const missingFields = getMissingPoFields(false);
     if (missingFields.length > 0) {
       setValidationErrorModal({ fields: missingFields });
       return;
@@ -1175,7 +1180,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const isDraft = statusToSave === 'Draft' || statusToSave === 'DRAFT';
 
     // Validate mandatory fields marked with red asterisk *
-    const missingFields = getMissingPoFields();
+    const missingFields = getMissingPoFields(isDraft);
     const effDelAddress = formatAddressObj({ address1: deliveryAddress1, address2: deliveryAddress2, city: deliveryCity, state: deliveryState, pincode: deliveryPincode }) || (deliveryAddress || '').trim();
     const effBillAddress = formatAddressObj({ address1: billingAddress1, address2: billingAddress2, city: billingCity, state: billingState, pincode: billingPincode }) || (billingAddress || '').trim();
     const validItems = (items || []).filter(it => it && String(it.name || '').trim() !== '' && Number(it.qty) > 0);
@@ -1416,8 +1421,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       statusType: 'md_approved',
       approvedBy: 'Velmurugan Rathinam (MD)',
       approvedAt: approveNow.toISOString(),
-      approvedDate: approveNow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      approvedTime: approveNow.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      approvedDate: approveNow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+      approvedTime: approveNow.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
       approvalRemarks: approvalRemarksInput || 'Approved by MD'
     };
     setPoList(prev => prev.map(p => {
@@ -1558,6 +1563,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       ? payImagesInput 
       : (payImageInput ? [{ dataUrl: payImageInput, name: payImageMeta?.name || 'Payment_Proof.jpg', size: payImageMeta?.size || '' }] : []);
 
+    const payNow = new Date();
     const updatedPaymentPo = {
       ...poTarget,
       status: 'Payment Processed',
@@ -1567,8 +1573,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         mode: payModeInput,
         refNo: payRefInput || (isCredit ? 'CREDIT-CONFIRMED' : ''),
         amount: payAmountInput ? `₹ ${Number(payAmountInput).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : poTarget.amount,
-        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        date: payNow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+        time: payNow.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+        paidAt: payNow.toISOString(),
         remarks: payRemarksInput || (isCredit ? 'Credit terms verified by Accounts team' : 'Payment recorded by Accounts'),
         isCredit,
         creditTerms: payCreditTermsInput,
@@ -1712,8 +1719,8 @@ ${senderName} | VRM Structures India Private Limited`;
     const poId = poTarget.poNo || poTarget.id;
 
     const now = new Date();
-    const proceedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    const proceedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const proceedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+    const proceedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
     const remarks = proceedRemarksInput || 'Authorized for dispatch and GRN creation';
     const targetVendorEmail = (proceedEmailInput || poTarget.email || email || '').trim();
     const targetVendorPhone = (proceedPhoneInput || poTarget.phone || '').trim();
@@ -1721,6 +1728,7 @@ ${senderName} | VRM Structures India Private Limited`;
     const proceedDetails = {
       date: proceedDate,
       time: proceedTime,
+      proceededAt: now.toISOString(),
       remarks,
       authorizedBy: 'Procurement Head',
       vendorEmail: targetVendorEmail,
@@ -2490,15 +2498,15 @@ ${senderName} | VRM Structures India Private Limited`;
                     } catch (_) {}
 
                     const fmtStageTimestamp = (isoOrStr, fallbackDate, fallbackTime) => {
-                      if (fallbackDate && fallbackTime) return `${fallbackDate}, ${fallbackTime}`;
                       if (isoOrStr) {
                         const parsed = new Date(isoOrStr);
                         if (!Number.isNaN(parsed.getTime()) && String(isoOrStr).includes('T')) {
-                          const dStr = parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                          const tStr = parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                          const dStr = parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+                          const tStr = parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
                           return `${dStr}, ${tStr}`;
                         }
                       }
+                      if (fallbackDate && fallbackTime) return `${fallbackDate}, ${fallbackTime}`;
                       return fallbackDate || (isoOrStr ? String(isoOrStr) : '');
                     };
 
@@ -2508,8 +2516,9 @@ ${senderName} | VRM Structures India Private Limited`;
                     const totalRec = Number(currentPoObj?.totalReceived || currentPoObj?.totalReceivedQty || 0);
                     const grnCount = Number(currentPoObj?.grnCount || (currentPoObj?.grnHistory ? currentPoObj.grnHistory.length : 0));
 
-                    const isClosed = st.includes('CLOSED') || st.includes('FULLY RECEIVED') || objStatus.includes('CLOSED') || objStatusType === 'closed' || isLocalGrnClosed;
-                    const isPartial = st.includes('PARTIALLY') || objStatus.includes('PARTIALLY') || objStatusType === 'partially_received' || totalRec > 0 || hasLocalGrn || grnCount > 0;
+                    const isExplicitPartial = st.toLowerCase().includes('partial') || objStatus.toLowerCase().includes('partial') || objStatusType === 'partially_received';
+                    const isClosed = !isExplicitPartial && (st.includes('CLOSED') || st.includes('FULLY RECEIVED') || objStatus.includes('CLOSED') || objStatusType === 'closed' || isLocalGrnClosed);
+                    const isPartial = isExplicitPartial || totalRec > 0 || hasLocalGrn || grnCount > 0;
                     const isProceed = st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po' || !!currentPoObj?.proceedDetails || isPartial || isClosed;
                     const isPaymentDone = st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed' || !!currentPoObj?.paymentDetails || isProceed;
                     const isMdApproved = st === 'MD Approved' || st === 'OPEN' || st === 'Approved' || objStatus === 'MD Approved' || objStatusType === 'approved' || objStatusType === 'md_approved' || isPaymentDone;
@@ -2547,8 +2556,8 @@ ${senderName} | VRM Structures India Private Limited`;
                     const approvedStamp = isMdApproved
                       ? fmtStageTimestamp(
                           currentPoObj?.approvedAt || currentPoObj?.approved_at,
-                          currentPoObj?.approvedDate,
-                          currentPoObj?.approvedTime
+                          currentPoObj?.approvedDate || currentPoObj?.approvalDate,
+                          currentPoObj?.approvedTime || currentPoObj?.approvalTime
                         )
                       : '';
                     const paymentStamp = isPaymentDone
@@ -2560,22 +2569,22 @@ ${senderName} | VRM Structures India Private Limited`;
                       : '';
                     const proceedStamp = isProceed
                       ? fmtStageTimestamp(
-                          currentPoObj?.proceedDetails?.proceededAt,
+                          currentPoObj?.proceedDetails?.proceededAt || currentPoObj?.proceedDetails?.emailSentAt,
                           currentPoObj?.proceedDetails?.date,
                           currentPoObj?.proceedDetails?.time
                         )
                       : '';
                     const grnProcessStamp = (isPartial || hasLocalGrn || grnCount > 0 || isClosed)
                       ? fmtStageTimestamp(
-                          firstGrnRecord?.createdAt || firstGrnRecord?.created_at,
-                          firstGrnRecord?.date || firstGrnRecord?.receiptDate,
+                          firstGrnRecord?.createdAt || firstGrnRecord?.created_at || currentPoObj?.firstGrnAt || currentPoObj?.lastGrnAt,
+                          firstGrnRecord?.grnDate || firstGrnRecord?.date || firstGrnRecord?.receiptDate,
                           firstGrnRecord?.time
                         )
                       : '';
                     const grnCompletedStamp = isClosed
                       ? fmtStageTimestamp(
-                          closedGrnRecord?.createdAt || closedGrnRecord?.updatedAt || currentPoObj?.updatedAt,
-                          closedGrnRecord?.date || closedGrnRecord?.receiptDate,
+                          closedGrnRecord?.completedAt || closedGrnRecord?.createdAt || closedGrnRecord?.updatedAt || currentPoObj?.lastGrnAt || currentPoObj?.updatedAt,
+                          closedGrnRecord?.grnDate || closedGrnRecord?.date || closedGrnRecord?.receiptDate,
                           closedGrnRecord?.time
                         )
                       : '';

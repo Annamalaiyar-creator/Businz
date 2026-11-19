@@ -146,8 +146,16 @@ export async function heartbeatActiveSession() {
         const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
         if ((Date.now() - sessionStartTime) / 1000 > 30) {
           console.warn('Session has been revoked remotely by administrator. Logging out.');
+          const revokedEmp = localStorage.getItem('controlroom_logged_emp_id');
+          const revokedEmail = localStorage.getItem('controlroom_logged_user');
+          const revokedSession = localStorage.getItem('controlroom_device_session_id');
+          removeSavedAccount(revokedEmp || revokedEmail || revokedSession);
           localStorage.removeItem('controlroom_is_authenticated');
           localStorage.removeItem('controlroom_user_role');
+          localStorage.removeItem('controlroom_logged_emp_id');
+          localStorage.removeItem('controlroom_logged_user');
+          localStorage.removeItem('controlroom_logged_user_email');
+          localStorage.removeItem('controlroom_logged_user_name');
           localStorage.removeItem('controlroom_device_session_id');
           localStorage.removeItem('controlroom_session_start_time');
           window.location.reload();
@@ -244,5 +252,161 @@ export async function revokeAllOtherSessions() {
   } catch (err) {
     console.error('Error revoking all other sessions:', err);
     return false;
+  }
+}
+
+const SAVED_ACCOUNTS_KEY = 'businz_saved_accounts';
+const MAX_SAVED_ACCOUNTS = 8;
+
+/**
+ * Derive a deterministic key for a BUSINZ account saved on this browser.
+ */
+export function normalizeAccountKey(empCode = '', email = '', role = '') {
+  const emp = String(empCode || '').trim().toLowerCase();
+  if (emp) return `emp:${emp}`;
+  const mail = String(email || '').trim().toLowerCase();
+  if (mail) return `email:${mail}`;
+  const r = String(role || '').trim().toLowerCase();
+  return r ? `role:${r}` : '';
+}
+
+/**
+ * Return saved account session descriptors (never includes passwords).
+ */
+export function getSavedAccounts() {
+  try {
+    const raw = localStorage.getItem(SAVED_ACCOUNTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((acc) => acc && (acc.empCode || acc.email || acc.role))
+      .sort((a, b) => Number(b.lastUsedAt || 0) - Number(a.lastUsedAt || 0));
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeSavedAccounts(list) {
+  try {
+    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(list.slice(0, MAX_SAVED_ACCOUNTS)));
+  } catch (_) {}
+}
+
+/**
+ * Add or update a saved account entry on this browser (token-based, no password stored).
+ */
+export function upsertSavedAccount(account = {}) {
+  const key = normalizeAccountKey(account.empCode, account.email, account.role);
+  if (!key) return getSavedAccounts();
+
+  const existing = getSavedAccounts();
+  const prev = existing.find((item) => item.key === key) || {};
+  const nextEntry = {
+    key,
+    empCode: String(account.empCode ?? prev.empCode ?? '').trim(),
+    email: String(account.email ?? prev.email ?? '').trim(),
+    name: String(account.name ?? prev.name ?? '').trim() || String(account.empCode || account.email || account.role || 'User').trim(),
+    role: String(account.role ?? prev.role ?? '').trim(),
+    sessionId: String(account.sessionId ?? prev.sessionId ?? '').trim(),
+    sessionStartTime: Number(account.sessionStartTime || prev.sessionStartTime || Date.now()),
+    lastUsedAt: Number(account.lastUsedAt || Date.now())
+  };
+
+  const filtered = existing.filter((item) => item.key !== key);
+  const updated = [nextEntry, ...filtered].slice(0, MAX_SAVED_ACCOUNTS);
+  writeSavedAccounts(updated);
+  return updated;
+}
+
+/**
+ * Remove one account from saved accounts by key, empCode, email, or sessionId.
+ */
+export function removeSavedAccount(accountOrKey) {
+  if (!accountOrKey) return getSavedAccounts();
+  const targetKey = typeof accountOrKey === 'string'
+    ? (accountOrKey.startsWith('emp:') || accountOrKey.startsWith('email:') || accountOrKey.startsWith('role:')
+        ? accountOrKey.trim().toLowerCase()
+        : '')
+    : normalizeAccountKey(accountOrKey.empCode, accountOrKey.email, accountOrKey.role);
+
+  const rawLower = typeof accountOrKey === 'string' ? accountOrKey.trim().toLowerCase() : '';
+  const existing = getSavedAccounts();
+  const updated = existing.filter((item) => {
+    if (targetKey && item.key === targetKey) return false;
+    if (rawLower) {
+      if (String(item.empCode || '').trim().toLowerCase() === rawLower) return false;
+      if (String(item.email || '').trim().toLowerCase() === rawLower) return false;
+      if (String(item.sessionId || '').trim().toLowerCase() === rawLower) return false;
+    }
+    return true;
+  });
+  writeSavedAccounts(updated);
+  return updated;
+}
+
+/**
+ * Activate a saved account's local identity keys cleanly without wiping other saved accounts.
+ */
+export function activateSavedAccountLocal(account) {
+  if (!account || !account.role) return false;
+  const sessionId = String(account.sessionId || '').trim() || createNewSessionId();
+  const startTime = Number(account.sessionStartTime || Date.now());
+
+  localStorage.setItem('controlroom_is_authenticated', 'true');
+  localStorage.setItem('controlroom_user_role', account.role);
+  localStorage.setItem('controlroom_logged_emp_id', account.empCode || '');
+  localStorage.setItem('controlroom_logged_user', account.email || account.empCode || '');
+  localStorage.setItem('controlroom_logged_user_email', account.email || '');
+  localStorage.setItem('controlroom_logged_user_name', account.name || account.empCode || account.email || account.role);
+  localStorage.setItem('controlroom_device_session_id', sessionId);
+  localStorage.setItem('controlroom_session_start_time', String(startTime));
+
+  upsertSavedAccount({
+    ...account,
+    sessionId,
+    sessionStartTime: startTime,
+    lastUsedAt: Date.now()
+  });
+  return true;
+}
+
+/**
+ * Verify that a saved account's backend session token is still valid and unrevoked.
+ */
+export async function verifySavedAccountSession(account) {
+  if (!account || !account.sessionId) {
+    return { valid: false, reason: 'missing_session' };
+  }
+  try {
+    const res = await fetch('/api/sessions/heartbeat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-session-id': account.sessionId,
+        'x-user-role': account.role || '',
+        'x-emp-code': account.empCode || ''
+      },
+      body: JSON.stringify({
+        sessionId: account.sessionId,
+        empCode: account.empCode || '',
+        role: account.role || '',
+        userName: account.name || account.email || ''
+      })
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      return { valid: false, reason: 'unauthorized' };
+    }
+    if (!res.ok) {
+      return { valid: true, offlineFallback: true };
+    }
+    const json = await res.json().catch(() => null);
+    if (json && json.status === 'revoked') {
+      return { valid: false, reason: 'revoked' };
+    }
+    return { valid: true };
+  } catch (_) {
+    return { valid: true, offlineFallback: true };
   }
 }

@@ -193,13 +193,61 @@ export default function CeoProcurementAnalyticsSection({
     const normalizeStatus = (po) => {
       const raw = String(po.status || po.stage || po.approvalStatus || '').trim();
       const lower = raw.toLowerCase();
-      if (lower.includes('cancel') || lower.includes('reject')) return 'Cancelled';
-      if (lower.includes('fully') || lower.includes('closed') || lower.includes('completed') || lower === 'received' || lower.includes('grn completed')) {
+      const statusType = String(po.statusType || po.order_status || '').trim().toLowerCase();
+      if (lower.includes('cancel') || lower.includes('reject') || statusType === 'cancelled' || statusType === 'rejected') {
+        return 'Cancelled';
+      }
+      if (
+        lower.includes('fully') ||
+        lower.includes('closed') ||
+        lower.includes('completed') ||
+        lower === 'received' ||
+        lower.includes('grn completed') ||
+        statusType === 'closed'
+      ) {
         return 'Fully Received';
       }
-      if (lower.includes('partial')) return 'Partially Received';
-      if (lower.includes('proceed') || lower.includes('approv') || lower.includes('issued') || lower.includes('sent') || lower.includes('payment') || lower.includes('open')) {
-        return 'Approved';
+      if (lower.includes('partial') || statusType === 'partially_received') {
+        return 'Partially Received';
+      }
+      if (
+        lower.includes('waiting for approval') ||
+        lower.includes('pending approval') ||
+        lower.includes('pending ceo') ||
+        lower.includes('pending md') ||
+        lower.includes('awaiting approval') ||
+        statusType === 'pending'
+      ) {
+        return 'Pending CEO Approval';
+      }
+      if (lower === 'draft' || statusType === 'draft' || lower === '') {
+        return 'Draft';
+      }
+      if (lower.includes('payment pending') || lower.includes('awaiting payment')) {
+        return 'Payment Pending';
+      }
+      if (
+        lower.includes('proceed') ||
+        lower.includes('grn pending') ||
+        lower.includes('pending grn') ||
+        lower.includes('payment processed') ||
+        lower.includes('issued') ||
+        lower.includes('sent') ||
+        statusType === 'payment_processed' ||
+        statusType === 'proceed_po' ||
+        Boolean(po.proceedDetails) ||
+        Boolean(po.paymentDetails)
+      ) {
+        return 'GRN Pending';
+      }
+      if (
+        lower.includes('md approved') ||
+        lower.includes('ceo approved') ||
+        lower === 'approved' ||
+        lower === 'open' ||
+        statusType === 'approved'
+      ) {
+        return 'Payment Pending';
       }
       return 'Draft';
     };
@@ -216,24 +264,60 @@ export default function CeoProcurementAnalyticsSection({
       const today = new Date();
       const isoDaysAgo = (d) => new Date(today.getTime() - d * 86400000).toISOString().split('T')[0];
       rawPOs = [
-        { poNo: 'PO-00086', vendorName: 'AKEYEM SONS', date: isoDaysAgo(1), deliveryDate: isoDaysAgo(-4), grandTotal: 5248000, status: 'Approved', items: [{ name: 'Alu. Rail 100 mm', category: 'Aluminium Profiles' }] },
-        { poNo: 'PO-00085', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(2), deliveryDate: isoDaysAgo(-3), grandTotal: 2875600, status: 'Approved', items: [{ name: 'LEG 2500 mm (HDG)', category: 'HDG Steel' }] },
-        { poNo: 'PO-00084', vendorName: 'VAIBOV POLES', date: isoDaysAgo(4), deliveryDate: isoDaysAgo(-6), grandTotal: 2164400, status: 'Approved', items: [{ name: 'RAFTER 3900 mm (GAL)', category: 'HDG Steel' }] },
-        { poNo: 'PO-00083', vendorName: 'KPR Mill', date: isoDaysAgo(6), deliveryDate: isoDaysAgo(1), grandTotal: 1788000, status: 'Partially Received', items: [{ name: 'Mid Clamp 35mm', category: 'Aluminium Profiles' }] },
-        { poNo: 'PO-00082', vendorName: 'SHREE GANESH TRADERS', date: isoDaysAgo(9), deliveryDate: isoDaysAgo(2), grandTotal: 1436000, status: 'Fully Received', items: [{ name: 'SS304 Hex Bolt M10*30', category: 'Fasteners & Accessories' }] },
-        { poNo: 'PO-00079', vendorName: 'AKEYEM SONS', date: isoDaysAgo(18), deliveryDate: isoDaysAgo(6), grandTotal: 3420000, status: 'Partially Received', items: [{ name: 'Alu. Rail 60 mm', category: 'Aluminium Profiles' }] },
-        { poNo: 'PO-00074', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(35), deliveryDate: isoDaysAgo(9), grandTotal: 1864000, status: 'Approved', items: [{ name: 'Purlin C Type 2400mm', category: 'HDG Steel' }] },
-        { poNo: 'PO-00071', vendorName: 'KPR Mill', date: isoDaysAgo(44), deliveryDate: isoDaysAgo(7), grandTotal: 1248000, status: 'Draft', items: [{ name: 'T Nut M10', category: 'Fasteners & Accessories' }] },
-        { poNo: 'PO-00063', vendorName: 'VAIBOV POLES', date: isoDaysAgo(65), deliveryDate: isoDaysAgo(12), grandTotal: 972000, status: 'Partially Received', items: [{ name: 'HDG Pipe 50 NB', category: 'HDG Steel' }] },
-        { poNo: 'PO-00058', vendorName: 'SHREE GANESH TRADERS', date: isoDaysAgo(95), deliveryDate: isoDaysAgo(90), grandTotal: 1640000, status: 'Fully Received', items: [{ name: 'Solar Panel 550W', category: 'Solar & BOS' }] },
-        { poNo: 'PO-00049', vendorName: 'AKEYEM SONS', date: isoDaysAgo(128), deliveryDate: isoDaysAgo(120), grandTotal: 2950000, status: 'Fully Received', items: [{ name: 'Alu. Rail 100 mm', category: 'Aluminium Profiles' }] },
-        { poNo: 'PO-00042', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(155), deliveryDate: isoDaysAgo(148), grandTotal: 2410000, status: 'Fully Received', items: [{ name: 'LEG 3000 mm (HDG)', category: 'HDG Steel' }] }
+        { poNo: 'PO-00086', vendorName: 'AKEYEM SONS', date: isoDaysAgo(1), deliveryDate: isoDaysAgo(-4), grandTotal: 5248000, status: 'WAITING FOR APPROVAL', items: [{ name: 'Alu. Rail 100 mm', category: 'Aluminium Profiles', qty: 1000, unit: 'NOS', rate: 4447.46, tax: 18 }] },
+        { poNo: 'PO-00085', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(2), deliveryDate: isoDaysAgo(-3), grandTotal: 2875600, status: 'MD Approved', items: [{ name: 'LEG 2500 mm (HDG)', category: 'HDG Steel', qty: 800, unit: 'NOS', rate: 3046.19, tax: 18 }] },
+        { poNo: 'PO-00084', vendorName: 'VAIBOV POLES', date: isoDaysAgo(4), deliveryDate: isoDaysAgo(-6), grandTotal: 2164400, status: 'Proceed PO', items: [{ name: 'RAFTER 3900 mm (GAL)', category: 'HDG Steel', qty: 600, unit: 'NOS', rate: 3057.06, tax: 18 }] },
+        {
+          poNo: 'PO-00083', vendorName: 'KPR Mill', date: isoDaysAgo(6), deliveryDate: isoDaysAgo(1), grandTotal: 1788000, status: 'Partially Received',
+          totalOrderedQty: 2000, totalReceivedQty: 1200, grnCount: 1,
+          items: [{ name: 'Mid Clamp 35mm', category: 'Aluminium Profiles', qty: 2000, unit: 'NOS', rate: 757.63, tax: 18 }],
+          grnHistory: [{ grnNo: 'GRN-2026-0041', date: isoDaysAgo(2), challanNo: 'DC-8821', receivedBy: 'Store Team', status: 'OPEN / PARTIALLY RECEIVED', acceptedQty: 1200, items: [{ name: 'Mid Clamp 35mm', uom: 'NOS', ordered: 2000, accepted: 1200, rejected: 0, date: isoDaysAgo(2) }] }]
+        },
+        {
+          poNo: 'PO-00082', vendorName: 'SHREE GANESH TRADERS', date: isoDaysAgo(9), deliveryDate: isoDaysAgo(2), grandTotal: 1436000, status: 'Fully Received',
+          totalOrderedQty: 5000, totalReceivedQty: 5000, grnCount: 1,
+          items: [{ name: 'SS304 Hex Bolt M10*30', category: 'Fasteners & Accessories', qty: 5000, unit: 'NOS', rate: 243.39, tax: 18 }],
+          grnHistory: [{ grnNo: 'GRN-2026-0039', date: isoDaysAgo(3), challanNo: 'INV-4410', receivedBy: 'Store Team', status: 'CLOSED / FULLY RECEIVED', acceptedQty: 5000, items: [{ name: 'SS304 Hex Bolt M10*30', uom: 'NOS', ordered: 5000, accepted: 5000, rejected: 0, date: isoDaysAgo(3) }] }]
+        },
+        {
+          poNo: 'PO-00079', vendorName: 'AKEYEM SONS', date: isoDaysAgo(18), deliveryDate: isoDaysAgo(6), grandTotal: 3420000, status: 'Partially Received',
+          totalOrderedQty: 1500, totalReceivedQty: 900, grnCount: 1,
+          items: [{ name: 'Alu. Rail 60 mm', category: 'Aluminium Profiles', qty: 1500, unit: 'NOS', rate: 1932.2, tax: 18 }],
+          grnHistory: [{ grnNo: 'GRN-2026-0031', date: isoDaysAgo(8), challanNo: 'DC-7705', receivedBy: 'Store Team', status: 'OPEN / PARTIALLY RECEIVED', acceptedQty: 900, items: [{ name: 'Alu. Rail 60 mm', uom: 'NOS', ordered: 1500, accepted: 900, rejected: 0, date: isoDaysAgo(8) }] }]
+        },
+        { poNo: 'PO-00074', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(35), deliveryDate: isoDaysAgo(9), grandTotal: 1864000, status: 'Proceed PO', items: [{ name: 'Purlin C Type 2400mm', category: 'HDG Steel', qty: 1000, unit: 'NOS', rate: 1579.66, tax: 18 }] },
+        { poNo: 'PO-00071', vendorName: 'KPR Mill', date: isoDaysAgo(44), deliveryDate: isoDaysAgo(7), grandTotal: 1248000, status: 'Draft', items: [{ name: 'T Nut M10', category: 'Fasteners & Accessories', qty: 4000, unit: 'NOS', rate: 264.41, tax: 18 }] },
+        {
+          poNo: 'PO-00063', vendorName: 'VAIBOV POLES', date: isoDaysAgo(65), deliveryDate: isoDaysAgo(12), grandTotal: 972000, status: 'Partially Received',
+          totalOrderedQty: 400, totalReceivedQty: 250, grnCount: 1,
+          items: [{ name: 'HDG Pipe 50 NB', category: 'HDG Steel', qty: 400, unit: 'NOS', rate: 2059.32, tax: 18 }],
+          grnHistory: [{ grnNo: 'GRN-2026-0018', date: isoDaysAgo(20), challanNo: 'DC-6102', receivedBy: 'Store Team', status: 'OPEN / PARTIALLY RECEIVED', acceptedQty: 250, items: [{ name: 'HDG Pipe 50 NB', uom: 'NOS', ordered: 400, accepted: 250, rejected: 0, date: isoDaysAgo(20) }] }]
+        },
+        {
+          poNo: 'PO-00058', vendorName: 'SHREE GANESH TRADERS', date: isoDaysAgo(95), deliveryDate: isoDaysAgo(90), grandTotal: 1640000, status: 'Fully Received',
+          totalOrderedQty: 100, totalReceivedQty: 100, grnCount: 1,
+          items: [{ name: 'Solar Panel 550W', category: 'Solar & BOS', qty: 100, unit: 'NOS', rate: 15619.05, tax: 5 }],
+          grnHistory: [{ grnNo: 'GRN-2026-0011', date: isoDaysAgo(90), challanNo: 'INV-1180', receivedBy: 'Store Team', status: 'CLOSED / FULLY RECEIVED', acceptedQty: 100, items: [{ name: 'Solar Panel 550W', uom: 'NOS', ordered: 100, accepted: 100, rejected: 0, date: isoDaysAgo(90) }] }]
+        },
+        {
+          poNo: 'PO-00049', vendorName: 'AKEYEM SONS', date: isoDaysAgo(128), deliveryDate: isoDaysAgo(120), grandTotal: 2950000, status: 'Fully Received',
+          totalOrderedQty: 750, totalReceivedQty: 750, grnCount: 1,
+          items: [{ name: 'Alu. Rail 100 mm', category: 'Aluminium Profiles', qty: 750, unit: 'NOS', rate: 3333.33, tax: 18 }],
+          grnHistory: [{ grnNo: 'GRN-2026-0007', date: isoDaysAgo(120), challanNo: 'INV-0942', receivedBy: 'Store Team', status: 'CLOSED / FULLY RECEIVED', acceptedQty: 750, items: [{ name: 'Alu. Rail 100 mm', uom: 'NOS', ordered: 750, accepted: 750, rejected: 0, date: isoDaysAgo(120) }] }]
+        },
+        { poNo: 'PO-00042', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(155), deliveryDate: isoDaysAgo(148), grandTotal: 2410000, status: 'CANCELLED', items: [{ name: 'LEG 3000 mm (HDG)', category: 'HDG Steel', qty: 500, unit: 'NOS', rate: 4084.75, tax: 18 }] }
       ];
     }
 
-    const grnPoNumbers = new Set(
-      (grnList || []).map(g => String(g?.poNumber || g?.poNo || '').trim().toUpperCase()).filter(Boolean)
-    );
+    const grnPoStatusMap = new Map();
+    (grnList || []).forEach(g => {
+      const ref = String(g?.poNumber || g?.poNo || g?.poRef || '').trim().toUpperCase();
+      if (!ref) return;
+      const gSt = String(g?.status || '').toLowerCase();
+      const isFull = gSt.includes('closed') || gSt.includes('fully') || gSt.includes('completed') || g?.forceClosePO === true;
+      const prev = grnPoStatusMap.get(ref);
+      grnPoStatusMap.set(ref, (isFull || prev === 'full') ? 'full' : 'partial');
+    });
 
     const normalizedPOs = rawPOs.map((po, idx) => {
       const poNo = po.poNo || po.poNumber || po.purchaseorder_number || `PO-${idx + 1}`;
@@ -244,8 +328,13 @@ export default function CeoProcurementAnalyticsSection({
       const delTs = parseDateMs(rawDel);
       const value = parseAmount(po.grandTotal ?? po.total ?? po.totalAmount ?? po.amount ?? 0);
       let statusGroup = normalizeStatus(po);
-      if (statusGroup !== 'Fully Received' && statusGroup !== 'Cancelled' && grnPoNumbers.has(String(poNo).trim().toUpperCase())) {
-        statusGroup = 'Fully Received';
+      if (statusGroup !== 'Fully Received' && statusGroup !== 'Cancelled') {
+        const grnState = grnPoStatusMap.get(String(poNo).trim().toUpperCase());
+        if (grnState === 'full') {
+          statusGroup = 'Fully Received';
+        } else if (grnState === 'partial') {
+          statusGroup = 'Partially Received';
+        }
       }
       const rawStatus = po.status || po.stage || statusGroup;
       const ageDays = Number.isFinite(dateTs) ? Math.max(0, Math.floor((now - dateTs) / 86400000)) : 0;
@@ -284,12 +373,16 @@ export default function CeoProcurementAnalyticsSection({
     const receivedValue = normalizedPOs
       .filter(p => p.statusGroup === 'Fully Received')
       .reduce((s, p) => s + p.value, 0);
-    const openValue = Math.max(0, totalValue - receivedValue);
+    const openValue = normalizedPOs
+      .filter(p => p.statusGroup !== 'Fully Received' && p.statusGroup !== 'Cancelled')
+      .reduce((s, p) => s + p.value, 0);
 
     // 1. Purchase Status Segments
     const statusOrder = [
-      { name: 'Draft', label: 'Draft / Pending', color: '#2563EB' },
-      { name: 'Approved', label: 'Approved / Active', color: '#0E7490' },
+      { name: 'Draft', label: 'Draft', color: '#64748B' },
+      { name: 'Pending CEO Approval', label: 'Pending CEO Approval', color: '#7C3AED' },
+      { name: 'Payment Pending', label: 'Payment Pending', color: '#2563EB' },
+      { name: 'GRN Pending', label: 'GRN Pending', color: '#0E7490' },
       { name: 'Partially Received', label: 'Partially Received', color: '#D97706' },
       { name: 'Fully Received', label: 'Fully Received', color: '#059669' },
       { name: 'Cancelled', label: 'Cancelled', color: '#DC2626' }
@@ -357,8 +450,10 @@ export default function CeoProcurementAnalyticsSection({
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
-    // 4. PO Ageing Summary (By Value) - ONLY Approved / Payment Proceed / Partially Received POs still awaiting material inward (GRN)
-    const openPOs = normalizedPOs.filter(p => p.statusGroup === 'Approved' || p.statusGroup === 'Partially Received');
+    // 4. PO Ageing Summary (By Value) - ONLY Payment Pending / GRN Pending / Partially Received POs still awaiting material inward (GRN)
+    const openPOs = normalizedPOs.filter(
+      p => p.statusGroup === 'Payment Pending' || p.statusGroup === 'GRN Pending' || p.statusGroup === 'Partially Received'
+    );
     const ageingPool = openPOs;
     const ageingTotalVal = ageingPool.reduce((s, p) => s + p.value, 0);
     const ageingBrackets = [
@@ -414,7 +509,7 @@ export default function CeoProcurementAnalyticsSection({
       const minStock = parseFloat(it.minStock ?? it.reorderLevel ?? 10) || 10;
       return qty <= minStock;
     });
-    const draftPOs = normalizedPOs.filter(p => p.statusGroup === 'Draft');
+    const pendingApprovalPOs = normalizedPOs.filter(p => p.statusGroup === 'Pending CEO Approval');
     const agedOpenPOs = openPOs.filter(p => p.ageDays > 30);
 
     const keyAlerts = [
@@ -429,14 +524,14 @@ export default function CeoProcurementAnalyticsSection({
         orders: overduePOs
       },
       {
-        title: `${draftPOs.length} PO${draftPOs.length === 1 ? '' : 's'} Awaiting MD / Approval`,
-        sub: draftPOs.length > 0 ? `Pending value ${formatINRCompact(draftPOs.reduce((s, p) => s + p.value, 0))}` : 'No POs stuck in approval queue',
-        badge: draftPOs.length > 0 ? 'Approval Due' : 'Cleared',
-        color: draftPOs.length > 0 ? '#D97706' : '#059669',
-        bg: draftPOs.length > 0 ? '#FFFBEB' : '#F0FDF4',
-        border: draftPOs.length > 0 ? '#FDE68A' : '#BBF7D0',
+        title: `${pendingApprovalPOs.length} PO${pendingApprovalPOs.length === 1 ? '' : 's'} Awaiting CEO Approval`,
+        sub: pendingApprovalPOs.length > 0 ? `Pending value ${formatINRCompact(pendingApprovalPOs.reduce((s, p) => s + p.value, 0))}` : 'No POs stuck in approval queue',
+        badge: pendingApprovalPOs.length > 0 ? 'Approval Due' : 'Cleared',
+        color: pendingApprovalPOs.length > 0 ? '#D97706' : '#059669',
+        bg: pendingApprovalPOs.length > 0 ? '#FFFBEB' : '#F0FDF4',
+        border: pendingApprovalPOs.length > 0 ? '#FDE68A' : '#BBF7D0',
         icon: Clock,
-        orders: draftPOs
+        orders: pendingApprovalPOs
       },
       {
         title: `${lowStockItems.length} Material Shortage / Low Stock SKU${lowStockItems.length === 1 ? '' : 's'}`,
@@ -501,8 +596,10 @@ export default function CeoProcurementAnalyticsSection({
     if (stGroup === 'Fully Received') return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
     if (stGroup === 'Partially Received') return { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' };
     if (stGroup === 'Cancelled') return { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA' };
-    if (stGroup === 'Approved') return { bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC' };
-    return { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' };
+    if (stGroup === 'GRN Pending') return { bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC' };
+    if (stGroup === 'Payment Pending') return { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' };
+    if (stGroup === 'Pending CEO Approval') return { bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' };
+    return { bg: '#F8FAFC', color: '#475569', border: '#CBD5E1' };
   };
 
   return (
@@ -553,7 +650,7 @@ export default function CeoProcurementAnalyticsSection({
                 setPoPopup({ title: `Purchase Status: ${seg.name}`, color: seg.color, orders: seg.orders });
               }}
             />
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px', justifyContent: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px', justifyContent: 'center' }}>
               {analytics.statusSegments.map((seg, idx) => (
                 <button
                   key={idx}
@@ -566,8 +663,8 @@ export default function CeoProcurementAnalyticsSection({
                     setPoPopup({ title: `Purchase Status: ${seg.name}`, color: seg.color, orders: seg.orders });
                   }}
                   style={{
-                    display: 'flex', flexDirection: 'column', gap: '4px',
-                    width: '100%', textAlign: 'left', padding: '6px 8px',
+                    display: 'flex', flexDirection: 'column', gap: '3px',
+                    width: '100%', textAlign: 'left', padding: '4px 8px',
                     borderRadius: '10px',
                     border: selectedStatus === seg.name ? `1.5px solid ${seg.color}` : '1px solid transparent',
                     backgroundColor: selectedStatus === seg.name ? '#F8FAFC' : 'transparent',
@@ -1236,8 +1333,13 @@ export default function CeoProcurementAnalyticsSection({
       {/* FULL PO DETAIL PAGE POPUP (Matches PurchaseOrdersView Read-Only Document Layout) */}
       {detailPo && (() => {
         const raw = detailPo.rawPo || {};
-        const items = Array.isArray(raw.items) ? raw.items : [];
-        const badge = statusBadgeStyle(detailPo.statusGroup);
+        const items = (Array.isArray(raw.items) && raw.items.length > 0)
+          ? raw.items
+          : (Array.isArray(raw.line_items) ? raw.line_items : []);
+        const st = String(detailPo.rawStatus || '').trim();
+        const stLower = st.toLowerCase();
+        const isExplicitPartial = stLower.includes('partial') || String(raw.statusType || '').toLowerCase() === 'partially_received';
+        const badge = statusBadgeStyle(isExplicitPartial ? 'Partially Received' : detailPo.statusGroup);
         const poDateStr = detailPo.rawDate ? formatShortDate(detailPo.rawDate) : '—';
         const delDateStr = detailPo.rawDel ? formatShortDate(detailPo.rawDel) : '—';
         const priority = raw.priority || 'Medium';
@@ -1250,28 +1352,68 @@ export default function CeoProcurementAnalyticsSection({
         const deliveryAddress = raw.deliveryAddress || raw.delivery_address || '—';
 
         const fmtStageStamp = (isoOrStr, fallbackDate, fallbackTime) => {
-          if (fallbackDate && fallbackTime) return `${fallbackDate}, ${fallbackTime}`;
           if (isoOrStr) {
             const parsed = new Date(isoOrStr);
             if (!Number.isNaN(parsed.getTime()) && String(isoOrStr).includes('T')) {
-              const dStr = parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-              const tStr = parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+              const dStr = parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+              const tStr = parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
               return `${dStr}, ${tStr}`;
             }
           }
+          if (fallbackDate && fallbackTime) return `${fallbackDate}, ${fallbackTime}`;
           return fallbackDate || (isoOrStr ? String(isoOrStr) : '');
         };
 
-        const st = String(detailPo.rawStatus || '').trim();
-        const stLower = st.toLowerCase();
-        const totalRec = Number(raw.totalReceived || raw.totalReceivedQty || 0);
-        const grnCount = Number(raw.grnCount || (Array.isArray(raw.grnHistory) ? raw.grnHistory.length : 0));
-        const isClosed = detailPo.statusGroup === 'Fully Received' || stLower.includes('closed') || stLower.includes('fully received');
-        const isPartial = detailPo.statusGroup === 'Partially Received' || stLower.includes('partial') || totalRec > 0 || grnCount > 0;
-        const isProceed = stLower.includes('proceed') || stLower.includes('pending grn') || !!raw.proceedDetails || isPartial || isClosed;
-        const isPaymentDone = stLower.includes('payment') || !!raw.paymentDetails || isProceed;
-        const isMdApproved = detailPo.statusGroup === 'Approved' || stLower.includes('md approved') || stLower === 'open' || isPaymentDone;
-        const isPending = (detailPo.statusGroup === 'Draft' || stLower.includes('pending') || stLower.includes('waiting')) && !isMdApproved;
+        const normPoKey = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+        const detailPoKey = normPoKey(detailPo.poNo || raw.id);
+        const grnDedupMap = new Map();
+        const addGrnCandidate = (g, preferOverwrite, fallbackKey) => {
+          if (!g) return;
+          const k = normPoKey(g?.grnNo || g?.grnNumber || g?.id) || fallbackKey;
+          const existing = grnDedupMap.get(k);
+          if (!existing || preferOverwrite) {
+            const mergedItems = (Array.isArray(g.items) && g.items.length > 0)
+              ? g.items
+              : (existing?.items || []);
+            grnDedupMap.set(k, { ...(existing || {}), ...g, items: mergedItems });
+          }
+        };
+        (Array.isArray(raw.grnHistory) ? raw.grnHistory : []).forEach((g, idx) => {
+          addGrnCandidate(g, false, `hist_${idx}`);
+        });
+        (Array.isArray(grnList) ? grnList : [])
+          .filter(g => {
+            const gk = normPoKey(g?.poNumber || g?.poNo || g?.poRef || g?.poId);
+            return detailPoKey && gk === detailPoKey;
+          })
+          .forEach((g, idx) => {
+            addGrnCandidate(g, true, `live_${idx}`);
+          });
+        const matchedGrns = Array.from(grnDedupMap.values()).sort((a, b) => {
+          const ta = new Date(a?.createdAt || a?.created_at || a?.grnDate || a?.receiptDate || a?.date || 0).getTime() || 0;
+          const tb = new Date(b?.createdAt || b?.created_at || b?.grnDate || b?.receiptDate || b?.date || 0).getTime() || 0;
+          return ta - tb;
+        });
+        const firstGrn = matchedGrns[0] || null;
+        const lastGrn = matchedGrns[matchedGrns.length - 1] || null;
+
+        const poOrderedTotal = Number(raw.totalOrderedQty) || items.reduce((s, it) => s + parseAmount(it.qty ?? it.quantity ?? it.orderedQty ?? 0), 0);
+        const summedFromGrns = matchedGrns.reduce((s, g) => {
+          if (Array.isArray(g.items) && g.items.length > 0) {
+            return s + g.items.reduce((si, it) => si + (Number(it.accepted ?? it.now ?? 0) || 0), 0);
+          }
+          return s + (Number(g.acceptedQty ?? g.receivedQty ?? 0) || 0);
+        }, 0);
+        const totalRec = summedFromGrns > 0 ? summedFromGrns : Number(raw.totalReceivedQty || raw.totalReceived || 0);
+        const poRemainingTotal = Math.max(0, poOrderedTotal - totalRec);
+        const grnCount = Number(raw.grnCount || matchedGrns.length || 0);
+        const isClosed = !isExplicitPartial && (detailPo.statusGroup === 'Fully Received' || stLower.includes('closed') || stLower.includes('fully received'));
+        const recvPct = poOrderedTotal > 0 ? Math.min(100, Math.round((totalRec / poOrderedTotal) * 100)) : (isClosed ? 100 : 0);
+        const isPartial = detailPo.statusGroup === 'Partially Received' || isExplicitPartial || totalRec > 0 || grnCount > 0;
+        const isProceed = detailPo.statusGroup === 'GRN Pending' || stLower.includes('proceed') || stLower.includes('pending grn') || !!raw.proceedDetails || isPartial || isClosed;
+        const isPaymentDone = stLower.includes('payment processed') || !!raw.paymentDetails || isProceed;
+        const isMdApproved = detailPo.statusGroup === 'Payment Pending' || stLower.includes('md approved') || stLower === 'open' || isPaymentDone;
+        const isPending = (detailPo.statusGroup === 'Pending CEO Approval' || stLower.includes('pending') || stLower.includes('waiting')) && !isMdApproved;
 
         let currentStepIndex = 0;
         if (isClosed) currentStepIndex = 5;
@@ -1282,11 +1424,11 @@ export default function CeoProcurementAnalyticsSection({
 
         const steps = [
           { label: '1. PO Created', timestamp: fmtStageStamp(raw.createdAt || raw.created_at, raw.poDate || raw.date, raw.createdTime) },
-          { label: '2. MD Approval', timestamp: isMdApproved ? fmtStageStamp(raw.approvedAt || raw.approved_at, raw.approvedDate, raw.approvedTime) : '' },
-          { label: '3. Payment Process', timestamp: isPaymentDone ? fmtStageStamp(raw.paymentDetails?.paidAt, raw.paymentDetails?.date, raw.paymentDetails?.time) : '' },
-          { label: '4. Proceed PO', timestamp: isProceed ? fmtStageStamp(raw.proceedDetails?.proceededAt, raw.proceedDetails?.date, raw.proceedDetails?.time) : '' },
-          { label: '5. GRN Process', timestamp: (isPartial || isClosed) ? fmtStageStamp(raw.updatedAt, '', '') : '' },
-          { label: '6. GRN Completed', timestamp: isClosed ? fmtStageStamp(raw.updatedAt, '', '') : '' }
+          { label: '2. MD Approval', timestamp: isMdApproved ? fmtStageStamp(raw.approvedAt || raw.approved_at, raw.approvedDate || raw.approvalDate, raw.approvedTime || raw.approvalTime) : '' },
+          { label: '3. Payment Process', timestamp: isPaymentDone ? fmtStageStamp(raw.paymentDetails?.paidAt || raw.paymentDetails?.createdAt || raw.paymentDetails?.timestamp, raw.paymentDetails?.date, raw.paymentDetails?.time) : '' },
+          { label: '4. Proceed PO', timestamp: isProceed ? fmtStageStamp(raw.proceedDetails?.proceededAt || raw.proceedDetails?.emailSentAt || raw.proceedDetails?.createdAt, raw.proceedDetails?.date, raw.proceedDetails?.time) : '' },
+          { label: '5. GRN Process', timestamp: (isPartial || isClosed) ? fmtStageStamp(firstGrn?.createdAt || firstGrn?.created_at || raw.firstGrnAt || raw.lastGrnAt || raw.updatedAt, firstGrn?.grnDate || firstGrn?.receiptDate || firstGrn?.date, firstGrn?.time) : '' },
+          { label: '6. GRN Completed', timestamp: isClosed ? fmtStageStamp(lastGrn?.completedAt || lastGrn?.createdAt || lastGrn?.created_at || raw.closedAt || raw.lastGrnAt || raw.updatedAt, lastGrn?.grnDate || lastGrn?.receiptDate || lastGrn?.date, lastGrn?.time) : '' }
         ].map((step, idx) => ({
           ...step,
           done: idx < currentStepIndex || (currentStepIndex === 5 && idx === 5),
@@ -1501,10 +1643,14 @@ export default function CeoProcurementAnalyticsSection({
                       <tbody>
                         {items.length > 0 ? items.map((item, idx) => {
                           const itemTax = (item.tax !== undefined && item.tax !== '' && !isNaN(Number(item.tax))) ? Number(item.tax) : 18;
-                          const qtyNum = Number(item.qty ?? item.quantity) || 0;
-                          const rateNum = Number(item.rate ?? item.unitPrice ?? item.price) || 0;
+                          const qtyNum = parseAmount(item.qty ?? item.quantity ?? item.orderedQty ?? 0);
+                          let rateNum = parseAmount(item.rate ?? item.unitPrice ?? item.unit_price ?? item.item_rate ?? item.purchaseRate ?? item.baseRate ?? item.costPrice ?? item.price ?? 0);
+                          const explicitTotal = parseAmount(item.total ?? item.amount ?? item.item_total ?? item.lineTotal ?? 0);
+                          if (rateNum === 0 && explicitTotal > 0 && qtyNum > 0) {
+                            rateNum = explicitTotal / (qtyNum * (1 + itemTax / 100));
+                          }
                           const baseTot = qtyNum * rateNum;
-                          const finalAmt = parseAmount(item.total ?? item.amount ?? (baseTot + baseTot * (itemTax / 100)));
+                          const finalAmt = explicitTotal > 0 ? explicitTotal : (baseTot + baseTot * (itemTax / 100));
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                               <td style={{ padding: '8px', textAlign: 'center', color: '#64748B' }}>{idx + 1}</td>
@@ -1525,6 +1671,180 @@ export default function CeoProcurementAnalyticsSection({
                       </tbody>
                     </table>
                   </div>
+                </div>
+
+                {/* GRN Details & Inwarding History Card */}
+                <div style={{
+                  backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '14px',
+                  padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <Package size={16} color="#0E7490" />
+                      <strong style={{ fontSize: '12.5px', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                        GRN Details &amp; Inwarding History
+                      </strong>
+                      <span style={{
+                        fontSize: '10.5px', fontWeight: '800', color: '#0E7490',
+                        backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '999px'
+                      }}>
+                        {matchedGrns.length} GRN{matchedGrns.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    {onNavigateTab && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailPo(null);
+                          setPoPopup(null);
+                          onNavigateTab('Goods Receipt Note');
+                        }}
+                        style={{
+                          border: '1px solid #0E7490', backgroundColor: '#FFFFFF', color: '#0E7490',
+                          fontSize: '11px', fontWeight: '700', padding: '4px 10px', borderRadius: '8px',
+                          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                        }}
+                      >
+                        Open GRN Ledger <ArrowRight size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Receiving Summary Strip */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '10px',
+                    backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 14px'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Ordered Qty</div>
+                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>{poOrderedTotal.toLocaleString('en-IN')}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Received Qty</div>
+                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#059669' }}>{totalRec.toLocaleString('en-IN')}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Remaining Qty</div>
+                      <div style={{ fontSize: '14px', fontWeight: '900', color: poRemainingTotal > 0 ? '#D97706' : '#059669' }}>{poRemainingTotal.toLocaleString('en-IN')}</div>
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
+                        <span>Inward Progress</span>
+                        <span style={{ color: '#0E7490', fontWeight: '900' }}>{recvPct}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '999px', overflow: 'hidden', marginTop: '6px' }}>
+                        <div style={{ width: `${recvPct}%`, height: '100%', backgroundColor: recvPct >= 100 ? '#059669' : '#0E7490', borderRadius: '999px' }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {matchedGrns.length === 0 ? (
+                    <div style={{
+                      padding: '14px 16px', backgroundColor: '#F8FAFC', borderRadius: '10px',
+                      border: '1px dashed #CBD5E1', textAlign: 'center', fontSize: '12px', color: '#64748B', fontWeight: '600'
+                    }}>
+                      No GRN inwarded yet for this PO — awaiting material receipt at Store.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {matchedGrns.map((g, gIdx) => {
+                        const gSt = String(g.status || '').toUpperCase();
+                        const isFullyRec = gSt.includes('FULLY') || gSt.includes('CLOSED') || gSt.includes('COMPLETED') || g.forceClosePO === true;
+                        const recQty = (Array.isArray(g.items) && g.items.length > 0)
+                          ? g.items.reduce((s, it) => s + (Number(it.accepted ?? it.now ?? 0) || 0), 0)
+                          : (Number(g.acceptedQty ?? g.receivedQty ?? 0) || 0);
+                        const rejQty = (Array.isArray(g.items) && g.items.length > 0)
+                          ? g.items.reduce((s, it) => s + (Number(it.rejected ?? 0) || 0), 0)
+                          : (Number(g.rejectedQty ?? 0) || 0);
+                        const grnWhen = fmtStageStamp(g.createdAt || g.created_at, g.grnDate || g.receiptDate || g.date, g.time) || g.date || '—';
+                        const grnItemsList = (Array.isArray(g.items) && g.items.length > 0)
+                          ? g.items
+                          : items.map(it => {
+                              const ord = parseAmount(it.qty ?? it.quantity ?? it.orderedQty ?? 0);
+                              return {
+                                name: it.name || it.itemName || it.description || 'Material Item',
+                                uom: it.unit || it.uom || 'NOS',
+                                ordered: ord,
+                                accepted: (items.length === 1 && recQty > 0) ? recQty : ord,
+                                rejected: 0,
+                                date: g.grnDate || g.receiptDate || g.date || '—'
+                              };
+                            });
+
+                        return (
+                          <div key={gIdx} style={{
+                            backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px',
+                            padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{g.grnNo || g.grnNumber || g.id || `GRN-${gIdx + 1}`}</strong>
+                                  <span style={{
+                                    fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '999px',
+                                    backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
+                                    color: isFullyRec ? '#166534' : '#B45309',
+                                    border: isFullyRec ? '1px solid #86EFAC' : '1px solid #FDE68A'
+                                  }}>
+                                    {isFullyRec ? 'Fully Received' : 'Partially Received'}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
+                                  Date: <strong style={{ color: '#334155' }}>{grnWhen}</strong> • DC / Inv No: <strong style={{ color: '#334155' }}>{g.challanNo || g.invoiceNo || '—'}</strong> • Received by: <strong style={{ color: '#334155' }}>{g.receivedBy || g.inspectorName || g.createdBy || 'Store Inwarder'}</strong>
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right', fontSize: '11.5px' }}>
+                                <div>
+                                  <strong style={{ color: '#0E7490' }}>{recQty.toLocaleString('en-IN')} Units</strong> Received
+                                  {rejQty > 0 && <span style={{ color: '#DC2626', fontWeight: '700', marginLeft: '6px' }}>({rejQty} rejected)</span>}
+                                </div>
+                                <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700', marginTop: '2px' }}>
+                                  ✓ Inwarded into Live Inventory
+                                </div>
+                              </div>
+                            </div>
+
+                            {grnItemsList.length > 0 && (
+                              <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+                                  <thead>
+                                    <tr style={{ backgroundColor: '#F8FAFC', color: '#475569', borderBottom: '1px solid #E2E8F0' }}>
+                                      <th style={{ padding: '7px 10px', fontWeight: '700' }}>Product Name</th>
+                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'center' }}>UOM</th>
+                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Ordered Qty</th>
+                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Received Qty</th>
+                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Rejected</th>
+                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Date</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {grnItemsList.map((it, itIdx) => {
+                                      const itemName = it.name || it.itemName || it.item_name || it.productName || it.description || 'Material Item';
+                                      const itemUom = it.uom || it.unit || 'NOS';
+                                      const ordVal = it.ordered ?? it.orderedQty ?? it.poQty ?? it.qty ?? it.quantity ?? '—';
+                                      const recVal = it.accepted ?? it.now ?? it.receivedQty ?? ordVal;
+                                      const rejVal = Number(it.rejected || 0);
+                                      const itemDt = it.date || it.receivedDate || g.grnDate || g.receiptDate || g.date || '—';
+                                      return (
+                                        <tr key={itIdx} style={{ borderBottom: itIdx < grnItemsList.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                                          <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>{itemName}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{itemUom}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>{ordVal}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0E7490' }}>{recVal}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '700', color: rejVal > 0 ? '#DC2626' : '#94A3B8' }}>{rejVal}</td>
+                                          <td style={{ padding: '7px 10px', textAlign: 'right', color: '#64748B' }}>{itemDt}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 

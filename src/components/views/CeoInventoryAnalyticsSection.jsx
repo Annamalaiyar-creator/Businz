@@ -3,6 +3,7 @@ import {
   AlertTriangle, CheckCircle, Warehouse, TrendingUp,
   Clock, Layers, ArrowRight, RefreshCw, ShieldAlert, X, Search
 } from 'lucide-react';
+import { resolveDefaultUom } from '../../utils/vrmProductsData';
 
 const formatINRCompact = (val) => {
   const n = Number(val) || 0;
@@ -129,7 +130,7 @@ export default function CeoInventoryAnalyticsSection({
       const rate = parseFloat(it.rate ?? it.unitRate ?? it.unitPrice ?? it.price ?? it.purchasePrice ?? it.cost ?? 0) || 0;
       const rawVal = parseFloat(it.totalValue ?? it.value ?? 0) || 0;
       const value = rawVal > 0 ? rawVal : Math.max(0, qty * rate);
-      const uom = it.unit || it.uom || 'Nos';
+      const uom = resolveDefaultUom(it, it.unit || it.uom, 'Nos');
       const category = it.category || it.group || 'Solar Structure Material';
       const whText = `${it.name || ''} ${it.itemName || ''} ${category} ${it.description || ''}`.toLowerCase();
       const isSolarPanel =

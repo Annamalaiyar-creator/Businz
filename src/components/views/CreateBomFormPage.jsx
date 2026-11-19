@@ -11,7 +11,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { saveCloudStoreImmediate, saveCloudBomRow, getAndReserveNextBomCode, resolveBomCollisions } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { getFullProductsCatalogWithStock } from "../../utils/productCatalogService";
-import { resolveProductCode, normalizeProductName } from "../../utils/vrmProductsData";
+import { resolveProductCode, normalizeProductName, SALES_UOM_OPTIONS, isSalesLoginRole, normalizeSalesUomValue } from "../../utils/vrmProductsData";
 import { searchCustomers } from "../../services/customerService";
 import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
@@ -1496,30 +1496,61 @@ export default function CreateBomFormPage(props) {
                     </td>
                     {/* UOM Heading Input (Both Dropdown & Typeable) */}
                     <td style={{ padding: '12px 10px' }}>
-                      <input id={`create-bom-form-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
-                        type="text"
-                        list={`uom-list-${i}`}
-                        placeholder="UOM"
-                        value={item.uom || item.unit || 'NOS'}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
-                        }}
-                        style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700' }}
-                       />
-                      <datalist id={`uom-list-${i}`}>
-                        <option value="NOS" />
-                        <option value="SET" />
-                        <option value="KW" />
-                        <option value="KG" />
-                        <option value="MTR" />
-                        <option value="PCS" />
-                        <option value="BOX" />
-                        <option value="PKT" />
-                        <option value="PAIR" />
-                        <option value="LOT" />
-                        <option value="TON" />
-                      </datalist>
+                      {(() => {
+                        const isSalesUser = isSalesLoginRole(userRole);
+                        if (isSalesUser) {
+                          const currentUom = normalizeSalesUomValue(item.uom || item.unit || 'NOS');
+                          const salesAllowedValues = SALES_UOM_OPTIONS.map((o) => o.value);
+                          return (
+                            <select
+                              id={`create-bom-form-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                              name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                              aria-label="UOM"
+                              value={currentUom}
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase();
+                                setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
+                              }}
+                              style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 6px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700', cursor: 'pointer', color: '#0F172A' }}
+                            >
+                              {!salesAllowedValues.includes(currentUom) && (
+                                <option value={currentUom}>{currentUom}</option>
+                              )}
+                              {SALES_UOM_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          );
+                        }
+                        return (
+                          <>
+                            <input id={`create-bom-form-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
+                              type="text"
+                              list={`uom-list-${i}`}
+                              placeholder="UOM"
+                              value={item.uom || item.unit || 'NOS'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
+                              }}
+                              style={{ width: '100%', minWidth: '80px', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '700' }}
+                             />
+                            <datalist id={`uom-list-${i}`}>
+                              <option value="NOS" />
+                              <option value="SET" />
+                              <option value="KW" />
+                              <option value="KG" />
+                              <option value="MTR" />
+                              <option value="PCS" />
+                              <option value="BOX" />
+                              <option value="PKT" />
+                              <option value="PAIR" />
+                              <option value="LOT" />
+                              <option value="TON" />
+                            </datalist>
+                          </>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '12px 6px', textAlign: 'center' }}>
                       <input id={`create-bom-form-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"

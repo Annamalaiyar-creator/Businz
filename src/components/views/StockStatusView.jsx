@@ -16,7 +16,7 @@ import { getVendors, getItems } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
-import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from '../../utils/vrmProductsData';
+import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName, CANONICAL_PRODUCT_ALIASES, resolveDefaultUom } from '../../utils/vrmProductsData';
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 
 
@@ -1605,7 +1605,7 @@ export default function StockStatusView(props) {
         rate: Number(newItemData.rate) || 0,
         sku: newItemData.sku ? newItemData.sku.trim() : '',
         description: newItemData.description ? newItemData.description.trim() : '',
-        unit: newItemData.unit || 'NOS',
+        unit: resolveDefaultUom(newItemData, newItemData.unit, 'NOS'),
         purchaseRate: Number(newItemData.purchaseRate) || 0,
         purchaseDescription: newItemData.purchaseDescription ? newItemData.purchaseDescription.trim() : '',
         productType: newItemData.productType || 'goods',
@@ -1663,7 +1663,7 @@ export default function StockStatusView(props) {
         name: newItemData.name,
         rate: Number(newItemData.rate) || 0,
         sku: newItemData.sku || '—',
-        unit: newItemData.unit || 'NOS',
+        unit: resolveDefaultUom(newItemData, newItemData.unit, 'NOS'),
         description: newItemData.description || '—',
         status: (newItemData.status && String(newItemData.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active'
       };
@@ -3858,7 +3858,7 @@ export default function StockStatusView(props) {
                               style={{ width: '80px', height: '32px', textAlign: 'center', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '13px' }}
                              />
                           </td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center', color: '#64748B' }}>{item.uom}</td>
+                          <td style={{ padding: '12px 10px', textAlign: 'center', color: '#64748B' }}>{resolveDefaultUom(item, item.uom || item.unit, 'NOS')}</td>
                           <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '500', color: '#475569' }}>{item.rate.toFixed(2)}</td>
                           <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 'bold', color: '#0F172A' }}>
                             {(item.qty * item.rate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

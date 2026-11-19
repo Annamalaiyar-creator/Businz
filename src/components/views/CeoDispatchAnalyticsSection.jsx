@@ -144,75 +144,153 @@ export default function CeoDispatchAnalyticsSection({
 
   const analytics = useMemo(() => {
     const now = new Date();
-    const todayIso = now.toISOString().split('T')[0];
+    const formatLocalIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const todayIso = formatLocalIso(now);
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     const toDateObj = (raw) => {
       if (!raw) return null;
-      const d = new Date(raw);
+      if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
+      const str = String(raw).trim();
+      if (!str) return null;
+      const ymd = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (ymd) {
+        const dt = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+        return isNaN(dt.getTime()) ? null : dt;
+      }
+      const dmy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+      if (dmy) {
+        const dt = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+        return isNaN(dt.getTime()) ? null : dt;
+      }
+      const d = new Date(str);
       return isNaN(d.getTime()) ? null : d;
     };
     const toIsoDate = (raw) => {
       const d = toDateObj(raw);
-      return d ? d.toISOString().split('T')[0] : null;
+      return d ? formatLocalIso(d) : null;
     };
 
     const invMap = new Map();
     for (const inv of (invList || [])) {
-      const k = String(inv?.bomCode || inv?.poNo || inv?.bomId || '').trim().toLowerCase();
-      if (k) invMap.set(k, inv);
+      [inv?.bomCode, inv?.bomNo, inv?.bomRef, inv?.poNo, inv?.bomId, inv?.orderNo].forEach(val => {
+        const k = String(val || '').trim().toLowerCase();
+        if (k) invMap.set(k, inv);
+      });
     }
 
     const challanMap = new Map();
     for (const ch of (challansList || [])) {
-      const k = String(ch?.bomCode || ch?.orderNo || ch?.poNo || '').trim().toLowerCase();
-      if (k) challanMap.set(k, ch);
+      [ch?.bomCode, ch?.bomNo, ch?.orderNo, ch?.poNo].forEach(val => {
+        const k = String(val || '').trim().toLowerCase();
+        if (k) challanMap.set(k, ch);
+      });
+    }
+
+    const dispatchMap = new Map();
+    for (const disp of (dispatchesList || [])) {
+      [disp?.bomCode, disp?.bomNo, disp?.orderNo, disp?.poNo, disp?.id].forEach(val => {
+        const k = String(val || '').trim().toLowerCase();
+        if (k) dispatchMap.set(k, disp);
+      });
     }
 
     let orders = (bomList || []).filter(Boolean).map((b, idx) => {
       const code = b.bomCode || b.code || b.id || `BOM-${idx + 1}`;
-      const codeKey = String(code).trim().toLowerCase();
+      const matchKeys = [b.bomCode, b.code, b.id, code].map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
       const customer = b.customerName || b.companyName || b.vendor || b.clientName || 'Customer';
       const st = String(b.status || '').toLowerCase();
-      const matchedInv = invMap.get(codeKey) || null;
-      const matchedChallan = challanMap.get(codeKey) || null;
+      const matchedInv = matchKeys.map(k => invMap.get(k)).find(Boolean) || null;
+      const matchedChallan = matchKeys.map(k => challanMap.get(k)).find(Boolean) || null;
+      const matchedDispatch = matchKeys.map(k => dispatchMap.get(k)).find(Boolean) || null;
 
       const isCancelled = Boolean(b.cancelled || b.status === 'Cancelled & Stock Restored' || st.includes('cancel'));
+      const invSt = String(matchedInv?.status || '').toLowerCase();
+      const dispSt = String(matchedDispatch?.status || '').toLowerCase();
       const isDispatched = !isCancelled && Boolean(
         b.fullyCompleted ||
         b.vehicleLoadingVerified ||
         b.dispatchedAt ||
         b.finalDispatchedAt ||
+        b.completedAt ||
+        b.vehicleLoading?.fullyCompleted ||
+        b.vehicleLoading?.completedAt ||
+        b.vehicleLoading?.loadedAt ||
+        b.vehicleLoading?.verifiedAt ||
         st === 'dispatched' ||
         st === 'closed' ||
-        st.includes('fully dispatched')
+        st === 'completed' ||
+        (st.includes('dispatched') && !st.includes('sent to dispatch') && !st.includes('ready for dispatch') && !st.includes('awaiting dispatch')) ||
+        invSt.includes('dispatched') ||
+        invSt.includes('delivered') ||
+        (matchedDispatch && !dispSt.includes('cancel'))
       );
-      const isInTransit = !isCancelled && !isDispatched && Boolean(
-        st.includes('transit') ||
-        st.includes('vehicle loading') ||
-        b.lrNumber ||
-        b.vehicleNo ||
-        b.vehicleLoading?.vehicleNo
-      );
-      const isReadyForDispatch = !isCancelled && !isDispatched && !isInTransit && Boolean(
+      const isInvoiceConfirmed = !isCancelled && Boolean(
         b.invoiceConfirmed ||
-        b.invoiceGenerated ||
-        matchedInv ||
-        st.includes('invoice') ||
+        st.includes('invoice confirmed') ||
         st.includes('awaiting vehicle') ||
-        st.includes('ready for dispatch')
+        st.includes('ready for dispatch') ||
+        invSt === 'invoice confirmed' ||
+        invSt === 'confirmed' ||
+        invSt === 'completed' ||
+        String(matchedInv?.pay || '').toLowerCase().includes('completed')
+      );
+      const isAccountsDone = !isCancelled && Boolean(
+        b.accountsVerified ||
+        b.isAccountsDone ||
+        b.accountsVerification?.verified ||
+        st.includes('accounts verified') ||
+        st.includes('passed to invoice') ||
+        isInvoiceConfirmed ||
+        isDispatched
+      );
+      const isPacked = !isCancelled && Boolean(
+        b.dispatchPackingVerified ||
+        b.packingVerified ||
+        st.includes('packed') ||
+        st.includes('awaiting accounts') ||
+        st.includes('awaiting sales payment') ||
+        st.includes('ready for payment') ||
+        st.includes('payment uploaded') ||
+        isAccountsDone
       );
 
-      let bucket = 'Pending (Not Ready)';
+      let bucket = 'Dispatch Pending';
       if (isCancelled) bucket = 'Cancelled';
       else if (isDispatched) bucket = 'Dispatched';
-      else if (isInTransit) bucket = 'In Transit';
-      else if (isReadyForDispatch) bucket = 'Ready for Dispatch';
+      else if (isInvoiceConfirmed) bucket = 'Dispatch Pending';
+      else if (isAccountsDone) bucket = 'Invoice Pending';
+      else if (isPacked) bucket = 'Accounts Pending';
+      else bucket = 'Dispatch Pending';
 
-      const createdD = toDateObj(b.salesConfirmedAt || b.confirmedAt || b.date || b.createdAt);
-      const dispatchedD = toDateObj(b.finalDispatchedAt || b.dispatchedAt || b.vehicleLoading?.completedAt);
+      const createdD = toDateObj(b.salesConfirmedAt || b.confirmedAt || b.date || b.bomDate || b.createdAt);
+      const dispatchedD = isDispatched
+        ? toDateObj(
+            b.finalDispatchedAt ||
+            b.dispatchedAt ||
+            b.completedAt ||
+            b.vehicleLoading?.completedAt ||
+            b.vehicleLoading?.loadedAt ||
+            b.vehicleLoading?.verifiedAt ||
+            b.vehicleLoading?.dispatchDate ||
+            b.vehicleLoading?.date ||
+            matchedDispatch?.dispatchedAt ||
+            matchedDispatch?.completedAt ||
+            matchedDispatch?.date ||
+            matchedInv?.dispatchedAt ||
+            matchedInv?.vehicleLoading?.loadedAt ||
+            matchedInv?.completedAt ||
+            matchedInv?.updatedAt ||
+            b.updatedAt ||
+            b.date ||
+            b.bomDate ||
+            b.createdAt
+          )
+        : null;
       const expectedD = toDateObj(b.deliveryDate || b.expectedDispatchDate || b.expectedDate);
-      const plannedIso = (expectedD ? expectedD.toISOString().split('T')[0] : null) || toIsoDate(b.date || b.createdAt) || todayIso;
+      const plannedIso = (expectedD ? formatLocalIso(expectedD) : null) || toIsoDate(b.date || b.bomDate || b.createdAt) || todayIso;
+      const createdIso = createdD ? formatLocalIso(createdD) : null;
+      const dispatchedIso = dispatchedD ? formatLocalIso(dispatchedD) : null;
 
       const ageDays = createdD ? Math.max(0, Math.floor((now.getTime() - createdD.getTime()) / 86400000)) : 0;
       const delayDays = (!isCancelled && !isDispatched)
@@ -220,23 +298,23 @@ export default function CeoDispatchAnalyticsSection({
             ? Math.max(0, Math.floor((now.getTime() - expectedD.getTime()) / 86400000))
             : Math.max(0, ageDays - 2))
         : 0;
-      const dispatchedOnTime = isDispatched && (!expectedD || !dispatchedD || (dispatchedD.toISOString().split('T')[0] <= plannedIso));
+      const dispatchedOnTime = isDispatched && (!expectedD || !dispatchedIso || (dispatchedIso <= plannedIso));
 
       let delayReason = 'Pending Processing';
-      if (st.includes('packing') || !b.dispatchPackingVerified) delayReason = 'Packing Pending';
-      else if (!b.accountsVerified && !b.isAccountsDone) delayReason = 'Accounts Verification Pending';
-      else if (!b.invoiceConfirmed && !b.invoiceGenerated && !matchedInv) delayReason = 'Invoice Pending';
-      else if (!b.vehicleNo && !b.vehicleLoading?.vehicleNo) delayReason = 'Vehicle Loading Pending';
+      if (!isPacked) delayReason = 'Packing Pending';
+      else if (!isAccountsDone) delayReason = 'Accounts Verification Pending';
+      else if (!isInvoiceConfirmed) delayReason = 'Invoice Pending';
+      else delayReason = 'Vehicle Loading Pending';
 
       const grandTotal = Number(b.grandTotal || matchedInv?.grandTotal || b.subTotal || 0) || 0;
       const itemsArr = Array.isArray(b.items) ? b.items : [];
       const totalQty = itemsArr.reduce((s, it) => s + (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0), 0);
       const firstProd = b.presetName || b.preset || itemsArr[0]?.name || itemsArr[0]?.description || 'Solar Structure Kit';
 
-      const hasInvoice = Boolean(b.invoiceConfirmed || b.invoiceGenerated || b.invoiceNo || matchedInv);
+      const hasInvoice = Boolean(isInvoiceConfirmed || b.invoiceNo || matchedInv);
       const hasEwayBill = Boolean(b.ewayBillNo || b.ewayBillDoc || matchedInv?.ewayBillNo || matchedInv?.ewayBillDoc);
       const hasLrOrDc = Boolean(b.lrNumber || b.lrDoc || b.lrCopyDoc || matchedChallan || b.docType === 'DC');
-      const hasPackingList = Boolean(b.dispatchPackingVerified || b.packingVerified || st.includes('packed'));
+      const hasPackingList = isPacked;
 
       return {
         rawBom: b,
@@ -245,10 +323,11 @@ export default function CeoDispatchAnalyticsSection({
         bucket,
         isCancelled,
         isDispatched,
-        isInTransit,
-        isReadyForDispatch,
-        createdIso: createdD ? createdD.toISOString().split('T')[0] : null,
-        dispatchedIso: dispatchedD ? dispatchedD.toISOString().split('T')[0] : null,
+        isPacked,
+        isAccountsDone,
+        isInvoiceConfirmed,
+        createdIso,
+        dispatchedIso,
         plannedIso,
         delayDays,
         dispatchedOnTime,
@@ -273,16 +352,16 @@ export default function CeoDispatchAnalyticsSection({
     if (isLocalhostPreview) {
       const dayIso = (ago) => {
         const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ago);
-        return dt.toISOString().split('T')[0];
+        return formatLocalIso(dt);
       };
       orders = [
-        { code: 'VRMS/BOM/26-27/718', customer: 'Softrays Power Solutions', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isInTransit: false, isReadyForDispatch: false, createdIso: dayIso(1), dispatchedIso: dayIso(0), plannedIso: dayIso(0), delayDays: 0, delayReason: 'On Schedule', grandTotal: 287271, totalQty: 144, firstProd: 'HAT Purlin 2x5 (1200x1800)', itemsArr: [{ name: 'HAT Purlin 2x5 (1200x1800)', qty: 144, total: 287271 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/719', customer: 'Green Infra Ltd', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isInTransit: false, isReadyForDispatch: false, createdIso: dayIso(2), dispatchedIso: dayIso(1), plannedIso: dayIso(1), delayDays: 0, delayReason: 'On Schedule', grandTotal: 540000, totalQty: 320, firstProd: 'Mono Rail 4200 mm (AL)', itemsArr: [{ name: 'Mono Rail 4200 mm (AL)', qty: 320, total: 540000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/720', customer: 'ABC Solar Pvt Ltd', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isInTransit: false, isReadyForDispatch: false, createdIso: dayIso(4), dispatchedIso: dayIso(2), plannedIso: dayIso(2), delayDays: 0, delayReason: 'On Schedule', grandTotal: 785000, totalQty: 500, firstProd: 'LEG 1500 mm (HDG)', itemsArr: [{ name: 'LEG 1500 mm (HDG)', qty: 500, total: 785000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/721', customer: 'Sun Power EPC', bucket: 'In Transit', isCancelled: false, isDispatched: false, isInTransit: true, isReadyForDispatch: false, createdIso: dayIso(4), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 2, delayReason: 'In Transit — ETA Today', grandTotal: 420000, totalQty: 260, firstProd: 'Mid Clamp 35mm Anodized', itemsArr: [{ name: 'Mid Clamp 35mm Anodized', qty: 260, total: 420000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/722', customer: 'Bright Energy', bucket: 'Ready for Dispatch', isCancelled: false, isDispatched: false, isInTransit: false, isReadyForDispatch: true, createdIso: dayIso(5), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 3, delayReason: 'Vehicle Loading Pending', grandTotal: 365000, totalQty: 180, firstProd: 'Rafter 4300 mm (GAL)', itemsArr: [{ name: 'Rafter 4300 mm (GAL)', qty: 180, total: 365000 }], hasInvoice: true, hasEwayBill: false, hasLrOrDc: false, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/723', customer: 'Voltix Solutions', bucket: 'Pending (Not Ready)', isCancelled: false, isDispatched: false, isInTransit: false, isReadyForDispatch: false, createdIso: dayIso(6), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 4, delayReason: 'Packing Pending', grandTotal: 195000, totalQty: 120, firstProd: 'End Clamp L-Foot Kit', itemsArr: [{ name: 'End Clamp L-Foot Kit', qty: 120, total: 195000 }], hasInvoice: false, hasEwayBill: false, hasLrOrDc: false, hasPackingList: false },
-        { code: 'VRMS/BOM/26-27/724', customer: 'KPR Mill Solar', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isInTransit: false, isReadyForDispatch: false, createdIso: dayIso(5), dispatchedIso: dayIso(3), plannedIso: dayIso(3), delayDays: 0, delayReason: 'On Schedule', grandTotal: 615000, totalQty: 410, firstProd: 'HAT Purlin 2x5 (1200x1800)', itemsArr: [{ name: 'HAT Purlin 2x5 (1200x1800)', qty: 410, total: 615000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true }
+        { code: 'VRMS/BOM/26-27/718', customer: 'Softrays Power Solutions', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(1), dispatchedIso: dayIso(0), plannedIso: dayIso(0), delayDays: 0, delayReason: 'On Schedule', grandTotal: 287271, totalQty: 144, firstProd: 'HAT Purlin 2x5 (1200x1800)', itemsArr: [{ name: 'HAT Purlin 2x5 (1200x1800)', qty: 144, total: 287271 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
+        { code: 'VRMS/BOM/26-27/719', customer: 'Green Infra Ltd', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(2), dispatchedIso: dayIso(1), plannedIso: dayIso(1), delayDays: 0, delayReason: 'On Schedule', grandTotal: 540000, totalQty: 320, firstProd: 'Mono Rail 4200 mm (AL)', itemsArr: [{ name: 'Mono Rail 4200 mm (AL)', qty: 320, total: 540000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
+        { code: 'VRMS/BOM/26-27/720', customer: 'ABC Solar Pvt Ltd', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(4), dispatchedIso: dayIso(2), plannedIso: dayIso(2), delayDays: 0, delayReason: 'On Schedule', grandTotal: 785000, totalQty: 500, firstProd: 'LEG 1500 mm (HDG)', itemsArr: [{ name: 'LEG 1500 mm (HDG)', qty: 500, total: 785000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
+        { code: 'VRMS/BOM/26-27/721', customer: 'Sun Power EPC', bucket: 'Dispatch Pending', isCancelled: false, isDispatched: false, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(4), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 2, delayReason: 'Vehicle Loading Pending', grandTotal: 420000, totalQty: 260, firstProd: 'Mid Clamp 35mm Anodized', itemsArr: [{ name: 'Mid Clamp 35mm Anodized', qty: 260, total: 420000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: false, hasPackingList: true },
+        { code: 'VRMS/BOM/26-27/722', customer: 'Bright Energy', bucket: 'Invoice Pending', isCancelled: false, isDispatched: false, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: false, createdIso: dayIso(5), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 3, delayReason: 'Invoice Pending', grandTotal: 365000, totalQty: 180, firstProd: 'Rafter 4300 mm (GAL)', itemsArr: [{ name: 'Rafter 4300 mm (GAL)', qty: 180, total: 365000 }], hasInvoice: false, hasEwayBill: false, hasLrOrDc: false, hasPackingList: true },
+        { code: 'VRMS/BOM/26-27/723', customer: 'Voltix Solutions', bucket: 'Accounts Pending', isCancelled: false, isDispatched: false, isPacked: true, isAccountsDone: false, isInvoiceConfirmed: false, createdIso: dayIso(6), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 4, delayReason: 'Accounts Verification Pending', grandTotal: 195000, totalQty: 120, firstProd: 'End Clamp L-Foot Kit', itemsArr: [{ name: 'End Clamp L-Foot Kit', qty: 120, total: 195000 }], hasInvoice: false, hasEwayBill: false, hasLrOrDc: false, hasPackingList: true },
+        { code: 'VRMS/BOM/26-27/724', customer: 'KPR Mill Solar', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(5), dispatchedIso: dayIso(3), plannedIso: dayIso(3), delayDays: 0, delayReason: 'On Schedule', grandTotal: 615000, totalQty: 410, firstProd: 'HAT Purlin 2x5 (1200x1800)', itemsArr: [{ name: 'HAT Purlin 2x5 (1200x1800)', qty: 410, total: 615000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true }
       ];
     }
 
@@ -292,10 +371,10 @@ export default function CeoDispatchAnalyticsSection({
 
     // 1. DISPATCH STATUS
     const statusDefs = [
+      { name: 'Dispatch Pending', color: '#0E7490' },
+      { name: 'Accounts Pending', color: '#7C3AED' },
+      { name: 'Invoice Pending', color: '#D97706' },
       { name: 'Dispatched', color: '#059669' },
-      { name: 'In Transit', color: '#2563EB' },
-      { name: 'Ready for Dispatch', color: '#D97706' },
-      { name: 'Pending (Not Ready)', color: '#7C3AED' },
       { name: 'Cancelled', color: '#DC2626' }
     ];
     const statusSegments = statusDefs.map(sd => {
@@ -313,7 +392,7 @@ export default function CeoDispatchAnalyticsSection({
     const dailyTrend = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const iso = d.toISOString().split('T')[0];
+      const iso = formatLocalIso(d);
       const label = `${String(d.getDate()).padStart(2, '0')} ${monthShort[d.getMonth()]}`;
       const dayDispatched = orders.filter(o => o.isDispatched && (o.dispatchedIso === iso || (!o.dispatchedIso && o.plannedIso === iso)));
       const dayExpected = orders.filter(o => !o.isCancelled && o.plannedIso === iso);
@@ -327,7 +406,9 @@ export default function CeoDispatchAnalyticsSection({
         dispatchedCount: dayDispatched.length,
         plannedCount: dayExpected.length,
         onTimePct,
-        valueSum: dayDispatched.reduce((s, o) => s + o.grandTotal, 0)
+        valueSum: dayDispatched.reduce((s, o) => s + o.grandTotal, 0),
+        orders: dayDispatched,
+        expectedOrders: dayExpected
       });
     }
 
@@ -389,7 +470,7 @@ export default function CeoDispatchAnalyticsSection({
 
     // 5. TODAY'S DISPATCH PLAN
     const todaysPlan = orders
-      .filter(o => !o.isCancelled && (o.plannedIso === todayIso || o.dispatchedIso === todayIso || o.isReadyForDispatch || o.isInTransit))
+      .filter(o => !o.isCancelled && (o.plannedIso === todayIso || o.dispatchedIso === todayIso || o.bucket === 'Dispatch Pending'))
       .slice(0, 8);
 
     // 6. DOCUMENT CHECKLIST (Today)
@@ -410,9 +491,9 @@ export default function CeoDispatchAnalyticsSection({
 
     // 7. KEY ALERTS
     const overdueOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && o.delayDays > 0);
-    const invPendingOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && !o.hasInvoice);
+    const invPendingOrders = orders.filter(o => o.bucket === 'Invoice Pending');
     const packingPendingOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && !o.hasPackingList);
-    const vehiclePendingOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && o.hasInvoice && !o.isInTransit);
+    const vehiclePendingOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && o.isInvoiceConfirmed);
 
     const keyAlerts = [
       {
@@ -469,7 +550,7 @@ export default function CeoDispatchAnalyticsSection({
       docChecklist,
       keyAlerts
     };
-  }, [bomList, challansList, invList, inventoryList]);
+  }, [bomList, dispatchesList, challansList, invList, inventoryList]);
 
   const maxDailyCount = Math.max(1, ...analytics.dailyTrend.map(d => d.dispatchedCount));
   const peakDay = analytics.dailyTrend.reduce((best, d) => (d.dispatchedCount >= best.dispatchedCount ? d : best), analytics.dailyTrend[0] || { label: '—', dispatchedCount: 0 });
@@ -481,10 +562,11 @@ export default function CeoDispatchAnalyticsSection({
 
   const statusBadgeStyle = (bucket) => {
     if (bucket === 'Dispatched') return { bg: '#DCFCE7', fg: '#15803D', border: '#BBF7D0' };
-    if (bucket === 'In Transit') return { bg: '#DBEAFE', fg: '#1D4ED8', border: '#BFDBFE' };
-    if (bucket === 'Ready for Dispatch') return { bg: '#FEF3C7', fg: '#B45309', border: '#FDE68A' };
+    if (bucket === 'Dispatch Pending') return { bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
+    if (bucket === 'Accounts Pending') return { bg: '#F5F3FF', fg: '#7C3AED', border: '#DDD6FE' };
+    if (bucket === 'Invoice Pending') return { bg: '#FEF3C7', fg: '#B45309', border: '#FDE68A' };
     if (bucket === 'Cancelled') return { bg: '#FEE2E2', fg: '#DC2626', border: '#FECACA' };
-    return { bg: '#F3E8FF', fg: '#7E22CE', border: '#E9D5FF' };
+    return { bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
   };
 
   return (

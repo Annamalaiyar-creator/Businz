@@ -3,7 +3,16 @@ import {
   Check, Trash2, Eye, FileText, AlertCircle, AlertTriangle, X, CheckCircle, Clock, UploadCloud, Truck, ShoppingCart, Upload, Layers, FileCheck, Image, Lock, Save, Boxes, ArrowLeft
 } from 'lucide-react';
 import { isFixedQuantityPreset } from '../../../vrmHdgProposalPresets';
-import { VRM_PRODUCTS, isRailPreset, isKwPreset, calculateTotalDispatchQty } from '../../../utils/vrmProductsData';
+import {
+  VRM_PRODUCTS,
+  isRailPreset,
+  isKwPreset,
+  isTriangleDirectPreset,
+  SALES_UOM_OPTIONS,
+  isSalesLoginRole,
+  normalizeSalesUomValue,
+  calculateTotalDispatchQty
+} from '../../../utils/vrmProductsData';
 import { cleanNum } from '../../../utils/otherViewsShared';
 import SearchablePresetSelector from '../../SearchablePresetSelector';
 import TypeableProductSelect from '../../TypeableProductSelect';
@@ -1300,34 +1309,61 @@ export default function BomCreateFormSection({ ctx }) {
                               <div style={{ textAlign: 'center', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
                                 {item.uom || item.unit || 'NOS'}
                               </div>
-                            ) : (
-                              <>
-                                <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
-                                  type="text"
-                                  list={`uom-list-${i}`}
-                                  placeholder="UOM"
-                                  value={item.uom || item.unit || 'NOS'}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
-                                  }}
-                                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                                 />
-                                <datalist id={`uom-list-${i}`}>
-                                  <option value="NOS" />
-                                  <option value="SET" />
-                                  <option value="KW" />
-                                  <option value="KG" />
-                                  <option value="MTR" />
-                                  <option value="PCS" />
-                                  <option value="BOX" />
-                                  <option value="PKT" />
-                                  <option value="PAIR" />
-                                  <option value="LOT" />
-                                  <option value="TON" />
-                                </datalist>
-                              </>
-                            )}
+                            ) : (() => {
+                              const isSalesUser = isSalesLoginRole(ctx?.userRole);
+                              if (isSalesUser) {
+                                const currentUom = normalizeSalesUomValue(item.uom || item.unit || 'NOS');
+                                const salesAllowedValues = SALES_UOM_OPTIONS.map((o) => o.value);
+                                return (
+                                  <select
+                                    id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                    name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                    aria-label="UOM"
+                                    value={currentUom}
+                                    onChange={(e) => {
+                                      const val = e.target.value.toUpperCase();
+                                      setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
+                                    }}
+                                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 6px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600', cursor: 'pointer', color: '#0F172A' }}
+                                  >
+                                    {!salesAllowedValues.includes(currentUom) && (
+                                      <option value={currentUom}>{currentUom}</option>
+                                    )}
+                                    {SALES_UOM_OPTIONS.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                );
+                              }
+                              return (
+                                <>
+                                  <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
+                                    type="text"
+                                    list={`uom-list-${i}`}
+                                    placeholder="UOM"
+                                    value={item.uom || item.unit || 'NOS'}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val, unit: val } : mat));
+                                    }}
+                                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
+                                   />
+                                  <datalist id={`uom-list-${i}`}>
+                                    <option value="NOS" />
+                                    <option value="SET" />
+                                    <option value="KW" />
+                                    <option value="KG" />
+                                    <option value="MTR" />
+                                    <option value="PCS" />
+                                    <option value="BOX" />
+                                    <option value="PKT" />
+                                    <option value="PAIR" />
+                                    <option value="LOT" />
+                                    <option value="TON" />
+                                  </datalist>
+                                </>
+                              );
+                            })()}
                           </td>
                           <td style={{ padding: '12px 10px' }}>
                             {isPiLocked ? (
@@ -1364,7 +1400,7 @@ export default function BomCreateFormSection({ ctx }) {
                               const calcTotalDisp = isCustomSetGroup
                                 ? (parseFloat(item.qty) || 0)
                                 : calculateTotalDispatchQty(
-                                item,
+                                { ...item, presetId: currentGroup?.presetId || item.presetId },
                                 effectiveSetCount,
                                 effectivePresetName,
                                 currentGroup?.category || item.category,
@@ -1375,6 +1411,12 @@ export default function BomCreateFormSection({ ctx }) {
                                 : calcTotalDisp;
                               const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
                               const isRail = isRailPreset(effectivePresetName, currentGroup?.category || item.category, item.subPresetName, item.name);
+                              const isTriangle = isTriangleDirectPreset(
+                                effectivePresetName,
+                                currentGroup?.category || item.category,
+                                item.subPresetName,
+                                currentGroup?.presetId || item.presetId
+                              );
                               return (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                   <div style={{
@@ -1413,8 +1455,8 @@ export default function BomCreateFormSection({ ctx }) {
                                     </span>
                                   </div>
                                   {isPresetItem && (
-                                    <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600' }}>
-                                      {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) > 1 ? 's' : ''}`)}
+                                    <span style={{ fontSize: '9px', color: (isKw || isRail || isTriangle) ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                      {isKw ? 'Direct kW Qty' : (isTriangle ? 'Direct Triangle Qty' : (isRail ? 'Direct Rails Qty' : `${parseFloat(item.qty) || 0} × ${currentGroup?.setCount || 1} Set${(currentGroup?.setCount || 1) > 1 ? 's' : ''}`))}
                                     </span>
                                   )}
                                 </div>

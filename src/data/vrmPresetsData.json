@@ -20745,7 +20745,7 @@
       {
         "name": "DC CABLE 4Sqmm. (Red)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20753,7 +20753,7 @@
       {
         "name": "DC CABLE 4Sqmm. (Black)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20761,7 +20761,7 @@
       {
         "name": "AC CABLE 4Sqmm. (Red)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20769,7 +20769,7 @@
       {
         "name": "AC CABLE 4Sqmm. (Black)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20777,7 +20777,7 @@
       {
         "name": "EARTHING CABLE 4Sqmm. (Green)",
         "qty": "100",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20785,7 +20785,7 @@
       {
         "name": "EARTHING CABLE 16Sqmm. (Green)",
         "qty": "100",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20922,7 +20922,7 @@
       {
         "name": "DC CABLE 4Sqmm. (Red)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20930,7 +20930,7 @@
       {
         "name": "DC CABLE 4Sqmm. (Black)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20938,7 +20938,7 @@
       {
         "name": "AC CABLE 4Sqmm. (Red)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20946,7 +20946,7 @@
       {
         "name": "AC CABLE 4Sqmm. (Black)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20954,7 +20954,7 @@
       {
         "name": "EARTHING CABLE 16Sqmm. (Green)",
         "qty": "100",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -20962,7 +20962,7 @@
       {
         "name": "EARTHING CABLE 4Sqmm. (Green)",
         "qty": "100",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21107,7 +21107,7 @@
       {
         "name": "DC CABLE 6Sqmm. (Red)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21115,7 +21115,7 @@
       {
         "name": "DC CABLE 6Sqmm. (Black)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21123,7 +21123,7 @@
       {
         "name": "AC CABLE 6Sqmm. (Red)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21131,7 +21131,7 @@
       {
         "name": "AC CABLE 6Sqmm. (Black)",
         "qty": "20",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21139,7 +21139,7 @@
       {
         "name": "EARTHING CABLE 16Sqmm. (Green)",
         "qty": "100",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21147,7 +21147,7 @@
       {
         "name": "EARTHING CABLE 6Sqmm. (Green)",
         "qty": "100",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21276,7 +21276,7 @@
       {
         "name": "CABLE Polycab make DC CABLEs 6 Sqmm - Red",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21284,7 +21284,7 @@
       {
         "name": "CABLE Polycab make DC CABLEs 6 Sqmm - Black",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21292,7 +21292,7 @@
       {
         "name": "CABLE Polycab make AC CABLEs 6 Sqmm - Red",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21300,7 +21300,7 @@
       {
         "name": "CABLE Polycab make AC CABLEs 6 Sqmm - Black",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21308,7 +21308,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 16 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21316,7 +21316,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 6 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21324,7 +21324,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 4 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21453,7 +21453,7 @@
       {
         "name": "CABLE Polycab make DC CABLEs 6 Sqmm - Red",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21461,7 +21461,7 @@
       {
         "name": "CABLE Polycab make DC CABLEs 6 Sqmm - Black",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21469,7 +21469,7 @@
       {
         "name": "CABLE Polycab make AC CABLEs 6 Sqmm - Red",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21477,7 +21477,7 @@
       {
         "name": "CABLE Polycab make AC CABLEs 6 Sqmm - Black",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21485,7 +21485,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 16 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21493,7 +21493,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 6 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21501,7 +21501,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 4 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21630,7 +21630,7 @@
       {
         "name": "CABLE Polycab make DC CABLEs 6 Sqmm - Red",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21638,7 +21638,7 @@
       {
         "name": "CABLE Polycab make DC CABLEs 6 Sqmm - Black",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21646,7 +21646,7 @@
       {
         "name": "CABLE Polycab make AC CABLEs 6 Sqmm - Red",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21654,7 +21654,7 @@
       {
         "name": "CABLE Polycab make AC CABLEs 6 Sqmm - Black",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21662,7 +21662,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 16 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21670,7 +21670,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 6 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"
@@ -21678,7 +21678,7 @@
       {
         "name": "CABLE Polycab make Earthing CABLEs 4 Sqmm - Green",
         "qty": "1",
-        "uom": "NOS",
+        "uom": "MTR",
         "category": "BOS",
         "rate": "0.0",
         "gstRate": "5%"

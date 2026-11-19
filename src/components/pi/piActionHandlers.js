@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react';
 import { isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
 import { normalizePaymentTerm, stripDataUrlsFromRecord } from '../../utils/otherViewsShared';
-import { resolveProductCode, calculateTotalDispatchQty } from '../../utils/vrmProductsData';
+import { resolveProductCode, calculateTotalDispatchQty, isRailPreset, isTriangleDirectPreset } from '../../utils/vrmProductsData';
 import { notifyPiCreated, notifyPiUpdated } from '../../services/notificationService';
 import { isTamilNaduIntra } from '../../utils/gstHelper';
 import { getNextSequence } from '../../utils/sequenceGenerator';
@@ -285,7 +285,12 @@ export function createPiActionHandlers(ctx) {
   const handleAddPresetItem = (groupId) => {
     const grp = (groupId && presetGroups[groupId]) || Object.values(presetGroups)[0];
     if (!grp) return;
-    const mult = (grp.unit === 'kW' || grp.unitType === 'kW') ? 1 : Math.max(1, parseFloat(grp.setCount) || 1);
+    const isDirectMult =
+      grp.unit === 'kW' ||
+      grp.unitType === 'kW' ||
+      isRailPreset(grp.presetName, grp.category) ||
+      isTriangleDirectPreset(grp.presetName, grp.category, '', grp.presetId);
+    const mult = isDirectMult ? 1 : Math.max(1, parseFloat(grp.setCount) || 1);
     const targetGid = grp.groupId || groupId;
     const newItem = {
       name: '',

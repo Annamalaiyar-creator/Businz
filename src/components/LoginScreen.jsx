@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { authenticateUser, syncEmployeesFromCloud } from '../services/authService';
 import { saveCloudStore } from '../utils/supabaseDataSync';
-import { registerActiveSession, createNewSessionId } from '../services/sessionService';
+import { registerActiveSession, createNewSessionId, upsertSavedAccount, getOrCreateSessionId } from '../services/sessionService';
 
 export const USER_ROLES_CONFIG = [
   {
@@ -141,11 +141,18 @@ export const USER_ROLES_CONFIG = [
   }
 ];
 
-export default function LoginScreen({ onLoginSuccess }) {
+export default function LoginScreen({ onLoginSuccess, initialIdentifier = '', isAddAccountMode = false }) {
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [selectedRoleObj, setSelectedRoleObj] = useState(USER_ROLES_CONFIG[0]);
   const [empIdInput, setEmpIdInput] = useState('');
-  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameInput, setUsernameInput] = useState(initialIdentifier || '');
+
+  useEffect(() => {
+    if (initialIdentifier) {
+      setUsernameInput(initialIdentifier);
+      setIsSignUpMode(false);
+    }
+  }, [initialIdentifier]);
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -270,11 +277,28 @@ export default function LoginScreen({ onLoginSuccess }) {
     localStorage.setItem('controlroom_user_role', roleName);
     localStorage.setItem('controlroom_logged_emp_id', empCode);
     localStorage.setItem('controlroom_logged_user', emailStr);
+    localStorage.setItem('controlroom_logged_user_email', emailStr);
     localStorage.setItem('controlroom_logged_user_name', displayNameStr);
 
+    let registered = null;
     try {
-      await registerActiveSession(emailStr, empCode, displayNameStr, roleName, passwordStr || passwordInput);
+      registered = await registerActiveSession(emailStr, empCode, displayNameStr, roleName, passwordStr || passwordInput);
     } catch (e) {}
+
+    const activeSessionId =
+      (registered && (registered.id || registered?.session?.id)) ||
+      localStorage.getItem('controlroom_device_session_id') ||
+      getOrCreateSessionId();
+    const activeStartTime = Number(localStorage.getItem('controlroom_session_start_time')) || Date.now();
+    upsertSavedAccount({
+      empCode,
+      email: emailStr,
+      name: displayNameStr,
+      role: roleName,
+      sessionId: activeSessionId,
+      sessionStartTime: activeStartTime,
+      lastUsedAt: Date.now()
+    });
 
     setShowSuccessBanner(false);
     setShow2FAModal(false);
@@ -640,13 +664,28 @@ export default function LoginScreen({ onLoginSuccess }) {
 
             {/* Title & Subtitle */}
             <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-              {isSignUpMode ? 'Create your Businz Account' : 'Sign in to Businz'}
+              {isSignUpMode ? 'Create your Businz Account' : (isAddAccountMode ? 'Add another account' : 'Sign in to Businz')}
             </h1>
             <p style={{ fontSize: '12.5px', color: '#64748B', margin: '6px 0 16px 0', lineHeight: '1.4', maxWidth: '380px' }}>
               {isSignUpMode 
                 ? 'Enter your details below to register your employee account & security verification.'
                 : 'Enter your Emp ID or Email ID and password to log into your account portal.'}
             </p>
+            {isAddAccountMode && !isSignUpMode && (
+              <div style={{
+                marginBottom: '12px',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                backgroundColor: '#ECFEFF',
+                border: '1px solid #A5F3FC',
+                color: '#0E7490',
+                fontSize: '12px',
+                fontWeight: '600',
+                lineHeight: '1.35'
+              }}>
+                Sign in to add another BUSINZ account to this browser. Your existing signed-in accounts stay saved.
+              </div>
+            )}
 
             {/* FORM */}
             <form onSubmit={handleLoginSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

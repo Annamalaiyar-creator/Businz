@@ -3,7 +3,7 @@ import {
   Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt
 } from 'lucide-react';
 import { saveCloudBomRow } from '../../../utils/supabaseDataSync';
-import { isRailPreset, isKwPreset, calculateTotalDispatchQty } from '../../../utils/vrmProductsData';
+import { isRailPreset, isKwPreset, isTriangleDirectPreset, SALES_UOM_OPTIONS, isSalesLoginRole, normalizeSalesUomValue, calculateTotalDispatchQty } from '../../../utils/vrmProductsData';
 import { getMediaFromCache, stripDataUrlsFromRecord, cleanNum } from '../../../utils/otherViewsShared';
 import { uploadBomDocumentFile, validateClientFile } from '../../../utils/bomStorageClient';
 import TypeableProductSelect from '../../TypeableProductSelect';
@@ -1692,7 +1692,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (pInfo?.unitType || pInfo?.unit || item.unit || item.uom);
                                 const effectiveSetCount = isSub ? (item.subSetCount || 1) : (pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1);
                                 const totalDisp = calculateTotalDispatchQty(
-                                  item,
+                                  { ...item, presetId: pInfo?.presetId || item.presetId },
                                   effectiveSetCount,
                                   effectivePresetName,
                                   confirmingBomModal.category || item.category,
@@ -1700,6 +1700,12 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 );
                                 const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
                                 const isRail = isRailPreset(effectivePresetName, confirmingBomModal.category || item.category, item.subPresetName, item.name);
+                                const isTriangle = isTriangleDirectPreset(
+                                  effectivePresetName,
+                                  confirmingBomModal.category || item.category,
+                                  item.subPresetName,
+                                  pInfo?.presetId || item.presetId
+                                );
                                 return (
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                     <div style={{
@@ -1719,8 +1725,8 @@ export default function BomConfirmAuditSection({ ctx }) {
                                       </span>
                                     </div>
                                     {isPartBundle && (
-                                      <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600' }}>
-                                        {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `${itemQty} × ${pInfo?.setCount || 1} Set${(pInfo?.setCount || 1) > 1 ? 's' : ''}`)}
+                                      <span style={{ fontSize: '9px', color: (isKw || isRail || isTriangle) ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                        {isKw ? 'Direct kW Qty' : (isTriangle ? 'Direct Triangle Qty' : (isRail ? 'Direct Rails Qty' : `${itemQty} × ${pInfo?.setCount || 1} Set${(pInfo?.setCount || 1) > 1 ? 's' : ''}`))}
                                       </span>
                                     )}
                                   </div>
@@ -1942,19 +1948,47 @@ export default function BomConfirmAuditSection({ ctx }) {
                               <div style={{ fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>
                                 {item.uom || item.unit || 'NOS'}
                               </div>
-                            ) : (
-                              <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
-                                type="text"
-                                placeholder="UOM"
-                                value={item.uom || item.unit || 'NOS'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
-                                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                                }}
-                                style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                               />
-                            )}
+                            ) : (() => {
+                              const isSalesUser = isSalesLoginRole(userRole);
+                              if (isSalesUser) {
+                                const currentUom = normalizeSalesUomValue(item.uom || item.unit || 'NOS');
+                                const salesAllowedValues = SALES_UOM_OPTIONS.map((o) => o.value);
+                                return (
+                                  <select
+                                    id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                    name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`}
+                                    aria-label="UOM"
+                                    value={currentUom}
+                                    onChange={(e) => {
+                                      const val = e.target.value.toUpperCase();
+                                      const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
+                                      setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                    }}
+                                    style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
+                                  >
+                                    {!salesAllowedValues.includes(currentUom) && (
+                                      <option value={currentUom}>{currentUom}</option>
+                                    )}
+                                    {SALES_UOM_OPTIONS.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                );
+                              }
+                              return (
+                                <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
+                                  type="text"
+                                  placeholder="UOM"
+                                  value={item.uom || item.unit || 'NOS'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, uom: val, unit: val } : it);
+                                    setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                  }}
+                                  style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
+                                 />
+                              );
+                            })()}
                           </td>
                           <td style={{ padding: '12px 10px' }}>
                             {isSourcePiLocked ? (
@@ -1983,10 +2017,10 @@ export default function BomConfirmAuditSection({ ctx }) {
                               const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (pInfo?.unit || item.unit || item.uom);
                               const effectiveSetCount = isSub ? (item.subSetCount || 1) : (pInfo?.setCount || 1);
                               const calcTotalDisp = calculateTotalDispatchQty(
-                                item,
+                                { ...item, presetId: pInfo?.presetId || item.presetId },
                                 effectiveSetCount,
                                 effectivePresetName,
-                                item.category,
+                                confirmingBomModal.category || item.category,
                                 effectiveUnit
                               );
                               const totalDisp = item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== ''
@@ -1994,6 +2028,12 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 : calcTotalDisp;
                               const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
                               const isRail = isRailPreset(effectivePresetName, item.category, item.subPresetName, item.name);
+                              const isTriangle = isTriangleDirectPreset(
+                                effectivePresetName,
+                                confirmingBomModal.category || item.category,
+                                item.subPresetName,
+                                pInfo?.presetId || item.presetId
+                              );
                               return (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                   <div style={{
@@ -2033,8 +2073,8 @@ export default function BomConfirmAuditSection({ ctx }) {
                                     </span>
                                   </div>
                                   {isPartBundle && (
-                                    <span style={{ fontSize: '9px', color: (isKw || isRail) ? '#059669' : '#64748B', fontWeight: '600' }}>
-                                      {isKw ? 'Direct kW Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${effectiveSetCount}`)}
+                                    <span style={{ fontSize: '9px', color: (isKw || isRail || isTriangle) ? '#059669' : '#64748B', fontWeight: '600' }}>
+                                      {isKw ? 'Direct kW Qty' : (isTriangle ? 'Direct Triangle Qty' : (isRail ? 'Direct Rails Qty' : `Formula: ${parseFloat(item.qty) || 0} × ${effectiveSetCount}`))}
                                     </span>
                                   )}
                                 </div>

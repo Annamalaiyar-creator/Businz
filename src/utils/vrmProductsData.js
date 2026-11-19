@@ -1466,7 +1466,7 @@ export const VRM_PRODUCTS = [
     "code": "ACB4",
     "name": "AC CABLE 4Sqmm. (Black)",
     "sections": "4SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1479,7 +1479,7 @@ export const VRM_PRODUCTS = [
     "code": "ACR4",
     "name": "AC CABLE 4Sqmm. (Red)",
     "sections": "4SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1492,7 +1492,7 @@ export const VRM_PRODUCTS = [
     "code": "DCB4",
     "name": "DC CABLE 4Sqmm. (Black)",
     "sections": "4SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1505,7 +1505,7 @@ export const VRM_PRODUCTS = [
     "code": "DCR4",
     "name": "DC CABLE 4Sqmm. (Red)",
     "sections": "4SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1518,7 +1518,7 @@ export const VRM_PRODUCTS = [
     "code": "ECG4",
     "name": "EARTHING CABLE 4Sqmm. (Green)",
     "sections": "4SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1531,7 +1531,7 @@ export const VRM_PRODUCTS = [
     "code": "ACB6",
     "name": "AC CABLE 6Sqmm. (Black)",
     "sections": "6SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1544,7 +1544,7 @@ export const VRM_PRODUCTS = [
     "code": "ACR6",
     "name": "AC CABLE 6Sqmm. (Red)",
     "sections": "6SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1557,7 +1557,7 @@ export const VRM_PRODUCTS = [
     "code": "DCB6",
     "name": "DC CABLE 6Sqmm. (Black)",
     "sections": "6SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1570,7 +1570,7 @@ export const VRM_PRODUCTS = [
     "code": "DCR6",
     "name": "DC CABLE 6Sqmm. (Red)",
     "sections": "6SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1583,7 +1583,7 @@ export const VRM_PRODUCTS = [
     "code": "ECG6",
     "name": "EARTHING CABLE 6Sqmm. (Green)",
     "sections": "6SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -1596,7 +1596,7 @@ export const VRM_PRODUCTS = [
     "code": "ECG16",
     "name": "EARTHING CABLE 16Sqmm. (Green)",
     "sections": "16SQMM",
-    "uom": "NOS",
+    "uom": "MTR",
     "gst": "18%",
     "price": 0,
     "rate": 0,
@@ -3992,11 +3992,16 @@ export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', p
     return baseQty;
   }
 
-  // 3. Rails Rule: Mini Rails, Adhesive Rails, Short Rails, Long Rails, etc.
-  // When an item's own effective preset or item name is a rail:
-  // Rails quantity is entered directly for roof sheet ribs -> multiplier = 1 (NOT multiplied by table setCount).
+  // 3. Rails Rule & Triangle Direct Rule: Mini Rails, Adhesive Rails, Short Rails, Long Rails, and 2 Mtr Triangle Structures
+  // Quantity is entered directly by salesperson -> multiplier = 1 (NOT multiplied by table setCount).
   const isRail = isRailPreset(effectivePreset, presetCategory || item.category, item.isSubPreset ? item.subPresetName : '', item.name);
-  if (isRail) {
+  const isTriangleDirect = isTriangleDirectPreset(
+    effectivePreset,
+    presetCategory || item.category,
+    item.isSubPreset ? item.subPresetName : '',
+    item.presetId || item.subPresetId || ''
+  );
+  if (isRail || isTriangleDirect) {
     return baseQty;
   }
 
@@ -4052,7 +4057,108 @@ export const resolveBomItemDispatchQty = (item, bomRecord = null, rawMatch = nul
   const effectiveCategory = it.category || rm.category || grp?.category || '';
   const effectiveUnit = grp?.unit || grp?.unitType || it.unit || it.uom || rm.unit || rm.uom || '';
 
-  return calculateTotalDispatchQty({ ...rm, ...it, isCustomSet }, effectiveSetCount, effectivePresetName, effectiveCategory, effectiveUnit);
+  return calculateTotalDispatchQty(
+    { ...rm, ...it, presetId: it.presetId || rm.presetId || grp?.presetId || '', isCustomSet },
+    effectiveSetCount,
+    effectivePresetName,
+    effectiveCategory,
+    effectiveUnit
+  );
+};
+
+const TRIANGLE_DIRECT_PRESET_IDS = new Set([
+  'preset_10_2_mtr_triangle_structure_north_slope',
+  'preset_11_2_mtr_triangle_structure_east_west_slope',
+  'preset_12_2_mtr_triangle_structure_bllast_structures'
+]);
+
+/**
+ * Detects the 2 Mtr Triangle Structure presets (North Slope, East-West Slope, Ballast / Bllast)
+ * whose item quantities are decoupled from setCount (same behavior as Rails presets).
+ */
+export const isTriangleDirectPreset = (presetName = '', category = '', subPresetName = '', presetId = '') => {
+  const pid = String(presetId || '').trim().toLowerCase();
+  if (pid && TRIANGLE_DIRECT_PRESET_IDS.has(pid)) return true;
+  const norm = `${presetName || ''} ${category || ''} ${subPresetName || ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!norm) return false;
+  if (norm.includes('2 mtr triangle structure') || norm.includes('reverse tilt triangle')) return true;
+  return norm.includes('triangle structure') && (
+    norm.includes('north slope') ||
+    norm.includes('east west') ||
+    norm.includes('east-west') ||
+    norm.includes('bllast') ||
+    norm.includes('ballast')
+  );
+};
+
+export const SALES_UOM_OPTIONS = [
+  { value: 'MTR', label: 'MTR' },
+  { value: 'NOS', label: 'NOS' },
+  { value: 'KW', label: 'kW' },
+  { value: 'SET', label: 'Set' }
+];
+
+/**
+ * Returns true only for Sales login roles (excludes CEO/Admin/Procurement/Dispatch/Accounts/Production/Billing).
+ */
+export const isSalesLoginRole = (role = '') => {
+  const rawRole = String(
+    role || (typeof window !== 'undefined' && window.localStorage ? localStorage.getItem('controlroom_user_role') : '') || ''
+  ).trim().toLowerCase();
+  if (!rawRole) return false;
+  if ([
+    'ceo', 'md', 'managing director', 'technical administrator',
+    'dispatch', 'procurement', 'purchase', 'production',
+    'accounts', 'billing', 'floor supervisor', 'hr', 'tech support'
+  ].some(r => rawRole.includes(r))) {
+    return false;
+  }
+  return rawRole === 'sales' || rawRole === 'salesperson' || rawRole.includes('sales');
+};
+
+/**
+ * Normalizes unit strings onto the Sales UOM value codes (MTR, NOS, KW, SET).
+ */
+export const normalizeSalesUomValue = (rawUom = 'NOS') => {
+  const u = String(rawUom || '').trim().toUpperCase();
+  if (!u || ['NO', 'NOS', 'NUMBER', 'NUMBERS'].includes(u)) return 'NOS';
+  if (['MTR', 'MTRS', 'METER', 'METERS', 'M'].includes(u)) return 'MTR';
+  if (['KW', 'KWH'].includes(u)) return 'KW';
+  if (['SET', 'SETS'].includes(u)) return 'SET';
+  return u;
+};
+
+const CABLE_MTR_CODE_RE = /^(?:ACB|ACR|DCB|DCR|ECG)\d+$/i;
+const CABLE_MTR_NAME_RE = /\b(?:ac|dc|earthing)[\s\-_/]+cables?\b/i;
+
+/**
+ * Returns true only for AC Cable, DC Cable, and Earthing Cable items (excludes CABLE TIE / CABLE TRAY).
+ */
+export const isMtrDefaultCable = (itemOrName) => {
+  if (!itemOrName) return false;
+  if (typeof itemOrName === 'string') {
+    const trimmed = itemOrName.trim();
+    return CABLE_MTR_CODE_RE.test(trimmed) || CABLE_MTR_NAME_RE.test(trimmed);
+  }
+  const code = String(itemOrName.code || itemOrName.sku || '').trim();
+  if (code && CABLE_MTR_CODE_RE.test(code)) return true;
+  const text = `${itemOrName.name || ''} ${itemOrName.itemName || ''} ${itemOrName.description || ''}`.trim();
+  return Boolean(text && CABLE_MTR_NAME_RE.test(text));
+};
+
+/**
+ * Resolves default UOM, enforcing MTR for AC/DC/Earthing cables unless a non-NOS unit was explicitly chosen.
+ */
+export const resolveDefaultUom = (itemOrName, currentUom = '', fallback = 'NOS') => {
+  const rawUom = String(currentUom || '').trim();
+  if (isMtrDefaultCable(itemOrName)) {
+    const upper = rawUom.toUpperCase();
+    if (!upper || ['NOS', 'NO', 'NUMBERS', 'NUMBER', 'MTR', 'MTRS', 'METER', 'METERS'].includes(upper)) {
+      return 'MTR';
+    }
+    return rawUom;
+  }
+  return rawUom || fallback;
 };
 
 export default {
@@ -4061,8 +4167,14 @@ export default {
   resolveProductCode,
   isRailPreset,
   isKwPreset,
+  isTriangleDirectPreset,
+  SALES_UOM_OPTIONS,
+  isSalesLoginRole,
+  normalizeSalesUomValue,
   calculateTotalDispatchQty,
-  resolveBomItemDispatchQty
+  resolveBomItemDispatchQty,
+  isMtrDefaultCable,
+  resolveDefaultUom
 };
 
 

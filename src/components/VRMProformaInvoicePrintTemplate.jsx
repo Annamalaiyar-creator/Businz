@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { fetchMasterBranding, getCachedBranding, saveCompanyBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { isTamilNaduIntra } from '../utils/gstHelper';
 import { getHsnCode } from '../utils/hsnCodeService';
+import { isRailPreset, isKwPreset, isTriangleDirectPreset } from '../utils/vrmProductsData';
 import { resolvePiSalesPersonName } from './pi/piHelpers';
 import {
   Printer,
@@ -1038,7 +1039,12 @@ export function VRMProformaInvoicePrintSheet({
       String(grpId || '').startsWith('custom_set_') ||
       String(grpMeta?.groupId || '').startsWith('custom_set_')
     );
-    const setMultiplier = isCustomSetItem ? 1 : (parseFloat(grpMeta?.setCount || it.setCount || pi.presetSetCount || 1) || 1);
+    const isDirectPresetQty =
+      isCustomSetItem ||
+      isKwPreset(grpMeta?.presetName || it.presetName || '', grpMeta?.unit || it.unit || it.uom || '', it) ||
+      isRailPreset(grpMeta?.presetName || it.presetName || '', grpMeta?.category || it.category || '', it.subPresetName || '', it.name || '') ||
+      isTriangleDirectPreset(grpMeta?.presetName || it.presetName || '', grpMeta?.category || it.category || '', it.subPresetName || '', grpMeta?.presetId || it.presetId || '');
+    const setMultiplier = isDirectPresetQty ? 1 : (parseFloat(grpMeta?.setCount || it.setCount || pi.presetSetCount || 1) || 1);
     const rawPerKit = parseFloat(it.qtyPerSet ?? it.baseQty ?? it.qty);
     const perKitQty = isCustomSetItem
       ? ((parseFloat(grpMeta?.setCount || 1) || 1) > 1 ? Number((q / (parseFloat(grpMeta?.setCount || 1) || 1)).toFixed(2)) : q)
