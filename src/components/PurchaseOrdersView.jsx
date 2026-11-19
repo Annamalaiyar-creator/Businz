@@ -988,7 +988,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           return {
             name: catalogMatch ? catalogMatch.name : it.name,
             description: it.description || catalogMatch?.description || '',
-            account: catalogMatch?.account || it.account || 'Raw Material',
+            account: catalogMatch?.account || it.account || 'Raw Materials',
             hsn: it.hsn || catalogMatch?.hsn || getHsnCode(it.name) || '',
             qty: Number(it.qty) > 0 ? Number(it.qty) : 1,
             unit: (it.unit || catalogMatch?.unit || 'NOS').toUpperCase(),

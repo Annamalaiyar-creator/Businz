@@ -111,8 +111,8 @@ function mapPaymentTerms(raw) {
 }
 
 function normalizeUnit(u) {
-  const up = String(u || 'NOS').toUpperCase().replace(/\./g, '').trim();
-  if (up === 'NO' || up === 'PCS' || up === 'PC' || up === 'UNITS' || up === 'UNIT') return 'NOS';
+  const up = String(u || 'NOS').toUpperCase().replace(/['’.]/g, '').trim();
+  if (up === 'NO' || up === 'NOS' || up === 'PCS' || up === 'PC' || up === 'UNITS' || up === 'UNIT') return 'NOS';
   if (up === 'KGS') return 'KG';
   if (up === 'TON' || up === 'TONS') return 'MT';
   if (up === 'MTRS' || up === 'M') return 'MTR';
@@ -323,7 +323,7 @@ function parseItemsFromTables(tables, defaultTax = 18) {
         name,
         description,
         hsn,
-        account: 'Raw Material',
+        account: 'Raw Materials',
         qty: qty > 0 ? qty : 1,
         unit: normalizeUnit(unit || 'NOS'),
         rate: rate >= 0 ? rate : 0,
@@ -333,6 +333,12 @@ function parseItemsFromTables(tables, defaultTax = 18) {
   }
 
   return extracted;
+}
+
+function isUnitToken(str) {
+  if (!str) return false;
+  const cleaned = String(str).toUpperCase().replace(/['’.]/g, '').trim();
+  return UNIT_SET.has(cleaned);
 }
 
 function parseZohoMultiLineItems(lines, defaultTax = 18) {
@@ -358,15 +364,140 @@ function parseZohoMultiLineItems(lines, defaultTax = 18) {
   }
   if (tableLines.length === 0) return [];
 
-  // First try single-line item pattern (generic POs with Indian/standard commas)
-  const singleLineRegex = new RegExp(
-    `^(?:\\d{1,3}[.)]?\\s+)?(.+?)\\s+(?:(\\d{4,8})\\s+)?(${NUM_TOKEN})\\s*(NOS|NO|PCS|PC|KG|KGS|MT|TON|TONS|MTR|MTRS|M|FT|SQFT|SQM|SET|SETS|BOX|PKT|LOT|BAG|LTR|ROLL|LENGTH|BAR|PAIR|UNIT|UNITS)?\\s+(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})\\s+(?:(\\d{1,2}(?:\\.\\d+)?)\\s*%\\s+)?(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})$`,
+  const unitTokenRegexStr = "NOS|NO'S|NO’S|NO|PCS|PC|KG|KGS|MT|TON|TONS|MTR|MTRS|M|FT|SQFT|SQM|SET|SETS|BOX|PKT|LOT|BAG|LTR|ROLL|LENGTH|BAR|PAIR|UNIT|UNITS";
+  const singleLineItemRegex = new RegExp(
+    `^(.+?)\\s+(?:(\\d{4,8})\\s+)?(${NUM_TOKEN})\\s*(?:(${unitTokenRegexStr})\\s+)?(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})\\s+(?:(\\d{1,2}(?:\\.\\d+)?)\\s*%\\s+)?(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})$`,
     'i'
   );
 
+  // Split table into numbered item blocks (1, 2, 3...) — handles MIXED single-line & multi-line Zoho items!
+  const blocks = [];
+  let current = null;
+  let expectedNo = 1;
+
+  for (const l of tableLines) {
+    const startMatch = l.match(/^(\d{1,3})[.)]?\s+(.+)$/);
+    if (startMatch && Number(startMatch[1]) === expectedNo) {
+      if (current) blocks.push(current);
+      current = {
+        firstLine: startMatch[2].trim(),
+        lines: []
+      };
+      expectedNo += 1;
+    } else if (current) {
+      current.lines.push(l);
+    }
+  }
+  if (current) blocks.push(current);
+
+  const hsnQtyRateAmtRegex = new RegExp(`^(\\d{4,8})\\s+(${NUM_TOKEN})\\s+(?:([A-Za-z'’.]+)\\s+)?(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})\\s+(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})$`);
+  const qtyRateAmtRegex = new RegExp(`^(${NUM_TOKEN})\\s+(?:([A-Za-z'’.]+)\\s+)?(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})\\s+(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})$`);
+  const hsnQtyRegex = new RegExp(`^(\\d{4,8})\\s+(${NUM_TOKEN})(?:\\s*([A-Za-z'’.]+))?$`);
+  const standaloneQtyRegex = new RegExp(`^(${NUM_TOKEN})(?:\\s*([A-Za-z'’.]+))?$`);
+  const rateAmtRegex = new RegExp(`^(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})\\s+(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})$`);
+
+  if (blocks.length > 0) {
+    const items = [];
+    for (const blk of blocks) {
+      let name = blk.firstLine;
+      let hsn = '';
+      let qty = 0;
+      let unit = '';
+      let rate = 0;
+      let tax = defaultTax;
+      const descLines = [];
+
+      // Case A: First line already contains Name + [HSN] + Qty + [Unit] + Rate + [Tax%] + Amount (e.g., "OIL CAN 5.00 110.00 550.00")
+      const inlineMatch = blk.firstLine.match(singleLineItemRegex);
+      if (inlineMatch) {
+        name = inlineMatch[1].trim();
+        if (inlineMatch[2]) hsn = inlineMatch[2];
+        qty = parseNumber(inlineMatch[3]);
+        if (inlineMatch[4] && isUnitToken(inlineMatch[4])) unit = inlineMatch[4];
+        rate = parseNumber(inlineMatch[5]);
+        if (inlineMatch[6] !== undefined) tax = Number(inlineMatch[6]);
+      }
+
+      for (const ln of blk.lines) {
+        // Standalone unit line (e.g. "no's", "mtr", "nos", "kg")
+        if (!unit && isUnitToken(ln)) {
+          unit = ln;
+          continue;
+        }
+
+        // Combined HSN + Qty + [Unit] + Rate + Amount
+        if (qty === 0 && rate === 0) {
+          const combinedHsn = ln.match(hsnQtyRateAmtRegex);
+          if (combinedHsn) {
+            hsn = combinedHsn[1];
+            qty = parseNumber(combinedHsn[2]);
+            if (combinedHsn[3] && isUnitToken(combinedHsn[3])) unit = combinedHsn[3];
+            rate = parseNumber(combinedHsn[4]);
+            continue;
+          }
+
+          // Combined Qty + [Unit] + Rate + Amount (no HSN)
+          const combinedNoHsn = ln.match(qtyRateAmtRegex);
+          if (combinedNoHsn) {
+            qty = parseNumber(combinedNoHsn[1]);
+            if (combinedNoHsn[2] && isUnitToken(combinedNoHsn[2])) unit = combinedNoHsn[2];
+            rate = parseNumber(combinedNoHsn[3]);
+            continue;
+          }
+
+          // HSN + Qty (e.g. "76109010 500.00" or "8207 10.00")
+          const hq = ln.match(hsnQtyRegex);
+          if (hq) {
+            hsn = hq[1];
+            qty = parseNumber(hq[2]);
+            if (hq[3] && isUnitToken(hq[3])) unit = hq[3];
+            continue;
+          }
+
+          // Standalone Qty (no HSN, e.g. "15.00" or "15.00 no's")
+          const sq = ln.match(standaloneQtyRegex);
+          if (sq && (!sq[2] || isUnitToken(sq[2]))) {
+            const candidateQty = parseNumber(sq[1]);
+            if (candidateQty > 0) {
+              qty = candidateQty;
+              if (sq[2]) unit = sq[2];
+              continue;
+            }
+          }
+        }
+
+        // Rate + Amount line (e.g. "135.00 2,025.00" or "48.00 480.00")
+        if (qty > 0 && rate === 0) {
+          const ra = ln.match(rateAmtRegex);
+          if (ra) {
+            rate = parseNumber(ra[1]);
+            continue;
+          }
+        }
+
+        descLines.push(ln);
+      }
+
+      if (name && (qty > 0 || rate > 0)) {
+        items.push({
+          name,
+          description: descLines.join(' ').replace(/\s+/g, ' ').trim(),
+          hsn,
+          account: 'Raw Materials',
+          qty: qty > 0 ? qty : 1,
+          unit: normalizeUnit(unit || 'NOS'),
+          rate: rate >= 0 ? rate : 0,
+          tax: Number.isFinite(tax) ? tax : defaultTax
+        });
+      }
+    }
+    if (items.length > 0) return items;
+  }
+
+  // Fallback for unnumbered single-line tables
   const singleLineItems = [];
   for (const l of tableLines) {
-    const m = l.match(singleLineRegex);
+    const m = l.match(singleLineItemRegex);
     if (!m) continue;
     const [, rawName, hsn, qtyStr, unitStr, rateStr, taxStr] = m;
     const cleanName = rawName.trim();
@@ -379,7 +510,7 @@ function parseZohoMultiLineItems(lines, defaultTax = 18) {
         name: cleanName,
         description: '',
         hsn: hsn || '',
-        account: 'Raw Material',
+        account: 'Raw Materials',
         qty: qty > 0 ? qty : 1,
         unit: normalizeUnit(unitStr || 'NOS'),
         rate: rate >= 0 ? rate : 0,
@@ -387,93 +518,7 @@ function parseZohoMultiLineItems(lines, defaultTax = 18) {
       });
     }
   }
-  if (singleLineItems.length > 0) return singleLineItems;
-
-  // Multi-line Zoho Books item blocks:
-  // Starts with "<itemNo> <Item Name>" (where itemNo increments 1, 2, 3...)
-  // Followed by description lines, then HSN+Qty line, optional unit line, and Rate+Amount line.
-  const blocks = [];
-  let current = null;
-  let expectedNo = 1;
-
-  for (const l of tableLines) {
-    const startMatch = l.match(/^(\d{1,3})\s+([A-Za-z].*)$/);
-    if (startMatch && Number(startMatch[1]) === expectedNo) {
-      if (current) blocks.push(current);
-      current = {
-        name: startMatch[2].trim(),
-        lines: []
-      };
-      expectedNo += 1;
-    } else if (current) {
-      current.lines.push(l);
-    }
-  }
-  if (current) blocks.push(current);
-
-  const hsnQtyRegex = new RegExp(`^(\\d{4,8})\\s+(${NUM_TOKEN})(?:\\s*([A-Za-z]+))?$`);
-  const rateAmtRegex = new RegExp(`^(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})\\s+(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})$`);
-  const hsnQtyRateAmtRegex = new RegExp(`^(\\d{4,8})\\s+(${NUM_TOKEN})\\s*(?:([A-Za-z]+)\\s+)?(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})\\s+(?:₹|Rs\\.?\\s*)?(${NUM_TOKEN})$`);
-
-  const items = [];
-  for (const blk of blocks) {
-    let hsn = '';
-    let qty = 0;
-    let unit = '';
-    let rate = 0;
-    const descLines = [];
-
-    for (const ln of blk.lines) {
-      // Combined HSN Qty [Unit] Rate Amount on one line
-      const combined = ln.match(hsnQtyRateAmtRegex);
-      if (combined) {
-        hsn = combined[1];
-        qty = parseNumber(combined[2]);
-        if (combined[3] && UNIT_SET.has(combined[3].toUpperCase())) unit = combined[3];
-        rate = parseNumber(combined[4]);
-        continue;
-      }
-
-      // HSN + Qty (e.g. "76109010 500.00")
-      const hq = ln.match(hsnQtyRegex);
-      if (hq) {
-        hsn = hq[1];
-        qty = parseNumber(hq[2]);
-        if (hq[3] && UNIT_SET.has(hq[3].toUpperCase())) unit = hq[3];
-        continue;
-      }
-
-      // Standalone unit line (e.g. "mtr", "nos", "kg")
-      if (!unit && UNIT_SET.has(ln.toUpperCase().replace(/\./g, ''))) {
-        unit = ln;
-        continue;
-      }
-
-      // Rate + Amount line (e.g. "480.00 2,40,000.00")
-      const ra = ln.match(rateAmtRegex);
-      if (ra && qty > 0) {
-        rate = parseNumber(ra[1]);
-        continue;
-      }
-
-      descLines.push(ln);
-    }
-
-    if (blk.name && (qty > 0 || rate > 0)) {
-      items.push({
-        name: blk.name,
-        description: descLines.join(' ').replace(/\s+/g, ' ').trim(),
-        hsn,
-        account: 'Raw Material',
-        qty: qty > 0 ? qty : 1,
-        unit: normalizeUnit(unit || 'NOS'),
-        rate: rate >= 0 ? rate : 0,
-        tax: defaultTax
-      });
-    }
-  }
-
-  return items;
+  return singleLineItems;
 }
 
 async function parsePoPdfBuffer(pdfBuffer) {
