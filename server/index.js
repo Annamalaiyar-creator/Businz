@@ -3299,6 +3299,53 @@ export const saveActiveSessionsToDisk = () => {
   } catch (_) {}
 };
 
+export const persistSessionToDb = async (sessionRec) => {
+  if (!sessionRec?.id || isOptimizationTestMode() || !isDbConnected()) return;
+  try {
+    const cleanId = String(sessionRec.id).trim();
+    const payloadJson = JSON.stringify({
+      user: sessionRec.user,
+      email: sessionRec.email,
+      empCode: sessionRec.empCode,
+      role: sessionRec.role,
+      expiresAt: sessionRec.expiresAt,
+      lastActiveTimestamp: sessionRec.lastActiveTimestamp,
+      device: sessionRec.device,
+      browser: sessionRec.browser
+    });
+    const upd = await query(
+      `UPDATE public.leaves
+       SET reason = $1, status = $2, dates = NOW()
+       WHERE employee = 'SESSION_REGISTRY' AND duration = $3
+       RETURNING id`,
+      [payloadJson, sessionRec.status || 'active', cleanId]
+    );
+    if (!upd || upd.rowCount === 0) {
+      await query(
+        `INSERT INTO public.leaves (employee, reason, status, duration, type, dates)
+         VALUES ('SESSION_REGISTRY', $1, $2, $3, 'Session', NOW())`,
+        [payloadJson, sessionRec.status || 'active', cleanId]
+      );
+    }
+  } catch (err) {
+    console.warn('[persistSessionToDb] Non-fatal session DB persistence warning:', err?.message || err);
+  }
+};
+
+export const revokeSessionInDb = async (sessionId) => {
+  if (!sessionId || isOptimizationTestMode() || !isDbConnected()) return;
+  try {
+    await query(
+      `UPDATE public.leaves
+       SET status = 'revoked', dates = NOW()
+       WHERE employee = 'SESSION_REGISTRY' AND duration = $1`,
+      [String(sessionId).trim()]
+    );
+  } catch (err) {
+    console.warn('[revokeSessionInDb] Non-fatal session DB revoke warning:', err?.message || err);
+  }
+};
+
 export const loadActiveSessionsFromDisk = () => {
   try {
     const diskPath = getStoreFilePath('active_sessions.json');
@@ -3450,12 +3497,14 @@ app.post('/api/sessions/register', async (req, res) => {
         s.status = 'revoked';
         s.revokedAt = Date.now();
         activeSessionsMap.set(sid, s);
+        revokeSessionInDb(sid);
       }
     }
   }
   const verifiedSession = createSessionRecord(authResult, { device, browser });
   activeSessionsMap.set(verifiedSession.id, verifiedSession);
   saveActiveSessionsToDisk();
+  await persistSessionToDb(verifiedSession);
 
   return res.status(200).json({
     success: true,
@@ -3582,6 +3631,7 @@ app.post('/api/sessions/revoke', async (req, res) => {
   }
 
   saveActiveSessionsToDisk();
+  await revokeSessionInDb(sessionId);
   return res.json(result);
 });
 
@@ -3614,8 +3664,10 @@ export async function getVerifiedUserSession(req) {
     return { valid: false, error: 'Unauthorized: Active Businz session required (x-session-id)' };
   }
 
+  const cleanSid = String(sessionId).trim();
+
   // 1. Check in-memory active session map with expiration & revocation validation
-  const sessionValidation = validateSessionInMap(sessionId, activeSessionsMap);
+  let sessionValidation = validateSessionInMap(cleanSid, activeSessionsMap);
   if (sessionValidation.valid) {
     const s = sessionValidation.session;
     return {
@@ -3629,24 +3681,56 @@ export async function getVerifiedUserSession(req) {
   }
 
   // If session was found in map but revoked or expired, do not fall back to persistent validation
-  if (activeSessionsMap.has(String(sessionId).trim())) {
+  if (sessionValidation.revoked || sessionValidation.expired || activeSessionsMap.has(cleanSid)) {
     return { valid: false, error: sessionValidation.error || 'Unauthorized: Session revoked or expired' };
   }
 
-  // 2. Persistent session verification
-  const sessionResult = await validateBusinzSession(sessionId);
-  if (sessionResult && sessionResult.valid) {
+  // 2. Reload from disk store in case another worker registered the session or server restarted
+  loadActiveSessionsFromDisk();
+  sessionValidation = validateSessionInMap(cleanSid, activeSessionsMap);
+  if (sessionValidation.valid) {
+    const s = sessionValidation.session;
     return {
       valid: true,
-      sessionId,
-      user: sessionResult.user || 'Active User',
+      sessionId: s.id,
+      user: s.user || s.displayName || s.email,
+      email: s.email,
+      empCode: s.empCode || s.employee_code || s.code || 'EMP',
+      role: s.role || 'Employee'
+    };
+  }
+  if (sessionValidation.revoked || sessionValidation.expired) {
+    return { valid: false, error: sessionValidation.error || 'Unauthorized: Session revoked or expired' };
+  }
+
+  // 3. Persistent database session verification + in-memory rehydration
+  const sessionResult = await validateBusinzSession(cleanSid);
+  if (sessionResult && sessionResult.valid) {
+    const hydratedUser = sessionResult.user || 'Active User';
+    const hydratedEmpCode = sessionResult.empCode || sessionResult.employee_code || 'EMP';
+    const hydratedRole = sessionResult.role || 'Employee';
+    activeSessionsMap.set(cleanSid, {
+      id: cleanSid,
+      sessionId: cleanSid,
+      user: hydratedUser,
       email: sessionResult.email,
-      empCode: sessionResult.empCode || sessionResult.employee_code || 'EMP',
-      role: sessionResult.role || 'Employee'
+      empCode: hydratedEmpCode,
+      role: hydratedRole,
+      status: 'active',
+      lastActiveTimestamp: Date.now(),
+      expiresAt: sessionResult.expiresAt || (Date.now() + SESSION_TTL_MS)
+    });
+    return {
+      valid: true,
+      sessionId: cleanSid,
+      user: hydratedUser,
+      email: sessionResult.email,
+      empCode: hydratedEmpCode,
+      role: hydratedRole
     };
   }
 
-  return { valid: false, error: sessionResult?.error || 'Unauthorized: Invalid or expired session' };
+  return { valid: false, error: sessionResult?.error || 'Unauthorized: Session expired or invalid. Please log out and log in again.' };
 }
 
 export const normalizeUserRole = (role) => String(role || '').toLowerCase().trim();
@@ -5114,6 +5198,36 @@ app.post('/api/workorders', async (req, res) => {
     }
 
     saveLocalWorkOrders(updated);
+
+    if (existingIndex === -1) {
+      try {
+        const rawAssignee = String(req.body.assignedEmployee || '').trim();
+        const targetAssigneeName = (rawAssignee && rawAssignee.toLowerCase() !== 'unassigned') ? rawAssignee : null;
+        createInternalNotification({
+          recipientRole: 'Production',
+          recipientUserName: targetAssigneeName,
+          eventType: 'WORK_ORDER_ASSIGNED',
+          documentType: 'work_order',
+          documentId: woId,
+          title: `🔧 Work Order Assigned: ${woId}`,
+          message: `Work Order ${woId} (${savedOrder.productName}, Qty: ${savedOrder.plannedQty}) has been issued${targetAssigneeName ? ` and assigned to ${targetAssigneeName}` : ''}.`,
+          actorEmpCode: req.headers['x-employee-code'] || null,
+          actorName: req.headers['x-user-name'] || req.body.productionHead || 'Production Admin',
+          actorRole: req.headers['x-user-role'] || 'Production Admin',
+          targetTab: 'Work Orders',
+          targetRecordId: woId,
+          metadata: {
+            workOrderNo: woId,
+            productName: savedOrder.productName,
+            assignedEmployee: targetAssigneeName
+          },
+          dedupId: `wo_assigned_${woId}`
+        });
+      } catch (notifErr) {
+        console.warn('[Work Order Notification Warning]:', notifErr.message);
+      }
+    }
+
     res.json({ success: true, message: 'Production Work Order Saved!', workOrder: savedOrder });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -9315,6 +9429,30 @@ app.post('/api/purchaseorders/:id/reject', async (req, res) => {
     saveLocalPOs(localPOs);
   }
 
+  try {
+    createInternalNotification({
+      recipientRole: 'Procurement Head',
+      eventType: 'PO_REJECTED',
+      documentType: 'PO',
+      documentId: targetId,
+      title: `❌ PO ${targetId} Rejected`,
+      message: `Purchase Order ${targetId} was rejected by ${rejectedBy}. Reason: ${reason}`,
+      actorEmpCode: req.headers['x-employee-code'] || null,
+      actorName: rejectedBy,
+      actorRole: req.headers['x-user-role'] || 'CEO',
+      targetTab: 'Purchase Orders',
+      targetRecordId: targetId,
+      metadata: {
+        poNo: targetId,
+        rejectedBy,
+        reason
+      },
+      dedupId: `po_rejected_${targetId}_${Date.now()}`
+    });
+  } catch (notifErr) {
+    console.warn('[PO Reject Notification Warning]:', notifErr.message);
+  }
+
   res.json({ success: true, message: `PO ${targetId} rejected by ${rejectedBy}.` });
 });
 
@@ -11030,7 +11168,7 @@ app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
     broadcastRealtimeEvent('crm_lead_created', { lead: createdLead });
 
     // If lead was assigned upon creation, trigger immediate real-time notification to salesperson
-    if (createdLead?.assigned_to_user_id) {
+    if (createdLead?.assigned_to_user_id && !createdLead?._notificationDispatched) {
       try {
         await createInternalNotification({
           recipientEmpCode: createdLead.assigned_to_user_id,
@@ -11138,25 +11276,30 @@ app.post(['/api/crm/leads/:id/assign', '/api/leads/:id/assign'], requireBusinzSe
     broadcastRealtimeEvent('crm_lead_assigned', { lead: updated });
     broadcastRealtimeEvent('controlroom_crm_updated', { lead: updated });
 
-    // Send real-time notification to the assigned salesperson
-    try {
-      await createInternalNotification({
-        recipientEmpCode: assignedToId,
-        recipientRole: null, // Strictly target the assigned employee code only
-        eventType: 'LEAD_ASSIGNED',
-        documentType: 'lead',
-        documentId: id,
-        title: `🎯 New Lead Assigned: ${updated.company_name || 'Prospect'}`,
-        message: `Lead #${updated.lead_number || id} (${updated.company_name}) has been assigned to you by ${assignerUser.employee_name || 'Management'}.`,
-        actorEmpCode: assignerUser.employee_code,
-        actorName: assignerUser.employee_name || 'Management',
-        actorRole: assignerUser.role || 'CEO',
-        targetTab: 'Leads',
-        targetRecordId: id,
-        dedupId: `lead_assigned_${id}_${assignedToId}_${Date.now()}`
-      });
-    } catch (notifErr) {
-      console.warn('[Lead Notification Notice]:', notifErr.message);
+    // Send real-time notification to the assigned salesperson (unless assignDbLead already dispatched it)
+    if (!updated?._notificationDispatched) {
+      try {
+        const isReassign = Boolean(updated?._isReassignment);
+        await createInternalNotification({
+          recipientEmpCode: assignedToId,
+          recipientRole: null, // Strictly target the assigned employee code only
+          eventType: isReassign ? 'LEAD_REASSIGNED' : 'LEAD_ASSIGNED',
+          documentType: 'lead',
+          documentId: id,
+          title: isReassign
+            ? `🔄 Lead Reassigned: ${updated.company_name || 'Prospect'}`
+            : `🎯 New Lead Assigned: ${updated.company_name || 'Prospect'}`,
+          message: `Lead #${updated.lead_number || id} (${updated.company_name}) has been ${isReassign ? 'reassigned' : 'assigned'} to you by ${assignerUser.employee_name || 'Management'}.`,
+          actorEmpCode: assignerUser.employee_code,
+          actorName: assignerUser.employee_name || 'Management',
+          actorRole: assignerUser.role || 'CEO',
+          targetTab: 'Leads',
+          targetRecordId: id,
+          dedupId: `lead_${isReassign ? 'reassigned' : 'assigned'}_${id}_${assignedToId}_${Date.now()}`
+        });
+      } catch (notifErr) {
+        console.warn('[Lead Notification Notice]:', notifErr.message);
+      }
     }
 
     res.json({ success: true, message: `Lead assigned to ${assignedToName}`, lead: updated, data: updated });

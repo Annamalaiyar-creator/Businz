@@ -353,6 +353,7 @@ export async function getNotificationsForUser(options = {}) {
             OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
             OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
             OR ($2 ILIKE '%procurement%' AND recipient_role ILIKE '%procurement%')
+            OR ($2 ILIKE '%production%' AND recipient_role ILIKE '%production%')
           )
         )
       )
@@ -399,6 +400,7 @@ export async function getNotificationsForUser(options = {}) {
             OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
             OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
             OR ($2 ILIKE '%procurement%' AND recipient_role ILIKE '%procurement%')
+            OR ($2 ILIKE '%production%' AND recipient_role ILIKE '%production%')
           )
         )
       );
@@ -451,6 +453,7 @@ export async function markNotificationAsRead({ notificationId, empCode = '', rol
             OR ($2 ILIKE '%account%' AND recipient_role ILIKE '%account%')
             OR ($2 ILIKE '%bill%' AND recipient_role ILIKE '%bill%')
             OR ($2 ILIKE '%sale%' AND recipient_role ILIKE '%sale%')
+            OR ($2 ILIKE '%production%' AND recipient_role ILIKE '%production%')
           ))
         );
       `, [normalizedEmp, normalizedRole]);

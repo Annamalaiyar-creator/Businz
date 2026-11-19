@@ -20,6 +20,7 @@ function SearchablePresetSelector({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [alignRight, setAlignRight] = useState(false);
   const wrapperRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -55,6 +56,22 @@ function SearchablePresetSelector({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Keep wider dropdown within viewport when trigger is near the right edge
+  useEffect(() => {
+    if (!isOpen || !wrapperRef.current) return;
+    const updateAlignment = () => {
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const desiredWidth = Math.min(560, window.innerWidth * 0.9);
+      const overflowsRight = rect.left + desiredWidth > window.innerWidth - 16;
+      const hasMoreSpaceLeft = rect.right > (window.innerWidth - rect.left);
+      setAlignRight(Boolean(overflowsRight && hasMoreSpaceLeft));
+    };
+    updateAlignment();
+    window.addEventListener('resize', updateAlignment);
+    return () => window.removeEventListener('resize', updateAlignment);
+  }, [isOpen]);
 
   const allPresetsList = useMemo(() => {
     const map = presetsStore || VRM_HDG_PRESETS || {};
@@ -194,6 +211,7 @@ function SearchablePresetSelector({
           ref={inputRef}
           type="text"
           value={searchTerm}
+          title={searchTerm || (selectedPresetObj ? (selectedPresetObj.label || selectedPresetObj.id) : '')}
           placeholder={selectedPresetObj ? (selectedPresetObj.label || selectedPresetObj.id) : `${placeholder} (${totalPresetsCount} available)`}
           onChange={(e) => {
             setSearchTerm(e.target.value);
@@ -270,20 +288,24 @@ function SearchablePresetSelector({
           style={{
             position: 'absolute',
             top: 'calc(100% + 4px)',
-            left: 0,
-            width: '100%',
-            minWidth: '380px',
-            maxHeight: '340px',
+            left: alignRight ? 'auto' : 0,
+            right: alignRight ? 0 : 'auto',
+            width: 'max(100%, min(560px, 90vw))',
+            minWidth: 'min(480px, 90vw)',
+            maxWidth: 'min(640px, 92vw)',
+            maxHeight: '380px',
             overflowY: 'auto',
+            overflowX: 'auto',
+            overscrollBehavior: 'contain',
             backgroundColor: '#FFFFFF',
             borderRadius: '10px',
             border: '1px solid #E2E8F0',
             boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
             zIndex: 9999,
-            padding: '6px 0'
+            padding: '0 0 6px 0'
           }}
         >
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', position: 'sticky', top: 0, zIndex: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 {groupTitleLabel} ({totalPresetsCount})
@@ -327,13 +349,15 @@ function SearchablePresetSelector({
                   return (
                     <div
                       key={preset.id}
+                      title={preset.label || preset.id}
                       onClick={() => handleSelect(preset.id)}
                       style={{
                         padding: '8px 12px',
                         cursor: 'pointer',
                         display: 'flex',
-                        alignItems: 'center',
+                        alignItems: 'flex-start',
                         justifyContent: 'space-between',
+                        gap: '10px',
                         backgroundColor: isSelected ? `${accentColor}12` : 'transparent',
                         borderLeft: isSelected ? `3px solid ${accentColor}` : '3px solid transparent',
                         transition: 'background-color 0.1s ease'
@@ -345,14 +369,14 @@ function SearchablePresetSelector({
                         if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
                         <span style={{
                           fontSize: '12px',
                           fontWeight: isSelected ? '700' : '600',
                           color: isSelected ? accentColor : '#0F172A',
-                          whiteSpace: 'nowrap',
-                          textOverflow: 'ellipsis',
-                          overflow: 'hidden'
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          lineHeight: '1.35'
                         }}>
                           {preset.label || preset.id}
                         </span>
@@ -374,7 +398,7 @@ function SearchablePresetSelector({
                       </div>
 
                       {isSelected && (
-                        <Check size={14} style={{ color: accentColor, flexShrink: 0, marginLeft: '8px' }} />
+                        <Check size={14} style={{ color: accentColor, flexShrink: 0, marginLeft: '8px', marginTop: '2px' }} />
                       )}
                     </div>
                   );

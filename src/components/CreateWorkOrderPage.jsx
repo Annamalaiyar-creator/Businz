@@ -624,9 +624,17 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
       });
 
       try {
+        const actorEmp = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '') || '';
+        const actorName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '') || creatorDisplay || 'Production Admin';
+        const actorRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || 'Production Admin';
         await fetch('/api/workorders', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-employee-code': actorEmp,
+            'x-user-name': actorName,
+            'x-user-role': actorRole
+          },
           body: JSON.stringify({
             workOrderNo: newWO.id || woNumber,
             productName: fgProductName || newWO.finishedProductName || 'Mini Rail - 300 mm',
@@ -636,7 +644,9 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
             plannedQty: Number(targetQty),
             completedQty: 0,
             status: 'PENDING_MATERIAL',
-            targetDate: expectedCompletionDate || woDate
+            targetDate: expectedCompletionDate || woDate,
+            assignedEmployee: assignedEmployee || (newWO.assignedEmployee && newWO.assignedEmployee !== 'Unassigned' ? newWO.assignedEmployee : ''),
+            productionHead: creatorDisplay
           })
         });
       } catch (e) {

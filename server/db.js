@@ -883,6 +883,11 @@ export function createLocalDbClient(memoryStore = {}) {
           if (res.error) return { data: null, error: res.error };
           return { data: Array.isArray(res.data) ? res.data[0] || null : res.data, error: null };
         },
+        async maybeSingle() {
+          const res = await builder.then(r => r);
+          if (res.error) return { data: null, error: res.error };
+          return { data: Array.isArray(res.data) ? res.data[0] || null : res.data, error: null };
+        },
 
         // Execution via Promise then()
         async then(resolve, reject) {

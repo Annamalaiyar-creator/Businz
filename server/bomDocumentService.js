@@ -269,19 +269,22 @@ export async function validateBusinzSession(sessionId) {
   }
 
   try {
-    const { data: sessionRow, error } = await supabaseAdmin
-      .from('leaves')
-      .select('id, duration, reason, status, dates')
-      .eq('employee', 'SESSION_REGISTRY')
-      .eq('duration', cleanId)
-      .maybeSingle();
+    const dbRes = await supabaseAdmin.query(
+      `SELECT id, duration, reason, status, dates
+       FROM public.leaves
+       WHERE employee = $1 AND duration = $2
+       ORDER BY id DESC
+       LIMIT 1`,
+      ['SESSION_REGISTRY', cleanId]
+    );
+    const sessionRow = dbRes?.rows?.[0] || null;
 
-    if (error || !sessionRow) {
-      return { valid: false, error: 'Session not found in persistent registry' };
+    if (!sessionRow) {
+      return { valid: false, error: 'Session expired or not found. Please log out and log in again.' };
     }
 
     if (sessionRow.status && sessionRow.status !== 'active') {
-      return { valid: false, error: `Session is ${sessionRow.status}` };
+      return { valid: false, error: `Session is ${sessionRow.status}. Please log in again.` };
     }
 
     let parsed = {};
@@ -289,15 +292,21 @@ export async function validateBusinzSession(sessionId) {
       parsed = JSON.parse(sessionRow.reason || '{}');
     } catch (_) {}
 
+    if (parsed.expiresAt && Date.now() > Number(parsed.expiresAt)) {
+      return { valid: false, error: 'Session has expired. Please log out and log in again.' };
+    }
+
     return {
       valid: true,
       sessionId: cleanId,
       user: parsed.user || 'User',
       email: parsed.email,
       empCode: parsed.empCode || parsed.employee_code,
-      role: parsed.role || 'Employee'
+      role: parsed.role || 'Employee',
+      expiresAt: parsed.expiresAt || null
     };
   } catch (err) {
-    return { valid: false, error: err.message || 'Session verification error' };
+    console.warn('[validateBusinzSession] Database lookup failed:', err?.message || err);
+    return { valid: false, error: 'Session expired or could not be verified. Please log out and log in again.' };
   }
 }

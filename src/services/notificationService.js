@@ -6,6 +6,7 @@
 // ===================================================================================
 
 let sharedAudioCtx = null;
+let audioUnlocked = false;
 
 export function getAudioContext() {
   if (typeof window === 'undefined') return null;
@@ -21,6 +22,21 @@ export function getAudioContext() {
   } catch (_) {
     return null;
   }
+}
+
+/**
+ * Unlock Web Audio & browser speechSynthesis after the first user gesture
+ * so live incoming SSE alerts can speak without autoplay restrictions.
+ */
+export function unlockNotificationAudio() {
+  if (typeof window === 'undefined' || audioUnlocked) return;
+  audioUnlocked = true;
+  try {
+    getAudioContext();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.getVoices?.();
+    }
+  } catch (_) {}
 }
 
 /**
@@ -113,22 +129,30 @@ export function getVoiceAnnouncementText(notif) {
     case 'PO_REJECTED':
       return 'Purchase Order rejected';
     case 'PO_AWAITING_PAYMENT':
+    case 'PO_APPROVED_FOR_PAYMENT':
       return 'Approved Purchase Order awaiting payment';
     case 'PO_PAYMENT_COMPLETED':
+    case 'PO_PAYMENT_PROCESSED':
       return 'Purchase Order payment completed';
     case 'LEAD_CREATED':
+    case 'NEW_LEAD':
+    case 'INDIAMART_ENQUIRY':
       return 'New lead received';
     case 'LEAD_ASSIGNED':
+    case 'ASSIGNMENT':
       return 'New lead assigned to you';
     case 'LEAD_REASSIGNED':
+    case 'REASSIGNMENT':
       return 'Lead reassigned to you';
     case 'WORK_ORDER_ASSIGNED':
       return 'Work order assigned';
     case 'CREDIT_PAYMENT_SETTLED':
       return 'Credit Payment Settled';
     case 'STATUS_UNCHANGED_2H':
+    case 'LEAD_INACTIVITY_2H':
       return 'Lead Inactivity Alert 2 Hours';
     case 'ESCALATION_48H':
+    case 'LEAD_INACTIVITY_48H':
       return '48 Hour Inactivity After Contact';
     case 'PAYMENT_PROOF_PENDING':
       return 'Payment Attachment Pending';
@@ -189,6 +213,7 @@ export function speakNotificationVoice(textOrNotif) {
 
     if (window.speechSynthesis.getVoices().length === 0) {
       window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
         selectVoiceAndSpeak();
       };
     } else {

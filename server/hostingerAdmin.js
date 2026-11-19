@@ -2,12 +2,16 @@
  * Server-only Database Admin for Hostinger VPS
  * Self-hosted PostgreSQL admin operations.
  */
-import { pool, query, isDbConnected } from './db.js';
+import { pool, query, isDbConnected, createLocalDbClient } from './db.js';
+
+const localDbClient = createLocalDbClient();
 
 export const hostingerAdmin = {
   isSelfHosted: true,
   query,
   pool,
+  isDbConnected,
+  from: (tableName) => localDbClient.from(tableName),
   storage: {
     from() {
       return {

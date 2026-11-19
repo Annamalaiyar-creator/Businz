@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Component, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import KPIGrid from './components/KPIGrid';
@@ -29,7 +29,7 @@ const TechSupportDashboardView = lazy(() => import('./components/views/TechSuppo
 const TechnicalAdminDashboardView = lazy(() => import('./components/views/TechnicalAdminDashboardView'));
 const DeveloperPortalView = lazy(() => import('./components/DeveloperPortalView'));
 
-import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw, Clock } from 'lucide-react';
 import {
   heartbeatActiveSession,
   revokeSession,
@@ -38,6 +38,7 @@ import {
   activateSavedAccountLocal,
   verifySavedAccountSession
 } from './services/sessionService';
+import { playWorkflowNotificationSound, unlockNotificationAudio } from './services/notificationService';
 import { getPurchaseOrders, getItems } from './services/businzDataService';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
@@ -330,6 +331,18 @@ function App() {
   const [loginModalNotice, setLoginModalNotice] = useState('');
   const [accountVersion, setAccountVersion] = useState(0);
 
+  const IDLE_WARNING_MS = 60 * 60 * 1000;
+  const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [idleRemainingSec, setIdleRemainingSec] = useState(3600);
+  const [idleLogoutNotice, setIdleLogoutNotice] = useState('');
+  const idleWarningVisibleRef = useRef(false);
+  const idleLastActivityRef = useRef(Date.now());
+  const idleWarningTimerRef = useRef(null);
+  const idleLogoutTimerRef = useRef(null);
+  const idleCountdownIntervalRef = useRef(null);
+  const stayLoggedInHandlerRef = useRef(null);
+
   // Ensure the currently authenticated account is persisted in browser saved accounts
   useEffect(() => {
     if (!isAuthenticated || !userRole) return;
@@ -398,39 +411,198 @@ function App() {
     };
   }, [isAuthenticated]);
 
-  // Auto-logout after 30 minutes of inactivity (Bug-006 / CRM-0011)
+  // Unlock browser Web Audio & speech synthesis on first user interaction for live voice alerts
   useEffect(() => {
     if (!isAuthenticated) return undefined;
-    const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
-    let idleTimer = null;
-    const resetIdleTimer = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        try {
-          const sesId = localStorage.getItem('controlroom_device_session_id');
-          if (sesId) revokeSession(sesId);
-        } catch (_) {}
-        localStorage.removeItem('controlroom_is_authenticated');
-        localStorage.removeItem('controlroom_user_role');
-        localStorage.removeItem('controlroom_logged_user');
-        localStorage.removeItem('controlroom_logged_user_name');
-        localStorage.removeItem('controlroom_logged_emp_id');
-        localStorage.removeItem('controlroom_device_session_id');
-        localStorage.removeItem('controlroom_session_start_time');
-        setUserRole('');
-        setIsAuthenticated(false);
-      }, IDLE_TIMEOUT_MS);
+    const handleFirstGesture = () => {
+      unlockNotificationAudio();
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      window.removeEventListener('keydown', handleFirstGesture);
     };
-    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
-    events.forEach(ev => window.addEventListener(ev, resetIdleTimer, { passive: true }));
-    resetIdleTimer();
+    window.addEventListener('pointerdown', handleFirstGesture, { once: true, passive: true });
+    window.addEventListener('keydown', handleFirstGesture, { once: true, passive: true });
     return () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      events.forEach(ev => window.removeEventListener(ev, resetIdleTimer));
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      window.removeEventListener('keydown', handleFirstGesture);
     };
   }, [isAuthenticated]);
 
+  // Auto-logout after 2 hours of inactivity with 1-hour warning popup & "Stay" button
+  useEffect(() => {
+    const clearAllIdleTimers = () => {
+      if (idleWarningTimerRef.current) {
+        clearTimeout(idleWarningTimerRef.current);
+        idleWarningTimerRef.current = null;
+      }
+      if (idleLogoutTimerRef.current) {
+        clearTimeout(idleLogoutTimerRef.current);
+        idleLogoutTimerRef.current = null;
+      }
+      if (idleCountdownIntervalRef.current) {
+        clearInterval(idleCountdownIntervalRef.current);
+        idleCountdownIntervalRef.current = null;
+      }
+    };
+
+    if (!isAuthenticated) {
+      clearAllIdleTimers();
+      idleWarningVisibleRef.current = false;
+      setShowIdleWarning(false);
+      stayLoggedInHandlerRef.current = null;
+      return undefined;
+    }
+
+    const performIdleAutoLogout = () => {
+      clearAllIdleTimers();
+      idleWarningVisibleRef.current = false;
+      setShowIdleWarning(false);
+
+      try {
+        realtimeNotificationService.stop();
+      } catch (_) {}
+
+      const sesId = localStorage.getItem('controlroom_device_session_id');
+      const currentEmpId = localStorage.getItem('controlroom_logged_emp_id') || '';
+      const currentUser = localStorage.getItem('controlroom_logged_user') || '';
+      const currentRole = localStorage.getItem('controlroom_user_role') || '';
+
+      try {
+        if (sesId) revokeSession(sesId, { useTargetSessionAuth: true });
+      } catch (_) {}
+      try {
+        if (currentEmpId || currentUser || currentRole) {
+          removeSavedAccount({ empCode: currentEmpId, email: currentUser, role: currentRole });
+        }
+      } catch (_) {}
+
+      localStorage.removeItem('controlroom_is_authenticated');
+      localStorage.removeItem('controlroom_user_role');
+      localStorage.removeItem('controlroom_logged_user');
+      localStorage.removeItem('controlroom_logged_user_email');
+      localStorage.removeItem('controlroom_logged_user_name');
+      localStorage.removeItem('controlroom_logged_emp_id');
+      localStorage.removeItem('controlroom_device_session_id');
+      localStorage.removeItem('controlroom_session_start_time');
+      localStorage.removeItem('controlroom_active_tab');
+      localStorage.removeItem('controlroom_sidebar_active_item');
+
+      setToastAlert(null);
+      setShowLoginModal(false);
+      setLoginModalPrefill('');
+      setLoginModalNotice('');
+      setIdleLogoutNotice('You were automatically logged out after 2 hours of inactivity. Please sign in again.');
+      setUserRole('');
+      setIsAuthenticated(false);
+      setActiveTab('Dashboard');
+    };
+
+    const showWarningPhase = (remainingMs) => {
+      clearAllIdleTimers();
+      const safeRemainingMs = Math.max(0, remainingMs);
+      if (safeRemainingMs <= 0) {
+        performIdleAutoLogout();
+        return;
+      }
+
+      const wasVisible = idleWarningVisibleRef.current;
+      idleWarningVisibleRef.current = true;
+      setIdleRemainingSec(Math.ceil(safeRemainingMs / 1000));
+      setShowIdleWarning(true);
+
+      if (!wasVisible) {
+        try {
+          playWorkflowNotificationSound();
+        } catch (_) {}
+      }
+
+      idleLogoutTimerRef.current = setTimeout(() => {
+        performIdleAutoLogout();
+      }, safeRemainingMs);
+
+      idleCountdownIntervalRef.current = setInterval(() => {
+        const msLeft = (idleLastActivityRef.current + IDLE_TIMEOUT_MS) - Date.now();
+        if (msLeft <= 0) {
+          performIdleAutoLogout();
+        } else {
+          setIdleRemainingSec(Math.ceil(msLeft / 1000));
+        }
+      }, 1000);
+    };
+
+    const scheduleWarningDelay = (delayMs) => {
+      clearAllIdleTimers();
+      const safeDelay = Math.max(1000, delayMs);
+      idleWarningTimerRef.current = setTimeout(() => {
+        const elapsed = Date.now() - idleLastActivityRef.current;
+        if (elapsed >= IDLE_TIMEOUT_MS) {
+          performIdleAutoLogout();
+        } else if (elapsed >= IDLE_WARNING_MS) {
+          showWarningPhase(IDLE_TIMEOUT_MS - elapsed);
+        } else {
+          scheduleWarningDelay(IDLE_WARNING_MS - elapsed);
+        }
+      }, safeDelay);
+    };
+
+    const scheduleFromActivity = (nowTs = Date.now(), force = false) => {
+      if (idleWarningVisibleRef.current && !force) return;
+      if (force) {
+        idleWarningVisibleRef.current = false;
+        setShowIdleWarning(false);
+      }
+      idleLastActivityRef.current = nowTs;
+      scheduleWarningDelay(IDLE_WARNING_MS);
+    };
+
+    let lastActivityHandledAt = Date.now();
+
+    const handleUserActivity = () => {
+      if (idleWarningVisibleRef.current) return;
+      const now = Date.now();
+      if (now - lastActivityHandledAt < 1000) return;
+      lastActivityHandledAt = now;
+      scheduleFromActivity(now, false);
+    };
+
+    const handleWindowWake = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const elapsed = Date.now() - idleLastActivityRef.current;
+      if (elapsed >= IDLE_TIMEOUT_MS) {
+        performIdleAutoLogout();
+      } else if (elapsed >= IDLE_WARNING_MS) {
+        showWarningPhase(IDLE_TIMEOUT_MS - elapsed);
+      } else if (!idleWarningVisibleRef.current) {
+        scheduleWarningDelay(IDLE_WARNING_MS - elapsed);
+      }
+    };
+
+    stayLoggedInHandlerRef.current = () => {
+      const now = Date.now();
+      lastActivityHandledAt = now;
+      scheduleFromActivity(now, true);
+      try {
+        heartbeatActiveSession().catch(() => {});
+      } catch (_) {}
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach(ev => window.addEventListener(ev, handleUserActivity, { passive: true }));
+    document.addEventListener('visibilitychange', handleWindowWake);
+    window.addEventListener('focus', handleWindowWake);
+
+    scheduleFromActivity(Date.now(), true);
+
+    return () => {
+      clearAllIdleTimers();
+      stayLoggedInHandlerRef.current = null;
+      events.forEach(ev => window.removeEventListener(ev, handleUserActivity));
+      document.removeEventListener('visibilitychange', handleWindowWake);
+      window.removeEventListener('focus', handleWindowWake);
+    };
+  }, [isAuthenticated, accountVersion]);
+
   const handleLoginSuccess = (roleName) => {
+    setIdleLogoutNotice('');
     setUserRole(roleName);
     setIsAuthenticated(true);
     const defaultTab = 'Dashboard';
@@ -450,6 +622,7 @@ function App() {
   };
 
   const handleRoleSwitch = (newRole) => {
+    setIdleLogoutNotice('');
     setUserRole(newRole);
     localStorage.setItem('controlroom_user_role', newRole);
     localStorage.setItem('controlroom_is_authenticated', 'true');
@@ -632,9 +805,12 @@ function App() {
       }
     } catch (_) {}
     setToastAlert(null);
+    idleWarningVisibleRef.current = false;
+    setShowIdleWarning(false);
     setShowLoginModal(false);
     setLoginModalPrefill('');
     setLoginModalNotice('');
+    setIdleLogoutNotice('');
     setTargetPoNo(null);
     setTargetBomCode(null);
     setTargetPiNo(null);
@@ -988,7 +1164,7 @@ function App() {
   }, []);
 
   if (!isAuthenticated || !userRole) {
-    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} infoMessage={idleLogoutNotice} />;
   }
 
 
@@ -1191,6 +1367,131 @@ function App() {
           onNavigate={(tab, extra) => handleTabChange(tab, extra)} 
         />
       )}
+
+      {/* 1-Hour Idle Inactivity Warning Modal (Auto-logout at 2 hours) */}
+      {isAuthenticated && showIdleWarning && (() => {
+        const safeSec = Math.max(0, idleRemainingSec);
+        const mins = Math.floor(safeSec / 60);
+        const secs = safeSec % 60;
+        const formattedRemaining = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="businz-idle-warning-title"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.55)',
+              backdropFilter: 'blur(3px)',
+              zIndex: 1000001,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
+            }}
+          >
+            <div style={{
+              width: '100%',
+              maxWidth: '420px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 24px 48px -12px rgba(15, 23, 42, 0.28)',
+              padding: '24px',
+              fontFamily: "'Plus Jakarta Sans', 'DM Sans', -apple-system, sans-serif"
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <div style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '12px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#B45309',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Clock size={22} />
+                </div>
+                <div>
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    letterSpacing: '0.6px',
+                    color: '#0E7490',
+                    textTransform: 'uppercase'
+                  }}>
+                    BUSINZ Security
+                  </div>
+                  <h3 id="businz-idle-warning-title" style={{
+                    margin: '2px 0 0 0',
+                    fontSize: '17px',
+                    fontWeight: '800',
+                    color: '#0F172A'
+                  }}>
+                    Session Inactivity Warning
+                  </h3>
+                </div>
+              </div>
+
+              <p style={{
+                margin: '0 0 18px 0',
+                fontSize: '14px',
+                lineHeight: '1.55',
+                color: '#334155'
+              }}>
+                You have been idle for 1 hour. You will be automatically logged out in{' '}
+                <strong style={{ color: '#B45309', fontVariantNumeric: 'tabular-nums' }}>
+                  {formattedRemaining}
+                </strong>{' '}
+                unless you stay signed in.
+              </p>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: '13.5px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Log Out
+                </button>
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => stayLoggedInHandlerRef.current && stayLoggedInHandlerRef.current()}
+                  style={{
+                    padding: '10px 22px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    fontSize: '13.5px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(14, 116, 144, 0.25)'
+                  }}
+                >
+                  Stay
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Sidebar Navigation */}
     </div>

@@ -1,12 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt
+  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt, Layers, X, Save, Clock, UploadCloud, FileCheck
 } from 'lucide-react';
 import { saveCloudBomRow } from '../../../utils/supabaseDataSync';
-import { isRailPreset, isKwPreset, isTriangleDirectPreset, SALES_UOM_OPTIONS, isSalesLoginRole, normalizeSalesUomValue, calculateTotalDispatchQty } from '../../../utils/vrmProductsData';
-import { getMediaFromCache, stripDataUrlsFromRecord, cleanNum } from '../../../utils/otherViewsShared';
+import {
+  VRM_PRODUCTS,
+  isRailPreset,
+  isKwPreset,
+  isTriangleDirectPreset,
+  SALES_UOM_OPTIONS,
+  isSalesLoginRole,
+  normalizeSalesUomValue,
+  calculateTotalDispatchQty,
+  resolveBomItemDispatchQty,
+  resolveDefaultUom
+} from '../../../utils/vrmProductsData';
+import { getMediaFromCache, stripDataUrlsFromRecord, cleanNum, normalizePaymentTerm } from '../../../utils/otherViewsShared';
 import { uploadBomDocumentFile, validateClientFile } from '../../../utils/bomStorageClient';
 import TypeableProductSelect from '../../TypeableProductSelect';
+import SearchablePresetSelector from '../../SearchablePresetSelector';
+import { searchCustomers } from '../../../services/customerService';
 import { is5PctSolarProduct } from '../../../utils/hsnCodeService';
 import { PRESET_THEMES, getPresetTheme } from '../../../utils/presetThemes';
 import DispatchMediaThumbnail from '../DispatchMediaThumbnail';
@@ -31,6 +44,10 @@ export default function BomConfirmAuditSection({ ctx }) {
     bomStore,
     setBomStore,
     itemsList,
+    customerList,
+    setCustomerList,
+    activePresetsMap,
+    bomCustSearchTimerRef,
     isCeo,
     confirmingBomModal,
     setConfirmingBomModal,
@@ -45,6 +62,10 @@ export default function BomConfirmAuditSection({ ctx }) {
     blockInventoryForBom,
     alert
   } = ctx;
+
+  const [selectedPresetPicker, setSelectedPresetPicker] = useState('');
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
 
     const isCancelled = Boolean(
       confirmingBomModal.cancelled ||
@@ -61,6 +82,21 @@ export default function BomConfirmAuditSection({ ctx }) {
     const isAlreadyForwarded = !isEditMode;
     const isSourcePiLocked = false;
 
+    const isDcOrder = Boolean(
+      confirmingBomModal.docType === 'DC' ||
+      confirmingBomModal.docType === 'Delivery Challan' ||
+      confirmingBomModal.documentType === 'DC' ||
+      confirmingBomModal.invoiceType === 'DC' ||
+      String(confirmingBomModal.docType || '').toUpperCase().includes('DC') ||
+      String(confirmingBomModal.docType || '').toUpperCase().includes('CHALLAN') ||
+      String(confirmingBomModal.documentType || '').toUpperCase().includes('DC') ||
+      String(confirmingBomModal.documentType || '').toUpperCase().includes('CHALLAN')
+    );
+
+    const normalizedPayType = isDcOrder
+      ? '100% Paid'
+      : normalizePaymentTerm(confirmingBomModal.paymentType || confirmingBomModal.paymentTerms || confirmingBomModal.piPaymentTerms || '100% Paid');
+
     const rawPresetGroupsList = Array.isArray(confirmingBomModal.presetGroups)
       ? confirmingBomModal.presetGroups
       : (confirmingBomModal.presetGroups && typeof confirmingBomModal.presetGroups === 'object'
@@ -73,6 +109,7 @@ export default function BomConfirmAuditSection({ ctx }) {
             presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
             setCount: parseFloat(confirmingBomModal.presetSetCount) || 1,
             unit: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+            unitType: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
             kitPrice: cleanNum(confirmingBomModal.presetKitPrice) || 0
           }]
         : [];
@@ -92,6 +129,7 @@ export default function BomConfirmAuditSection({ ctx }) {
             presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
             setCount: parseFloat(confirmingBomModal.presetSetCount) || 1,
             unit: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+            unitType: confirmingBomModal.presetUnit || (String(confirmingBomModal.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets'),
             kitPrice: presetKitsTotal
           });
         } else if (modalPresetGroups.length === 1 && (cleanNum(modalPresetGroups[0].kitPrice) || 0) === 0) {
@@ -117,17 +155,23 @@ export default function BomConfirmAuditSection({ ctx }) {
       const rate = extractGstRate(it.gstRate ?? it.tax ?? confirmingBomModal.gstRate, 18);
       return acc + (sub * (rate / 100));
     }, 0);
-    const presetGroupsGstCalc = modalPresetGroups.reduce((acc, g) => {
+    const presetGroupsGstCalc = modalPresetGroups.reduce((acc, g, gi) => {
       const sub = (cleanNum(g.kitPrice) || 0) * (parseFloat(g.setCount) || 1);
-      const rate = extractGstRate(g.gstRate ?? confirmingBomModal.gstRate, 18);
+      const gKey = g.groupId || g.presetGroupId || g.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`);
+      const firstGrpItem = (confirmingBomModal.items || []).find(it => (it.presetGroupId || it.groupId || it.presetId || 'default_kit') === gKey);
+      const rate = extractGstRate(g.gstRate ?? firstGrpItem?.gstRate ?? confirmingBomModal.gstRate, 18);
       return acc + (sub * (rate / 100));
     }, 0);
     const computedBomGst = Math.round((customItemsGstCalc + presetGroupsGstCalc) * 100) / 100;
     const fallbackBomGst = Math.round(orderSubTotal * (extractGstRate(confirmingBomModal.gstRate, 18) / 100) * 100) / 100;
     const effectiveComputedGst = (customItemsTotal + presetKitsTotal) > 0 ? computedBomGst : fallbackBomGst;
+    const storedGstForCheck = confirmingBomModal.gstAmount != null
+      ? cleanNum(confirmingBomModal.gstAmount)
+      : (cleanNum(confirmingBomModal.grandTotal) > 0 ? Math.max(0, cleanNum(confirmingBomModal.grandTotal) - orderSubTotal) : effectiveComputedGst);
+    const hasGstMismatch = Boolean((customItemsTotal + presetKitsTotal) > 0 && Math.abs(effectiveComputedGst - storedGstForCheck) > 1);
 
-    if (hasSubtotalMismatch) {
-      // Items were modified or previous PI had ghost unlisted amount -> recompute GST and Grand Total cleanly from actual line items
+    if (hasSubtotalMismatch || hasGstMismatch) {
+      // Items or GST rates were modified -> recompute GST and Grand Total cleanly from actual line items
       orderGstAmount = effectiveComputedGst;
       orderGrandTotal = Math.round((orderSubTotal + orderGstAmount) * 100) / 100;
     } else {
@@ -171,10 +215,10 @@ export default function BomConfirmAuditSection({ ctx }) {
               ? sourcePi.deliveryAddressObj
               : (sourcePi?.deliveryAddress && typeof sourcePi.deliveryAddress === 'object' ? sourcePi.deliveryAddress : {})));
 
-    const resolvedBStreet = confirmingBomModal.billingStreet || rawBObj.street || rawBObj.address || sourcePi?.billingStreet || (typeof confirmingBomModal.billingAddress === 'string' && !confirmingBomModal.billingAddress.includes('on file') ? confirmingBomModal.billingAddress : '') || (typeof sourcePi?.billingAddress === 'string' ? sourcePi.billingAddress : '') || '';
-    const resolvedBCity = confirmingBomModal.billingCity || rawBObj.city || sourcePi?.billingCity || '';
-    const resolvedBState = confirmingBomModal.billingState || rawBObj.state || sourcePi?.billingState || '';
-    const resolvedBPincode = confirmingBomModal.billingPincode || rawBObj.pincode || rawBObj.pin || sourcePi?.billingPincode || '';
+    const resolvedBStreet = rawBObj.address ?? rawBObj.street ?? confirmingBomModal.billingStreet ?? sourcePi?.billingStreet ?? (typeof confirmingBomModal.billingAddress === 'string' && !confirmingBomModal.billingAddress.includes('on file') ? confirmingBomModal.billingAddress : '') ?? (typeof sourcePi?.billingAddress === 'string' ? sourcePi.billingAddress : '') ?? '';
+    const resolvedBCity = rawBObj.city ?? confirmingBomModal.billingCity ?? sourcePi?.billingCity ?? '';
+    const resolvedBState = rawBObj.state ?? confirmingBomModal.billingState ?? sourcePi?.billingState ?? '';
+    const resolvedBPincode = rawBObj.pincode ?? rawBObj.pin ?? confirmingBomModal.billingPincode ?? sourcePi?.billingPincode ?? '';
 
     const bObj = {
       address: resolvedBStreet,
@@ -184,14 +228,18 @@ export default function BomConfirmAuditSection({ ctx }) {
       pincode: resolvedBPincode
     };
 
-    const isSameAddr = confirmingBomModal.sameAsBilling !== false && (!rawDObj.address && !rawDObj.street || (rawDObj.address || rawDObj.street) === (rawBObj.address || rawBObj.street));
+    const isSameAddr = confirmingBomModal.sameAsBilling === true
+      ? true
+      : (confirmingBomModal.sameAsBilling === false
+          ? false
+          : (!rawDObj.address && !rawDObj.street || (rawDObj.address || rawDObj.street) === (rawBObj.address || rawBObj.street)));
 
     const resolvedDStreet = isSameAddr && resolvedBStreet
       ? resolvedBStreet
-      : (confirmingBomModal.deliveryStreet || rawDObj.street || rawDObj.address || sourcePi?.deliveryStreet || (typeof confirmingBomModal.deliveryAddress === 'string' && !confirmingBomModal.deliveryAddress.includes('on file') ? confirmingBomModal.deliveryAddress : '') || resolvedBStreet);
-    const resolvedDCity = isSameAddr && resolvedBCity ? resolvedBCity : (confirmingBomModal.deliveryCity || rawDObj.city || sourcePi?.deliveryCity || resolvedBCity);
-    const resolvedDState = isSameAddr && resolvedBState ? resolvedBState : (confirmingBomModal.deliveryState || rawDObj.state || sourcePi?.deliveryState || resolvedBState);
-    const resolvedDPincode = isSameAddr && resolvedBPincode ? resolvedBPincode : (confirmingBomModal.deliveryPincode || rawDObj.pincode || rawDObj.pin || sourcePi?.deliveryPincode || resolvedBPincode);
+      : (rawDObj.address ?? rawDObj.street ?? confirmingBomModal.deliveryStreet ?? sourcePi?.deliveryStreet ?? (typeof confirmingBomModal.deliveryAddress === 'string' && !confirmingBomModal.deliveryAddress.includes('on file') ? confirmingBomModal.deliveryAddress : '') ?? resolvedBStreet);
+    const resolvedDCity = isSameAddr && resolvedBCity ? resolvedBCity : (rawDObj.city ?? confirmingBomModal.deliveryCity ?? sourcePi?.deliveryCity ?? resolvedBCity);
+    const resolvedDState = isSameAddr && resolvedBState ? resolvedBState : (rawDObj.state ?? confirmingBomModal.deliveryState ?? sourcePi?.deliveryState ?? resolvedBState);
+    const resolvedDPincode = isSameAddr && resolvedBPincode ? resolvedBPincode : (rawDObj.pincode ?? rawDObj.pin ?? confirmingBomModal.deliveryPincode ?? sourcePi?.deliveryPincode ?? resolvedBPincode);
 
     const dObj = {
       address: resolvedDStreet,
@@ -216,6 +264,30 @@ export default function BomConfirmAuditSection({ ctx }) {
       }
       return parts.length > 0 ? parts.join(', ') : (fallbackStr || '—');
     };
+
+    const paymentProofList = (() => {
+      const list = (Array.isArray(confirmingBomModal.paymentProofDocs) && confirmingBomModal.paymentProofDocs.length > 0)
+        ? confirmingBomModal.paymentProofDocs
+        : (Array.isArray(confirmingBomModal.payments?.proofDocObjs) && confirmingBomModal.payments.proofDocObjs.length > 0)
+          ? confirmingBomModal.payments.proofDocObjs
+          : (confirmingBomModal.paymentProofDoc
+              ? (Array.isArray(confirmingBomModal.paymentProofDoc) ? confirmingBomModal.paymentProofDoc : [confirmingBomModal.paymentProofDoc])
+              : (confirmingBomModal.payments?.proofDocObj
+                  ? [confirmingBomModal.payments.proofDocObj]
+                  : (confirmingBomModal.payments?.proofDoc
+                      ? [{ name: confirmingBomModal.payments.proofDoc, dataUrl: confirmingBomModal.payments.proofDocData }]
+                      : [])));
+      return list.filter(d => Boolean(d && (typeof d === 'string' ? d.trim() : (d.name || d.url || d.dataUrl || d.storagePath))));
+    })();
+
+    const deliveryProofList = (() => {
+      const list = (Array.isArray(confirmingBomModal.deliveryAddressProofDocs) && confirmingBomModal.deliveryAddressProofDocs.length > 0)
+        ? confirmingBomModal.deliveryAddressProofDocs
+        : (confirmingBomModal.deliveryAddressProofDoc
+            ? (Array.isArray(confirmingBomModal.deliveryAddressProofDoc) ? confirmingBomModal.deliveryAddressProofDoc : [confirmingBomModal.deliveryAddressProofDoc])
+            : []);
+      return list.filter(d => Boolean(d && (typeof d === 'string' ? d.trim() : (d.name || d.url || d.dataUrl || d.storagePath))));
+    })();
 
     let matchedInv = null;
     try {
@@ -272,6 +344,539 @@ export default function BomConfirmAuditSection({ ctx }) {
     return <BomConfirmCeoDetailSection ctx={ctx} auditVars={auditVars} />;
   }
 
+  const isSameAsBillingActive = confirmingBomModal.sameAsBilling !== undefined
+    ? Boolean(confirmingBomModal.sameAsBilling)
+    : isSameAddr;
+
+  const updateBomInStores = (updatedBomData) => {
+    const updatedList = (bomStore || []).map(b => ((b.bomCode && (b.bomCode === confirmingBomModal.bomCode || b.bomCode === confirmingBomModal.id || b.bomCode === confirmingBomModal.code)) || (b.id && (b.id === confirmingBomModal.id || b.id === confirmingBomModal.bomCode)) || (b.code && (b.code === confirmingBomModal.code || b.code === confirmingBomModal.bomCode))) ? {
+      ...b,
+      ...updatedBomData
+    } : b);
+    setBomStore(updatedList);
+    safeSaveBomStoreToLocal(updatedList);
+    saveCloudBomRow(updatedBomData);
+    return updatedList;
+  };
+
+  const persistBomToServer = async (updatedBomData) => {
+    const sesId = typeof window !== 'undefined' && window.localStorage
+      ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+      : null;
+    const curRole = typeof window !== 'undefined' && window.localStorage
+      ? (localStorage.getItem('controlroom_user_role') || userRole || 'Sales')
+      : (userRole || 'Sales');
+    const curEmp = typeof window !== 'undefined' && window.localStorage
+      ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
+      : 'SE-001';
+
+    return fetch('/api/boms', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sesId ? { 'x-session-id': sesId } : {}),
+        'x-user-role': curRole,
+        'x-employee-code': curEmp
+      },
+      body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
+    }).catch(() => null);
+  };
+
+  const buildUpdatedBomPayload = (currentItemsList, { confirmAndSend = false } = {}) => {
+    const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
+    const dStr = isSameAsBillingActive ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
+    const finalDObj = isSameAsBillingActive ? { ...bObj } : { ...dObj };
+
+    const finalizedItems = (currentItemsList || []).map(i => {
+      const totalDispatchQty = resolveBomItemDispatchQty(i, confirmingBomModal);
+      return {
+        ...i,
+        ...(confirmAndSend ? { confirmed: true } : {}),
+        qtyPerSet: i.qtyPerSet || i.qty,
+        totalDispatchQty
+      };
+    });
+
+    const packingItems = (confirmingBomModal.dispatchPacking && confirmingBomModal.dispatchPacking.length > 0 && confirmAndSend)
+      ? confirmingBomModal.dispatchPacking
+      : finalizedItems.map(it => ({
+          name: it.name || it.c2 || 'Item',
+          bomQty: it.totalDispatchQty || it.qty || 1,
+          qtyPerSet: it.qtyPerSet || it.qty || 1,
+          totalDispatchQty: it.totalDispatchQty || it.qty || 1,
+          packed: false
+        }));
+
+    const prevBomRec = (bomStore || []).find(b => b && (b.bomCode === confirmingBomModal.bomCode || b.id === confirmingBomModal.id || b.code === confirmingBomModal.code));
+    const nextEditedFields = { ...(prevBomRec?.editedFields || confirmingBomModal.editedFields || {}) };
+    const normVal = (v) => String(v == null ? '' : v).trim();
+
+    if (prevBomRec) {
+      if (normVal(prevBomRec.deliveryDate) !== normVal(confirmingBomModal.deliveryDate)) {
+        nextEditedFields.deliveryDate = `${normVal(prevBomRec.deliveryDate) || '—'} → ${normVal(confirmingBomModal.deliveryDate) || '—'}`;
+      }
+      if (normVal(prevBomRec.docType || 'Invoice') !== normVal(confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'))) {
+        nextEditedFields.docType = `${normVal(prevBomRec.docType) || 'Invoice'} → ${normVal(confirmingBomModal.docType) || 'Invoice'}`;
+      }
+      if (normVal(prevBomRec.customerName) !== normVal(confirmingBomModal.customerName)) {
+        nextEditedFields.customerName = `${normVal(prevBomRec.customerName) || '—'} → ${normVal(confirmingBomModal.customerName) || '—'}`;
+      }
+      if (normVal(prevBomRec.companyName) !== normVal(confirmingBomModal.companyName)) {
+        nextEditedFields.companyName = `${normVal(prevBomRec.companyName) || '—'} → ${normVal(confirmingBomModal.companyName) || '—'}`;
+      }
+      if (normVal(prevBomRec.contactPerson) !== normVal(confirmingBomModal.contactPerson)) {
+        nextEditedFields.contactPerson = `${normVal(prevBomRec.contactPerson) || '—'} → ${normVal(confirmingBomModal.contactPerson) || '—'}`;
+      }
+      if (normVal(prevBomRec.mobile || prevBomRec.phone) !== normVal(confirmingBomModal.mobile || confirmingBomModal.phone)) {
+        nextEditedFields.mobile = `${normVal(prevBomRec.mobile || prevBomRec.phone) || '—'} → ${normVal(confirmingBomModal.mobile || confirmingBomModal.phone) || '—'}`;
+      }
+      if (normVal(prevBomRec.email) !== normVal(confirmingBomModal.email)) {
+        nextEditedFields.email = `${normVal(prevBomRec.email) || '—'} → ${normVal(confirmingBomModal.email) || '—'}`;
+      }
+      if (normVal(prevBomRec.gstNo || prevBomRec.gstin) !== normVal(confirmingBomModal.gstNo || confirmingBomModal.gstin)) {
+        nextEditedFields.gstNo = `${normVal(prevBomRec.gstNo || prevBomRec.gstin) || '—'} → ${normVal(confirmingBomModal.gstNo || confirmingBomModal.gstin) || '—'}`;
+      }
+      if (normVal(prevBomRec.paymentType) !== normVal(normalizedPayType)) {
+        nextEditedFields.paymentType = `${normVal(prevBomRec.paymentType) || '—'} → ${normVal(normalizedPayType) || '—'}`;
+      }
+      if (normalizedPayType === 'Credit Payment' && normVal(prevBomRec.creditDays) !== normVal(confirmingBomModal.creditDays || 7)) {
+        nextEditedFields.creditDays = `${normVal(prevBomRec.creditDays) || '7'} → ${normVal(confirmingBomModal.creditDays || 7)}`;
+      }
+      if (normVal(prevBomRec.billingAddress) !== normVal(bStr)) {
+        nextEditedFields.billingAddress = 'Updated during BOM confirmation';
+      }
+      if (normVal(prevBomRec.deliveryAddress) !== normVal(dStr)) {
+        nextEditedFields.deliveryAddress = 'Updated during BOM confirmation';
+      }
+      if (normVal(prevBomRec.transportMode) !== normVal(confirmingBomModal.transportMode)) {
+        nextEditedFields.transportMode = `${normVal(prevBomRec.transportMode) || '—'} → ${normVal(confirmingBomModal.transportMode) || '—'}`;
+      }
+      if (normVal(prevBomRec.transporterName) !== normVal(confirmingBomModal.transporterName)) {
+        nextEditedFields.transporterName = `${normVal(prevBomRec.transporterName) || '—'} → ${normVal(confirmingBomModal.transporterName) || '—'}`;
+      }
+      if (normVal(prevBomRec.destination) !== normVal(confirmingBomModal.destination)) {
+        nextEditedFields.destination = `${normVal(prevBomRec.destination) || '—'} → ${normVal(confirmingBomModal.destination) || '—'}`;
+      }
+      if (normVal(prevBomRec.transportScope) !== normVal(confirmingBomModal.transportScope)) {
+        nextEditedFields.transportScope = `${normVal(prevBomRec.transportScope) || '—'} → ${normVal(confirmingBomModal.transportScope) || '—'}`;
+      }
+      if (normVal(prevBomRec.remarks) !== normVal(confirmingBomModal.remarks)) {
+        nextEditedFields.remarks = 'Updated during BOM confirmation';
+      }
+    }
+
+    const prevItemsMap = new Map();
+    (Array.isArray(prevBomRec?.items) ? prevBomRec.items : []).forEach((it) => {
+      const k = normVal(it?.name || it?.code).toLowerCase();
+      if (k) prevItemsMap.set(k, it);
+    });
+
+    let anyItemEdited = false;
+    const diffedItems = finalizedItems.map((it) => {
+      const k = normVal(it?.name || it?.code).toLowerCase();
+      const prevIt = k ? prevItemsMap.get(k) : null;
+      const diffs = [];
+      if (prevBomRec) {
+        if (!prevIt) {
+          diffs.push('Added during BOM confirmation');
+        } else {
+          if (Number(prevIt.qty || 0) !== Number(it.qty || 0)) {
+            diffs.push(`Qty: ${prevIt.qty || 0} → ${it.qty || 0}`);
+          }
+          if (Number(resolveBomItemDispatchQty(prevIt, prevBomRec) || 0) !== Number(it.totalDispatchQty || 0)) {
+            diffs.push(`Dispatch Qty: ${resolveBomItemDispatchQty(prevIt, prevBomRec) || 0} → ${it.totalDispatchQty || 0}`);
+          }
+          if (Number(prevIt.rate || 0) !== Number(it.rate || 0)) {
+            diffs.push(`Rate: ₹${Number(prevIt.rate || 0).toLocaleString('en-IN')} → ₹${Number(it.rate || 0).toLocaleString('en-IN')}`);
+          }
+          if (normVal(prevIt.uom || prevIt.unit) !== normVal(it.uom || it.unit)) {
+            diffs.push(`UOM: ${normVal(prevIt.uom || prevIt.unit)} → ${normVal(it.uom || it.unit)}`);
+          }
+          if (extractGstRate(prevIt.gstRate, 18) !== extractGstRate(it.gstRate, 18)) {
+            diffs.push(`GST: ${extractGstRate(prevIt.gstRate, 18)}% → ${extractGstRate(it.gstRate, 18)}%`);
+          }
+          if (normVal(prevIt.category || prevIt.specs) !== normVal(it.category || it.specs)) {
+            diffs.push('Description updated');
+          }
+        }
+      }
+      const itemEdited = Boolean(it.isEdited || diffs.length > 0);
+      if (itemEdited) anyItemEdited = true;
+      const mergedNote = [it.editedNote, ...diffs].filter(Boolean).join(' • ');
+      return itemEdited ? { ...it, isEdited: true, ...(mergedNote ? { editedNote: mergedNote } : {}) } : it;
+    });
+
+    const hasAnyEdit = Boolean(confirmingBomModal.isEdited || prevBomRec?.isEdited || Object.keys(nextEditedFields).length > 0 || anyItemEdited);
+    const todayIso = new Date().toISOString().split('T')[0];
+    const resolvedCreditDays = normalizedPayType === 'Credit Payment' ? (parseInt(confirmingBomModal.creditDays, 10) || 7) : null;
+    const isPartialPay = normalizedPayType === 'Partial Paid' || normalizedPayType === 'Partial Payment';
+    const partialAmtVal = isPartialPay ? (parseFloat(confirmingBomModal.partialAmount) || 0) : null;
+    const balanceAmtVal = isPartialPay
+      ? Math.max(0, orderGrandTotal - partialAmtVal)
+      : (normalizedPayType === '100% Paid' ? 0 : orderGrandTotal);
+
+    const savedPaymentDocs = isDcOrder ? [] : paymentProofList;
+    const savedDeliveryDocs = isSameAsBillingActive ? [] : deliveryProofList;
+
+    const updatedBomData = {
+      ...confirmingBomModal,
+      ...(hasAnyEdit ? { date: todayIso, bomDate: todayIso } : {}),
+      deliveryDate: confirmingBomModal.deliveryDate || '',
+      docType: confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'),
+      documentType: confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'),
+      invoiceType: (confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice')) === 'DC' ? 'DC' : 'Invoice',
+      customerName: confirmingBomModal.customerName || confirmingBomModal.companyName || '',
+      companyName: confirmingBomModal.companyName || bObj.companyName || confirmingBomModal.customerName || '',
+      contactPerson: confirmingBomModal.contactPerson || '',
+      mobile: confirmingBomModal.mobile || confirmingBomModal.phone || '',
+      phone: confirmingBomModal.mobile || confirmingBomModal.phone || confirmingBomModal.mobile || '',
+      email: confirmingBomModal.email || '',
+      gstNo: confirmingBomModal.gstNo || confirmingBomModal.gstin || '',
+      gstin: confirmingBomModal.gstNo || confirmingBomModal.gstin || '',
+      billingAddress: bStr,
+      billingAddressObj: bObj,
+      billingStreet: bObj.address || '',
+      billingCity: bObj.city || '',
+      billingState: bObj.state || '',
+      billingPincode: bObj.pincode || '',
+      sameAsBilling: isSameAsBillingActive,
+      deliveryAddress: dStr,
+      deliveryAddressObj: finalDObj,
+      deliveryStreet: finalDObj.address || '',
+      deliveryCity: finalDObj.city || '',
+      deliveryState: finalDObj.state || '',
+      deliveryPincode: finalDObj.pincode || '',
+      deliveryAddressProofDoc: savedDeliveryDocs[0] || null,
+      deliveryAddressProofDocs: savedDeliveryDocs,
+      paymentType: normalizedPayType,
+      partialAmount: partialAmtVal,
+      balanceAmount: balanceAmtVal,
+      creditDays: resolvedCreditDays,
+      creditDueDate: normalizedPayType === 'Credit Payment'
+        ? (confirmingBomModal.creditDueDate || new Date(Date.now() + (resolvedCreditDays || 7) * 86400000).toISOString().split('T')[0])
+        : null,
+      paymentProofDoc: savedPaymentDocs[0] || null,
+      paymentProofDocs: savedPaymentDocs,
+      paymentUpdated: (normalizedPayType === '100% Paid' || isPartialPay) && savedPaymentDocs.length > 0,
+      payments: confirmingBomModal.payments
+        ? {
+            ...confirmingBomModal.payments,
+            proofDocObj: savedPaymentDocs[0] || null,
+            proofDocObjs: savedPaymentDocs
+          }
+        : (savedPaymentDocs.length > 0
+            ? { proofDocObj: savedPaymentDocs[0] || null, proofDocObjs: savedPaymentDocs }
+            : undefined),
+      transportMode: confirmingBomModal.transportMode || '',
+      transporterName: confirmingBomModal.transporterName || '',
+      destination: confirmingBomModal.destination || '',
+      transportScope: confirmingBomModal.transportScope || '',
+      remarks: confirmingBomModal.remarks || '',
+      presetGroups: modalPresetGroups,
+      ...(modalPresetGroups.length > 0
+        ? {
+            presetName: modalPresetGroups[0].presetName || confirmingBomModal.presetName || '',
+            presetSetCount: modalPresetGroups[0].setCount || 1,
+            presetUnit: modalPresetGroups[0].unitType || modalPresetGroups[0].unit || 'Sets',
+            presetKitPrice: modalPresetGroups.length === 1 ? (modalPresetGroups[0].kitPrice ?? 0) : confirmingBomModal.presetKitPrice
+          }
+        : {
+            presetName: '',
+            presetSetCount: 1,
+            presetUnit: 'Sets',
+            presetKitPrice: 0
+          }),
+      items: diffedItems,
+      ...(hasAnyEdit ? {
+        isEdited: true,
+        editedFields: nextEditedFields,
+        lastEditedAt: new Date().toISOString(),
+        lastEditedBy: confirmingBomModal.lastEditedBy || defaultSalesPersonName
+      } : {}),
+      salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
+      subTotal: orderSubTotal,
+      gstAmount: orderGstAmount,
+      grandTotal: orderGrandTotal
+    };
+
+    if (confirmAndSend) {
+      return {
+        updatedBomData: {
+          ...updatedBomData,
+          dispatchPacking: packingItems,
+          status: 'Sales Confirmed - Sent to Dispatch',
+          salesConfirmed: true,
+          salesReconfirmed: true,
+          tabGroup: 'Sent',
+          stBg: '#dcfce7',
+          stFg: '#166534',
+          stBorder: '1px solid #bbf7d0',
+          salesConfirmedAt: new Date().toISOString(),
+          reconfirmedAt: new Date().toISOString(),
+          isSentToDispatch: true,
+          stockBlocked: true,
+          stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
+          stockDeducted: true,
+          addressProofReuploadRequested: false
+        },
+        finalizedItems
+      };
+    }
+
+    return {
+      updatedBomData: {
+        ...updatedBomData,
+        status: confirmingBomModal.status === 'Draft' ? 'Draft' : 'Edited / Pending Confirmation',
+        salesConfirmed: false,
+        salesReconfirmed: false,
+        isSentToDispatch: false,
+        stockBlocked: Boolean(confirmingBomModal.stockBlocked),
+        stockDeducted: Boolean(confirmingBomModal.stockDeducted)
+      },
+      finalizedItems
+    };
+  };
+
+  const handleAddPresetInReconfirm = (presetId, targetPreset, setsCount = 1) => {
+    if (!targetPreset || !targetPreset.items || targetPreset.items.length === 0) return;
+    const groupId = 'preset_grp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const isKw = String(targetPreset.label || presetId || '').toLowerCase().includes('kw');
+    const multiplier = Math.max(0.01, parseFloat(setsCount) || 1);
+    const pUnit = targetPreset.unit || (isKw ? 'kW' : 'Sets');
+
+    let defaultPrice = '';
+    if (targetPreset.price || targetPreset.rate) {
+      defaultPrice = String(targetPreset.price || targetPreset.rate);
+    } else {
+      const origSum = targetPreset.items.reduce((acc, it) => acc + (parseFloat(it.qty || 1) * parseFloat(it.rate || 0)), 0);
+      defaultPrice = origSum > 0 ? String(origSum) : '';
+    }
+
+    const presetName = targetPreset.label || presetId;
+    const isDcrBosKit = targetPreset.category === 'DCR BOS Solar Kits' || targetPreset.category === 'BOS Solar Kits' || (targetPreset.label && targetPreset.label.includes('BOS KITS'));
+    const initialGstRate = isDcrBosKit ? '5%' : (targetPreset.gstRate || targetPreset.gst || '18%');
+
+    const newGroup = {
+      groupId,
+      presetId,
+      presetName,
+      setCount: multiplier,
+      sets: multiplier,
+      unit: pUnit,
+      unitType: pUnit,
+      kitPrice: defaultPrice,
+      gstRate: initialGstRate
+    };
+
+    const existingGroups = modalPresetGroups.map((g, gi) => ({
+      ...g,
+      groupId: g.groupId || g.presetGroupId || g.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`)
+    }));
+    const nextGroups = [...existingGroups, newGroup];
+
+    const newItems = targetPreset.items.map(it => {
+      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+      const hasQty = rawQ !== '' && rawQ !== '0' && !isNaN(parseFloat(rawQ));
+      const baseQ = hasQty ? parseFloat(rawQ) : '';
+      const matchedCatalog = (itemsList || []).find(ci => ci.name && ci.name.toLowerCase().trim() === String(it.name || '').toLowerCase().trim()) || (VRM_PRODUCTS || []).find(vp => vp.name && vp.name.toLowerCase().trim() === String(it.name || '').toLowerCase().trim());
+      const resolvedCode = it.code || (matchedCatalog ? matchedCatalog.code : '');
+      const resolvedUom = resolveDefaultUom(it.name, it.uom || it.unit || matchedCatalog?.uom || matchedCatalog?.unit || 'NOS');
+      const itemDraft = {
+        ...it,
+        code: resolvedCode,
+        uom: resolvedUom,
+        unit: resolvedUom,
+        presetGroupId: groupId,
+        presetId,
+        presetName,
+        baseQty: baseQ,
+        qty: hasQty ? String(baseQ) : '1',
+        qtyPerSet: hasQty ? String(baseQ) : '1',
+        rate: '0',
+        gstRate: isDcrBosKit ? '5%' : (it.gstRate || initialGstRate),
+        isPresetItem: true,
+        confirmed: false
+      };
+      itemDraft.totalDispatchQty = calculateTotalDispatchQty(
+        itemDraft,
+        multiplier,
+        presetName,
+        targetPreset.category || it.category,
+        pUnit
+      );
+      return itemDraft;
+    });
+
+    setConfirmingBomModal(prev => ({
+      ...prev,
+      presetGroups: nextGroups,
+      presetName: nextGroups.length === 1 ? presetName : (prev.presetName || presetName),
+      items: [...(prev.items || []), ...newItems]
+    }));
+    setSelectedPresetPicker('');
+  };
+
+  const handleUploadReconfirmDeliveryProofs = async (fileList) => {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (files.length === 0) return;
+    const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
+    setIsUploadingProof(true);
+    try {
+      const uploaded = [];
+      for (const file of files) {
+        validateClientFile(file);
+        const metadata = await uploadBomDocumentFile({
+          file,
+          bomCode: bCode,
+          category: 'delivery-proof'
+        });
+        uploaded.push({
+          ...metadata,
+          uploadedAt: new Date().toISOString()
+        });
+      }
+      setConfirmingBomModal(prev => {
+        const prevSingle = prev.deliveryAddressProofDoc;
+        const prevDocs = Array.isArray(prev.deliveryAddressProofDocs) && prev.deliveryAddressProofDocs.length > 0
+          ? prev.deliveryAddressProofDocs
+          : (prevSingle ? [prevSingle] : []);
+        const existingHistory = Array.isArray(prevSingle?.history) ? prevSingle.history : [];
+        const updatedHistory = prevSingle && existingHistory.length === 0 && uploaded.length > 0
+          ? [{
+              name: prevSingle.name || prevSingle.originalName,
+              size: prevSingle.size,
+              storageBucket: prevSingle.storageBucket,
+              storagePath: prevSingle.storagePath,
+              uploadedAt: prevSingle.uploadedAt || new Date().toISOString()
+            }]
+          : existingHistory;
+        const nextDocs = [...prevDocs, ...uploaded];
+        return {
+          ...prev,
+          addressProofReuploadRequested: false,
+          deliveryAddressProofDocs: nextDocs,
+          deliveryAddressProofDoc: {
+            ...nextDocs[0],
+            history: updatedHistory
+          }
+        };
+      });
+    } catch (err) {
+      alert(`⚠️ Cannot Proceed: ${err.message}`);
+    } finally {
+      setIsUploadingProof(false);
+    }
+  };
+
+  const handleRemoveReconfirmDeliveryProof = (removeIdx) => {
+    setConfirmingBomModal(prev => {
+      const prevDocs = (Array.isArray(prev.deliveryAddressProofDocs) && prev.deliveryAddressProofDocs.length > 0)
+        ? prev.deliveryAddressProofDocs
+        : (prev.deliveryAddressProofDoc ? [prev.deliveryAddressProofDoc] : []);
+      const nextDocs = prevDocs.filter((_, idx) => idx !== removeIdx);
+      return {
+        ...prev,
+        deliveryAddressProofDocs: nextDocs,
+        deliveryAddressProofDoc: nextDocs[0] || null
+      };
+    });
+  };
+
+  const handleUploadReconfirmPaymentProofs = async (fileList) => {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (files.length === 0) return;
+    const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
+    setIsUploadingProof(true);
+    try {
+      const uploaded = [];
+      for (const file of files) {
+        validateClientFile(file);
+        const metadata = await uploadBomDocumentFile({
+          file,
+          bomCode: bCode,
+          category: 'payment-proof'
+        });
+        uploaded.push({
+          ...metadata,
+          uploadedAt: new Date().toISOString()
+        });
+      }
+      setConfirmingBomModal(prev => {
+        const currentDocs = (Array.isArray(prev.paymentProofDocs) && prev.paymentProofDocs.length > 0)
+          ? prev.paymentProofDocs
+          : (prev.paymentProofDoc ? [prev.paymentProofDoc] : []);
+        const nextDocs = [...currentDocs, ...uploaded];
+        return {
+          ...prev,
+          paymentProofDocs: nextDocs,
+          paymentProofDoc: nextDocs[0] || null,
+          payments: {
+            ...(prev.payments || {}),
+            proofDocObjs: nextDocs,
+            proofDocObj: nextDocs[0] || null
+          }
+        };
+      });
+    } catch (err) {
+      alert(`⚠️ Cannot Proceed: ${err.message}`);
+    } finally {
+      setIsUploadingProof(false);
+    }
+  };
+
+  const handleRemoveReconfirmPaymentProof = (removeIdx) => {
+    setConfirmingBomModal(prev => {
+      const currentDocs = (Array.isArray(prev.paymentProofDocs) && prev.paymentProofDocs.length > 0)
+        ? prev.paymentProofDocs
+        : (Array.isArray(prev.payments?.proofDocObjs) && prev.payments.proofDocObjs.length > 0
+            ? prev.payments.proofDocObjs
+            : (prev.paymentProofDoc ? [prev.paymentProofDoc] : []));
+      const nextDocs = currentDocs.filter((_, idx) => idx !== removeIdx);
+      return {
+        ...prev,
+        paymentProofDocs: nextDocs,
+        paymentProofDoc: nextDocs[0] || null,
+        payments: {
+          ...(prev.payments || {}),
+          proofDocObjs: nextDocs,
+          proofDocObj: nextDocs[0] || null
+        }
+      };
+    });
+  };
+
+  const handleSaveBomChanges = async () => {
+    if (isSavingDraft || isConfirmingForward) return;
+    if (!confirmingBomModal.items || confirmingBomModal.items.length === 0) {
+      alert('⚠️ Please keep at least one product or preset item in the BOM before saving.');
+      return;
+    }
+    setIsSavingDraft(true);
+    try {
+      const { updatedBomData } = buildUpdatedBomPayload(confirmingBomModal.items || [], { confirmAndSend: false });
+      const saveRes = await persistBomToServer(updatedBomData);
+      if (!saveRes || !saveRes.ok) {
+        const errJson = saveRes ? await saveRes.json().catch(() => null) : null;
+        alert(`⚠️ Failed to save BOM changes (HTTP ${saveRes?.status || 'Network Error'}): ${errJson?.error || errJson?.message || 'Please try again.'}`);
+        return;
+      }
+
+      updateBomInStores(updatedBomData);
+      try {
+        window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData } }));
+        window.dispatchEvent(new Event('controlroom_storage_update'));
+      } catch (_) {}
+
+      setConfirmingBomModal(null);
+      alert(`✅ BOM (${confirmingBomModal.bomCode}) changes saved!`);
+    } catch (err) {
+      console.error('Error saving BOM draft changes:', err);
+      alert(`⚠️ Failed to save BOM changes: ${err?.message || 'Unexpected error. Please try again.'}`);
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
   const handleConfirmAndSendToDispatch = async (itemsOverride = null) => {
     const currentItemsList = itemsOverride || (confirmingBomModal.items || []);
     const unconfirmedItems = currentItemsList.filter(it => !it.confirmed);
@@ -280,20 +885,9 @@ export default function BomConfirmAuditSection({ ctx }) {
       return;
     }
 
-    const isDcOrder = Boolean(
-      confirmingBomModal.docType === 'DC' ||
-      confirmingBomModal.docType === 'Delivery Challan' ||
-      confirmingBomModal.documentType === 'DC' ||
-      confirmingBomModal.invoiceType === 'DC' ||
-      String(confirmingBomModal.docType || '').toUpperCase().includes('DC') ||
-      String(confirmingBomModal.docType || '').toUpperCase().includes('CHALLAN') ||
-      String(confirmingBomModal.documentType || '').toUpperCase().includes('DC') ||
-      String(confirmingBomModal.documentType || '').toUpperCase().includes('CHALLAN')
-    );
-
-    const currentPayType = confirmingBomModal.paymentType;
-    const is100OrPartial = currentPayType === '100% Paid' || currentPayType === '100% Advance' || currentPayType === 'Partial Paid' || currentPayType === 'Partial Payment';
+    const is100OrPartial = normalizedPayType === '100% Paid' || normalizedPayType === '100% Advance' || normalizedPayType === 'Partial Paid' || normalizedPayType === 'Partial Payment';
     const hasProof = Boolean(
+      paymentProofList.length > 0 ||
       confirmingBomModal.paymentProofDoc ||
       confirmingBomModal.payments?.proofDocObj ||
       confirmingBomModal.payments?.proofDoc ||
@@ -301,149 +895,22 @@ export default function BomConfirmAuditSection({ ctx }) {
       confirmingBomModal.proofDocData
     );
     if (!isDcOrder && is100OrPartial && !hasProof) {
-      alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${currentPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
+      alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${normalizedPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
       return;
     }
 
     setIsConfirmingForward(true);
     try {
-      const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
-      const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
-      const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
-
-      const finalizedItems = currentItemsList.map(i => ({ ...i, confirmed: true }));
-      const packingItems = (confirmingBomModal.dispatchPacking && confirmingBomModal.dispatchPacking.length > 0)
-        ? confirmingBomModal.dispatchPacking
-        : finalizedItems.map(it => ({
-          name: it.name || it.c2 || 'Item',
-          bomQty: it.qty || 1,
-          packed: false
-        }));
+      const { updatedBomData, finalizedItems } = buildUpdatedBomPayload(currentItemsList, { confirmAndSend: true });
 
       // Ensure inventory is blocked upon verification if not already blocked
       if (!confirmingBomModal.stockBlocked && !confirmingBomModal.stockDeducted) {
         blockInventoryForBom(finalizedItems, confirmingBomModal.bomCode);
       }
 
-      const prevBomRec = (bomStore || []).find(b => b && (b.bomCode === confirmingBomModal.bomCode || b.id === confirmingBomModal.id || b.code === confirmingBomModal.code));
-      const nextEditedFields = { ...(prevBomRec?.editedFields || confirmingBomModal.editedFields || {}) };
-      const normVal = (v) => String(v == null ? '' : v).trim();
-      if (prevBomRec) {
-        if (normVal(prevBomRec.companyName) !== normVal(confirmingBomModal.companyName)) {
-          nextEditedFields.companyName = `${normVal(prevBomRec.companyName) || '—'} → ${normVal(confirmingBomModal.companyName) || '—'}`;
-        }
-        if (normVal(prevBomRec.paymentType) !== normVal(confirmingBomModal.paymentType)) {
-          nextEditedFields.paymentType = `${normVal(prevBomRec.paymentType) || '—'} → ${normVal(confirmingBomModal.paymentType) || '—'}`;
-        }
-        if (normVal(prevBomRec.billingAddress) !== normVal(bStr)) {
-          nextEditedFields.billingAddress = 'Updated during BOM confirmation';
-        }
-        if (normVal(prevBomRec.deliveryAddress) !== normVal(dStr)) {
-          nextEditedFields.deliveryAddress = 'Updated during BOM confirmation';
-        }
-      }
-      const prevItemsMap = new Map();
-      (Array.isArray(prevBomRec?.items) ? prevBomRec.items : []).forEach((it) => {
-        const k = normVal(it?.name || it?.code).toLowerCase();
-        if (k) prevItemsMap.set(k, it);
-      });
-      let anyItemEdited = false;
-      const diffedItems = finalizedItems.map((it) => {
-        const k = normVal(it?.name || it?.code).toLowerCase();
-        const prevIt = k ? prevItemsMap.get(k) : null;
-        const diffs = [];
-        if (prevBomRec) {
-          if (!prevIt) {
-            diffs.push('Added during BOM confirmation');
-          } else {
-            if (Number(prevIt.qty || 0) !== Number(it.qty || 0)) {
-              diffs.push(`Qty: ${prevIt.qty || 0} → ${it.qty || 0}`);
-            }
-            if (Number(prevIt.rate || 0) !== Number(it.rate || 0)) {
-              diffs.push(`Rate: ₹${Number(prevIt.rate || 0).toLocaleString('en-IN')} → ₹${Number(it.rate || 0).toLocaleString('en-IN')}`);
-            }
-            if (normVal(prevIt.uom || prevIt.unit) !== normVal(it.uom || it.unit)) {
-              diffs.push(`UOM: ${normVal(prevIt.uom || prevIt.unit)} → ${normVal(it.uom || it.unit)}`);
-            }
-          }
-        }
-        const itemEdited = Boolean(it.isEdited || diffs.length > 0);
-        if (itemEdited) anyItemEdited = true;
-        const mergedNote = [it.editedNote, ...diffs].filter(Boolean).join(' • ');
-        return itemEdited ? { ...it, isEdited: true, ...(mergedNote ? { editedNote: mergedNote } : {}) } : it;
-      });
-      const hasAnyEdit = Boolean(confirmingBomModal.isEdited || prevBomRec?.isEdited || Object.keys(nextEditedFields).length > 0 || anyItemEdited);
-      const todayIso = new Date().toISOString().split('T')[0];
-
-      const updatedBomData = {
-        ...confirmingBomModal,
-        ...(hasAnyEdit ? { date: todayIso, bomDate: todayIso } : {}),
-        companyName: confirmingBomModal.companyName,
-        docType: confirmingBomModal.docType || (isDcOrder ? 'DC' : 'Invoice'),
-        paymentType: confirmingBomModal.paymentType,
-        billingAddress: bStr,
-        billingAddressObj: bObj,
-        deliveryAddress: dStr,
-        deliveryAddressObj: finalDObj,
-        deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
-        items: diffedItems,
-        ...(hasAnyEdit ? {
-          isEdited: true,
-          editedFields: nextEditedFields,
-          lastEditedAt: confirmingBomModal.lastEditedAt || new Date().toISOString(),
-          lastEditedBy: confirmingBomModal.lastEditedBy || defaultSalesPersonName
-        } : {}),
-        dispatchPacking: packingItems,
-        salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
-        status: 'Sales Confirmed - Sent to Dispatch',
-        salesConfirmed: true,
-        salesReconfirmed: true,
-        tabGroup: 'Sent',
-        stBg: '#dcfce7',
-        stFg: '#166534',
-        stBorder: '1px solid #bbf7d0',
-        salesConfirmedAt: new Date().toISOString(),
-        reconfirmedAt: new Date().toISOString(),
-        isSentToDispatch: true,
-        stockBlocked: true,
-        stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
-        stockDeducted: true,
-        addressProofReuploadRequested: false,
-        subTotal: orderSubTotal,
-        gstAmount: orderGstAmount,
-        grandTotal: orderGrandTotal
-      };
-
-      const updatedList = (bomStore || []).map(b => ((b.bomCode && (b.bomCode === confirmingBomModal.bomCode || b.bomCode === confirmingBomModal.id || b.bomCode === confirmingBomModal.code)) || (b.id && (b.id === confirmingBomModal.id || b.id === confirmingBomModal.bomCode)) || (b.code && (b.code === confirmingBomModal.code || b.code === confirmingBomModal.bomCode))) ? {
-        ...b,
-        ...updatedBomData
-      } : b);
-      setBomStore(updatedList);
-      safeSaveBomStoreToLocal(updatedList);
-
-      // Push to Supabase and server immediately so Dispatch sees it in real time
-      saveCloudBomRow(updatedBomData);
+      updateBomInStores(updatedBomData);
       try {
-        const sesId = typeof window !== 'undefined' && window.localStorage
-          ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
-          : null;
-        const curRole = typeof window !== 'undefined' && window.localStorage
-          ? (localStorage.getItem('controlroom_user_role') || userRole || 'Sales')
-          : (userRole || 'Sales');
-        const curEmp = typeof window !== 'undefined' && window.localStorage
-          ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
-          : 'SE-001';
-
-        const saveRes = await fetch('/api/boms', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(sesId ? { 'x-session-id': sesId } : {}),
-            'x-user-role': curRole,
-            'x-employee-code': curEmp
-          },
-          body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
-        }).catch(() => null);
+        const saveRes = await persistBomToServer(updatedBomData);
         if (!saveRes || !saveRes.ok) {
           const errJson = saveRes ? await saveRes.json().catch(() => null) : null;
           alert(`⚠️ Failed to confirm & send BOM to Dispatch (HTTP ${saveRes?.status || 'Network Error'}): ${errJson?.error || errJson?.message || 'Please try again.'}`);
@@ -463,8 +930,8 @@ export default function BomConfirmAuditSection({ ctx }) {
         if (typeof notifyBomSentToDispatch === 'function') {
           notifyBomSentToDispatch({
             bomCode: confirmingBomModal.bomCode,
-            customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
-            salesPerson: confirmingBomModal.salesPerson
+            customerName: updatedBomData.companyName || updatedBomData.customerName,
+            salesPerson: updatedBomData.salesPerson
           });
         }
       } catch (nErr) {
@@ -526,7 +993,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                 ? 'This BOM was cancelled and reserved stock was released back into inventory.'
                 : (isAlreadyForwarded
                   ? 'Review verified bill of materials, product breakdown, and order specifications.'
-                  : 'Review & modify company details, billing/delivery addresses, payment terms, or product specifications before final dispatch.')}
+                  : 'Review & modify order dates, document type, customer/contact info, addresses, presets, products, transport details, payment terms, or remarks before final dispatch.')}
             </span>
           </div>
 
@@ -632,7 +1099,7 @@ export default function BomConfirmAuditSection({ ctx }) {
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
             <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {isAlreadyForwarded ? 'BILL OF MATERIALS SUMMARY' : 'ORDER DETAILS & ADDRESSES'}
+              {isAlreadyForwarded ? 'BILL OF MATERIALS SUMMARY' : '1. ORDER INFORMATION, CUSTOMER DETAILS & ADDRESSES'}
             </span>
             <span style={{
               backgroundColor: isAlreadyForwarded ? '#DCFCE7' : '#FEF3C7',
@@ -643,18 +1110,272 @@ export default function BomConfirmAuditSection({ ctx }) {
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+          {/* Row 1: Order Information (Order Date, Delivery Date, Document Type, Order Number, Sales Person) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '16px' }}>
             <div>
-              <label htmlFor="bom-orders-customer-name" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
-                CUSTOMER NAME
+              <label htmlFor="reconfirm-bom-order-date" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
+                ORDER DATE
               </label>
-              <input id="bom-orders-customer-name" name="cUSTOMERNAME" aria-label="CUSTOMER NAME"
+              <input
+                id="reconfirm-bom-order-date"
                 type="text"
-                value={confirmingBomModal.customerName}
                 readOnly
-                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', boxSizing: 'border-box' }}
-               />
+                disabled
+                value={confirmingBomModal.date || confirmingBomModal.bomDate || (confirmingBomModal.createdAt ? String(confirmingBomModal.createdAt).split('T')[0] : '—')}
+                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#64748B', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
+              />
             </div>
+
+            <div>
+              <label htmlFor="reconfirm-bom-delivery-date" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                DELIVERY DATE {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+                {confirmingBomModal.editedFields?.deliveryDate && (
+                  <span title={confirmingBomModal.editedFields.deliveryDate} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
+                )}
+              </label>
+              {isAlreadyForwarded ? (
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  {confirmingBomModal.deliveryDate || '—'}
+                </div>
+              ) : (
+                <input
+                  id="reconfirm-bom-delivery-date"
+                  name="deliveryDate"
+                  aria-label="Delivery Date"
+                  type="date"
+                  value={confirmingBomModal.deliveryDate || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryDate: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                />
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="reconfirm-bom-doc-type" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                DOCUMENT TYPE {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+                {confirmingBomModal.editedFields?.docType && (
+                  <span title={confirmingBomModal.editedFields.docType} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
+                )}
+              </label>
+              {isAlreadyForwarded ? (
+                <div style={{ height: '40px', display: 'flex', alignItems: 'center' }}>
+                  <span style={{
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    backgroundColor: isDcOrder ? '#FFFBEB' : '#F0FDFA',
+                    color: isDcOrder ? '#92400E' : '#0E7490',
+                    border: isDcOrder ? '1px solid #FCD34D' : '1px solid #99F6E4'
+                  }}>
+                    {isDcOrder ? 'DC (Delivery Challan)' : 'Invoice (Official Tax Invoice)'}
+                  </span>
+                </div>
+              ) : (
+                <select
+                  id="reconfirm-bom-doc-type"
+                  name="docType"
+                  aria-label="Document Type"
+                  value={isDcOrder ? 'DC' : 'Invoice'}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setConfirmingBomModal(prev => ({
+                      ...prev,
+                      docType: val,
+                      documentType: val,
+                      invoiceType: val === 'DC' ? 'DC' : 'Invoice',
+                      ...(val === 'DC'
+                        ? {
+                            _prevPaymentType: prev.paymentType || normalizedPayType,
+                            paymentType: '100% Paid'
+                          }
+                        : {
+                            paymentType: prev._prevPaymentType || normalizedPayType || '100% Paid',
+                            _prevPaymentType: undefined
+                          })
+                    }));
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: isDcOrder ? '1.5px solid #F59E0B' : '1.5px solid #0E7490',
+                    backgroundColor: isDcOrder ? '#FFFBEB' : '#F0FDFA',
+                    padding: '0 10px',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    color: isDcOrder ? '#92400E' : '#0E7490',
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="Invoice">Invoice (Official Tax Invoice)</option>
+                  <option value="DC">DC (Delivery Challan)</option>
+                </select>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="reconfirm-bom-order-number" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
+                ORDER NUMBER
+              </label>
+              <input
+                id="reconfirm-bom-order-number"
+                type="text"
+                readOnly
+                disabled
+                value={confirmingBomModal.bomCode || confirmingBomModal.code || '—'}
+                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CFFAFE', padding: '0 12px', fontSize: '13px', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490', display: 'block', marginBottom: '6px' }}>
+                SALES PERSON / CREATOR
+              </label>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', height: '40px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F0FDFA', padding: '0 12px', borderRadius: '8px', border: '1px solid #CCFBF1', boxSizing: 'border-box' }}>
+                <User size={14} style={{ color: '#0E7490', flexShrink: 0 }} /> {(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Customer Name Search + Company Name */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div>
+              <label htmlFor="bom-orders-customer-name" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                CUSTOMER NAME {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable / Search)</span>}
+                {confirmingBomModal.editedFields?.customerName && (
+                  <span title={confirmingBomModal.editedFields.customerName} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
+                )}
+              </label>
+              {isAlreadyForwarded ? (
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  {confirmingBomModal.customerName || '—'}
+                </div>
+              ) : (
+                <>
+                  <input
+                    id="bom-orders-customer-name"
+                    name="customerName"
+                    aria-label="CUSTOMER NAME"
+                    type="text"
+                    list="reconfirm-bom-customer-suggestions"
+                    placeholder="Type or select customer from list..."
+                    value={confirmingBomModal.customerName || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setConfirmingBomModal(prev => ({ ...prev, customerName: val }));
+                      const target = (val || '').toLowerCase().trim();
+                      if (!target) return;
+
+                      if (target.length >= 2) {
+                        if (bomCustSearchTimerRef?.current) clearTimeout(bomCustSearchTimerRef.current);
+                        if (bomCustSearchTimerRef) {
+                          bomCustSearchTimerRef.current = setTimeout(async () => {
+                            try {
+                              const matches = await searchCustomers({ query: val, limit: 50 });
+                              if (Array.isArray(matches) && matches.length > 0 && typeof setCustomerList === 'function') {
+                                setCustomerList(prev => {
+                                  const map = new Map();
+                                  (prev || []).forEach(p => {
+                                    const k = (p.customerCode || p.id || p.code || p.companyName || '').toLowerCase().trim();
+                                    if (k) map.set(k, p);
+                                  });
+                                  matches.forEach(m => {
+                                    const k = (m.customerCode || m.id || m.code || m.companyName || '').toLowerCase().trim();
+                                    if (k && !map.has(k)) map.set(k, m);
+                                  });
+                                  return Array.from(map.values());
+                                });
+                              }
+                            } catch (_) {}
+                          }, 250);
+                        }
+                      }
+
+                      const chosen = (customerList || []).find(c => {
+                        const code = (c.code || c.customerCode || '').toLowerCase().trim();
+                        const c2 = (c.c2 || c.companyName || '').toLowerCase().trim();
+                        const cName = (c.customerName || '').toLowerCase().trim();
+                        const comp = (c.companyName || '').toLowerCase().trim();
+                        return code === target || c2 === target || cName === target || comp === target ||
+                               (code && code.startsWith(target)) || (c2 && c2.startsWith(target)) ||
+                               (cName && cName.startsWith(target)) || (comp && comp.startsWith(target)) ||
+                               (c2 && c2.includes(target)) || (comp && comp.includes(target));
+                      });
+
+                      if (chosen) {
+                        const nextCompany = chosen.c2 || chosen.companyName || chosen.customerName || chosen.code || val;
+                        const nextContact = chosen.contact || chosen.contactPerson || chosen.primaryContact?.name || '';
+                        const nextPhone = chosen.c4 || chosen.phone || chosen.mobile || chosen.primaryContact?.phone || chosen.primaryContact?.whatsapp || '';
+                        const nextEmail = chosen.c5 || chosen.email || chosen.primaryContact?.email || '';
+                        const nextGst = chosen.gst || chosen.gstNo || '';
+                        const cBObj = chosen.billingAddressObj || {};
+                        const cBAddr = cBObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '';
+                        const cBCity = cBObj.city || chosen.city || '';
+                        const cBState = cBObj.state || chosen.state || '';
+                        const cBPin = cBObj.pincode || chosen.pincode || '';
+                        const nextBObj = { address: cBAddr, street: cBAddr, city: cBCity, state: cBState, pincode: cBPin };
+
+                        const cDObj = chosen.deliveryAddressObj || {};
+                        const cDAddr = cDObj.address || chosen.c7 || chosen.deliveryAddress || chosen.dispatchAddress || '';
+                        const clean = (s) => String(s || '').trim().toLowerCase();
+                        const isSame = !cDAddr || (
+                          clean(cDAddr) === clean(cBAddr) &&
+                          clean(cDObj.city || chosen.city || '') === clean(cBCity) &&
+                          clean(cDObj.state || chosen.state || '') === clean(cBState) &&
+                          clean(cDObj.pincode || chosen.pincode || '') === clean(cBPin)
+                        );
+                        const nextDObj = (!isSame && cDAddr)
+                          ? {
+                              address: cDAddr,
+                              street: cDAddr,
+                              city: cDObj.city || chosen.dispatchCity || chosen.city || '',
+                              state: cDObj.state || chosen.dispatchState || chosen.state || '',
+                              pincode: cDObj.pincode || chosen.dispatchPincode || chosen.pincode || ''
+                            }
+                          : { ...nextBObj };
+
+                        setConfirmingBomModal(prev => ({
+                          ...prev,
+                          customerName: val,
+                          companyName: nextCompany,
+                          ...(nextContact ? { contactPerson: nextContact } : {}),
+                          ...(nextPhone ? { mobile: nextPhone, phone: nextPhone } : {}),
+                          ...(nextEmail ? { email: nextEmail } : {}),
+                          ...(nextGst ? { gstNo: nextGst, gstin: nextGst } : {}),
+                          billingAddressObj: nextBObj,
+                          billingStreet: nextBObj.address,
+                          billingCity: nextBObj.city,
+                          billingState: nextBObj.state,
+                          billingPincode: nextBObj.pincode,
+                          sameAsBilling: isSame,
+                          deliveryAddressObj: nextDObj,
+                          deliveryStreet: nextDObj.address,
+                          deliveryCity: nextDObj.city,
+                          deliveryState: nextDObj.state,
+                          deliveryPincode: nextDObj.pincode
+                        }));
+                      }
+                    }}
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                  <datalist id="reconfirm-bom-customer-suggestions">
+                    {(customerList || []).slice(0, 60).map((c, idx) => {
+                      const cVal = c.code || c.customerName || c.companyName;
+                      const label = c.c2 || c.companyName;
+                      return (
+                        <option key={idx} value={cVal}>
+                          {label && label !== cVal ? `${cVal} (${label})` : cVal}
+                        </option>
+                      );
+                    })}
+                  </datalist>
+                </>
+              )}
+            </div>
+
             <div>
               <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                 COMPANY NAME {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
@@ -663,7 +1384,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                 )}
               </label>
               {isAlreadyForwarded ? (
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center' }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
                   {confirmingBomModal.companyName || confirmingBomModal.customerName || '—'}
                 </div>
               ) : (
@@ -676,96 +1397,92 @@ export default function BomConfirmAuditSection({ ctx }) {
                  />
               )}
             </div>
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                PAYMENT TYPE {(!isAlreadyForwarded || confirmingBomModal.isEditMode) && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
-                {confirmingBomModal.editedFields?.paymentType && (
-                  <span title={confirmingBomModal.editedFields.paymentType} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
-                )}
-              </label>
-              {isAlreadyForwarded && !confirmingBomModal.isEditMode ? (
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#2563EB', height: '40px', display: 'flex', alignItems: 'center' }}>
-                  {confirmingBomModal.paymentType || '100% Paid'}
-                </div>
-              ) : (
-                <select id="bom-orders-payment-type-50-advance" name="paymentType50Advance" aria-label="PaymentType 50 Advance"
-                  value={confirmingBomModal.paymentType || '50% Advance + 50% Dispatch'}
-                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
-                >
-                  <option value="100% Paid">100% Paid</option>
-                  <option value="Partial Paid">Partial Paid</option>
-                  <option value="Payment While Dispatch">Payment While Dispatch</option>
-                  <option value="Credit Payment">Credit Payment</option>
-                </select>
-              )}
-            </div>
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490', display: 'block', marginBottom: '6px' }}>
-                SALES PERSON / CREATOR
-              </label>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', height: '40px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F0FDFA', padding: '0 12px', borderRadius: '8px', border: '1px solid #CCFBF1' }}>
-                <User size={14} style={{ color: '#0E7490', flexShrink: 0 }} /> {(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+          </div>
+
+          {/* Row 3: Contact Details & GSTIN */}
+          {isAlreadyForwarded ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>CONTACT PERSON</span>
+                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.contactPerson || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>PHONE</span>
+                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.mobile || confirmingBomModal.phone || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>EMAIL</span>
+                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700', wordBreak: 'break-all' }}>{confirmingBomModal.email || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>GSTIN</span>
+                <strong style={{ fontSize: '12.5px', color: '#0E7490', fontWeight: '800' }}>{confirmingBomModal.gstNo || confirmingBomModal.gstin || '—'}</strong>
               </div>
             </div>
-          </div>
-
-          {/* Contact Details & GSTIN */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-            <div>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>CONTACT PERSON</span>
-              <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.contactPerson || '—'}</strong>
-            </div>
-            <div>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>PHONE</span>
-              <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.mobile || confirmingBomModal.phone || '—'}</strong>
-            </div>
-            <div>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>EMAIL</span>
-              <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700', wordBreak: 'break-all' }}>{confirmingBomModal.email || '—'}</strong>
-            </div>
-            <div>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>GSTIN</span>
-              <strong style={{ fontSize: '12.5px', color: '#0E7490', fontWeight: '800' }}>{confirmingBomModal.gstNo || confirmingBomModal.gstin || '—'}</strong>
-            </div>
-          </div>
-
-          {(confirmingBomModal.paymentType === 'Partial Paid' || confirmingBomModal.paymentType === 'Partial Payment') && (
-            <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                <label htmlFor="bom-orders-partial-amount" style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', whiteSpace: 'nowrap' }}>
-                  Advance Amount (₹):
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '16px' }}>
+              <div>
+                <label htmlFor="reconfirm-bom-contact-person" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  CONTACT PERSON <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
                 </label>
-                {confirmingBomModal.isEditMode ? (
-                  <input id="bom-orders-partial-amount" name="partialAmount" aria-label="Advance Amount (₹)
-                
-                {confirmingBomModal.isEditMode ? ("
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={confirmingBomModal.partialAmount != null ? confirmingBomModal.partialAmount : ''}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
-                      const gTot = Number(confirmingBomModal.grandTotal || confirmingBomModal.subTotal || 0);
-                      setConfirmingBomModal({
-                        ...confirmingBomModal,
-                        partialAmount: val,
-                        balanceAmount: Math.max(0, gTot - val)
-                      });
-                    }}
-                    style={{ height: '36px', width: '160px', borderRadius: '6px', border: '1px solid #5EEAD4', padding: '0 10px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none' }}
-                   />
-                ) : (
-                  <strong style={{ fontSize: '13px', color: '#0F766E' }}>
-                    ₹{Number(confirmingBomModal.partialAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </strong>
-                )}
+                <input
+                  id="reconfirm-bom-contact-person"
+                  name="contactPerson"
+                  aria-label="Contact Person"
+                  type="text"
+                  placeholder="Contact Person..."
+                  value={confirmingBomModal.contactPerson || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, contactPerson: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#115E59' }}>
-                <span>Balance Due:</span>
-                <strong style={{ fontSize: '13px', color: '#0F766E' }}>
-                  ₹{Number(confirmingBomModal.balanceAmount != null ? confirmingBomModal.balanceAmount : Math.max(0, (confirmingBomModal.grandTotal || 0) - (confirmingBomModal.partialAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </strong>
+              <div>
+                <label htmlFor="reconfirm-bom-mobile" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  MOBILE NUMBER <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
+                </label>
+                <input
+                  id="reconfirm-bom-mobile"
+                  name="mobileNumber"
+                  aria-label="Mobile Number"
+                  type="text"
+                  placeholder="Mobile / Phone..."
+                  value={confirmingBomModal.mobile || confirmingBomModal.phone || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, mobile: e.target.value, phone: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label htmlFor="reconfirm-bom-email" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  EMAIL <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
+                </label>
+                <input
+                  id="reconfirm-bom-email"
+                  name="email"
+                  aria-label="Email"
+                  type="email"
+                  placeholder="Email Address..."
+                  value={confirmingBomModal.email || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, email: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label htmlFor="reconfirm-bom-gstin" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  GST NUMBER <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
+                </label>
+                <input
+                  id="reconfirm-bom-gstin"
+                  name="gstNo"
+                  aria-label="GST Number"
+                  type="text"
+                  placeholder="GSTIN (e.g. 33AAAAA0000A1Z5)..."
+                  value={confirmingBomModal.gstNo || confirmingBomModal.gstin || ''}
+                  onChange={(e) => {
+                    const up = e.target.value.toUpperCase();
+                    setConfirmingBomModal({ ...confirmingBomModal, gstNo: up, gstin: up });
+                  }}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                />
               </div>
             </div>
           )}
@@ -782,12 +1499,50 @@ export default function BomConfirmAuditSection({ ctx }) {
             const dState = dObj.state || bState;
             const dPin = dObj.pincode || bPin;
 
-            const isDeliveryMatching = Boolean(confirmingBomModal.sameAsBilling) || (
+            const isDeliveryMatching = isSameAsBillingActive || (
               ((dObj.address || '').trim() === (bObj.address || '').trim()) &&
               ((dObj.city || '').trim() === (bObj.city || '').trim()) &&
               ((dObj.state || '').trim() === (bObj.state || '').trim()) &&
               ((dObj.pincode || '').trim() === (bObj.pincode || '').trim())
             );
+
+            const updateBillingField = (fieldKey, val) => {
+              const nextB = {
+                ...bObj,
+                [fieldKey]: val,
+                ...(fieldKey === 'address' ? { street: val } : {})
+              };
+              const nextD = isSameAsBillingActive ? { ...nextB } : dObj;
+              setConfirmingBomModal({
+                ...confirmingBomModal,
+                billingAddressObj: nextB,
+                billingStreet: nextB.address || '',
+                billingCity: nextB.city || '',
+                billingState: nextB.state || '',
+                billingPincode: nextB.pincode || '',
+                deliveryAddressObj: nextD,
+                deliveryStreet: nextD.address || '',
+                deliveryCity: nextD.city || '',
+                deliveryState: nextD.state || '',
+                deliveryPincode: nextD.pincode || ''
+              });
+            };
+
+            const updateDeliveryField = (fieldKey, val) => {
+              const nextD = {
+                ...dObj,
+                [fieldKey]: val,
+                ...(fieldKey === 'address' ? { street: val } : {})
+              };
+              setConfirmingBomModal({
+                ...confirmingBomModal,
+                deliveryAddressObj: nextD,
+                deliveryStreet: nextD.address || '',
+                deliveryCity: nextD.city || '',
+                deliveryState: nextD.state || '',
+                deliveryPincode: nextD.pincode || ''
+              });
+            };
 
             if (isAlreadyForwarded) {
               return (
@@ -817,22 +1572,26 @@ export default function BomConfirmAuditSection({ ctx }) {
                         <span>State: <strong style={{ color: '#334155' }}>{dState}</strong></span>
                         <span>Pincode: <strong style={{ color: '#334155' }}>{dPin}</strong></span>
                       </div>
-                      {confirmingBomModal.deliveryAddressProofDoc ? (
-                        <div style={{ marginTop: '8px', padding: '8px 12px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#166534' }}>
-                            <FileText style={{ width: '13px', height: '13px' }} />
-                            Address Proof: {confirmingBomModal.deliveryAddressProofDoc.name}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => setPreviewDocModal({ title: 'Delivery Address Proof Document', doc: confirmingBomModal.deliveryAddressProofDoc })}
-                              style={{ border: '1px solid #BBF7D0', background: '#FFFFFF', color: '#166534', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Eye style={{ width: '12px', height: '12px' }} /> View Image
-                            </button>
-                            <span style={{ fontSize: '10px', color: '#15803D', fontWeight: '800' }}>Verified</span>
-                          </div>
+                      {deliveryProofList.length > 0 ? (
+                        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {deliveryProofList.map((dDoc, dIdx) => (
+                            <div key={dIdx} style={{ padding: '8px 12px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#166534' }}>
+                                <FileText style={{ width: '13px', height: '13px' }} />
+                                Address Proof{deliveryProofList.length > 1 ? ` #${dIdx + 1}` : ''}: {dDoc.name || 'Address Proof'}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewDocModal({ title: `Delivery Address Proof${deliveryProofList.length > 1 ? ` #${dIdx + 1}` : ''}`, doc: dDoc })}
+                                  style={{ border: '1px solid #BBF7D0', background: '#FFFFFF', color: '#166534', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <Eye style={{ width: '12px', height: '12px' }} /> View Image
+                                </button>
+                                <span style={{ fontSize: '10px', color: '#15803D', fontWeight: '800' }}>Verified</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       ) : null}
                     </div>
@@ -860,29 +1619,22 @@ export default function BomConfirmAuditSection({ ctx }) {
                       type="text"
                       placeholder="Street Address..."
                       value={bObj.address || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setConfirmingBomModal({
-                          ...confirmingBomModal,
-                          billingAddressObj: { ...bObj, address: val },
-                          deliveryAddressObj: confirmingBomModal.sameAsBilling ? { ...dObj, address: val } : dObj
-                        });
-                      }}
+                      onChange={(e) => updateBillingField('address', e.target.value)}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
                      />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                     <div>
                       <label htmlFor="bom-orders-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                      <input id="bom-orders-city" name="city" aria-label="City" type="text" placeholder="City..." value={bObj.city || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, city: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
+                      <input id="bom-orders-city" name="city" aria-label="City" type="text" placeholder="City..." value={bObj.city || ''} onChange={(e) => updateBillingField('city', e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
                     </div>
                     <div>
                       <label htmlFor="bom-orders-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                      <input id="bom-orders-state" name="state" aria-label="State" type="text" placeholder="State..." value={bObj.state || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, state: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
+                      <input id="bom-orders-state" name="state" aria-label="State" type="text" placeholder="State..." value={bObj.state || ''} onChange={(e) => updateBillingField('state', e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
                     </div>
                     <div>
                       <label htmlFor="bom-orders-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                      <input id="bom-orders-pincode" name="pincode" aria-label="Pincode" type="text" placeholder="Pincode..." value={bObj.pincode || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, pincode: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
+                      <input id="bom-orders-pincode" name="pincode" aria-label="Pincode" type="text" placeholder="Pincode..." value={bObj.pincode || ''} onChange={(e) => updateBillingField('pincode', e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
                     </div>
                   </div>
                 </div>
@@ -902,13 +1654,18 @@ export default function BomConfirmAuditSection({ ctx }) {
                     <label htmlFor="bom-orders-same-as-billing" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #A5F3FC' }}>
                       <input id="bom-orders-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                         type="checkbox"
-                        checked={Boolean(confirmingBomModal.sameAsBilling)}
+                        checked={isSameAsBillingActive}
                         onChange={(e) => {
                           const checked = e.target.checked;
+                          const nextD = checked ? { ...bObj } : dObj;
                           setConfirmingBomModal({
                             ...confirmingBomModal,
                             sameAsBilling: checked,
-                            deliveryAddressObj: checked ? { ...bObj } : dObj
+                            deliveryAddressObj: nextD,
+                            deliveryStreet: nextD.address || '',
+                            deliveryCity: nextD.city || '',
+                            deliveryState: nextD.state || '',
+                            deliveryPincode: nextD.pincode || ''
                           });
                         }}
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
@@ -918,35 +1675,35 @@ export default function BomConfirmAuditSection({ ctx }) {
                   </div>
 
                   <div>
-                    <label htmlFor="bom-orders-address" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
-                    <input id="bom-orders-address" name="address" aria-label="Address"
+                    <label htmlFor="reconfirm-bom-delivery-address" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
+                    <input id="reconfirm-bom-delivery-address" name="deliveryAddress" aria-label="Delivery Address"
                       type="text"
                       placeholder="e.g. Plot No 42, SIDCO Industrial Estate"
-                      value={confirmingBomModal.sameAsBilling ? (bObj.address || '') : (dObj.address || '')}
-                      disabled={confirmingBomModal.sameAsBilling}
-                      onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, address: e.target.value } })}
-                      style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: confirmingBomModal.sameAsBilling ? 'not-allowed' : 'text' }}
+                      value={isSameAsBillingActive ? (bObj.address || '') : (dObj.address || '')}
+                      disabled={isSameAsBillingActive}
+                      onChange={(e) => updateDeliveryField('address', e.target.value)}
+                      style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: isSameAsBillingActive ? '#64748B' : '#0F172A', backgroundColor: isSameAsBillingActive ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: isSameAsBillingActive ? 'not-allowed' : 'text' }}
                      />
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                     <div>
-                      <label htmlFor="bom-orders-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                      <input id="bom-orders-city" name="city" aria-label="City" type="text" placeholder="e.g. Chennai" value={confirmingBomModal.sameAsBilling ? (bObj.city || '') : (dObj.city || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, city: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
+                      <label htmlFor="reconfirm-bom-delivery-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                      <input id="reconfirm-bom-delivery-city" name="deliveryCity" aria-label="Delivery City" type="text" placeholder="e.g. Chennai" value={isSameAsBillingActive ? (bObj.city || '') : (dObj.city || '')} disabled={isSameAsBillingActive} onChange={(e) => updateDeliveryField('city', e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: isSameAsBillingActive ? '#64748B' : '#0F172A', backgroundColor: isSameAsBillingActive ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
                     </div>
                     <div>
-                      <label htmlFor="bom-orders-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                      <input id="bom-orders-state" name="state" aria-label="State" type="text" placeholder="e.g. Tamil Nadu" value={confirmingBomModal.sameAsBilling ? (bObj.state || '') : (dObj.state || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, state: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
+                      <label htmlFor="reconfirm-bom-delivery-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                      <input id="reconfirm-bom-delivery-state" name="deliveryState" aria-label="Delivery State" type="text" placeholder="e.g. Tamil Nadu" value={isSameAsBillingActive ? (bObj.state || '') : (dObj.state || '')} disabled={isSameAsBillingActive} onChange={(e) => updateDeliveryField('state', e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: isSameAsBillingActive ? '#64748B' : '#0F172A', backgroundColor: isSameAsBillingActive ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
                     </div>
                     <div>
-                      <label htmlFor="bom-orders-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                      <input id="bom-orders-pincode" name="pincode" aria-label="Pincode" type="text" placeholder="e.g. 600058" value={confirmingBomModal.sameAsBilling ? (bObj.pincode || '') : (dObj.pincode || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, pincode: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
+                      <label htmlFor="reconfirm-bom-delivery-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                      <input id="reconfirm-bom-delivery-pincode" name="deliveryPincode" aria-label="Delivery Pincode" type="text" placeholder="e.g. 600058" value={isSameAsBillingActive ? (bObj.pincode || '') : (dObj.pincode || '')} disabled={isSameAsBillingActive} onChange={(e) => updateDeliveryField('pincode', e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: isSameAsBillingActive ? '#64748B' : '#0F172A', backgroundColor: isSameAsBillingActive ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
                     </div>
                   </div>
 
                   {!isDeliveryMatching ? (
                     <div style={{ marginTop: '6px', padding: '14px 16px', backgroundColor: '#FEF2F2', border: '1px dashed #F87171', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <AlertCircle style={{ width: '14px', height: '14px' }} />
@@ -955,12 +1712,12 @@ export default function BomConfirmAuditSection({ ctx }) {
                             <h5 style={{ margin: 0, fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>
                               Delivery Address Proof Document <span style={{ color: '#64748B', fontWeight: '600' }}>(Optional)</span>
                             </h5>
-                            <span style={{ fontSize: '11px', color: '#64748B' }}>Upload proof (GST / Electricity Bill / Lease Agreement) if available.</span>
+                            <span style={{ fontSize: '11px', color: '#64748B' }}>Upload proof images (GST / Electricity Bill / Lease Agreement) if available.</span>
                           </div>
                         </div>
-                        {confirmingBomModal.deliveryAddressProofDoc && (
+                        {deliveryProofList.length > 0 && (
                           <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle style={{ width: '12px', height: '12px' }} /> Attached
+                            <CheckCircle style={{ width: '12px', height: '12px' }} /> {deliveryProofList.length} Attached
                           </span>
                         )}
                         {confirmingBomModal.addressProofReuploadRequested && (() => {
@@ -978,72 +1735,40 @@ export default function BomConfirmAuditSection({ ctx }) {
                         })()}
                       </div>
 
-                      {confirmingBomModal.deliveryAddressProofDoc && (
+                      {deliveryProofList.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FECACA' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <FileText style={{ width: '16px', height: '16px', color: '#DC2626' }} />
-                              <div>
-                                <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>{confirmingBomModal.deliveryAddressProofDoc.name}</div>
-                                <div style={{ fontSize: '10px', color: '#64748B' }}>{confirmingBomModal.deliveryAddressProofDoc.size || '1.2 MB'} • Current Version</div>
+                          {deliveryProofList.map((dDoc, dIdx) => (
+                            <div key={dIdx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FECACA', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                <FileText style={{ width: '15px', height: '15px', color: '#DC2626', flexShrink: 0 }} />
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {dDoc.name || `Proof #${dIdx + 1}`}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: '#64748B' }}>{dDoc.size || 'Attached'}</div>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewDocModal({ title: `Delivery Address Proof #${dIdx + 1}`, doc: dDoc })}
+                                  style={{ border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <Eye style={{ width: '12px', height: '12px' }} /> View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveReconfirmDeliveryProof(dIdx)}
+                                  title="Remove this document"
+                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '5px 7px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                >
+                                  <Trash2 style={{ width: '12px', height: '12px' }} />
+                                </button>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <button
-                                type="button"
-                                onClick={() => setPreviewDocModal({ title: 'Delivery Address Proof Document', doc: confirmingBomModal.deliveryAddressProofDoc })}
-                                style={{ border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', padding: '5px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              >
-                                <Eye style={{ width: '13px', height: '13px' }} /> View Image
-                              </button>
-                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', padding: '5px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
-                                <Upload style={{ width: '11px', height: '11px' }} /> Upload New Version
-                                <input id="bom-orders-input-3" name="input3" aria-label="Input 3"
-                                  type="file"
-                                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                  style={{ display: 'none' }}
-                                  onChange={async (e) => {
-                                    const file = e.target.files && e.target.files[0];
-                                    if (file) {
-                                      try {
-                                        validateClientFile(file);
-                                        const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
-                                        const metadata = await uploadBomDocumentFile({
-                                          file,
-                                          bomCode: bCode,
-                                          category: 'delivery-proof'
-                                        });
-                                        const prevDoc = confirmingBomModal.deliveryAddressProofDoc || {};
-                                        const existingHistory = Array.isArray(prevDoc.history) ? prevDoc.history : [];
-                                        const updatedHistory = [...existingHistory, {
-                                          name: prevDoc.name || prevDoc.originalName,
-                                          size: prevDoc.size,
-                                          storageBucket: prevDoc.storageBucket,
-                                          storagePath: prevDoc.storagePath,
-                                          uploadedAt: prevDoc.uploadedAt || new Date().toISOString()
-                                        }];
-                                        setConfirmingBomModal(prev => ({
-                                          ...prev,
-                                          addressProofReuploadRequested: false,
-                                          deliveryAddressProofDoc: {
-                                            ...metadata,
-                                            uploadedAt: new Date().toISOString(),
-                                            history: updatedHistory
-                                          }
-                                        }));
-                                      } catch (err) {
-                                        e.target.value = '';
-                                        alert(`⚠️ Cannot Proceed: ${err.message}`);
-                                      }
-                                    }
-                                  }}
-                                 />
-                              </label>
-                            </div>
-                          </div>
+                          ))}
 
-                          {/* Render Previous Preserved Versions If Any */}
-                          {confirmingBomModal.deliveryAddressProofDoc.history && confirmingBomModal.deliveryAddressProofDoc.history.length > 0 && (
+                          {confirmingBomModal.deliveryAddressProofDoc?.history && confirmingBomModal.deliveryAddressProofDoc.history.length > 0 && (
                             <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
                                 📁 Previous Address Proof Uploads Preserved ({confirmingBomModal.deliveryAddressProofDoc.history.length}):
@@ -1059,45 +1784,25 @@ export default function BomConfirmAuditSection({ ctx }) {
                         </div>
                       )}
 
-                      {!confirmingBomModal.deliveryAddressProofDoc && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                            <Upload style={{ width: '13px', height: '13px' }} />
-                            Upload Address Proof Document
-                            <input id="bom-orders-input-4" name="input4" aria-label="Input 4"
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                              style={{ display: 'none' }}
-                              onChange={async (e) => {
-                                const file = e.target.files && e.target.files[0];
-                                if (file) {
-                                  try {
-                                    validateClientFile(file);
-                                    const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
-                                    const metadata = await uploadBomDocumentFile({
-                                      file,
-                                      bomCode: bCode,
-                                      category: 'delivery-proof'
-                                    });
-                                    setConfirmingBomModal(prev => ({
-                                      ...prev,
-                                      addressProofReuploadRequested: false,
-                                      deliveryAddressProofDoc: {
-                                        ...metadata,
-                                        uploadedAt: new Date().toISOString(),
-                                        history: []
-                                      }
-                                    }));
-                                  } catch (err) {
-                                    e.target.value = '';
-                                    alert(`⚠️ Cannot Proceed: ${err.message}`);
-                                  }
-                                }
-                              }}
-                             />
-                          </label>
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: isUploadingProof ? 'wait' : 'pointer' }}>
+                          <Upload style={{ width: '13px', height: '13px' }} />
+                          {deliveryProofList.length > 0 ? '+ Add More Address Proofs' : 'Upload Address Proof Document(s)'}
+                          <input id="bom-orders-input-4" name="input4" aria-label="Upload Address Proof Documents"
+                            type="file"
+                            multiple
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            style={{ display: 'none' }}
+                            disabled={isUploadingProof}
+                            onChange={async (e) => {
+                              if (e.target.files && e.target.files.length > 0) {
+                                await handleUploadReconfirmDeliveryProofs(e.target.files);
+                                e.target.value = '';
+                              }
+                            }}
+                           />
+                        </label>
+                      </div>
                     </div>
                   ) : (
                     <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -1397,31 +2102,110 @@ export default function BomConfirmAuditSection({ ctx }) {
 
         {/* PRODUCT ITEMS TABLE */}
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                {isAlreadyForwarded ? 'Itemized Product & Material Breakdown' : 'Product Verification List'}
+                {isAlreadyForwarded ? 'Itemized Product & Material Breakdown' : '2. Order Items & Bill of Materials'}
               </h3>
               <span style={{ fontSize: '12px', color: '#64748B' }}>
                 {isAlreadyForwarded
                   ? 'Itemized specifications and rate breakdown passed to Production & Dispatch teams.'
-                  : 'Check every product box after verifying item details. Modify or add products if incorrect.'}
+                  : 'Add preset kits or products, modify specs/quantities/rates, and check every product box before forwarding to Dispatch.'}
               </span>
             </div>
 
             {!isAlreadyForwarded && !isSourcePiLocked && (
-              <button
-                onClick={() => {
-                  const currentItems = confirmingBomModal.items || [];
-                  const updatedItems = [...currentItems, { name: '', category: '', qty: 1, rate: 0, confirmed: false }];
-                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                }}
-                style={{ border: '1px solid #A5F3FC', backgroundColor: '#ECFEFF', color: '#0E7490', height: '36px', padding: '0 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Plus style={{ width: '14px', height: '14px' }} /> Add New Product
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ECFEFF', padding: '0 12px', borderRadius: '20px', height: '38px', border: '1px solid #CFFAFE' }}>
+                  <Layers style={{ width: '14px', height: '14px', color: '#0E7490' }} />
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0E7490' }}>Preset:</span>
+                </div>
+
+                <SearchablePresetSelector
+                  value={selectedPresetPicker}
+                  activePresetsMap={activePresetsMap}
+                  accentColor="#0E7490"
+                  width="320px"
+                  placeholder="Pick a Preset to add..."
+                  style={{ height: '38px' }}
+                  onChange={(val, targetPreset) => {
+                    if (val && targetPreset && targetPreset.items) {
+                      handleAddPresetInReconfirm(val, targetPreset, 1);
+                    } else if (!val) {
+                      setSelectedPresetPicker('');
+                    }
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentItems = confirmingBomModal.items || [];
+                    const updatedItems = [...currentItems, { name: '', category: '', specs: '', uom: 'NOS', unit: 'NOS', qty: 1, rate: 0, gstRate: '18%', confirmed: false }];
+                    setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                  }}
+                  style={{ border: '1px solid #A5F3FC', backgroundColor: '#ECFEFF', color: '#0E7490', height: '38px', padding: '0 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Plus style={{ width: '14px', height: '14px' }} /> Add New Product
+                </button>
+              </div>
             )}
           </div>
+
+          {/* Active Preset Badges / Pills */}
+          {!isAlreadyForwarded && modalPresetGroups.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingTop: '2px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Active Presets in Order:</span>
+              {modalPresetGroups.map((grp, gi) => {
+                const grpGid = grp.groupId || grp.presetGroupId || grp.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`);
+                const grpSets = parseFloat(grp.setCount || grp.quantity || grp.sets) || 1;
+                const grpUnit = grp.unitType || grp.unit || (String(grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
+                return (
+                  <span
+                    key={grpGid}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      backgroundColor: '#ECFEFF',
+                      color: '#0E7490',
+                      border: '1px solid #A5F3FC',
+                      borderRadius: '16px',
+                      padding: '4px 10px',
+                      fontSize: '12px',
+                      fontWeight: '700'
+                    }}
+                  >
+                    <Layers size={13} style={{ color: '#0E7490' }} />
+                    {grp.presetName} ({grpSets} {grpUnit})
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextGroups = modalPresetGroups
+                          .map((g, gIdx) => ({ ...g, _k: g.groupId || g.presetGroupId || g.presetId || (gIdx === 0 ? 'default_kit' : `preset_grp_${gIdx}`) }))
+                          .filter(g => g._k !== grpGid)
+                          .map(({ _k, ...rest }) => rest);
+                        const nextItems = (confirmingBomModal.items || []).filter(it => {
+                          const itGid = it.presetGroupId || it.groupId || it.presetId || 'default_kit';
+                          return itGid !== grpGid && !(modalPresetGroups.length === 1 && it.isPresetItem);
+                        });
+                        setConfirmingBomModal({
+                          ...confirmingBomModal,
+                          presetGroups: nextGroups,
+                          items: nextItems,
+                          ...(nextGroups.length === 0 ? { presetName: '', presetKitPrice: 0, presetSetCount: 1 } : {})
+                        });
+                      }}
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '0 0 0 2px', display: 'flex', alignItems: 'center', color: '#0891B2' }}
+                      title={`Remove ${grp.presetName}`}
+                    >
+                      <X size={13} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
 
           {isSourcePiLocked && (
             <div style={{ padding: '10px 16px', backgroundColor: '#FEF3C7', border: '1.5px solid #F59E0B', borderRadius: '10px', color: '#92400E', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1495,11 +2279,13 @@ export default function BomConfirmAuditSection({ ctx }) {
                     const price = cleanNum(matchedGrp.kitPrice) || (modalPresetGroups.length === 1 ? (presetKitsTotal / sets) : 0);
                     presetGroupMap[gid] = {
                       groupId: gid,
+                      presetId: matchedGrp.presetId || firstMatchingItem?.presetId,
                       groupIndex: gIdx,
                       presetName: matchedGrp.presetName || firstMatchingItem?.presetName || (confirmingBomModal.presetName && gIdx === 0 ? confirmingBomModal.presetName : `Preset Package ${gIdx + 1}`),
                       setCount: sets,
                       unitType: unitType,
                       kitPrice: price,
+                      gstRate: matchedGrp.gstRate || firstMatchingItem?.gstRate || '18%',
                       totalAmount: price * sets,
                       firstIdx: -1,
                       count: 0
@@ -1909,37 +2695,53 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 {item.name || '—'}
                               </div>
                             ) : (
-                              <TypeableProductSelect
-                                value={item.name || ''}
-                                itemsList={itemsList}
-                                placeholder="Type or select product / item..."
-                                accentColor={theme.primary}
-                                onChange={(val, matched) => {
-                                  if (!matched) {
-                                    const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, name: val } : it);
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <TypeableProductSelect
+                                  value={item.name || ''}
+                                  itemsList={itemsList}
+                                  placeholder="Type or select product / item..."
+                                  accentColor={theme.primary}
+                                  onChange={(val, matched) => {
+                                    if (!matched) {
+                                      const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, name: val } : it);
+                                      setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                      return;
+                                    }
+                                    const pName = matched.name;
+                                    const pCat = matched.category || matched.description || item.category || '';
+                                    const isSolar5 = is5PctSolarProduct(pName, pCat);
+                                    const updatedItems = (confirmingBomModal.items || []).map((it, i) => {
+                                      if (i !== idx) return it;
+                                      const resolvedUom = resolveDefaultUom(pName, matched.uom || matched.unit || it.uom || it.unit || 'NOS');
+                                      return {
+                                        ...it,
+                                        name: pName,
+                                        code: matched.code || it.code || '',
+                                        rate: matched.price || matched.rate ? Number(matched.price || matched.rate) : it.rate,
+                                        uom: resolvedUom,
+                                        unit: resolvedUom,
+                                        category: pCat,
+                                        specs: pCat,
+                                        gstRate: isSolar5 ? '5%' : (it.gstRate || '18%')
+                                      };
+                                    });
                                     setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                                    return;
-                                  }
-                                  const pName = matched.name;
-                                  const pCat = matched.category || matched.description || item.category;
-                                  const isSolar5 = is5PctSolarProduct(pName, pCat);
-                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? {
-                                    ...it,
-                                    name: pName,
-                                    code: matched.code || it.code || '',
-                                    rate: matched.price || matched.rate ? Number(matched.price || matched.rate) : it.rate,
-                                    uom: matched.uom || matched.unit || it.uom || it.unit || 'NOS',
-                                    unit: matched.uom || matched.unit || it.uom || it.unit || 'NOS',
-                                    category: pCat,
-                                    gstRate: isSolar5 ? '5%' : (it.gstRate || '18%')
-                                  } : it);
-                                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                                }}
-                              />
-                            )}
-                            {(item.category || item.specs) && (
-                              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px', fontWeight: '500' }}>
-                                {item.category || item.specs}
+                                  }}
+                                />
+                                <input
+                                  id={`reconfirm-bom-description-${idx}`}
+                                  name={`description_${idx}`}
+                                  aria-label="Description"
+                                  type="text"
+                                  placeholder="Description..."
+                                  value={item.category || item.specs || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, category: val, specs: val } : it);
+                                    setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                  }}
+                                  style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#475569', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC' }}
+                                />
                               </div>
                             )}
                           </td>
@@ -2002,7 +2804,24 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 value={item.qty}
                                 onChange={(e) => {
                                   const val = e.target.value;
-                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, qty: val } : it);
+                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => {
+                                    if (i !== idx) return it;
+                                    const nextIt = { ...it, qty: val, qtyPerSet: val };
+                                    const isSub = Boolean(it.isSubPreset || it.subPresetName || it.subPresetId);
+                                    const effectivePresetName = isSub ? it.subPresetName : (pInfo?.presetName || it.presetName || confirmingBomModal.presetName);
+                                    const effectiveUnit = isSub ? (it.subUnit || it.unit || 'Sets') : (pInfo?.unitType || it.unit || it.uom);
+                                    const effectiveSetCount = isPartBundle
+                                      ? (isSub ? (it.subSetCount || 1) : (pInfo?.setCount || 1))
+                                      : 1;
+                                    const recalcDisp = calculateTotalDispatchQty(
+                                      { ...nextIt, presetId: pInfo?.presetId || it.presetId },
+                                      effectiveSetCount,
+                                      effectivePresetName,
+                                      confirmingBomModal.category || it.category,
+                                      effectiveUnit
+                                    );
+                                    return { ...nextIt, totalDispatchQty: recalcDisp };
+                                  });
                                   setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                                 }}
                                 style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
@@ -2145,7 +2964,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 }}
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pInfo.presetName}>
+                                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', maxWidth: '180px', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.3', textAlign: 'center' }} title={pInfo.presetName}>
                                     {pInfo.presetName}
                                   </span>
                                   {!isAlreadyForwarded && !isSourcePiLocked ? (
@@ -2224,18 +3043,35 @@ export default function BomConfirmAuditSection({ ctx }) {
                                             const rawVal = e.target.value;
                                             const parsed = parseFloat(rawVal);
                                             const valToSave = rawVal === '' ? '' : (isNaN(parsed) ? 1 : Math.max(0.01, parsed));
+                                            const effectiveCountForCalc = parseFloat(valToSave) || 1;
                                             const existingGroups = Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0
                                               ? confirmingBomModal.presetGroups
-                                              : [{ groupId: pInfo.groupId, presetName: pInfo.presetName, setCount: pInfo.setCount, unit: pInfo.unitType, kitPrice: pInfo.kitPrice }];
+                                              : [{ groupId: pInfo.groupId, presetId: pInfo.presetId, presetName: pInfo.presetName, setCount: pInfo.setCount, unit: pInfo.unitType, unitType: pInfo.unitType, kitPrice: pInfo.kitPrice, gstRate: pInfo.gstRate }];
                                             const nextGroups = existingGroups.map((g, gi) => {
                                               const gKey = g.groupId || g.presetGroupId || g.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`);
                                               return (gKey === pInfo.groupId || (existingGroups.length === 1 && gi === 0))
                                                 ? { ...g, setCount: valToSave, sets: valToSave }
                                                 : g;
                                             });
+                                            const nextItems = (confirmingBomModal.items || []).map(it => {
+                                              const itIsBundle = Boolean(it.isPresetItem || (existingGroups.length > 0 && cleanNum(it.rate) === 0));
+                                              const itGid = it.presetGroupId || it.groupId || it.presetId || (existingGroups.length === 1 ? pInfo.groupId : null);
+                                              if (!itIsBundle || (itGid !== pInfo.groupId && !(existingGroups.length === 1 && itIsBundle))) return it;
+                                              const isSub = Boolean(it.isSubPreset || it.subPresetName || it.subPresetId);
+                                              if (isSub && it.subSetCount) return it;
+                                              const recalcDisp = calculateTotalDispatchQty(
+                                                { ...it, presetId: pInfo.presetId || it.presetId },
+                                                effectiveCountForCalc,
+                                                pInfo.presetName,
+                                                confirmingBomModal.category || it.category,
+                                                pInfo.unitType
+                                              );
+                                              return { ...it, totalDispatchQty: recalcDisp };
+                                            });
                                             setConfirmingBomModal({
                                               ...confirmingBomModal,
                                               presetGroups: nextGroups,
+                                              items: nextItems,
                                               presetSetCount: nextGroups.length === 1 ? valToSave : confirmingBomModal.presetSetCount
                                             });
                                           }}
@@ -2252,14 +3088,27 @@ export default function BomConfirmAuditSection({ ctx }) {
                                             const val = e.target.value;
                                             const existingGroups = Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0
                                               ? confirmingBomModal.presetGroups
-                                              : [{ groupId: pInfo.groupId, presetName: pInfo.presetName, setCount: pInfo.setCount, unit: val, unitType: val, kitPrice: pInfo.kitPrice }];
+                                              : [{ groupId: pInfo.groupId, presetId: pInfo.presetId, presetName: pInfo.presetName, setCount: pInfo.setCount, unit: val, unitType: val, kitPrice: pInfo.kitPrice, gstRate: pInfo.gstRate }];
                                             const nextGroups = existingGroups.map((g, gi) => {
                                               const gKey = g.groupId || g.presetGroupId || g.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`);
                                               return (gKey === pInfo.groupId || (existingGroups.length === 1 && gi === 0))
                                                 ? { ...g, unit: val, unitType: val }
                                                 : g;
                                             });
-                                            setConfirmingBomModal({ ...confirmingBomModal, presetGroups: nextGroups, presetUnit: val });
+                                            const nextItems = (confirmingBomModal.items || []).map(it => {
+                                              const itIsBundle = Boolean(it.isPresetItem || (existingGroups.length > 0 && cleanNum(it.rate) === 0));
+                                              const itGid = it.presetGroupId || it.groupId || it.presetId || (existingGroups.length === 1 ? pInfo.groupId : null);
+                                              if (!itIsBundle || (itGid !== pInfo.groupId && !(existingGroups.length === 1 && itIsBundle))) return it;
+                                              const recalcDisp = calculateTotalDispatchQty(
+                                                { ...it, presetId: pInfo.presetId || it.presetId },
+                                                pInfo.setCount || 1,
+                                                pInfo.presetName,
+                                                confirmingBomModal.category || it.category,
+                                                val
+                                              );
+                                              return { ...it, totalDispatchQty: recalcDisp };
+                                            });
+                                            setConfirmingBomModal({ ...confirmingBomModal, presetGroups: nextGroups, items: nextItems, presetUnit: val });
                                           }}
                                           style={{
                                             height: '24px', borderRadius: '6px',
@@ -2276,18 +3125,23 @@ export default function BomConfirmAuditSection({ ctx }) {
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                                         <span style={{ fontSize: '10px', color: '#6366F1', fontWeight: '700' }}>GST:</span>
                                         <select
-                                          value={`${extractGstRate(item.gstRate, 18)}%`}
+                                          value={`${extractGstRate(pInfo.gstRate ?? item.gstRate, 18)}%`}
                                           onChange={(e) => {
                                             const val = e.target.value;
-                                            const nextGroups = (confirmingBomModal.presetGroups || []).map((g, gi) => {
+                                            const existingGroups = Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0
+                                              ? confirmingBomModal.presetGroups
+                                              : [{ groupId: pInfo.groupId, presetId: pInfo.presetId, presetName: pInfo.presetName, setCount: pInfo.setCount, unit: pInfo.unitType, unitType: pInfo.unitType, kitPrice: pInfo.kitPrice, gstRate: val }];
+                                            const nextGroups = existingGroups.map((g, gi) => {
                                               const gKey = g.groupId || g.presetGroupId || g.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`);
-                                              return (gKey === pInfo.groupId || ((confirmingBomModal.presetGroups || []).length === 1 && gi === 0))
+                                              return (gKey === pInfo.groupId || (existingGroups.length === 1 && gi === 0))
                                                 ? { ...g, gstRate: val }
                                                 : g;
                                             });
                                             const nextItems = (confirmingBomModal.items || []).map(it => {
                                               const itGid = it.presetGroupId || it.groupId || it.presetId || pInfo.groupId;
-                                              return itGid === pInfo.groupId ? { ...it, gstRate: val } : it;
+                                              return (itGid === pInfo.groupId || (existingGroups.length === 1 && (it.isPresetItem || cleanNum(it.rate) === 0)))
+                                                ? { ...it, gstRate: val }
+                                                : it;
                                             });
                                             setConfirmingBomModal({ ...confirmingBomModal, presetGroups: nextGroups, items: nextItems });
                                           }}
@@ -2309,15 +3163,23 @@ export default function BomConfirmAuditSection({ ctx }) {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          const nextGroups = (confirmingBomModal.presetGroups || []).filter((g, gi) => {
+                                          const existingGroups = Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0
+                                            ? confirmingBomModal.presetGroups
+                                            : modalPresetGroups;
+                                          const nextGroups = existingGroups.filter((g, gi) => {
                                             const gKey = g.groupId || g.presetGroupId || g.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`);
                                             return gKey !== pInfo.groupId;
                                           });
                                           const nextItems = (confirmingBomModal.items || []).filter(it => {
                                             const itGid = it.presetGroupId || it.groupId || it.presetId || 'default_kit';
-                                            return itGid !== pInfo.groupId;
+                                            return itGid !== pInfo.groupId && !(existingGroups.length === 1 && (it.isPresetItem || cleanNum(it.rate) === 0));
                                           });
-                                          setConfirmingBomModal({ ...confirmingBomModal, presetGroups: nextGroups, items: nextItems });
+                                          setConfirmingBomModal({
+                                            ...confirmingBomModal,
+                                            presetGroups: nextGroups,
+                                            items: nextItems,
+                                            ...(nextGroups.length === 0 ? { presetName: '', presetKitPrice: 0, presetSetCount: 1 } : {})
+                                          });
                                         }}
                                         style={{ border: 'none', background: 'none', color: '#DC2626', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer', padding: '2px 4px' }}
                                       >
@@ -2362,8 +3224,27 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 </span>
                               ) : (
                                 <button
+                                  type="button"
                                   onClick={() => {
+                                    const removedItem = (confirmingBomModal.items || [])[idx];
                                     const updatedItems = (confirmingBomModal.items || []).filter((_, i) => i !== idx);
+                                    const removedGid = removedItem?.presetGroupId || removedItem?.groupId || removedItem?.presetId;
+                                    if (removedGid) {
+                                      const stillHasItemsInGroup = updatedItems.some(it => (it.presetGroupId || it.groupId || it.presetId) === removedGid);
+                                      if (!stillHasItemsInGroup) {
+                                        const nextGroups = (confirmingBomModal.presetGroups || []).filter((g, gi) => {
+                                          const gKey = g.groupId || g.presetGroupId || g.presetId || (gi === 0 ? 'default_kit' : `preset_grp_${gi}`);
+                                          return gKey !== removedGid;
+                                        });
+                                        setConfirmingBomModal({
+                                          ...confirmingBomModal,
+                                          items: updatedItems,
+                                          presetGroups: nextGroups,
+                                          ...(nextGroups.length === 0 ? { presetName: '', presetKitPrice: 0, presetSetCount: 1 } : {})
+                                        });
+                                        return;
+                                      }
+                                    }
                                     setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                                   }}
                                   style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
@@ -2411,6 +3292,379 @@ export default function BomConfirmAuditSection({ ctx }) {
                   Total Order Value: <strong style={{ color: '#0E7490', fontSize: '17px', fontWeight: '900' }}>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 3: TRANSPORT & LOGISTICS DETAILS */}
+        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              3. TRANSPORT & LOGISTICS DETAILS
+            </span>
+          </div>
+
+          {isAlreadyForwarded ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', backgroundColor: '#F8FAFC', padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '3px' }}>MODE OF TRANSPORT</span>
+                <strong style={{ fontSize: '13px', color: '#0F172A' }}>{confirmingBomModal.transportMode || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '3px' }}>TRANSPORT NAME</span>
+                <strong style={{ fontSize: '13px', color: '#0F172A' }}>{confirmingBomModal.transporterName || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '3px' }}>DESTINATION</span>
+                <strong style={{ fontSize: '13px', color: '#0F172A' }}>{confirmingBomModal.destination || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '3px' }}>SCOPE</span>
+                <strong style={{ fontSize: '13px', color: '#0F172A' }}>{confirmingBomModal.transportScope || '—'}</strong>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+              <div>
+                <label htmlFor="reconfirm-bom-transport-mode" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Mode of Transport
+                </label>
+                <select
+                  id="reconfirm-bom-transport-mode"
+                  name="transportMode"
+                  aria-label="Mode of Transport"
+                  value={confirmingBomModal.transportMode || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, transportMode: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: confirmingBomModal.transportMode ? '#0F172A' : '#64748B', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="">Select Mode Of Transport</option>
+                  <option value="Transport">Transport</option>
+                  <option value="Own Vehicle">Own Vehicle</option>
+                  <option value="Porter">Porter</option>
+                  <option value="Courier">Courier</option>
+                  <option value="Customer Pickup / Self">Customer Pickup / Self</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="reconfirm-bom-transport-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Transport Name
+                </label>
+                <input
+                  id="reconfirm-bom-transport-name"
+                  name="transporterName"
+                  aria-label="Transport Name"
+                  type="text"
+                  placeholder="e.g. VRL Logistics / TCI Freight / Local Transport"
+                  value={confirmingBomModal.transporterName || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, transporterName: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label htmlFor="reconfirm-bom-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Destination
+                </label>
+                <input
+                  id="reconfirm-bom-destination"
+                  name="destination"
+                  aria-label="Destination"
+                  type="text"
+                  placeholder="e.g. Chennai / Coimbatore / Site Location"
+                  value={confirmingBomModal.destination || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, destination: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label htmlFor="reconfirm-bom-scope" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Scope
+                </label>
+                <select
+                  id="reconfirm-bom-scope"
+                  name="transportScope"
+                  aria-label="Scope"
+                  value={confirmingBomModal.transportScope || ''}
+                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, transportScope: e.target.value })}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: confirmingBomModal.transportScope ? '#0F172A' : '#64748B', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="">Select Transport scope</option>
+                  <option value="VRM Structures">VRM Structures</option>
+                  <option value="Customer Scope">Customer Scope</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 4: PAYMENT TERMS, CREDIT DAYS, REMARKS & PAYMENT PROOF ATTACHMENTS */}
+        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              4. PAYMENT TERMS, REMARKS & PAYMENT ATTACHMENTS
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label htmlFor="bom-orders-payment-type-50-advance" style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  Payment Terms {!isAlreadyForwarded && !isDcOrder && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+                  {confirmingBomModal.editedFields?.paymentType && (
+                    <span title={confirmingBomModal.editedFields.paymentType} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
+                  )}
+                </label>
+                {isAlreadyForwarded ? (
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#2563EB', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    {normalizedPayType}
+                  </div>
+                ) : isDcOrder ? (
+                  <select id="bom-orders-payment-type-50-advance" name="paymentType" aria-label="Payment Terms"
+                    value="100% Paid"
+                    disabled
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', boxSizing: 'border-box' }}
+                  >
+                    <option value="100% Paid">100% Paid (DC Order)</option>
+                  </select>
+                ) : (
+                  <select id="bom-orders-payment-type-50-advance" name="paymentType" aria-label="Payment Terms"
+                    value={normalizedPayType}
+                    onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
+                  >
+                    <option value="100% Paid">100% Paid</option>
+                    <option value="Partial Paid">Partial Paid</option>
+                    <option value="Payment While Dispatch">Payment While Dispatch</option>
+                    <option value="Credit Payment">Credit Payment</option>
+                  </select>
+                )}
+              </div>
+
+              {(normalizedPayType === 'Partial Paid' || normalizedPayType === 'Partial Payment') && (
+                <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="bom-orders-partial-amount" style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
+                      Partial Advance Amount (₹)
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#0D9488', fontWeight: '700' }}>
+                      Total: ₹{Number(orderGrandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  {isAlreadyForwarded ? (
+                    <strong style={{ fontSize: '14px', color: '#0F766E' }}>
+                      ₹{Number(confirmingBomModal.partialAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </strong>
+                  ) : (
+                    <input id="bom-orders-partial-amount" name="partialAmount" aria-label="Partial Advance Amount"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="Enter advance amount paid..."
+                      value={confirmingBomModal.partialAmount != null ? confirmingBomModal.partialAmount : ''}
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        const numVal = parseFloat(rawVal) || 0;
+                        setConfirmingBomModal({
+                          ...confirmingBomModal,
+                          partialAmount: rawVal,
+                          balanceAmount: Math.max(0, (orderGrandTotal || 0) - numVal)
+                        });
+                      }}
+                      style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #5EEAD4', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                    />
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#CCFBF1', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', color: '#115E59' }}>
+                    <span>Remaining Balance:</span>
+                    <strong style={{ fontSize: '13px', color: '#0F766E' }}>
+                      ₹{Math.max(0, (orderGrandTotal || 0) - (parseFloat(confirmingBomModal.partialAmount) || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {normalizedPayType === 'Credit Payment' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label htmlFor="reconfirm-bom-credit-days" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155' }}>Credit Timeline (Days)</label>
+                    <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700' }}>Default: 7 Days</span>
+                  </div>
+                  {isAlreadyForwarded ? (
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#5B21B6', backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE', borderRadius: '8px', padding: '10px 12px' }}>
+                      {confirmingBomModal.creditDays || 7} Days
+                    </div>
+                  ) : (
+                    <input
+                      id="reconfirm-bom-credit-days"
+                      name="creditDays"
+                      aria-label="Credit Timeline Days"
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={confirmingBomModal.creditDays != null ? confirmingBomModal.creditDays : 7}
+                      onChange={(e) => {
+                        const nextDays = Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 1));
+                        setConfirmingBomModal({
+                          ...confirmingBomModal,
+                          creditDays: nextDays,
+                          creditDueDate: new Date(Date.now() + nextDays * 86400000).toISOString().split('T')[0]
+                        });
+                      }}
+                      style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #A5F3FC', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#F0FDFA', boxSizing: 'border-box', outline: 'none', fontWeight: '700' }}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="reconfirm-bom-remarks" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Remarks / Notes
+                </label>
+                {isAlreadyForwarded ? (
+                  <div style={{ minHeight: '60px', borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', padding: '10px 12px', fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap' }}>
+                    {confirmingBomModal.remarks || '—'}
+                  </div>
+                ) : (
+                  <textarea
+                    id="reconfirm-bom-remarks"
+                    name="remarks"
+                    aria-label="Remarks / Notes"
+                    rows={3}
+                    value={confirmingBomModal.remarks || ''}
+                    onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, remarks: e.target.value })}
+                    placeholder="Enter remarks, consignee references, or invoice notes..."
+                    style={{ width: '100%', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '10px 12px', fontSize: '13px', color: '#0F172A', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {normalizedPayType === 'Credit Payment' ? (
+                <div style={{ border: '1px solid #C7D2FE', borderRadius: '14px', padding: '20px', backgroundColor: '#F5F3FF', display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#EDE9FE', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Clock style={{ width: '18px', height: '18px' }} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#5B21B6' }}>Credit Payment Terms Active</h4>
+                      <span style={{ fontSize: '11px', color: '#6D28D9' }}>{confirmingBomModal.creditDays || 7} Days Credit Window</span>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#4C1D95', margin: 0, lineHeight: '1.5' }}>
+                    Payment slip is not required upfront. You can adjust the credit days or settle payment after confirmation.
+                  </p>
+                </div>
+              ) : normalizedPayType === 'Payment While Dispatch' ? (
+                <div style={{ border: '1px solid #C7D2FE', borderRadius: '14px', padding: '20px', backgroundColor: '#EEF2FF', display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#DBEAFE', color: '#1E40AF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Truck style={{ width: '18px', height: '18px' }} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#1E3A8A' }}>Payment While Dispatch Active</h4>
+                      <span style={{ fontSize: '11px', color: '#1D4ED8' }}>Payment proof will be attached once goods are packed for dispatch.</span>
+                    </div>
+                  </div>
+                </div>
+              ) : isDcOrder ? (
+                <div style={{ border: '1px solid #FDE68A', borderRadius: '14px', padding: '20px', backgroundColor: '#FFFBEB', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+                  <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#92400E' }}>Delivery Challan (DC) Order</h4>
+                  <span style={{ fontSize: '12px', color: '#B45309' }}>Payment attachment is not required for DC orders.</span>
+                </div>
+              ) : (
+                <div style={{
+                  padding: '18px 20px',
+                  backgroundColor: '#F0FDF4',
+                  border: '1.5px dashed #86EFAC',
+                  borderRadius: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileCheck style={{ width: '18px', height: '18px' }} />
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+                          Payment Attachment / Slip ({normalizedPayType}) <span style={{ color: '#EF4444' }}>*</span>
+                        </h4>
+                        <span style={{ fontSize: '11px', color: '#166534' }}>
+                          Mandatory bank remittance advice, NEFT/RTGS receipt, or deposit slip.
+                        </span>
+                      </div>
+                    </div>
+                    {paymentProofList.length > 0 && (
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCircle style={{ width: '12px', height: '12px' }} /> {paymentProofList.length} Slip{paymentProofList.length > 1 ? 's' : ''} Attached
+                      </span>
+                    )}
+                  </div>
+
+                  {paymentProofList.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {paymentProofList.map((pDoc, pIdx) => (
+                        <div key={pIdx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #86EFAC', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                            <FileText style={{ width: '15px', height: '15px', color: '#166534', flexShrink: 0 }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {pDoc.name || `Payment Slip #${pIdx + 1}`}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#64748B' }}>{pDoc.size || 'Attached'}</div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDocModal({ title: `Payment Proof #${pIdx + 1}: ${pDoc.name || 'Slip'}`, doc: pDoc })}
+                              style={{ border: '1px solid #BBF7D0', background: '#DCFCE7', color: '#166534', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Eye style={{ width: '12px', height: '12px' }} /> View
+                            </button>
+                            {!isAlreadyForwarded && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveReconfirmPaymentProof(pIdx)}
+                                title="Remove this slip"
+                                style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '5px 7px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                <Trash2 style={{ width: '12px', height: '12px' }} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!isAlreadyForwarded && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #10B981', color: '#047857', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: isUploadingProof ? 'wait' : 'pointer' }}>
+                        <UploadCloud style={{ width: '14px', height: '14px' }} />
+                        {paymentProofList.length > 0 ? '+ Add More Payment Slips' : 'Browse / Upload Payment Slip(s)'}
+                        <input
+                          id="reconfirm-bom-payment-proof-input"
+                          name="paymentProofUpload"
+                          aria-label="Upload Payment Proof Slips"
+                          type="file"
+                          multiple
+                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                          style={{ display: 'none' }}
+                          disabled={isUploadingProof}
+                          onChange={async (e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              await handleUploadReconfirmPaymentProofs(e.target.files);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                      <span style={{ fontSize: '10.5px', color: '#64748B' }}>Supported: PDF, JPG, PNG, DOC (Multi-select enabled)</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2481,35 +3735,62 @@ export default function BomConfirmAuditSection({ ctx }) {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             {!isAlreadyForwarded && (
-              <button
-                type="button"
-                onClick={() => {
-                  const currentItems = confirmingBomModal.items || [];
-                  const allCheckedItems = currentItems.map(it => ({ ...it, confirmed: true }));
-                  handleConfirmAndSendToDispatch(allCheckedItems);
-                }}
-                disabled={isConfirmingForward}
-                style={{
-                  backgroundColor: '#0E7490',
-                  border: 'none',
-                  color: 'white',
-                  height: '40px',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 22px',
-                  borderRadius: '50px',
-                  cursor: isConfirmingForward ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
-                  transition: 'all 0.2s ease-in-out',
-                  flexShrink: 0,
-                  opacity: isConfirmingForward ? 0.7 : 1
-                }}
-              >
-                Confirm and Send
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleSaveBomChanges}
+                  disabled={isSavingDraft || isConfirmingForward || isUploadingProof}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #0E7490',
+                    color: '#0E7490',
+                    height: '40px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '0 18px',
+                    borderRadius: '50px',
+                    cursor: (isSavingDraft || isConfirmingForward || isUploadingProof) ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                    opacity: (isSavingDraft || isConfirmingForward || isUploadingProof) ? 0.65 : 1
+                  }}
+                >
+                  <Save size={15} />
+                  {isSavingDraft ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentItems = confirmingBomModal.items || [];
+                    const allCheckedItems = currentItems.map(it => ({ ...it, confirmed: true }));
+                    handleConfirmAndSendToDispatch(allCheckedItems);
+                  }}
+                  disabled={isConfirmingForward || isSavingDraft || isUploadingProof}
+                  style={{
+                    backgroundColor: '#0E7490',
+                    border: 'none',
+                    color: 'white',
+                    height: '40px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 22px',
+                    borderRadius: '50px',
+                    cursor: (isConfirmingForward || isSavingDraft || isUploadingProof) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
+                    transition: 'all 0.2s ease-in-out',
+                    flexShrink: 0,
+                    opacity: (isConfirmingForward || isSavingDraft || isUploadingProof) ? 0.7 : 1
+                  }}
+                >
+                  Confirm and Send
+                </button>
+              </>
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>

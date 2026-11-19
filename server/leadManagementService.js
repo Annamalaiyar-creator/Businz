@@ -729,13 +729,15 @@ export async function assignLead({
   const assignerName = assignerUser.employee_name || assignerUser.name || 'Management';
   const assignerRole = assignerUser.role || 'Tech Support';
 
+  let isReassignment = false;
+
   const executeAssignment = async (activeClient) => {
     // 1. Get current lead state
     const currentRes = await activeClient.query(`SELECT * FROM public.leads WHERE id = $1 FOR UPDATE`, [leadId]);
     if (currentRes.rows.length === 0) throw new Error('Lead not found.');
     const current = currentRes.rows[0];
 
-    const isReassignment = Boolean(current.assigned_to_user_id && current.assigned_to_user_id !== assignedToId);
+    isReassignment = Boolean(current.assigned_to_user_id && current.assigned_to_user_id !== assignedToId);
     const assignmentType = isReassignment ? 'REASSIGNMENT' : 'INITIAL';
     const assignedAt = new Date();
 
@@ -810,17 +812,20 @@ export async function assignLead({
   const result = client ? await executeAssignment(client) : await withTransaction(executeAssignment);
 
   // 5. Notify the Assigned Salesperson after successful transaction commit
+  let notificationDispatched = false;
   try {
     const notifResult = await createLeadNotification({
       client,
       leadId: result.id,
-      type: 'ASSIGNMENT',
-      title: `🎯 Lead Assigned to You: ${result.company_name}`,
-      message: `Lead ${result.lead_number} assigned by ${assignerName} (${assignerRole}). Please contact within 24 hours.`,
-      metadata: { leadNumber: result.lead_number, companyName: result.company_name, assignerName },
+      type: isReassignment ? 'LEAD_REASSIGNED' : 'LEAD_ASSIGNED',
+      title: isReassignment ? `🔄 Lead Reassigned to You: ${result.company_name}` : `🎯 Lead Assigned to You: ${result.company_name}`,
+      message: `Lead ${result.lead_number} ${isReassignment ? 'reassigned' : 'assigned'} by ${assignerName} (${assignerRole}). Please contact within 24 hours.`,
+      metadata: { leadNumber: result.lead_number, companyName: result.company_name, assignerName, isReassignment },
       specificRecipientId: assignedToId,
       specificRecipientRole: assignedToRole || 'Sales Executive'
     });
+
+    notificationDispatched = Boolean(notifResult?.success);
 
     if (notifResult?.deferredBroadcast) {
       if (typeof onDeferredNotification === 'function') {
@@ -841,6 +846,17 @@ export async function assignLead({
     // Preserve historical standalone assignment behavior: log warning without reversing already committed assignment
     console.warn('[Notification Notice]:', notifErr.message);
   }
+
+  Object.defineProperty(result, '_isReassignment', {
+    value: isReassignment,
+    enumerable: false,
+    configurable: true
+  });
+  Object.defineProperty(result, '_notificationDispatched', {
+    value: notificationDispatched,
+    enumerable: false,
+    configurable: true
+  });
 
   // Preserve historical return contract: return database lead row directly without leaking internal fields
   return result;
