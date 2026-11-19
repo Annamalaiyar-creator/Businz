@@ -3982,6 +3982,121 @@ function enqueueStoreOperation(storeKey, opFn) {
   return opPromise;
 }
 
+// Targeted single-preset upsert (Tech Support / Admin / Executive) — avoids whole-store overwrites
+app.post('/api/presets', async (req, res) => {
+  try {
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({
+        success: false,
+        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+      });
+    }
+    const roleStr = normalizeUserRole(session.role);
+    const canManagePresets = isExecutiveOrAdminRole(session.role) ||
+      hasAnyUserRole(session.role, ['tech', 'support', 'technical', 'engineering', 'production', 'admin']) ||
+      roleStr.includes('tech') || roleStr.includes('support') || roleStr.includes('engineer');
+    if (!canManagePresets) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${session.role}" is not authorized to create or edit presets.`
+      });
+    }
+    if (!isDbConnected()) {
+      return res.status(500).json({ success: false, error: 'Database is not connected. Cannot save preset.' });
+    }
+
+    const incoming = req.body?.preset || req.body;
+    const presetId = String(incoming?.id || '').trim();
+    const presetLabel = String(incoming?.label || '').trim();
+    if (!presetId || !presetLabel) {
+      return res.status(400).json({ success: false, error: 'Preset id and label are required.' });
+    }
+
+    const savedPreset = await enqueueStoreOperation('presets_store', async () => {
+      const currentRaw = await getDatabaseStore('presets_store');
+      const currentMap = (currentRaw && typeof currentRaw === 'object' && !Array.isArray(currentRaw))
+        ? { ...currentRaw }
+        : {};
+      const nextPreset = {
+        ...incoming,
+        id: presetId,
+        label: presetLabel,
+        isCustom: true,
+        updated_at: new Date().toISOString(),
+        updated_by: session.name || session.empCode || session.role || 'Tech Support'
+      };
+      currentMap[presetId] = nextPreset;
+      await saveDatabaseStore('presets_store', currentMap);
+      return nextPreset;
+    });
+
+    broadcastRealtimeEvent('preset_updated', {
+      key: 'presets_store',
+      action: 'upsert',
+      recordId: savedPreset.id,
+      preset: savedPreset
+    });
+
+    return res.json({ success: true, preset: savedPreset });
+  } catch (err) {
+    console.error('[POST /api/presets Error]', err?.message || err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save preset.' });
+  }
+});
+
+// Targeted single-preset delete (Tech Support / Admin / Executive)
+app.delete('/api/presets/:id', async (req, res) => {
+  try {
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({
+        success: false,
+        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+      });
+    }
+    const roleStr = normalizeUserRole(session.role);
+    const canManagePresets = isExecutiveOrAdminRole(session.role) ||
+      hasAnyUserRole(session.role, ['tech', 'support', 'technical', 'engineering', 'production', 'admin']) ||
+      roleStr.includes('tech') || roleStr.includes('support') || roleStr.includes('engineer');
+    if (!canManagePresets) {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Role "${session.role}" is not authorized to delete presets.`
+      });
+    }
+    if (!isDbConnected()) {
+      return res.status(500).json({ success: false, error: 'Database is not connected. Cannot delete preset.' });
+    }
+
+    const presetId = decodeURIComponent(String(req.params.id || '')).trim();
+    if (!presetId) {
+      return res.status(400).json({ success: false, error: 'Preset id is required.' });
+    }
+
+    await enqueueStoreOperation('presets_store', async () => {
+      const currentRaw = await getDatabaseStore('presets_store');
+      const currentMap = (currentRaw && typeof currentRaw === 'object' && !Array.isArray(currentRaw))
+        ? { ...currentRaw }
+        : {};
+      delete currentMap[presetId];
+      await saveDatabaseStore('presets_store', currentMap);
+    });
+
+    broadcastRealtimeEvent('preset_updated', {
+      key: 'presets_store',
+      action: 'delete',
+      recordId: presetId,
+      presetId
+    });
+
+    return res.json({ success: true, deletedId: presetId });
+  } catch (err) {
+    console.error('[DELETE /api/presets/:id Error]', err?.message || err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to delete preset.' });
+  }
+});
+
 app.post('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   const cleanKey = String(key || '').trim().toLowerCase();

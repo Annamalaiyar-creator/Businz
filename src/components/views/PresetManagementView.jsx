@@ -6,8 +6,7 @@ import {
 } from 'lucide-react';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
-import { VRM_HDG_PRESETS, getAllActivePresets, saveCustomPreset, deleteCustomPreset, syncPresetsWithCloud } from '../../vrmHdgProposalPresets';
-import { saveCloudStore, fetchCloudStore } from '../../utils/supabaseDataSync';
+import { getAllActivePresets, saveCustomPresetAsync, deleteCustomPresetAsync, syncPresetsWithCloud } from '../../vrmHdgProposalPresets';
 import CreatePresetKitView from './CreatePresetKitView';
 
 export default function PresetManagementView(props) {
@@ -36,7 +35,7 @@ export default function PresetManagementView(props) {
   useEffect(() => {
     const loadStore = async () => {
       try {
-        const synced = await syncPresetsWithCloud();
+        const synced = await syncPresetsWithCloud({ force: true });
         if (synced && typeof synced === 'object') {
           setAllPresets(synced);
         }
@@ -111,10 +110,14 @@ export default function PresetManagementView(props) {
   };
 
   // Save Preset from Dedicated Screen
-  const handleSaveFromScreen = (savedPreset) => {
-    const updatedAll = saveCustomPreset(savedPreset);
-    if (updatedAll) {
-      setAllPresets({ ...updatedAll });
+  const handleSaveFromScreen = async (savedPreset) => {
+    const res = await saveCustomPresetAsync(savedPreset);
+    if (!res.ok) {
+      alert(`⚠️ Failed to save preset "${savedPreset.label}": ${res.error || 'Please check your login session and try again.'}`);
+      return;
+    }
+    if (res.presets) {
+      setAllPresets({ ...res.presets });
     }
 
     // Auto-select the preset's category (or 'All') and clear search so the user immediately sees it
@@ -127,7 +130,7 @@ export default function PresetManagementView(props) {
     setSelectedPresetId(savedPreset.id);
     setTimeout(() => setSelectedPresetId(null), 4000);
 
-    setSaveSuccessMsg(`✓ Preset Kit "${savedPreset.label}" created successfully and added to "${savedPreset.category || 'All'}"!`);
+    setSaveSuccessMsg(`✓ Preset Kit "${savedPreset.label}" saved to database and synced across BUSINZ!`);
     setTimeout(() => setSaveSuccessMsg(''), 6000);
     setIsCreateScreenOpen(false);
     setTargetPresetForScreen(null);
@@ -188,8 +191,8 @@ export default function PresetManagementView(props) {
     setEditingPreset(prev => ({ ...prev, items: updated }));
   };
 
-  // Save Preset to cloud & localStorage
-  const handleSavePreset = () => {
+  // Save Preset to database & broadcast live update
+  const handleSavePreset = async () => {
     if (!editingPreset || !editingPreset.label.trim()) {
       alert('Please provide a valid Preset Name / Title.');
       return;
@@ -214,22 +217,31 @@ export default function PresetManagementView(props) {
       updated_at: new Date().toISOString()
     };
 
-    // Save locally and trigger event
-    const updatedAll = saveCustomPreset(presetToSave);
-    if (updatedAll) {
-      setAllPresets(updatedAll);
+    const res = await saveCustomPresetAsync(presetToSave);
+    if (!res.ok) {
+      alert(`⚠️ Failed to save preset "${presetToSave.label}": ${res.error || 'Please check your login session and try again.'}`);
+      return;
+    }
+    if (res.presets) {
+      setAllPresets({ ...res.presets });
     }
 
-    setSaveSuccessMsg(`Preset "${presetToSave.label}" saved successfully! Available across the app.`);
+    setSaveSuccessMsg(`✓ Preset "${presetToSave.label}" saved to database and synced across BUSINZ!`);
     setTimeout(() => setSaveSuccessMsg(''), 4000);
     setIsEditModalOpen(false);
   };
 
   // Delete custom preset
-  const handleDeletePreset = (id, label) => {
+  const handleDeletePreset = async (id, label) => {
     if (!window.confirm(`Are you sure you want to delete preset "${label}"?`)) return;
-    const updated = deleteCustomPreset(id);
-    setAllPresets({ ...updated });
+    const res = await deleteCustomPresetAsync(id);
+    if (!res.ok) {
+      alert(`⚠️ Failed to delete preset "${label}": ${res.error || 'Please check your login session and try again.'}`);
+      return;
+    }
+    if (res.presets) {
+      setAllPresets({ ...res.presets });
+    }
   };
 
   // Render Dedicated Screen for Create / Edit Preset Kit (BOM Screen Aesthetic)

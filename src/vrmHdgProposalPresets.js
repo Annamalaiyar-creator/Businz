@@ -1,5 +1,5 @@
 import basePresets from "./data/vrmPresetsData.json";
-import { fetchCloudStore, saveCloudStoreImmediate } from "./utils/supabaseDataSync";
+import { fetchCloudStore } from "./utils/supabaseDataSync";
 import { resolveDefaultUom } from "./utils/vrmProductsData";
 
 /**
@@ -117,7 +117,32 @@ const buildActivePresets = () => {
  */
 let inFlightPresetsSync = null;
 let lastPresetsSyncAt = 0;
-const PRESETS_FOCUS_COOLDOWN_MS = 5 * 60 * 1000;
+const PRESETS_FOCUS_COOLDOWN_MS = 30 * 1000;
+
+const getPresetAuthHeaders = () => {
+  const headers = { 'Content-Type': 'application/json' };
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const sesId = localStorage.getItem('controlroom_device_session_id');
+    if (sesId) headers['x-session-id'] = sesId;
+  }
+  return headers;
+};
+
+const applyCustomPresetsAndBroadcast = (nextMap) => {
+  customPresetsCache = nextMap && typeof nextMap === 'object' ? nextMap : {};
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('controlroom_presets_store', JSON.stringify(customPresetsCache));
+    } catch (err) {
+      console.warn('Could not save presets cache to localStorage:', err);
+    }
+  }
+  const normalized = buildActivePresets();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('vrm_presets_updated', { detail: normalized }));
+  }
+  return normalized;
+};
 
 export async function syncPresetsWithCloud({ force = false } = {}) {
   const now = Date.now();
@@ -131,33 +156,27 @@ export async function syncPresetsWithCloud({ force = false } = {}) {
   inFlightPresetsSync = (async () => {
     try {
       let serverRes = null;
+      let serverRespondedOk = false;
       let cloudPresets = null;
       try {
-        const res = await fetch('/api/store/presets_store');
-        if (res.ok) serverRes = await res.json();
+        const res = await fetch('/api/store/presets_store', { headers: getPresetAuthHeaders() });
+        if (res.ok) {
+          serverRes = await res.json();
+          serverRespondedOk = true;
+        }
       } catch (_) {}
 
-      if (!serverRes || !serverRes.data) {
+      if (!serverRespondedOk) {
         cloudPresets = await fetchCloudStore('presets_store', {}).catch(() => ({}));
       }
 
-      let incomingMap = {};
-      if (serverRes && serverRes.data && typeof serverRes.data === 'object') {
-        const sData = serverRes.data;
-        if (Array.isArray(sData)) {
-          sData.forEach(p => { if (p && p.id && (p.isCustom || !basePresetsMap[p.id])) incomingMap[p.id] = p; });
+      const incomingMap = {};
+      const sourceData = serverRespondedOk ? serverRes?.data : cloudPresets;
+      if (sourceData && typeof sourceData === 'object') {
+        if (Array.isArray(sourceData)) {
+          sourceData.forEach(p => { if (p && p.id && (p.isCustom || !basePresetsMap[p.id])) incomingMap[p.id] = p; });
         } else {
-          Object.entries(sData).forEach(([k, v]) => {
-            if (v && (v.isCustom || !basePresetsMap[k])) incomingMap[k] = v;
-          });
-        }
-      }
-
-      if (cloudPresets && typeof cloudPresets === 'object') {
-        if (Array.isArray(cloudPresets)) {
-          cloudPresets.forEach(p => { if (p && p.id && (p.isCustom || !basePresetsMap[p.id])) incomingMap[p.id] = p; });
-        } else {
-          Object.entries(cloudPresets).forEach(([k, v]) => {
+          Object.entries(sourceData).forEach(([k, v]) => {
             if (v && (v.isCustom || !basePresetsMap[k])) incomingMap[k] = v;
           });
         }
@@ -165,25 +184,15 @@ export async function syncPresetsWithCloud({ force = false } = {}) {
 
       lastPresetsSyncAt = Date.now();
 
-      if (Object.keys(incomingMap).length > 0) {
-        const mergedCustom = { ...customPresetsCache, ...incomingMap };
-        const hasChanges = JSON.stringify(customPresetsCache) !== JSON.stringify(mergedCustom);
-        if (hasChanges) {
-          customPresetsCache = mergedCustom;
-          if (typeof window !== "undefined") {
-            try {
-              localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
-            } catch (_) {}
-          }
-          const normalized = buildActivePresets();
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
-          }
-          return normalized;
+      // Database is the authoritative source of truth (never resurrect deleted presets from stale localStorage)
+      if (serverRespondedOk || Object.keys(incomingMap).length > 0) {
+        const nextCustom = serverRespondedOk ? incomingMap : { ...customPresetsCache, ...incomingMap };
+        if (JSON.stringify(customPresetsCache) !== JSON.stringify(nextCustom)) {
+          return applyCustomPresetsAndBroadcast(nextCustom);
         }
       }
     } catch (err) {
-      console.warn("Could not sync presets with cloud:", err);
+      console.warn('Could not sync presets with cloud:', err);
     }
     return getAllActivePresets();
   })().finally(() => {
@@ -194,115 +203,145 @@ export async function syncPresetsWithCloud({ force = false } = {}) {
 }
 
 /**
- * Get all active presets including custom/edited presets stored in Supabase database
+ * Get all active presets including custom/edited presets stored in PostgreSQL database
  */
 export function getAllActivePresets() {
   if (cachedActivePresets) return cachedActivePresets;
   return buildActivePresets();
 }
 
+const preparePresetPayload = (preset) => {
+  const cleanItems = Array.isArray(preset.items) ? preset.items.map(it => {
+    const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
+    return {
+      ...it,
+      qty: (rawQ === '' || rawQ === '0') ? '' : rawQ
+    };
+  }) : [];
+  return {
+    ...preset,
+    isCustom: true,
+    items: cleanItems,
+    updated_at: new Date().toISOString()
+  };
+};
+
 /**
- * Save or update a custom preset into Supabase Database and broadcast real-time update
+ * Save or update a single custom preset via authenticated POST /api/presets (one record = one DB write)
  */
+export async function saveCustomPresetAsync(preset) {
+  if (!preset || !preset.id) {
+    return { ok: false, error: 'Preset id is required.', presets: getAllActivePresets() };
+  }
+  const toSave = preparePresetPayload(preset);
+  try {
+    const res = await fetch('/api/presets', {
+      method: 'POST',
+      headers: getPresetAuthHeaders(),
+      body: JSON.stringify(toSave)
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.success) {
+      return {
+        ok: false,
+        error: body.error || `Server rejected preset save (HTTP ${res.status})`,
+        presets: getAllActivePresets()
+      };
+    }
+    const saved = body.preset || toSave;
+    const normalized = applyCustomPresetsAndBroadcast({ ...customPresetsCache, [saved.id]: saved });
+    return { ok: true, preset: saved, presets: normalized };
+  } catch (err) {
+    console.error('Error saving custom preset:', err);
+    return {
+      ok: false,
+      error: err?.message || 'Network error while saving preset.',
+      presets: getAllActivePresets()
+    };
+  }
+}
+
 export function saveCustomPreset(preset) {
   if (!preset || !preset.id) return getAllActivePresets();
-
-  try {
-    const cleanItems = Array.isArray(preset.items) ? preset.items.map(it => {
-      const rawQ = it.qty !== undefined && it.qty !== null ? String(it.qty).trim() : '';
-      return {
-        ...it,
-        qty: (rawQ === '' || rawQ === '0') ? '' : rawQ
-      };
-    }) : [];
-    const toSave = {
-      ...preset,
-      isCustom: true,
-      items: cleanItems,
-      updated_at: new Date().toISOString()
-    };
-    customPresetsCache[preset.id] = toSave;
-
-    // Immediately persist to localStorage so it survives tab reloads and refreshes
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
-      } catch (err) {
-        console.warn("Could not save presets to localStorage:", err);
-      }
-    }
-
-    const normalized = buildActivePresets();
-
-    // Dispatch real-time update event immediately to all active views and selectors
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
-    }
-
-    // Push to backend server and Supabase cloud store in background without blocking
-    try {
-      fetch('/api/store/presets_store', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(customPresetsCache)
-      }).catch(() => {});
-      saveCloudStoreImmediate('presets_store', customPresetsCache).catch(() => {});
-    } catch (_) {}
-
-    return normalized;
-  } catch (e) {
-    console.error("Error saving custom preset", e);
-    return getAllActivePresets();
-  }
+  const toSave = preparePresetPayload(preset);
+  const normalized = applyCustomPresetsAndBroadcast({ ...customPresetsCache, [toSave.id]: toSave });
+  // Persist single preset asynchronously with session auth
+  fetch('/api/presets', {
+    method: 'POST',
+    headers: getPresetAuthHeaders(),
+    body: JSON.stringify(toSave)
+  }).catch((err) => console.warn('Background preset save failed:', err));
+  return normalized;
 }
 
 /**
- * Delete a custom preset and sync deletion to server & cloud
+ * Delete a single custom preset via authenticated DELETE /api/presets/:id
  */
-export function deleteCustomPreset(presetId) {
-  if (!presetId) return getAllActivePresets();
+export async function deleteCustomPresetAsync(presetId) {
+  if (!presetId) {
+    return { ok: false, error: 'Preset id is required.', presets: getAllActivePresets() };
+  }
   try {
-    delete customPresetsCache[presetId];
-
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
-      } catch (err) {}
-    }
-
-    // Push deletion to backend server and cloud store in background
-    try {
-      fetch('/api/store/presets_store', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(customPresetsCache)
-      }).catch(() => {});
-      saveCloudStoreImmediate('presets_store', customPresetsCache).catch(() => {});
-    } catch (_) {}
-
-    const merged = { ...basePresetsMap, ...customPresetsCache };
-    const normalized = {};
-    Object.keys(merged).forEach(key => {
-      normalized[key] = normalizePreset(merged[key]);
+    const res = await fetch(`/api/presets/${encodeURIComponent(presetId)}`, {
+      method: 'DELETE',
+      headers: getPresetAuthHeaders()
     });
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.success) {
+      return {
+        ok: false,
+        error: body.error || `Server rejected preset delete (HTTP ${res.status})`,
+        presets: getAllActivePresets()
+      };
     }
-    return normalized;
-  } catch (e) {
-    console.error("Error deleting custom preset", e);
-    return getAllActivePresets();
+    const nextMap = { ...customPresetsCache };
+    delete nextMap[presetId];
+    const normalized = applyCustomPresetsAndBroadcast(nextMap);
+    return { ok: true, presets: normalized };
+  } catch (err) {
+    console.error('Error deleting custom preset:', err);
+    return {
+      ok: false,
+      error: err?.message || 'Network error while deleting preset.',
+      presets: getAllActivePresets()
+    };
   }
 }
 
-// Background auto-sync on browser load and window focus
-if (typeof window !== "undefined") {
+export function deleteCustomPreset(presetId) {
+  if (!presetId) return getAllActivePresets();
+  const nextMap = { ...customPresetsCache };
+  delete nextMap[presetId];
+  const normalized = applyCustomPresetsAndBroadcast(nextMap);
+  fetch(`/api/presets/${encodeURIComponent(presetId)}`, {
+    method: 'DELETE',
+    headers: getPresetAuthHeaders()
+  }).catch((err) => console.warn('Background preset delete failed:', err));
+  return normalized;
+}
+
+// Background auto-sync on browser load, window focus, and instant real-time SSE single-preset updates
+if (typeof window !== 'undefined') {
   setTimeout(() => {
     syncPresetsWithCloud();
   }, 150);
 
-  window.addEventListener("focus", () => {
+  window.addEventListener('focus', () => {
     syncPresetsWithCloud();
+  });
+
+  window.addEventListener('controlroom_presets_realtime_update', (e) => {
+    const detail = e?.detail || {};
+    if (detail.action === 'upsert' && detail.preset && detail.preset.id) {
+      applyCustomPresetsAndBroadcast({ ...customPresetsCache, [detail.preset.id]: detail.preset });
+    } else if (detail.action === 'delete' && (detail.presetId || detail.recordId)) {
+      const targetId = detail.presetId || detail.recordId;
+      const nextMap = { ...customPresetsCache };
+      delete nextMap[targetId];
+      applyCustomPresetsAndBroadcast(nextMap);
+    } else {
+      syncPresetsWithCloud({ force: true });
+    }
   });
 }
 

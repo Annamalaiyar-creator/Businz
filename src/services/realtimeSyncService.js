@@ -216,6 +216,11 @@ export const handleIncomingRealtimeMessage = (data) => {
     window.dispatchEvent(new CustomEvent('controlroom_whatsapp_chats_updated', { detail: payload }));
   }
 
+  // 10. Structure Presets (Tech Support -> Sales PI / BOM / Quotations live sync)
+  else if (type === 'preset_updated' || (type === 'store_updated' && payload?.key === 'presets_store')) {
+    window.dispatchEvent(new CustomEvent('controlroom_presets_realtime_update', { detail: payload }));
+  }
+
   // Global broadcast for any custom listeners
   window.dispatchEvent(new CustomEvent('controlroom_realtime_event', { detail: data }));
 };
