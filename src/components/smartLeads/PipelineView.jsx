@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Columns3, RefreshCw, ChevronRight, User, TrendingUp, DollarSign, CheckCircle2, Award } from 'lucide-react';
+import { ChevronRight, User, TrendingUp, DollarSign, CheckCircle2, Award } from 'lucide-react';
 import { slApi, onSmartLeadChange, formatINR, formatDate, isOverdue } from './smartLeadsApi';
 import { TempBadge, SkeletonRows, EmptyState, BusinzKpiGrid, BusinzKpiCard } from './SlShared';
 import { StageModal } from './LeadActions';
@@ -67,10 +67,6 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
       {/* Top Controls */}
       <div className="sl-toolbar" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: '#0E7490', background: '#ECFEFF', padding: '6px 12px', borderRadius: 8 }}>
-            <Columns3 size={15} /> Kanban Pipeline
-          </div>
-
           {isManager && (
             <select
               className="sl-select"
@@ -85,10 +81,6 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
               ))}
             </select>
           )}
-
-          <button className="sl-btn" onClick={load} aria-label="Refresh pipeline">
-            <RefreshCw size={13} /> Refresh
-          </button>
         </div>
 
         {/* Forecast disclaimer pill */}
