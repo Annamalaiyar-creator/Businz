@@ -1498,14 +1498,14 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
           id, lead_number, company_name, contact_person, phone, email, source,
           pipeline_stage, priority, product_requirement, estimated_value,
           assigned_to_user_id, assigned_to_name, assigned_to_role, assigned_salesperson,
-          assigned_at, lead_created_by_id, lead_created_by_name, lead_created_by_role,
+          assigned_at, lead_created_by_id, lead_created_by_name,
           created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'New','High',$8,$9,$10,$11,$12,$11,NOW(),$13,$14,$15,NOW(),NOW())
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'New','High',$8,$9,$10,$11,$12,$11,NOW(),$13,$14,NOW(),NOW())
       `, [
         lid, num, company, contact, phone, email, source,
         reqText, estVal,
         assignee?.user_id || null, assignee?.name || null, assignee?.role || null,
-        'WEBHOOK', 'Inbound Webhook System', 'System'
+        'WEBHOOK', 'Inbound Webhook System'
       ]);
 
       if (auto.autoFollowup?.enabled) {
