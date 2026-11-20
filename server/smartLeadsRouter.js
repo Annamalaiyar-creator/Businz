@@ -1071,7 +1071,8 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
       // Attention queue: Hot/Warm leads needing attention
       query(`
-        SELECT l.id, l.company_name, l.contact_person, l.phone, l.pipeline_stage, l.temperature, l.score, l.estimated_value, l.next_action_due_at, l.assigned_salesperson_name
+        SELECT l.id, l.company_name, l.contact_person, l.phone, l.pipeline_stage, l.temperature, l.score, l.estimated_value, l.next_action_due_at,
+               COALESCE(l.assigned_to_name, l.assigned_salesperson, 'Sales Team') AS assigned_salesperson_name
         FROM public.leads l
         ${whereClause ? whereClause + ' AND' : 'WHERE'} l.pipeline_stage NOT IN ('Won', 'Lost')
           AND (l.temperature = 'HOT' OR l.score >= 60 OR l.next_action_due_at < NOW())
