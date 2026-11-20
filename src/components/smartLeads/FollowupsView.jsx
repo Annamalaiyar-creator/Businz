@@ -156,82 +156,79 @@ export default function FollowupsView({ meta, onOpenLead, toast }) {
         </div>
       </div>
 
-      {/* Filter Tabs & Type Selector */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', gap: '8px', background: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
-          {[
-            { key: 'today', label: `Today (${counts.today || 0})` },
-            { key: 'overdue', label: `Overdue (${counts.overdue || 0})` },
-            { key: 'upcoming', label: `Upcoming (${counts.upcoming || 0})` },
-            { key: 'completed', label: `Completed (${counts.completed || 0})` },
-            { key: 'all', label: `All (${counts.total || 0})` }
-          ].map(t => (
-            <button
-              key={t.key}
-              onClick={() => { setTab(t.key); setPage(1); }}
+      {/* Main Authoritative Card (Matching Native BUSINZ Design) */}
+      <div className="section-card" style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', padding: 0 }}>
+        {/* Status Sub-Tabs Row (Exact Native BUSINZ Underline Design) */}
+        <div style={{
+          display: 'flex', borderBottom: '1px solid #E2E8F0', padding: '0 20px',
+          justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', backgroundColor: '#FFFFFF'
+        }}>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {[
+              { key: 'today', label: 'Today', count: counts.today || 0 },
+              { key: 'overdue', label: 'Overdue', count: counts.overdue || 0 },
+              { key: 'upcoming', label: 'Upcoming', count: counts.upcoming || 0 },
+              { key: 'completed', label: 'Completed', count: counts.completed || 0 },
+              { key: 'all', label: 'All Follow-ups', count: counts.total || 0 }
+            ].map(t => {
+              const isActive = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => { setTab(t.key); setPage(1); }}
+                  style={{
+                    border: 'none', background: 'transparent', padding: '12px 4px',
+                    fontSize: '13px', fontWeight: 'bold',
+                    color: isActive ? '#0E7490' : '#64748B',
+                    borderBottom: isActive ? '2px solid #0E7490' : '2px solid transparent',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span>{t.label}</span>
+                  <span style={{
+                    fontSize: '10px', fontWeight: 'bold',
+                    backgroundColor: isActive ? '#ECFEFF' : '#F1F5F9',
+                    color: isActive ? '#0E7490' : '#475569',
+                    padding: '1px 7px', borderRadius: '10px'
+                  }}>
+                    {t.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+            <select
+              value={typeFilter}
+              onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
               style={{
-                border: 'none',
-                background: tab === t.key ? '#FFFFFF' : 'transparent',
-                color: tab === t.key ? '#0F172A' : '#64748B',
-                fontWeight: tab === t.key ? '700' : '600',
-                fontSize: '13px',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all 0.15s ease'
+                height: '34px', padding: '0 12px', fontSize: '12px',
+                borderRadius: '8px', border: '1px solid #CBD5E1',
+                background: '#FFFFFF', color: '#334155', cursor: 'pointer'
               }}
             >
-              {t.label}
+              <option value="">All Follow-up Types</option>
+              <option value="CALL">📞 Phone Calls</option>
+              <option value="WHATSAPP">💬 WhatsApp</option>
+              <option value="EMAIL">✉️ Emails</option>
+              <option value="MEETING">🤝 Meetings</option>
+            </select>
+
+            <button
+              onClick={load}
+              style={{
+                height: '34px', width: '34px', borderRadius: '8px',
+                border: '1px solid #CBD5E1', background: '#FFFFFF',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: '#64748B'
+              }}
+              title="Refresh list"
+            >
+              <RefreshCw size={14} />
             </button>
-          ))}
+          </div>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select
-            value={typeFilter}
-            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-            style={{
-              height: '36px',
-              padding: '0 12px',
-              fontSize: '13px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              background: '#FFFFFF',
-              color: '#334155',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="">All Follow-up Types</option>
-            <option value="CALL">📞 Phone Calls</option>
-            <option value="WHATSAPP">💬 WhatsApp</option>
-            <option value="EMAIL">✉️ Emails</option>
-            <option value="MEETING">🤝 Meetings</option>
-          </select>
-
-          <button
-            onClick={load}
-            style={{
-              height: '36px',
-              width: '36px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              background: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#64748B'
-            }}
-            title="Refresh list"
-          >
-            <RefreshCw size={15} />
-          </button>
-        </div>
-      </div>
-
-      {/* Main List */}
-      <div style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: '24px' }}>
             <SkeletonRows rows={5} />
