@@ -3572,6 +3572,11 @@ app.post('/api/sessions/heartbeat', async (req, res) => {
       liveRec._lastPersistedAt = Date.now();
       saveActiveSessionsToDisk();
     }
+    // Refresh sliding 30-day expires_at in PostgreSQL at most once every 30 minutes so PM2 restarts never expire active users
+    if (liveRec && (!liveRec._lastDbPersistedAt || (Date.now() - liveRec._lastDbPersistedAt) >= 30 * 60 * 1000)) {
+      liveRec._lastDbPersistedAt = Date.now();
+      persistSessionToDb(liveRec).catch(() => {});
+    }
   }
 
   if (!result.success) {

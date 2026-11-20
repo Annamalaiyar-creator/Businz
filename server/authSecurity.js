@@ -20,7 +20,7 @@
 
 import crypto from 'crypto';
 
-export const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24-hour inactivity TTL
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30-day sliding inactivity TTL
 
 export const FORBIDDEN_SELF_REGISTER_ROLES = [
   'CEO',
