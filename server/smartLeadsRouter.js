@@ -731,9 +731,10 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     let pIdx = 1;
 
     // Scoping by user role
-    if (!canViewAllLeads(req.userSession)) {
-      conds.push(`(f.assigned_salesperson_id = $${pIdx} OR l.assigned_salesperson = $${pIdx})`);
-      params.push(req.userSession.employee_code);
+    if (!isLeadManager(req.userSession.role)) {
+      const myId = String(req.userSession.empCode || '');
+      conds.push(`(f.assigned_salesperson_id = $${pIdx} OR l.assigned_to_user_id = $${pIdx} OR l.lead_created_by_id = $${pIdx})`);
+      params.push(myId);
       pIdx++;
     } else if (salespersonId) {
       conds.push(`f.assigned_salesperson_id = $${pIdx}`);
@@ -767,9 +768,10 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     const scopeConds = ['l.deleted_at IS NULL'];
     const scopeParams = [];
     let sIdx = 1;
-    if (!canViewAllLeads(req.userSession)) {
-      scopeConds.push(`(f.assigned_salesperson_id = $${sIdx} OR l.assigned_salesperson = $${sIdx})`);
-      scopeParams.push(req.userSession.employee_code);
+    if (!isLeadManager(req.userSession.role)) {
+      const myId = String(req.userSession.empCode || '');
+      scopeConds.push(`(f.assigned_salesperson_id = $${sIdx} OR l.assigned_to_user_id = $${sIdx} OR l.lead_created_by_id = $${sIdx})`);
+      scopeParams.push(myId);
       sIdx++;
     } else if (salespersonId) {
       scopeConds.push(`f.assigned_salesperson_id = $${sIdx}`);
@@ -1022,12 +1024,13 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
   // ---------- Command Center Overview KPIs ----------
   router.get('/overview', wrap(async (req, res) => {
-    const isManager = canViewAllLeads(req.userSession);
+    const isManager = isLeadManager(req.userSession.role);
     const conds = ['l.deleted_at IS NULL'];
     const params = [];
     if (!isManager) {
-      conds.push('l.assigned_salesperson = $1');
-      params.push(req.userSession.employee_code);
+      const myId = String(req.userSession.empCode || '');
+      conds.push('(l.assigned_to_user_id = $1 OR l.lead_created_by_id = $1)');
+      params.push(myId);
     }
     const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
