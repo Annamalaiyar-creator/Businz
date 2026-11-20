@@ -32,7 +32,8 @@ const STAGE_TO_LEGACY_STATUS = {
   'Contacted': 'Contacted',
   'Qualified': 'Opportunity',
   'Quotation Sent': 'Proposal Sent',
-  'Negotiation': 'Negotiating',
+  // The old lead screens have no "Negotiating" status, so Negotiation is shown there as "Proposal Sent"
+  'Negotiation': 'Proposal Sent',
   'Won': 'Converted',
   'Lost': 'Dropped'
 };
@@ -51,14 +52,22 @@ export function isValidStage(stage) {
 }
 
 /**
- * Validate a stage transition. Open stages can move freely (forward or back).
- * Leaving a closed stage (reopen) requires a manager. Lost requires a reason.
+ * Validate a stage transition. Stages only move forward (same rule as the old lead management).
+ * Moving back or reopening a Won/Lost lead needs a manager (CEO / Technical Administrator / Tech Support) and a reason.
+ * Lost requires a lost reason.
  */
-export function validateStageTransition({ from, to, lostReasonId, isManager }) {
+export function validateStageTransition({ from, to, lostReasonId, isManager, remarks }) {
   if (!isValidStage(to)) return { ok: false, error: `Invalid stage "${to}"` };
   if (from === to) return { ok: false, error: 'Lead is already in this stage' };
-  if (CLOSED_STAGES.includes(from) && !isManager) {
-    return { ok: false, error: 'Only a sales manager can reopen a Won/Lost lead' };
+  const isReopen = CLOSED_STAGES.includes(from);
+  const isBackward = OPEN_STAGES.includes(from) && OPEN_STAGES.includes(to) && OPEN_STAGES.indexOf(to) < OPEN_STAGES.indexOf(from);
+  if ((isReopen || isBackward) && !isManager) {
+    return { ok: false, error: isReopen
+      ? 'Only CEO, Technical Administrator or Tech Support can reopen a Won/Lost lead'
+      : 'Stages can only move forward. Ask CEO, Technical Administrator or Tech Support to move a lead back' };
+  }
+  if ((isReopen || isBackward) && !String(remarks || '').trim()) {
+    return { ok: false, error: 'A reason (remarks) is required to move a lead back' };
   }
   if (to === 'Lost' && !lostReasonId) return { ok: false, error: 'A lost reason is required' };
   return { ok: true };
@@ -84,7 +93,7 @@ export function isLeadAdmin(role) {
 
 export function isLeadManager(role) {
   const r = norm(role);
-  return isLeadAdmin(r) || r.includes('sales head') || r.includes('tech support') || r.includes('technical support');
+  return isLeadAdmin(r) || r.includes('tech support') || r.includes('technical support');
 }
 
 export function canAccessSmartLeads(role) {

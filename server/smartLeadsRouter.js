@@ -189,8 +189,9 @@ async function insertAudit(client, leadId, field, oldV, newV, actor) {
  * @param {Function} deps.broadcast       (eventType, payload) => void  (SSE)
  * @param {Function} deps.getTeam         async () => [{ user_id, name, role }]  registered BUSINZ sales staff
  * @param {Function} [deps.notify]        async (params) => void  (internal notifications)
+ * @param {Function} [deps.getStaff]      async () => [{ user_id, name, role }]  all BUSINZ employees (for manager notifications)
  */
-export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, getTeam = async () => [], notify = async () => {} }) {
+export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, getTeam = async () => [], getStaff = async () => [], notify = async () => {} }) {
   const router = express.Router();
   router.use(express.json({ limit: '1mb' }));
   router.use(requireSession);
@@ -436,13 +437,13 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     const settings = await getSettings();
     const team = await getTeam();
 
+    // Same rule as the old lead management: only CEO / Technical Administrator / Tech Support assign leads.
+    // A lead created by Sales goes to the Unassigned queue (the creator can still see it).
     let assignee = null;
     if (b.assigned_to_user_id) {
-      if (!isLeadManager(actor.role) && b.assigned_to_user_id !== actor.id) throw new HttpError(403, 'Only managers can assign leads to others');
+      if (!isLeadManager(actor.role)) throw new HttpError(403, 'Only CEO, Technical Administrator or Tech Support can assign leads');
       assignee = team.find(t => t.user_id === b.assigned_to_user_id);
       if (!assignee) throw new HttpError(400, 'Assignee is not an active BUSINZ sales user');
-    } else if (!isLeadManager(actor.role)) {
-      assignee = { user_id: actor.id, name: actor.name, role: actor.role }; // sales exec owns what they create
     }
 
     const lead = await withTx(async (client) => {
@@ -487,6 +488,18 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         dedupId: `smart-lead-assign-${lead.id}-${lead.assigned_to_user_id}`
       }).catch(() => {});
     }
+    if (!lead.assigned_to_user_id) {
+      // Old rule: notify CEO & Tech Support of a new unassigned lead
+      const managers = (await getStaff().catch(() => [])).filter(s => isLeadManager(s.role) && s.user_id !== actor.id);
+      for (const m of managers) {
+        notify({
+          recipientEmpCode: m.user_id, eventType: 'NEW_LEAD', documentType: 'LEAD', documentId: lead.id,
+          title: 'New unassigned lead', message: `${lead.lead_number} – ${lead.company_name} was created by ${actor.name} and needs to be assigned`,
+          actorEmpCode: actor.id, actorName: actor.name, actorRole: actor.role, targetTab: 'Smart Leads', targetRecordId: lead.id,
+          dedupId: `smart-lead-new-${lead.id}-${m.user_id}`
+        }).catch(() => {});
+      }
+    }
     emit('create', lead);
     res.status(201).json({ success: true, lead });
   }));
@@ -526,19 +539,41 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
   // ---------- Stage change ----------
   async function changeStage(client, cur, { stage, lostReasonId, remarks }, actor, isManager) {
-    const v = validateStageTransition({ from: cur.pipeline_stage, to: stage, lostReasonId, isManager });
+    const v = validateStageTransition({ from: cur.pipeline_stage, to: stage, lostReasonId, isManager, remarks });
     if (!v.ok) throw new HttpError(400, v.error);
     if (stage === 'Lost') {
       const r = await client.query(`SELECT 1 FROM public.lead_lost_reasons WHERE id = $1 AND is_active`, [lostReasonId]);
       if (!r.rows[0]) throw new HttpError(400, 'Invalid lost reason');
     }
+    // Won = a real sale: the lead must have a quotation and a customer in the Customer master
+    let customerId = cur.converted_customer_id || null;
+    let customerCode = cur.converted_customer_code || null;
+    if (stage === 'Won') {
+      const q = await client.query(`SELECT 1 FROM public.quotations WHERE lead_id = $1 LIMIT 1`, [cur.id]);
+      if (!q.rows[0]) throw new HttpError(400, 'Create a quotation for this lead before marking it Won');
+      if (!customerId) {
+        const c = await client.query(
+          `SELECT id, customer_code FROM public.customers
+            WHERE (company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $1)
+               OR ($2 <> '' AND RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $2)
+            LIMIT 1`,
+          [String(cur.company_name || '').trim().toLowerCase(), normalizePhone(cur.phone || cur.whatsapp)]
+        );
+        customerId = c.rows[0]?.id != null ? String(c.rows[0].id) : null;
+        customerCode = c.rows[0]?.customer_code || null;
+      }
+      if (!customerId) throw new HttpError(400, 'Add this customer to the Customer master before marking the lead Won');
+    }
     const legacy = mapStageToLegacyStatus(stage, !!cur.assigned_to_user_id);
     await client.query(
       `UPDATE public.leads SET pipeline_stage = $2, status = $3, stage_changed_at = NOW(), updated_at = NOW(),
           lost_reason_id = CASE WHEN $2 = 'Lost' THEN $4 ELSE NULL END,
-          lost_remarks = CASE WHEN $2 = 'Lost' THEN $5 ELSE NULL END
+          lost_remarks = CASE WHEN $2 = 'Lost' THEN $5 ELSE NULL END,
+          is_converted = CASE WHEN $2 = 'Won' THEN TRUE WHEN $6 = 'Won' THEN FALSE ELSE is_converted END,
+          converted_customer_id = CASE WHEN $2 = 'Won' THEN $7 ELSE converted_customer_id END,
+          converted_customer_code = CASE WHEN $2 = 'Won' THEN $8 ELSE converted_customer_code END
         WHERE id = $1`,
-      [cur.id, stage, legacy, lostReasonId || null, remarks || null]
+      [cur.id, stage, legacy, lostReasonId || null, remarks || null, cur.pipeline_stage || null, customerId, customerCode]
     );
     await insertStatusHistory(client, cur.id, cur.pipeline_stage, stage, remarks, actor);
     if (stage === 'Won' || stage === 'Lost') {
@@ -564,7 +599,8 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     await client.query(
       `UPDATE public.leads SET assigned_to_user_id = $2, assigned_to_name = $3, assigned_to_role = $4, assigned_salesperson = $3,
           assigned_by_user_id = $5, assigned_by_name = $6, assigned_by_role = $7, assigned_at = NOW(), updated_at = NOW(),
-          status = CASE WHEN pipeline_stage = 'New' THEN 'Assigned' ELSE status END
+          status = CASE WHEN pipeline_stage = 'New' THEN 'Assigned' ELSE status END,
+          sl_escalated_24h_at = NULL
         WHERE id = $1`,
       [cur.id, assignee.user_id, assignee.name, assignee.role || null, actor.id, actor.name, actor.role]
     );
@@ -1278,7 +1314,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         UPDATE public.leads
         SET assigned_to_user_id = $1, assigned_to_name = $2, assigned_to_role = $3,
             assigned_salesperson = $2, assigned_at = NOW(), assigned_by_user_id = $4,
-            assigned_by_name = $5, updated_at = NOW()
+            assigned_by_name = $5, updated_at = NOW(), sl_escalated_24h_at = NULL
         WHERE (assigned_to_user_id = $6 OR assigned_salesperson = $6)
           AND pipeline_stage NOT IN ('Won', 'Lost')
           AND deleted_at IS NULL
@@ -1535,4 +1571,50 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
   }));
 
   return router;
+}
+
+/**
+ * 24-hour escalation (Smart Leads only): an open lead with no customer contact
+ * (call / WhatsApp / email / meeting) within `uncontactedHours` of assignment — or of creation if still
+ * unassigned — is escalated once to every Tech Support user. The old lead management's own 2h / 48h
+ * alerts keep running unchanged. Uses the existing Automation setting `slaAlerts`.
+ * @param {{ notify: Function, getStaff: Function }} deps
+ */
+export async function runSmartLeadsSlaEscalation({ notify = async () => {}, getStaff = async () => [] } = {}) {
+  const s = await query(`SELECT value FROM public.lead_settings WHERE key = 'automation_rules'`);
+  const sla = { ...DEFAULT_AUTOMATION.slaAlerts, ...(s.rows[0]?.value?.slaAlerts || {}) };
+  if (sla.escalateToManager === false) return { escalated: 0, skipped: 'disabled' };
+  const hours = Math.max(1, Number(sla.uncontactedHours) || 24);
+  const techSupport = (await getStaff().catch(() => [])).filter(p => /tech(nical)?\s*support/i.test(String(p.role || '')));
+  if (!techSupport.length) return { escalated: 0, skipped: 'no tech support users' };
+
+  // Mark first (one UPDATE), then notify — each lead is escalated at most once per assignment
+  const res = await query(
+    `UPDATE public.leads SET sl_escalated_24h_at = NOW()
+      WHERE id IN (
+        SELECT id FROM public.leads
+         WHERE deleted_at IS NULL
+           AND pipeline_stage = ANY($1::text[])
+           AND last_qualifying_activity_at IS NULL
+           AND sl_escalated_24h_at IS NULL
+           AND COALESCE(assigned_at, created_at) <= NOW() - ($2 || ' hours')::interval
+           -- only leads that crossed the limit in the last 2 days, so old backlog does not flood Tech Support on go-live
+           AND COALESCE(assigned_at, created_at) > NOW() - (($2::int + 48) || ' hours')::interval
+         LIMIT 200)
+      RETURNING id, lead_number, company_name, assigned_to_name`,
+    [OPEN_STAGES, String(hours)]
+  );
+  for (const lead of res.rows) {
+    const who = lead.assigned_to_name ? `assigned to ${lead.assigned_to_name}` : 'still unassigned';
+    for (const ts of techSupport) {
+      await notify({
+        recipientEmpCode: ts.user_id, eventType: 'LEAD_SLA_24H', documentType: 'LEAD', documentId: lead.id,
+        title: `Lead not contacted in ${hours} hours`,
+        message: `${lead.lead_number} – ${lead.company_name} (${who}) has had no customer contact for ${hours} hours.`,
+        actorEmpCode: 'SYSTEM', actorName: 'Smart Leads', actorRole: 'System', targetTab: 'Smart Leads', targetRecordId: lead.id,
+        dedupId: `smart-lead-sla24-${lead.id}-${ts.user_id}`
+      }).catch(() => {});
+    }
+  }
+  return { escalated: res.rows.length };
 }

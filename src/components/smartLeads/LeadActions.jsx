@@ -2,17 +2,26 @@ import React, { useState } from 'react';
 import { Modal } from './SlShared';
 import { slApi } from './smartLeadsApi';
 
+const OPEN_STAGES = ['New', 'Contacted', 'Qualified', 'Quotation Sent', 'Negotiation'];
+
 export function StageModal({ meta, lead, bulkIds, initialStage, onClose, onDone }) {
-  const [stage, setStage] = useState(initialStage || '');
+  // Stages only move forward; moving back / reopening is for CEO, Technical Administrator or Tech Support with a reason
+  const from = lead.pipeline_stage;
+  const isBack = (to) => ['Won', 'Lost'].includes(from) || (OPEN_STAGES.includes(from) && OPEN_STAGES.includes(to) && OPEN_STAGES.indexOf(to) < OPEN_STAGES.indexOf(from));
+  const isManager = Boolean(meta?.me?.isManager);
+  const allowedStages = (meta?.stages || []).filter(s => s !== from && (isManager || !isBack(s)));
+  const [stage, setStage] = useState(allowedStages.includes(initialStage) ? initialStage : '');
   const [lostReasonId, setLostReasonId] = useState('');
   const [remarks, setRemarks] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const reasons = (meta?.lostReasons || []).filter(r => r.is_active);
+  const needsReason = Boolean(stage) && isBack(stage);
   const submit = async () => {
     setError('');
     if (!stage) return setError('Choose a stage.');
     if (stage === 'Lost' && !lostReasonId) return setError('Choose a lost reason.');
+    if (needsReason && !remarks.trim()) return setError('Give a reason for moving this lead back.');
     setSaving(true);
     try {
       if (bulkIds) {
@@ -32,7 +41,7 @@ export function StageModal({ meta, lead, bulkIds, initialStage, onClose, onDone 
         <label className="sl-label" htmlFor="sl-stage">Stage</label>
         <select id="sl-stage" className="sl-select" value={stage} onChange={e => setStage(e.target.value)}>
           <option value="">Select…</option>
-          {(meta?.stages || []).filter(s => s !== lead.pipeline_stage).map(s => <option key={s}>{s}</option>)}
+          {allowedStages.map(s => <option key={s}>{s}</option>)}
         </select>
       </div>
       {stage === 'Lost' && (
@@ -45,9 +54,10 @@ export function StageModal({ meta, lead, bulkIds, initialStage, onClose, onDone 
         </div>
       )}
       <div className="sl-field">
-        <label className="sl-label" htmlFor="sl-remarks">Remarks</label>
+        <label className="sl-label" htmlFor="sl-remarks">{needsReason ? 'Reason for moving back *' : 'Remarks'}</label>
         <textarea id="sl-remarks" className="sl-textarea" value={remarks} onChange={e => setRemarks(e.target.value)} />
       </div>
+      {stage === 'Won' && <p className="sl-faint" style={{ margin: 0 }}>Won needs a quotation for this lead and the customer in the Customer master.</p>}
       {['Won', 'Lost'].includes(stage) && <p className="sl-faint" style={{ margin: 0 }}>Pending follow-ups for this lead will be closed automatically.</p>}
     </Modal>
   );

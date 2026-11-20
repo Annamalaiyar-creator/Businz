@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { query, pool } from '../server/db.js';
 import { ensureSmartLeadsSchema } from '../server/smartLeadsSchema.js';
-import { createSmartLeadsRouter } from '../server/smartLeadsRouter.js';
+import { createSmartLeadsRouter, runSmartLeadsSlaEscalation } from '../server/smartLeadsRouter.js';
 
 if (process.env.APP_ENV !== 'development') {
   throw new Error('Refusing to run Smart Leads integration tests: APP_ENV is not "development".');
@@ -18,7 +18,7 @@ const TEAM = [
 ];
 const USERS = {
   ceo: { empCode: 'ZZT-CEO', user: 'Test CEO', role: 'CEO' },
-  head: { empCode: 'ZZT-SH', user: 'Test Head', role: 'Sales Head' },
+  head: { empCode: 'ZZT-TS', user: 'Test Tech Support', role: 'Tech Support' },
   se1: { empCode: 'ZZT-SE1', user: 'Test Exec One', role: 'Sales Executive' },
   se2: { empCode: 'ZZT-SE2', user: 'Test Exec Two', role: 'Sales Executive' },
   dispatch: { empCode: 'ZZT-DSP', user: 'Test Dispatch', role: 'Dispatch' }
@@ -46,7 +46,8 @@ before(async () => {
     },
     broadcast: (type, payload) => events.push({ type, payload }),
     notify: async (p) => { notifications.push(p); },
-    getTeam: async () => TEAM
+    getTeam: async () => TEAM,
+    getStaff: async () => [...TEAM, { user_id: 'ZZT-TS', name: 'Test Tech Support', role: 'Tech Support' }]
   }));
   await new Promise(r => { server = app.listen(0, '127.0.0.1', r); });
   base = `http://127.0.0.1:${server.address().port}`;
@@ -61,6 +62,8 @@ after(async () => {
     await query(`DELETE FROM public.leads WHERE id = ANY($1::text[])`, [ids]);
   }
   await query(`DELETE FROM public.lead_lost_reasons WHERE label LIKE $1`, [`${PREFIX}%`]);
+  await query(`DELETE FROM public.quotations WHERE id LIKE $1`, [`${PREFIX}%`]);
+  await query(`DELETE FROM public.customers WHERE id LIKE $1`, [`${PREFIX}%`]);
   server?.close();
   await pool.end();
 });
@@ -143,9 +146,25 @@ test('activity auto-moves New → Contacted; stage rules enforced', async () => 
   const q = await api('se1', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Quotation Sent' });
   assert.equal(q.status, 200);
   assert.equal(q.body.lead.status, 'Proposal Sent');
+  // forward-only: Sales cannot move back
+  assert.equal((await api('se1', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Contacted' })).status, 400);
+  // Won needs a quotation AND a customer master record
+  const noQuote = await api('se1', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Won' });
+  assert.equal(noQuote.status, 400);
+  assert.match(noQuote.body.error, /quotation/i);
+  await query(`INSERT INTO public.quotations (id, quote_number, customer_name, lead_id) VALUES ($1, $1, $2, $3)`, [`${PREFIX}Q1`, `${PREFIX}Alpha Solar`, leadA.id]);
+  const noCust = await api('se1', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Won' });
+  assert.equal(noCust.status, 400);
+  assert.match(noCust.body.error, /customer/i);
+  await query(`INSERT INTO public.customers (id, customer_code, company_name) VALUES ($1, $1, $2)`, [`${PREFIX}C1`, `${PREFIX}Alpha Solar`]);
   const won = await api('se1', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Won' });
+  assert.equal(won.status, 200, JSON.stringify(won.body));
   assert.equal(won.body.lead.pipeline_stage, 'Won');
-  assert.equal((await api('se1', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Negotiation' })).status, 400);
+  const conv = await query(`SELECT is_converted, converted_customer_id FROM public.leads WHERE id = $1`, [leadA.id]);
+  assert.equal(conv.rows[0].is_converted, true);
+  assert.equal(conv.rows[0].converted_customer_id, `${PREFIX}C1`);
+  assert.equal((await api('se1', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Negotiation', remarks: 'x' })).status, 400);
+  assert.equal((await api('head', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Negotiation' })).status, 400); // reason required
   assert.equal((await api('head', 'POST', `/api/smart-leads/leads/${leadA.id}/stage`, { stage: 'Negotiation', remarks: 'Reopened' })).status, 200);
   const hist = await query(`SELECT new_status FROM public.lead_status_history WHERE lead_id = $1`, [leadA.id]);
   assert.ok(['New', 'Contacted', 'Quotation Sent', 'Won', 'Negotiation'].every(s => hist.rows.some(h => h.new_status === s)));
@@ -205,6 +224,32 @@ test('merge moves history into target and soft-deletes source; bulk + delete per
   const bulk = await api('head', 'POST', '/api/smart-leads/leads/bulk', { ids: [leadA.id], action: 'assign', userId: 'ZZT-SE1' });
   assert.equal(bulk.status, 200);
   assert.equal((await api('head', 'POST', '/api/smart-leads/leads/bulk', { ids: [leadA.id], action: 'delete' })).status, 403);
+});
+
+test('sales-created lead is unassigned, notifies Tech Support; sales cannot assign', async () => {
+  assert.equal((await api('se1', 'POST', '/api/smart-leads/leads', {
+    company_name: `${PREFIX}Self Assign`, phone: '9000044444', assigned_to_user_id: 'ZZT-SE1'
+  })).status, 403);
+  const r = await api('se1', 'POST', '/api/smart-leads/leads', { company_name: `${PREFIX}Sales Created`, phone: '9000055555' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.lead.assigned_to_user_id, null);
+  assert.ok(notifications.some(n => n.eventType === 'NEW_LEAD' && n.recipientEmpCode === 'ZZT-TS' && n.documentId === r.body.lead.id));
+  // creator can still see it
+  assert.equal((await api('se1', 'GET', `/api/smart-leads/leads/${r.body.lead.id}/summary`)).status, 200);
+});
+
+test('24h no-contact escalation notifies Tech Support once', async () => {
+  const r = await api('ceo', 'POST', '/api/smart-leads/leads', { company_name: `${PREFIX}SLA Lead`, phone: '9000066666', assigned_to_user_id: 'ZZT-SE2' });
+  assert.equal(r.status, 201);
+  const id = r.body.lead.id;
+  await query(`UPDATE public.leads SET assigned_at = NOW() - interval '25 hours', created_at = NOW() - interval '25 hours' WHERE id = $1`, [id]);
+  const sent = [];
+  const deps = { notify: async (p) => { sent.push(p); }, getStaff: async () => [{ user_id: 'ZZT-TS', name: 'Test Tech Support', role: 'Tech Support' }] };
+  await runSmartLeadsSlaEscalation(deps);
+  assert.ok(sent.some(n => n.eventType === 'LEAD_SLA_24H' && n.documentId === id && n.recipientEmpCode === 'ZZT-TS'));
+  const before = sent.length;
+  await runSmartLeadsSlaEscalation(deps);
+  assert.ok(!sent.slice(before).some(n => n.documentId === id), 'escalated twice');
 });
 
 test('pipeline returns all 7 stages with weighted values', async () => {

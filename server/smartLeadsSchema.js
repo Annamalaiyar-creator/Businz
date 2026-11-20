@@ -21,7 +21,8 @@ export async function ensureSmartLeadsSchema() {
       ADD COLUMN IF NOT EXISTS next_action_exception TEXT,
       ADD COLUMN IF NOT EXISTS stage_changed_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS merged_into_lead_id TEXT;
+      ADD COLUMN IF NOT EXISTS merged_into_lead_id TEXT,
+      ADD COLUMN IF NOT EXISTS sl_escalated_24h_at TIMESTAMPTZ;
 
     ALTER TABLE public.lead_followups
       ADD COLUMN IF NOT EXISTS followup_type TEXT DEFAULT 'CALL',

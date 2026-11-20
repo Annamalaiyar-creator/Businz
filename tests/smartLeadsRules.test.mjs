@@ -22,14 +22,20 @@ test('stage maps back to a legacy status the old CRM understands', () => {
   assert.equal(mapStageToLegacyStatus('Won'), 'Converted');
   assert.equal(mapStageToLegacyStatus('Lost'), 'Dropped');
   assert.equal(mapStageToLegacyStatus('Quotation Sent'), 'Proposal Sent');
+  assert.equal(mapStageToLegacyStatus('Negotiation'), 'Proposal Sent'); // old screens have no "Negotiating"
 });
 
 test('stage transitions: lost needs reason, reopen needs manager', () => {
   assert.equal(validateStageTransition({ from: 'New', to: 'Lost', isManager: false }).ok, false);
   assert.equal(validateStageTransition({ from: 'New', to: 'Lost', lostReasonId: 'LR-01', isManager: false }).ok, true);
-  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: false }).ok, true);
-  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: false }).ok, false);
-  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: true }).ok, true);
+  // forward-only: Sales cannot move back; managers can, but only with a reason
+  assert.equal(validateStageTransition({ from: 'Contacted', to: 'Negotiation', isManager: false }).ok, true);
+  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: false }).ok, false);
+  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: true }).ok, false);
+  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: true, remarks: 'Wrong stage' }).ok, true);
+  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: false, remarks: 'x' }).ok, false);
+  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: true }).ok, false);
+  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: true, remarks: 'Order revised' }).ok, true);
   assert.equal(validateStageTransition({ from: 'New', to: 'Bogus', isManager: true }).ok, false);
   assert.equal(validateStageTransition({ from: 'New', to: 'New', isManager: true }).ok, false);
 });
@@ -62,7 +68,8 @@ test('source canonicalisation', () => {
 test('roles', () => {
   assert.equal(isLeadAdmin('CEO'), true);
   assert.equal(isLeadAdmin('Sales Head'), false);
-  assert.equal(isLeadManager('Sales Head'), true);
+  assert.equal(isLeadManager('Sales Head'), false); // no Sales Head role in BUSINZ
+  assert.equal(isLeadManager('Technical Administrator'), true);
   assert.equal(isLeadManager('Tech Support'), true);
   assert.equal(isLeadManager('Sales Executive'), false);
   assert.equal(canAccessSmartLeads('Sales Executive'), true);
