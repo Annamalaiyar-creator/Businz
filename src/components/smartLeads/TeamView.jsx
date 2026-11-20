@@ -4,7 +4,7 @@ import {
   RefreshCw, ArrowRightLeft, CalendarClock, Briefcase, ChevronRight
 } from 'lucide-react';
 import { slApi, formatINR } from './smartLeadsApi';
-import { SkeletonRows } from './SlShared';
+import { SkeletonRows, BusinzKpiGrid, BusinzKpiCard } from './SlShared';
 
 export default function TeamView({ meta, onNavigate, onOpenLead, toast }) {
   const [data, setData] = useState(null);
@@ -101,68 +101,66 @@ export default function TeamView({ meta, onNavigate, onOpenLead, toast }) {
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Active Sales Staff</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F0FDFA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={16} color="#0E7490" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#0E7490', marginTop: '10px' }}>
-            {totals.teamCount || members.length}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            Members in sales roster
-          </div>
-        </div>
+      {/* Signature BUSINZ Team KPI Cards */}
+      <BusinzKpiGrid minWidth="220px">
+        <BusinzKpiCard
+          title="ACTIVE SALES STAFF"
+          value={String(totals.teamCount || members.length)}
+          valColor="#0E7490"
+          icon={Users}
+          iconColor="#0E7490"
+          iconBg="#ECFEFF"
+          trend="Active"
+          trendNeutral={true}
+          bottomPrefix="Sales roster capacity"
+          bottomHighlight={`${totals.teamCount || members.length} Reps`}
+          bottomHighlightColor="#0E7490"
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Open Leads Assigned</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Briefcase size={16} color="#2563EB" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#1E293B', marginTop: '10px' }}>
-            {totals.totalActiveLeads || 0}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            Leads in active pipeline
-          </div>
-        </div>
+        <BusinzKpiCard
+          title="OPEN LEADS ASSIGNED"
+          value={String(totals.totalActiveLeads || 0)}
+          valColor="#1E293B"
+          icon={Briefcase}
+          iconColor="#2563EB"
+          iconBg="#EFF6FF"
+          trend="In Pipeline"
+          trendNeutral={true}
+          bottomPrefix="Active workload"
+          bottomHighlight={`${totals.totalActiveLeads || 0} Total Deals`}
+          bottomHighlightColor="#2563EB"
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Managed Pipeline</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <TrendingUp size={16} color="#16A34A" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#16A34A', marginTop: '10px' }}>
-            {formatINR(totals.totalPipelineValue || 0)}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            Total open opportunity value
-          </div>
-        </div>
+        <BusinzKpiCard
+          title="MANAGED PIPELINE"
+          value={formatINR(totals.totalPipelineValue || 0)}
+          valColor="#16A34A"
+          icon={TrendingUp}
+          iconColor="#16A34A"
+          iconBg="#F0FDF4"
+          trend="Pipeline Value"
+          trendUp={true}
+          bottomPrefix="Managed opportunity value"
+          bottomHighlight={formatINR(totals.totalPipelineValue || 0)}
+          bottomHighlightColor="#16A34A"
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Overdue SLA Follow-ups</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: totals.totalOverdueFollowups > 0 ? '#FEF2F2' : '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertTriangle size={16} color={totals.totalOverdueFollowups > 0 ? '#DC2626' : '#16A34A'} />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: totals.totalOverdueFollowups > 0 ? '#DC2626' : '#16A34A', marginTop: '10px' }}>
-            {totals.totalOverdueFollowups || 0}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            Pending client touches
-          </div>
-        </div>
-      </div>
+        <BusinzKpiCard
+          title="OVERDUE SLA FOLLOW-UPS"
+          value={String(totals.totalOverdueFollowups || 0)}
+          valColor={totals.totalOverdueFollowups > 0 ? '#DC2626' : '#16A34A'}
+          icon={AlertTriangle}
+          iconColor={totals.totalOverdueFollowups > 0 ? '#DC2626' : '#16A34A'}
+          iconBg={totals.totalOverdueFollowups > 0 ? '#FEF2F2' : '#F0FDF4'}
+          trend={totals.totalOverdueFollowups > 0 ? 'Urgent SLA' : 'SLA Met'}
+          trendUp={totals.totalOverdueFollowups === 0}
+          trendNeutral={false}
+          bottomPrefix="Pending client touches"
+          bottomHighlight={`${totals.totalOverdueFollowups || 0} Overdue`}
+          bottomHighlightColor={totals.totalOverdueFollowups > 0 ? '#DC2626' : '#16A34A'}
+          highlightCard={totals.totalOverdueFollowups > 0}
+        />
+      </BusinzKpiGrid>
 
       {/* Team Roster Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>

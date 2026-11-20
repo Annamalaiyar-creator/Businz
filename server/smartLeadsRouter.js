@@ -211,7 +211,12 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
   const requireManager = (req) => { if (!isLeadManager(req.userSession.role)) throw new HttpError(403, 'Sales manager permission required'); };
   const requireAdmin = (req) => { if (!isLeadAdmin(req.userSession.role)) throw new HttpError(403, 'Administrator permission required'); };
   // SSE goes to every connected client, so broadcast IDs only (no contact data). Clients fetch the row via the scoped /summary route.
-  const emit = (action, lead, extra = {}) => broadcast('smart_lead_changed', { action, leadId: lead?.id || extra.leadId, ownerId: lead?.assigned_to_user_id || null });
+  const emit = (action, lead, extra = {}) => broadcast('smart_lead_changed', {
+    action,
+    leadId: lead?.id || extra.leadId || null,
+    ownerId: lead?.assigned_to_user_id || extra.ownerId || null,
+    stage: lead?.stage || extra.stage || null
+  });
 
   // ---------- Meta / settings ----------
   router.get('/meta', wrap(async (req, res) => {

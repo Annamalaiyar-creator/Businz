@@ -97,3 +97,181 @@ export function Pager({ page, pageSize, total, onPage, onPageSize }) {
     </div>
   );
 }
+
+/**
+ * Signature BUSINZ KPI Grid layout container
+ */
+export function BusinzKpiGrid({ children, minWidth = '200px' }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}, 1fr))`,
+      gap: '12px',
+      width: '100%',
+      boxSizing: 'border-box'
+    }}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Signature BUSINZ KPI Card Component
+ * Matches the exact design language of CeoExecutiveDashboard and Sales Command Center
+ */
+export function BusinzKpiCard({
+  title,
+  value,
+  valColor,
+  icon: Icon,
+  iconColor = '#0E7490',
+  iconBg = '#ECFEFF',
+  trend,
+  trendUp,
+  trendNeutral,
+  bottomPrefix,
+  bottomHighlight,
+  bottomHighlightColor,
+  onClick,
+  isSelected,
+  highlightCard
+}) {
+  const [hovered, setHovered] = useState(false);
+  const isUp = trendUp;
+  const isNeutral = trendNeutral;
+  const trendBg = isUp ? '#ECFDF5' : (isNeutral ? '#F1F5F9' : '#FEF2F2');
+  const trendBorder = isUp ? '1px solid #A7F3D0' : (isNeutral ? '1px solid #E2E8F0' : '1px solid #FECACA');
+  const trendText = isUp ? '#059669' : (isNeutral ? '#475569' : '#DC2626');
+  const resolvedBottomHighlightColor = bottomHighlightColor || (isUp ? '#059669' : (isNeutral ? '#0F172A' : '#0E7490'));
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      style={{
+        backgroundColor: isSelected ? '#F0FDFA' : (hovered && onClick ? '#F8FAFC' : '#FFFFFF'),
+        borderRadius: '16px',
+        border: isSelected
+          ? '1.5px solid #0E7490'
+          : (hovered && onClick ? '1.5px solid #0E7490' : (highlightCard ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0')),
+        padding: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        boxShadow: isSelected
+          ? '0 0 0 1px #0E7490, 0 4px 18px rgba(14, 116, 144, 0.12)'
+          : (highlightCard
+              ? '0 4px 18px rgba(220, 38, 38, 0.08)'
+              : '0 4px 18px rgba(15, 23, 42, 0.03)'),
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'all 0.15s ease',
+        minWidth: 0,
+        boxSizing: 'border-box'
+      }}
+    >
+      {/* Top Header Row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+        <span
+          style={{
+            fontSize: '11px',
+            fontWeight: '800',
+            color: isSelected ? '#0E7490' : '#64748B',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}
+        >
+          {title}
+        </span>
+        {Icon && (
+          <div
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '8px',
+              backgroundColor: isSelected ? '#CCFBF1' : iconBg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            <Icon size={16} color={isSelected ? '#0E7490' : iconColor} />
+          </div>
+        )}
+      </div>
+
+      {/* Value & Trend Row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <span
+          style={{
+            fontSize: '22px',
+            fontWeight: '900',
+            color: highlightCard ? '#DC2626' : (valColor || '#0F172A'),
+            letterSpacing: '-0.5px',
+            lineHeight: '1.1'
+          }}
+        >
+          {value}
+        </span>
+
+        {trend !== undefined && trend !== null && trend !== '' && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              fontSize: '11px',
+              fontWeight: '800',
+              color: trendText,
+              backgroundColor: trendBg,
+              border: trendBorder,
+              padding: '2px 7px',
+              borderRadius: '6px',
+              lineHeight: '1.2'
+            }}
+          >
+            {trend}
+          </span>
+        )}
+      </div>
+
+      {/* Signature Bottom Sub-Card Box */}
+      {(bottomPrefix || bottomHighlight) && (
+        <div
+          style={{
+            backgroundColor: isSelected ? '#E6FFFA' : '#F8FAFC',
+            border: isSelected ? '1px solid #99F6E4' : '1px solid #F1F5F9',
+            borderRadius: '10px',
+            padding: '6px 10px',
+            fontSize: '11px',
+            fontWeight: '500',
+            color: '#64748B',
+            lineHeight: '1.3',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 'auto'
+          }}
+        >
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span>{bottomPrefix}</span>
+            {bottomHighlight && (
+              <span style={{ color: resolvedBottomHighlightColor, fontWeight: '800', marginLeft: '3px' }}>
+                {bottomHighlight}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

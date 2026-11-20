@@ -2213,7 +2213,8 @@ export default function AccountsVerificationModal({
             'Pre-Engineered Structure Kit Package';
 
           const sCount = parseFloat(accountsVerificationModal.presetSetCount) || parseFloat(accountsVerificationModal.setCount) || parseFloat(matchedPi?.presetSetCount) || parseFloat(matchedPi?.setCount) || 1;
-          const kPrice = cleanNum(accountsVerificationModal.presetKitPrice) || cleanNum(accountsVerificationModal.kitPrice) || cleanNum(accountsVerificationModal.kitSubtotal) || cleanNum(matchedPi?.presetKitPrice) || cleanNum(matchedPi?.kitPrice) || (sTotal > 0 ? Math.round((sTotal / sCount) * 100) / 100 : 0);
+          const knownCustomTotal = dynamicAccItems.filter(it => !it.isPresetItem && !it.presetGroupId && cleanNum(it.rate) > 0).reduce((acc, it) => acc + (it.qty * cleanNum(it.rate)), 0);
+          const kPrice = cleanNum(accountsVerificationModal.presetKitPrice) || cleanNum(accountsVerificationModal.kitPrice) || cleanNum(accountsVerificationModal.kitSubtotal) || cleanNum(matchedPi?.presetKitPrice) || cleanNum(matchedPi?.kitPrice) || (sTotal > knownCustomTotal ? Math.round(((sTotal - knownCustomTotal) / sCount) * 100) / 100 : (sTotal > 0 ? Math.round((sTotal / sCount) * 100) / 100 : 0));
           const pUnit = accountsVerificationModal.presetUnit || matchedPi?.presetUnit || (String(detectedName).toLowerCase().includes('kw') ? 'kW' : 'Sets');
 
           pGroups = [{
@@ -2226,9 +2227,9 @@ export default function AccountsVerificationModal({
         }
 
         // Fallback for Kit Price if 0 but order has value
+        const knownCustomTotal = dynamicAccItems.filter(it => !it.isPresetItem && !it.presetGroupId && cleanNum(it.rate) > 0).reduce((acc, it) => acc + (it.qty * cleanNum(it.rate)), 0);
         let presetKitsTotal = pGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseFloat(g.setCount) || 1)), 0);
-        const knownCustomTotal = dynamicAccItems.filter(it => !it.isPresetItem && !it.presetGroupId).reduce((acc, it) => acc + (it.qty * it.rate), 0);
-        if (pGroups.length > 0 && presetKitsTotal === 0 && sTotal > knownCustomTotal) {
+        if (pGroups.length > 0 && (presetKitsTotal === 0 || presetKitsTotal === sTotal) && sTotal > knownCustomTotal) {
           const unallocatedKitSub = sTotal - knownCustomTotal;
           if (pGroups.length === 1) {
             const sCount = parseFloat(pGroups[0].setCount) || 1;
@@ -2271,8 +2272,8 @@ export default function AccountsVerificationModal({
             if (assignedItemIndices.has(itemIdx)) return;
             const byGroupId = Boolean(grpId && it.presetGroupId && String(it.presetGroupId) === String(grpId));
             const byPresetName = Boolean(!it.presetGroupId && grpNameLower && String(it.presetName || '').trim().toLowerCase() === grpNameLower);
-            const legacyUnlabeledFirstGroup = Boolean(!it.presetGroupId && !it.presetName && it.isPresetItem && gIdx === 0);
-            if (byGroupId || byPresetName || legacyUnlabeledFirstGroup) {
+            const isZeroRateKitComponent = Boolean(!it.presetGroupId && !it.presetName && (it.isPresetItem || cleanNum(it.rate) === 0) && gIdx === 0);
+            if (byGroupId || byPresetName || isZeroRateKitComponent) {
               assignedItemIndices.add(itemIdx);
               matched.push(it);
             }
@@ -2281,13 +2282,15 @@ export default function AccountsVerificationModal({
         });
         if (pGroups.length === 1 && kitItemsByGroup[0].length === 0) {
           dynamicAccItems.forEach((it, itemIdx) => {
-            assignedItemIndices.add(itemIdx);
-            kitItemsByGroup[0].push(it);
+            if (it.isPresetItem || cleanNum(it.rate) === 0) {
+              assignedItemIndices.add(itemIdx);
+              kitItemsByGroup[0].push(it);
+            }
           });
         }
 
         const looseAccItems = pGroups.length > 0
-          ? dynamicAccItems.filter((it, itemIdx) => !assignedItemIndices.has(itemIdx) && !it.presetGroupId && !it.isPresetItem)
+          ? dynamicAccItems.filter((it, itemIdx) => !assignedItemIndices.has(itemIdx) && !it.presetGroupId)
           : dynamicAccItems;
 
         // Compute subtotal & GST without double-counting preset components and using each preset's actual GST rate

@@ -4,7 +4,7 @@ import {
   Calendar, CheckCircle2, XCircle, RefreshCw, Layers
 } from 'lucide-react';
 import { slApi, formatINR } from './smartLeadsApi';
-import { SkeletonRows } from './SlShared';
+import { SkeletonRows, BusinzKpiGrid, BusinzKpiCard } from './SlShared';
 
 const RANGES = [
   { key: 'month', label: 'This Month' },
@@ -94,68 +94,65 @@ export default function ReportsView({ meta, onNavigate, toast }) {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Total Leads Ingested</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F0FDFA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Layers size={16} color="#0E7490" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#0E7490', marginTop: '10px' }}>
-            {kpis.totalLeads || 0}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            In selected timeframe
-          </div>
-        </div>
+      {/* Signature BUSINZ Reports KPI Cards */}
+      <BusinzKpiGrid minWidth="220px">
+        <BusinzKpiCard
+          title="TOTAL LEADS INGESTED"
+          value={String(kpis.totalLeads || 0)}
+          valColor="#0E7490"
+          icon={Layers}
+          iconColor="#0E7490"
+          iconBg="#ECFEFF"
+          trend="In Timeframe"
+          trendNeutral={true}
+          bottomPrefix="Selected period"
+          bottomHighlight={`${kpis.totalLeads || 0} Ingested`}
+          bottomHighlightColor="#0E7490"
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Conversion Win Rate</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <TrendingUp size={16} color="#16A34A" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#16A34A', marginTop: '10px' }}>
-            {kpis.conversionRate || 0}%
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            {kpis.wonCount || 0} Won vs {kpis.lostCount || 0} Lost
-          </div>
-        </div>
+        <BusinzKpiCard
+          title="CONVERSION WIN RATE"
+          value={`${kpis.conversionRate || 0}%`}
+          valColor="#16A34A"
+          icon={TrendingUp}
+          iconColor="#16A34A"
+          iconBg="#F0FDF4"
+          trend={`${kpis.wonCount || 0} Won / ${kpis.lostCount || 0} Lost`}
+          trendUp={(kpis.conversionRate || 0) > 0}
+          trendNeutral={!kpis.conversionRate}
+          bottomPrefix="Outcome breakdown"
+          bottomHighlight={`${kpis.wonCount || 0} Won vs ${kpis.lostCount || 0} Lost`}
+          bottomHighlightColor="#16A34A"
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Closed Revenue</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <DollarSign size={16} color="#2563EB" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#1E293B', marginTop: '10px' }}>
-            {formatINR(kpis.totalRevenue || 0)}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            From converted deals
-          </div>
-        </div>
+        <BusinzKpiCard
+          title="CLOSED REVENUE"
+          value={formatINR(kpis.totalRevenue || 0)}
+          valColor="#1E293B"
+          icon={DollarSign}
+          iconColor="#2563EB"
+          iconBg="#EFF6FF"
+          trend="Converted Orders"
+          trendUp={true}
+          bottomPrefix="From converted deals"
+          bottomHighlight={formatINR(kpis.totalRevenue || 0)}
+          bottomHighlightColor="#2563EB"
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Average Deal Size</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#FAF5FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Award size={16} color="#9333EA" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#9333EA', marginTop: '10px' }}>
-            {formatINR(kpis.avgDealSize || 0)}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            Per successful order
-          </div>
-        </div>
-      </div>
+        <BusinzKpiCard
+          title="AVERAGE DEAL SIZE"
+          value={formatINR(kpis.avgDealSize || 0)}
+          valColor="#9333EA"
+          icon={Award}
+          iconColor="#9333EA"
+          iconBg="#FAF5FF"
+          trend="Per Deal"
+          trendNeutral={true}
+          bottomPrefix="Average ticket size"
+          bottomHighlight={formatINR(kpis.avgDealSize || 0)}
+          bottomHighlightColor="#9333EA"
+        />
+      </BusinzKpiGrid>
 
       {/* Main Analytics Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '18px' }}>

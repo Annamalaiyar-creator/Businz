@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Columns3, RefreshCw, ChevronRight, User } from 'lucide-react';
+import { Columns3, RefreshCw, ChevronRight, User, TrendingUp, DollarSign, CheckCircle2, Award } from 'lucide-react';
 import { slApi, onSmartLeadChange, formatINR, formatDate, isOverdue } from './smartLeadsApi';
-import { TempBadge, SkeletonRows, EmptyState } from './SlShared';
+import { TempBadge, SkeletonRows, EmptyState, BusinzKpiGrid, BusinzKpiCard } from './SlShared';
 import { StageModal } from './LeadActions';
 
 export default function PipelineView({ meta, onOpenLead, toast }) {
@@ -97,23 +97,52 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
         </div>
       </div>
 
-      {/* KPI Cards Banner */}
-      <div className="sl-kpis">
-        <div className="sl-card sl-kpi">
-          <div className="sl-kpi-label">Open Pipeline Value</div>
-          <div className="sl-kpi-value">{formatINR(totalOpenValue)}</div>
-          <div className="sl-kpi-hint">{totalOpenCount} open leads across 5 active stages</div>
-        </div>
-        <div className="sl-card sl-kpi">
-          <div className="sl-kpi-label">Weighted Sales Forecast</div>
-          <div className="sl-kpi-value" style={{ color: '#0E7490' }}>{formatINR(totalWeightedForecast)}</div>
-          <div className="sl-kpi-hint">Stage-probability weighted pipeline</div>
-        </div>
-        <div className="sl-card sl-kpi">
-          <div className="sl-kpi-label">Closed Won Orders</div>
-          <div className="sl-kpi-value" style={{ color: '#047857' }}>{formatINR(wonValue)}</div>
-          <div className="sl-kpi-hint">{wonCount} converted leads</div>
-        </div>
+      {/* Signature BUSINZ KPI Cards Banner */}
+      <div style={{ marginBottom: '16px' }}>
+        <BusinzKpiGrid minWidth="220px">
+          <BusinzKpiCard
+            title="OPEN PIPELINE VALUE"
+            value={formatINR(totalOpenValue)}
+            valColor="#0E7490"
+            icon={TrendingUp}
+            iconColor="#0E7490"
+            iconBg="#ECFEFF"
+            trend={`${totalOpenCount} Deals`}
+            trendNeutral={true}
+            bottomPrefix="Open deal volume"
+            bottomHighlight={`${totalOpenCount} Active Leads`}
+            bottomHighlightColor="#0E7490"
+          />
+
+          <BusinzKpiCard
+            title="WEIGHTED SALES FORECAST"
+            value={formatINR(totalWeightedForecast)}
+            valColor="#2563EB"
+            icon={DollarSign}
+            iconColor="#2563EB"
+            iconBg="#EFF6FF"
+            trend="Stage Weighted"
+            trendNeutral={true}
+            bottomPrefix="Probability adjusted"
+            bottomHighlight={formatINR(totalWeightedForecast)}
+            bottomHighlightColor="#2563EB"
+          />
+
+          <BusinzKpiCard
+            title="CLOSED WON REVENUE"
+            value={formatINR(wonValue)}
+            valColor="#059669"
+            icon={CheckCircle2}
+            iconColor="#059669"
+            iconBg="#ECFDF5"
+            trend={`${wonCount} Converted`}
+            trendUp={wonCount > 0}
+            trendNeutral={wonCount === 0}
+            bottomPrefix="Won order count"
+            bottomHighlight={`${wonCount} Won Deals`}
+            bottomHighlightColor="#059669"
+          />
+        </BusinzKpiGrid>
       </div>
 
       {error && (

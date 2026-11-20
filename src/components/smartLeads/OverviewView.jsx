@@ -4,7 +4,7 @@ import {
   Phone, ArrowRight, Sparkles, Flame, DollarSign, Activity, RefreshCw
 } from 'lucide-react';
 import { slApi, formatINR, formatDate } from './smartLeadsApi';
-import { StageBadge, TempBadge, SkeletonRows } from './SlShared';
+import { StageBadge, TempBadge, SkeletonRows, BusinzKpiGrid, BusinzKpiCard } from './SlShared';
 
 export default function OverviewView({ meta, onNavigate, onOpenLead, toast }) {
   const [data, setData] = useState(null);
@@ -39,68 +39,70 @@ export default function OverviewView({ meta, onNavigate, onOpenLead, toast }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-      {/* KPI Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Active Pipeline Value</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F0FDFA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <TrendingUp size={16} color="#0E7490" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#0E7490', marginTop: '10px' }}>
-            {formatINR(s.pipelineValue)}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            Non-closed lead opportunities
-          </div>
-        </div>
+      {/* Signature BUSINZ KPI Cards */}
+      <BusinzKpiGrid minWidth="220px">
+        <BusinzKpiCard
+          title="ACTIVE PIPELINE VALUE"
+          value={formatINR(s.pipelineValue)}
+          valColor="#0E7490"
+          icon={TrendingUp}
+          iconColor="#0E7490"
+          iconBg="#ECFEFF"
+          trend={`${s.totalLeads || 0} Leads`}
+          trendNeutral={true}
+          bottomPrefix="Non-closed pipeline"
+          bottomHighlight={formatINR(s.pipelineValue)}
+          bottomHighlightColor="#0E7490"
+          onClick={() => onNavigate && onNavigate('pipeline')}
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Weighted Forecast</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <DollarSign size={16} color="#2563EB" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#2563EB', marginTop: '10px' }}>
-            {formatINR(s.weightedForecast)}
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            Probability-adjusted revenue
-          </div>
-        </div>
+        <BusinzKpiCard
+          title="WEIGHTED SALES FORECAST"
+          value={formatINR(s.weightedForecast)}
+          valColor="#2563EB"
+          icon={DollarSign}
+          iconColor="#2563EB"
+          iconBg="#EFF6FF"
+          trend="Stage Adjusted"
+          trendNeutral={true}
+          bottomPrefix="Expected conversion"
+          bottomHighlight={formatINR(s.weightedForecast)}
+          bottomHighlightColor="#2563EB"
+          onClick={() => onNavigate && onNavigate('pipeline')}
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Total Active Leads</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={16} color="#334155" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A', marginTop: '10px' }}>
-            {s.totalLeads}
-          </div>
-          <div style={{ fontSize: '12px', color: '#059669', fontWeight: '600', marginTop: '4px' }}>
-            +{s.newThisWeek} new this week
-          </div>
-        </div>
+        <BusinzKpiCard
+          title="TOTAL ACTIVE LEADS"
+          value={String(s.totalLeads || 0)}
+          valColor="#0F172A"
+          icon={Users}
+          iconColor="#0F172A"
+          iconBg="#F8FAFC"
+          trend={s.newThisWeek > 0 ? `+${s.newThisWeek} new` : '0 new'}
+          trendUp={s.newThisWeek > 0}
+          trendNeutral={!s.newThisWeek}
+          bottomPrefix="New leads this week"
+          bottomHighlight={`+${s.newThisWeek || 0} Added`}
+          bottomHighlightColor="#059669"
+          onClick={() => onNavigate && onNavigate('leads')}
+        />
 
-        <div style={{ background: '#FFFFFF', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Win Rate</span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CheckCircle2 size={16} color="#059669" />
-            </div>
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: '#059669', marginTop: '10px' }}>
-            {s.winRate}%
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            {s.wonCount} won ({formatINR(s.wonValue)})
-          </div>
-        </div>
-      </div>
+        <BusinzKpiCard
+          title="CONVERSION WIN RATE"
+          value={`${s.winRate || 0}%`}
+          valColor="#059669"
+          icon={CheckCircle2}
+          iconColor="#059669"
+          iconBg="#ECFDF5"
+          trend={`${s.wonCount || 0} Won`}
+          trendUp={(s.winRate || 0) > 0}
+          trendNeutral={!s.winRate}
+          bottomPrefix="Won orders revenue"
+          bottomHighlight={formatINR(s.wonValue || 0)}
+          bottomHighlightColor="#059669"
+          onClick={() => onNavigate && onNavigate('reports')}
+        />
+      </BusinzKpiGrid>
 
       {/* Middle Row: Follow-up SLA + Stage Funnel */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '18px' }}>
