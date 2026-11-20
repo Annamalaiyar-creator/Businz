@@ -9,15 +9,18 @@ import LeadSettingsView from './LeadSettingsView';
 import PipelineView from './PipelineView';
 import FollowupsView from './FollowupsView';
 import OverviewView from './OverviewView';
+import TeamView from './TeamView';
+import ReportsView from './ReportsView';
+import AutomationView from './AutomationView';
 
 const SECTIONS = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
   { key: 'leads', label: 'All Leads', icon: Users },
   { key: 'pipeline', label: 'Pipeline', icon: Columns3 },
   { key: 'followups', label: 'Follow-ups', icon: CalendarClock },
-  { key: 'automation', label: 'Automation', icon: Zap, phase: 3 },
-  { key: 'team', label: 'Sales Team', icon: UsersRound, phase: 2 },
-  { key: 'reports', label: 'Reports', icon: BarChart3, phase: 5 },
+  { key: 'automation', label: 'Automation', icon: Zap },
+  { key: 'team', label: 'Sales Team', icon: UsersRound },
+  { key: 'reports', label: 'Reports', icon: BarChart3 },
   { key: 'settings', label: 'Settings', icon: Settings }
 ];
 const MOBILE_KEYS = ['overview', 'leads', 'pipeline', 'followups', 'settings'];
@@ -47,8 +50,11 @@ export default function SmartLeadsApp() {
   else if (section === 'leads') body = <AllLeadsView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'pipeline') body = <PipelineView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'followups') body = <FollowupsView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
+  else if (section === 'team') body = <TeamView meta={meta} onNavigate={go} onOpenLead={setOpenLeadId} toast={toast} />;
+  else if (section === 'reports') body = <ReportsView meta={meta} onNavigate={go} toast={toast} />;
+  else if (section === 'automation') body = <AutomationView meta={meta} toast={toast} />;
   else if (section === 'settings') body = <LeadSettingsView meta={meta} onMetaChange={loadMeta} toast={toast} />;
-  else body = <div className="sl-card"><EmptyState title={`${current.label} — coming in phase ${current.phase}`} text="This screen is part of the approved Smart Leads plan and will be built in its phase." /></div>;
+  else body = <div className="sl-card"><EmptyState title={`${current.label}`} text="Section under active development." /></div>;
 
   return (
     <div className="sl-root">

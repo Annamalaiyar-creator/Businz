@@ -28,6 +28,29 @@ const SORTS = {
   due: 'l.next_action_due_at ASC NULLS LAST', value: 'l.estimated_value DESC NULLS LAST', updated: 'l.updated_at DESC'
 };
 
+const DEFAULT_AUTOMATION = {
+  autoAssign: {
+    enabled: true,
+    mode: 'round_robin', // 'round_robin' | 'workload_balance'
+    eligibleRoles: ['Sales Executive', 'Sales']
+  },
+  slaAlerts: {
+    uncontactedHours: 24,
+    escalateToManager: true
+  },
+  autoFollowup: {
+    enabled: true,
+    delayHours: 24,
+    type: 'CALL',
+    notes: 'Initial contact & requirement qualification'
+  },
+  inboundWebhook: {
+    enabled: true,
+    apiKey: 'sl_wh_live_2026_vrm',
+    allowedSources: ['Website', 'IndiaMART', 'Meta Lead Ads', 'WhatsApp Cloud']
+  }
+};
+
 const genId = (prefix) => `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 
 class HttpError extends Error {
@@ -1119,6 +1142,391 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         attentionQueue: hotLeads.rows
       }
     });
+  }));
+
+  // ── 9. Sales Team Workload & Performance ────────────────────────────────────
+  router.get('/team', wrap(async (req, res) => {
+    const team = await getTeam();
+    const [leadAgg, followupAgg] = await Promise.all([
+      query(`
+        SELECT 
+          COALESCE(assigned_to_user_id, assigned_salesperson) AS user_id,
+          COALESCE(assigned_to_name, assigned_salesperson, 'Sales Team') AS rep_name,
+          COUNT(*) FILTER (WHERE pipeline_stage NOT IN ('Won', 'Lost')) AS active_leads,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Won') AS won_leads,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Lost') AS lost_leads,
+          COUNT(*) AS total_leads,
+          COALESCE(SUM(estimated_value) FILTER (WHERE pipeline_stage NOT IN ('Won', 'Lost')), 0) AS pipeline_value,
+          COALESCE(SUM(estimated_value) FILTER (WHERE pipeline_stage = 'Won'), 0) AS won_value
+        FROM public.leads
+        WHERE deleted_at IS NULL
+        GROUP BY 1, 2
+      `),
+      query(`
+        SELECT 
+          assigned_salesperson_id AS user_id,
+          COUNT(*) FILTER (WHERE status = 'PENDING' AND scheduled_at < NOW()) AS overdue_followups,
+          COUNT(*) FILTER (WHERE status = 'PENDING' AND scheduled_at::date = CURRENT_DATE) AS today_followups
+        FROM public.lead_followups
+        GROUP BY 1
+      `)
+    ]);
+
+    const leadMap = new Map();
+    leadAgg.rows.forEach(r => {
+      if (r.user_id) leadMap.set(String(r.user_id), r);
+    });
+
+    const followupMap = new Map();
+    followupAgg.rows.forEach(r => {
+      if (r.user_id) followupMap.set(String(r.user_id), r);
+    });
+
+    const members = (Array.isArray(team) && team.length > 0 ? team : []).map(member => {
+      const id = String(member.user_id);
+      const l = leadMap.get(id) || {};
+      const f = followupMap.get(id) || {};
+
+      const activeLeads = parseInt(l.active_leads || 0, 10);
+      const wonLeads = parseInt(l.won_leads || 0, 10);
+      const lostLeads = parseInt(l.lost_leads || 0, 10);
+      const totalClosed = wonLeads + lostLeads;
+      const winRate = totalClosed > 0 ? Math.round((wonLeads / totalClosed) * 100) : 0;
+
+      let workload = 'Low';
+      if (activeLeads > 15) workload = 'High';
+      else if (activeLeads >= 5) workload = 'Balanced';
+
+      return {
+        user_id: id,
+        name: member.name,
+        role: member.role || 'Sales',
+        active_leads: activeLeads,
+        total_leads: parseInt(l.total_leads || 0, 10),
+        won_leads: wonLeads,
+        lost_leads: lostLeads,
+        pipeline_value: parseFloat(l.pipeline_value || 0),
+        won_value: parseFloat(l.won_value || 0),
+        win_rate: winRate,
+        overdue_followups: parseInt(f.overdue_followups || 0, 10),
+        today_followups: parseInt(f.today_followups || 0, 10),
+        workload
+      };
+    });
+
+    // Also include any assigned reps who have leads but might not be in the current team store
+    leadAgg.rows.forEach(r => {
+      const id = String(r.user_id || '');
+      if (id && !members.some(m => m.user_id === id)) {
+        const activeLeads = parseInt(r.active_leads || 0, 10);
+        const wonLeads = parseInt(r.won_leads || 0, 10);
+        const lostLeads = parseInt(r.lost_leads || 0, 10);
+        const totalClosed = wonLeads + lostLeads;
+        const winRate = totalClosed > 0 ? Math.round((wonLeads / totalClosed) * 100) : 0;
+        const f = followupMap.get(id) || {};
+
+        members.push({
+          user_id: id,
+          name: r.rep_name || id,
+          role: 'Sales Representative',
+          active_leads: activeLeads,
+          total_leads: parseInt(r.total_leads || 0, 10),
+          won_leads: wonLeads,
+          lost_leads: lostLeads,
+          pipeline_value: parseFloat(r.pipeline_value || 0),
+          won_value: parseFloat(r.won_value || 0),
+          win_rate: winRate,
+          overdue_followups: parseInt(f.overdue_followups || 0, 10),
+          today_followups: parseInt(f.today_followups || 0, 10),
+          workload: activeLeads > 15 ? 'High' : (activeLeads >= 5 ? 'Balanced' : 'Low')
+        });
+      }
+    });
+
+    const totals = {
+      teamCount: members.length,
+      totalActiveLeads: members.reduce((sum, m) => sum + m.active_leads, 0),
+      totalPipelineValue: members.reduce((sum, m) => sum + m.pipeline_value, 0),
+      totalWonValue: members.reduce((sum, m) => sum + m.won_value, 0),
+      totalOverdueFollowups: members.reduce((sum, m) => sum + m.overdue_followups, 0)
+    };
+
+    res.json({ success: true, data: { members, totals } });
+  }));
+
+  // Reassign all active leads from one rep to another
+  router.post('/team/reassign', wrap(async (req, res) => {
+    if (!isLeadManager(req.userSession.role)) {
+      throw new HttpError(403, 'Only managers can perform team reassignments');
+    }
+    const { fromUserId, toUserId } = req.body;
+    if (!fromUserId || !toUserId) {
+      throw new HttpError(400, 'fromUserId and toUserId are required');
+    }
+    const team = await getTeam();
+    const target = team.find(t => t.user_id === toUserId);
+    if (!target) throw new HttpError(404, 'Target sales representative not found');
+
+    const actor = actorOf(req.userSession);
+    const updated = await withTx(async (client) => {
+      const res = await client.query(`
+        UPDATE public.leads
+        SET assigned_to_user_id = $1, assigned_to_name = $2, assigned_to_role = $3,
+            assigned_salesperson = $2, assigned_at = NOW(), assigned_by_user_id = $4,
+            assigned_by_name = $5, updated_at = NOW()
+        WHERE (assigned_to_user_id = $6 OR assigned_salesperson = $6)
+          AND pipeline_stage NOT IN ('Won', 'Lost')
+          AND deleted_at IS NULL
+        RETURNING id
+      `, [target.user_id, target.name, target.role || 'Sales Executive', actor.id, actor.name, fromUserId]);
+
+      if (res.rows.length > 0) {
+        const leadIds = res.rows.map(r => r.id);
+        await client.query(`
+          UPDATE public.lead_followups
+          SET assigned_salesperson_id = $1, assigned_salesperson_name = $2
+          WHERE lead_id = ANY($3::text[]) AND status = 'PENDING'
+        `, [target.user_id, target.name, leadIds]);
+      }
+      return res.rows.length;
+    });
+
+    res.json({ success: true, reassignedCount: updated, targetName: target.name });
+  }));
+
+  // ── 10. Performance & Analytics Reports ─────────────────────────────────────
+  router.get('/reports', wrap(async (req, res) => {
+    const range = req.query.range || 'month'; // '7d', '30d', 'month', 'quarter', 'year', 'all'
+    let timeClause = '';
+    const params = [];
+    if (range === '7d') {
+      timeClause = ` AND l.created_at >= NOW() - INTERVAL '7 days'`;
+    } else if (range === '30d') {
+      timeClause = ` AND l.created_at >= NOW() - INTERVAL '30 days'`;
+    } else if (range === 'quarter') {
+      timeClause = ` AND l.created_at >= DATE_TRUNC('quarter', CURRENT_DATE)`;
+    } else if (range === 'year') {
+      timeClause = ` AND l.created_at >= DATE_TRUNC('year', CURRENT_DATE)`;
+    } else if (range === 'month') {
+      timeClause = ` AND l.created_at >= DATE_TRUNC('month', CURRENT_DATE)`;
+    }
+
+    const [sourcesRes, lostReasonsRes, stagesRes, repLeaderboardRes, totalsRes] = await Promise.all([
+      // 1. Sources breakdown
+      query(`
+        SELECT 
+          COALESCE(NULLIF(source, ''), 'Direct') AS source,
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Won') AS won,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Lost') AS lost,
+          COUNT(*) FILTER (WHERE pipeline_stage NOT IN ('Won', 'Lost')) AS active,
+          COALESCE(SUM(estimated_value) FILTER (WHERE pipeline_stage = 'Won'), 0) AS revenue,
+          COALESCE(SUM(estimated_value) FILTER (WHERE pipeline_stage NOT IN ('Won', 'Lost')), 0) AS pipeline_value
+        FROM public.leads l
+        WHERE l.deleted_at IS NULL ${timeClause}
+        GROUP BY 1 ORDER BY total DESC
+      `, params),
+
+      // 2. Lost reasons
+      query(`
+        SELECT 
+          COALESCE(r.label, l.lost_remarks, 'Not Specified') AS reason,
+          COUNT(*) AS count
+        FROM public.leads l
+        LEFT JOIN public.lead_lost_reasons r ON l.lost_reason_id = r.id
+        WHERE l.deleted_at IS NULL AND l.pipeline_stage = 'Lost' ${timeClause}
+        GROUP BY 1 ORDER BY count DESC LIMIT 8
+      `, params),
+
+      // 3. Stage breakdown
+      query(`
+        SELECT 
+          pipeline_stage,
+          COUNT(*) AS count,
+          COALESCE(SUM(estimated_value), 0) AS total_value
+        FROM public.leads l
+        WHERE l.deleted_at IS NULL ${timeClause}
+        GROUP BY 1
+      `, params),
+
+      // 4. Sales rep leaderboard
+      query(`
+        SELECT 
+          COALESCE(l.assigned_to_name, l.assigned_salesperson, 'Unassigned') AS rep_name,
+          COUNT(*) AS total_assigned,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Won') AS won_count,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Lost') AS lost_count,
+          COUNT(*) FILTER (WHERE pipeline_stage NOT IN ('Won', 'Lost')) AS active_count,
+          COALESCE(SUM(estimated_value) FILTER (WHERE pipeline_stage = 'Won'), 0) AS revenue,
+          COALESCE(SUM(estimated_value) FILTER (WHERE pipeline_stage NOT IN ('Won', 'Lost')), 0) AS pipeline_value
+        FROM public.leads l
+        WHERE l.deleted_at IS NULL ${timeClause}
+        GROUP BY 1 ORDER BY revenue DESC, won_count DESC
+      `, params),
+
+      // 5. Total high-level KPIs for selected time range
+      query(`
+        SELECT 
+          COUNT(*) AS total_leads,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Won') AS won_count,
+          COUNT(*) FILTER (WHERE pipeline_stage = 'Lost') AS lost_count,
+          COALESCE(SUM(estimated_value) FILTER (WHERE pipeline_stage = 'Won'), 0) AS total_revenue,
+          COALESCE(AVG(estimated_value) FILTER (WHERE pipeline_stage = 'Won' AND estimated_value > 0), 0) AS avg_deal_size
+        FROM public.leads l
+        WHERE l.deleted_at IS NULL ${timeClause}
+      `, params)
+    ]);
+
+    const tot = totalsRes.rows[0] || {};
+    const wonCount = parseInt(tot.won_count || 0, 10);
+    const lostCount = parseInt(tot.lost_count || 0, 10);
+    const closedCount = wonCount + lostCount;
+    const conversionRate = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        range,
+        kpis: {
+          totalLeads: parseInt(tot.total_leads || 0, 10),
+          wonCount,
+          lostCount,
+          conversionRate,
+          totalRevenue: parseFloat(tot.total_revenue || 0),
+          avgDealSize: Math.round(parseFloat(tot.avg_deal_size || 0))
+        },
+        sources: sourcesRes.rows.map(s => {
+          const tot = parseInt(s.total, 10);
+          const w = parseInt(s.won, 10);
+          const l = parseInt(s.lost, 10);
+          const c = w + l;
+          return {
+            source: s.source,
+            total: tot,
+            won: w,
+            lost: l,
+            active: parseInt(s.active, 10),
+            revenue: parseFloat(s.revenue),
+            pipelineValue: parseFloat(s.pipeline_value),
+            conversionRate: c > 0 ? Math.round((w / c) * 100) : 0
+          };
+        }),
+        lostReasons: lostReasonsRes.rows.map(r => ({
+          reason: r.reason,
+          count: parseInt(r.count, 10)
+        })),
+        stages: stagesRes.rows.map(st => ({
+          stage: st.pipeline_stage,
+          count: parseInt(st.count, 10),
+          value: parseFloat(st.total_value)
+        })),
+        leaderboard: repLeaderboardRes.rows.map(rep => {
+          const w = parseInt(rep.won_count, 10);
+          const l = parseInt(rep.lost_count, 10);
+          const c = w + l;
+          return {
+            repName: rep.rep_name,
+            totalAssigned: parseInt(rep.total_assigned, 10),
+            wonCount: w,
+            lostCount: l,
+            activeCount: parseInt(rep.active_count, 10),
+            revenue: parseFloat(rep.revenue),
+            pipelineValue: parseFloat(rep.pipeline_value),
+            winRate: c > 0 ? Math.round((w / c) * 100) : 0
+          };
+        })
+      }
+    });
+  }));
+
+  // ── 11. Lead Automation & Inbound Rules ─────────────────────────────────────
+  router.get('/automation', wrap(async (req, res) => {
+    const s = await query(`SELECT value FROM public.lead_settings WHERE key = 'automation_rules'`);
+    const val = s.rows[0]?.value || DEFAULT_AUTOMATION;
+    res.json({ success: true, data: val });
+  }));
+
+  router.put('/automation', wrap(async (req, res) => {
+    if (!isLeadManager(req.userSession.role)) {
+      throw new HttpError(403, 'Only managers can modify automation rules');
+    }
+    const val = req.body || {};
+    await query(`
+      INSERT INTO public.lead_settings (key, value, updated_at)
+      VALUES ('automation_rules', $1::jsonb, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = NOW()
+    `, [JSON.stringify(val)]);
+    res.json({ success: true, data: val });
+  }));
+
+  router.post('/automation/test-webhook', wrap(async (req, res) => {
+    const team = await getTeam();
+    const s = await query(`SELECT value FROM public.lead_settings WHERE key = 'automation_rules'`);
+    const auto = s.rows[0]?.value || DEFAULT_AUTOMATION;
+
+    // Pick assignee based on mode
+    let assignee = null;
+    if (auto.autoAssign?.enabled && team.length > 0) {
+      if (auto.autoAssign.mode === 'workload_balance') {
+        const counts = await query(`
+          SELECT assigned_to_user_id, COUNT(*) as cnt FROM public.leads
+          WHERE deleted_at IS NULL AND pipeline_stage NOT IN ('Won', 'Lost')
+          GROUP BY 1
+        `);
+        const map = Object.fromEntries(counts.rows.map(r => [r.assigned_to_user_id, parseInt(r.cnt, 10)]));
+        team.sort((a, b) => (map[a.user_id] || 0) - (map[b.user_id] || 0));
+        assignee = team[0];
+      } else {
+        assignee = team[Math.floor(Math.random() * team.length)];
+      }
+    }
+
+    const testBody = req.body || {};
+    const company = testBody.company_name || 'Acme Solar Tech Ltd';
+    const contact = testBody.contact_person || 'Sunil Verma';
+    const phone = testBody.phone || '+91 98765 43210';
+    const email = testBody.email || 'sunil@acmesolar.com';
+    const source = testBody.source || 'Website Inbound Form';
+    const reqText = testBody.product_requirement || '50kW Rooftop Solar HDG Structure with walk-ways';
+    const estVal = testBody.estimated_value || 450000;
+
+    const leadNum = await withTx(async (client) => {
+      const num = await nextLeadNumber(client);
+      const lid = genId('LD');
+      await client.query(`
+        INSERT INTO public.leads (
+          id, lead_number, company_name, contact_person, phone, email, source,
+          pipeline_stage, priority, product_requirement, estimated_value,
+          assigned_to_user_id, assigned_to_name, assigned_to_role, assigned_salesperson,
+          assigned_at, lead_created_by_id, lead_created_by_name, lead_created_by_role,
+          created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'New','High',$8,$9,$10,$11,$12,$11,NOW(),$13,$14,$15,NOW(),NOW())
+      `, [
+        lid, num, company, contact, phone, email, source,
+        reqText, estVal,
+        assignee?.user_id || null, assignee?.name || null, assignee?.role || null,
+        'WEBHOOK', 'Inbound Webhook System', 'System'
+      ]);
+
+      if (auto.autoFollowup?.enabled) {
+        const dt = new Date(Date.now() + (auto.autoFollowup.delayHours || 24) * 3600 * 1000);
+        await client.query(`
+          INSERT INTO public.lead_followups (
+            id, lead_id, followup_type, scheduled_at, notes, status,
+            assigned_salesperson_id, assigned_salesperson_name, created_by_user_id, created_by_name, created_at
+          ) VALUES ($1,$2,$3,$4,$5,'PENDING',$6,$7,'WEBHOOK','Inbound Automation',NOW())
+        `, [
+          genId('LF'), lid, auto.autoFollowup.type || 'CALL', dt.toISOString(),
+          auto.autoFollowup.notes || 'Automated response & qualification',
+          assignee?.user_id || null, assignee?.name || null
+        ]);
+        await client.query(`UPDATE public.leads SET next_action_due_at = $2 WHERE id = $1`, [lid, dt.toISOString()]);
+      }
+
+      return { id: lid, lead_number: num, assigned_to: assignee?.name || 'Unassigned' };
+    });
+
+    res.json({ success: true, message: `Inbound lead created successfully via webhook simulator!`, lead: leadNum });
   }));
 
   return router;

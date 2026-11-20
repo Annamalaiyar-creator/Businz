@@ -48,7 +48,13 @@ export const slApi = {
   scheduleFollowup: (id, body) => request('POST', `/leads/${encodeURIComponent(id)}/followups`, body),
   completeFollowup: (id, body) => request('POST', `/followups/${encodeURIComponent(id)}/complete`, body),
   rescheduleFollowup: (id, body) => request('POST', `/followups/${encodeURIComponent(id)}/reschedule`, body),
-  overview: (params) => request('GET', `/overview${qs(params)}`)
+  overview: (params) => request('GET', `/overview${qs(params)}`),
+  team: () => request('GET', '/team'),
+  reassignTeam: (body) => request('POST', '/team/reassign', body),
+  reports: (params) => request('GET', `/reports${qs(params)}`),
+  automation: () => request('GET', '/automation'),
+  saveAutomation: (body) => request('PUT', '/automation', body),
+  testWebhook: (body) => request('POST', '/automation/test-webhook', body)
 };
 
 // Realtime: subscribe to single-row Smart Leads changes broadcast over the existing SSE channel.
