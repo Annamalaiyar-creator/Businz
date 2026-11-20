@@ -199,24 +199,52 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
             const invNum = (inv.invNo || inv.invoiceNo || inv.code || inv.id || '').toLowerCase().trim();
 
             let bestIdx = Infinity;
-            if (directRef) {
-              if (bomByCodeIdxMap.has(directRef)) bestIdx = Math.min(bestIdx, bomByCodeIdxMap.get(directRef));
-              if (bomBySoIdxMap.has(directRef)) bestIdx = Math.min(bestIdx, bomBySoIdxMap.get(directRef));
-            }
-            if (fromNotes) {
-              if (bomByCodeIdxMap.has(fromNotes)) bestIdx = Math.min(bestIdx, bomByCodeIdxMap.get(fromNotes));
-              if (bomBySoIdxMap.has(fromNotes)) bestIdx = Math.min(bestIdx, bomBySoIdxMap.get(fromNotes));
-            }
-            if (invNum) {
+
+            // --- Strict code / sales-order matching (exact + normalized + trailing-number) ---
+            const tryCodeMatch = (ref) => {
+              if (!ref) return;
+              if (bomByCodeIdxMap.has(ref)) { bestIdx = Math.min(bestIdx, bomByCodeIdxMap.get(ref)); return; }
+              if (bomBySoIdxMap.has(ref)) { bestIdx = Math.min(bestIdx, bomBySoIdxMap.get(ref)); return; }
+              // Normalized match (strip non-alphanumeric)
+              const normRef = ref.replace(/[^a-z0-9]/g, '');
+              for (const [key, idx] of bomByCodeIdxMap) {
+                if (key.replace(/[^a-z0-9]/g, '') === normRef) { bestIdx = Math.min(bestIdx, idx); return; }
+              }
+              for (const [key, idx] of bomBySoIdxMap) {
+                if (key.replace(/[^a-z0-9]/g, '') === normRef) { bestIdx = Math.min(bestIdx, idx); return; }
+              }
+              // Trailing-number match (e.g. "745" matches "vrms/bom/26-27/745") only if ref contains 'bom' or is pure number
+              const trailMatch = ref.match(/(\d+)$/);
+              if (trailMatch) {
+                const trailNum = parseInt(trailMatch[1], 10);
+                const isPure = /^\d+$/.test(ref);
+                if (ref.includes('bom') || isPure) {
+                  for (const [key, idx] of bomByCodeIdxMap) {
+                    const km = key.match(/(\d+)$/);
+                    if (km && parseInt(km[1], 10) === trailNum && (key.includes('bom') || /^\d+$/.test(key))) {
+                      bestIdx = Math.min(bestIdx, idx); return;
+                    }
+                  }
+                }
+              }
+            };
+
+            tryCodeMatch(directRef);
+            if (bestIdx === Infinity) tryCodeMatch(fromNotes);
+
+            if (bestIdx === Infinity && invNum) {
               if (bomByInvIdxMap.has(invNum)) bestIdx = Math.min(bestIdx, bomByInvIdxMap.get(invNum));
               const normInv = invNum.replace(/[^a-z0-9]/gi, '');
               if (normInv && bomByNormInvIdxMap.has(normInv)) bestIdx = Math.min(bestIdx, bomByNormInvIdxMap.get(normInv));
             }
             if (bestIdx < bomStore.length) return bomStore[bestIdx];
 
-            const custName = (inv.vendor || inv.customerName || inv.c2 || '').toLowerCase().trim();
-            if (custName && !['customer', 'customer order', 'pending'].includes(custName) && bomByCustIdxMap.has(custName)) {
-              return bomStore[bomByCustIdxMap.get(custName)];
+            // Customer-name fallback: ONLY when directRef AND fromNotes are both empty
+            if (!directRef && !fromNotes) {
+              const custName = (inv.vendor || inv.customerName || inv.c2 || '').toLowerCase().trim();
+              if (custName && !['customer', 'customer order', 'pending'].includes(custName) && bomByCustIdxMap.has(custName)) {
+                return bomStore[bomByCustIdxMap.get(custName)];
+              }
             }
             return null;
           };
@@ -230,7 +258,9 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
             return true;
           }).map(inv => {
             const matchingBom = findMatchingBom(inv);
-            const resolvedBomCode = matchingBom?.bomCode || matchingBom?.code || inv.poNo || inv.bomCode || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
+            // Prioritize the invoice's own explicit BOM code when present (prevents wrong BOM from customer-name fallback)
+            const explicitInvBom = inv.poNo || inv.bomCode || '';
+            const resolvedBomCode = explicitInvBom || matchingBom?.bomCode || matchingBom?.code || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
             const isConf = Boolean(
               (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed === true)) ||
               inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed === true

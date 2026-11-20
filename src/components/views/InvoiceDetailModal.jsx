@@ -17,6 +17,27 @@ import { notifyInvoiceCompletedReadyForDispatch, notifyAddressProofPendingToSale
 import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
 import { getHsnCode } from "../../utils/hsnCodeService";
 
+const isBomCodeMatching = (codeA, codeB) => {
+  if (!codeA || !codeB) return false;
+  const sA = String(codeA).trim().toLowerCase();
+  const sB = String(codeB).trim().toLowerCase();
+  if (sA === sB) return true;
+  const nA = sA.replace(/[^a-z0-9]/g, '');
+  const nB = sB.replace(/[^a-z0-9]/g, '');
+  if (nA && nB && nA === nB) return true;
+
+  const matchA = sA.match(/(\d+)$/);
+  const matchB = sB.match(/(\d+)$/);
+  if (matchA && matchB && parseInt(matchA[1], 10) === parseInt(matchB[1], 10)) {
+    const isPureA = /^\d+$/.test(sA);
+    const isPureB = /^\d+$/.test(sB);
+    if ((sA.includes('bom') || isPureA) && (sB.includes('bom') || isPureB)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
   setViewingInvoiceModal,
@@ -47,39 +68,52 @@ export default function InvoiceDetailModal({
   const [resolvedAddressProofUrl, setResolvedAddressProofUrl] = useState(null);
   const [resolvedPaymentProofUrl, setResolvedPaymentProofUrl] = useState(null);
 
-  const rawBomRefText = inv.poNo || inv.bomCode || (inv.c3 !== 'BOM-001' ? inv.c3 : '') || '';
+  const rawBomRefText = String(inv.poNo || inv.bomCode || (inv.c3 !== 'BOM-001' ? inv.c3 : '') || '').trim();
+  const invNum = String(inv.invNo || inv.code || inv.id || '').trim();
+  const custName = String(inv.vendor || inv.customerName || inv.c2 || '').trim().toLowerCase();
 
-  // Look up matching BOM from bomStore to sync items & dispatch checkboxes
-  const matchingBom = (bomStore || []).find(b => {
-    if (!b) return false;
-    const bCode = (b.bomCode || b.code || '').trim();
-    const invNum = (inv.invNo || inv.code || inv.id || '').trim();
-    const bInv = (b.invoiceNo || '').trim();
-    const custName = (inv.vendor || inv.customerName || inv.c2 || '').trim().toLowerCase();
-    const bCust = (b.customerName || b.companyName || '').trim().toLowerCase();
+  // Look up matching BOM from bomStore with strict hierarchical priority:
+  // Priority 1: Match directly on BOM Code / PO Number (exact, canonical, or numeric)
+  let matchingBom = null;
+  if (rawBomRefText) {
+    matchingBom = (bomStore || []).find(b => {
+      if (!b) return false;
+      const bCode = (b.bomCode || b.code || '').trim();
+      return isBomCodeMatching(bCode, rawBomRefText) ||
+             (b.salesOrderNo && isBomCodeMatching(b.salesOrderNo, rawBomRefText)) ||
+             (b.id && String(b.id).trim() === rawBomRefText);
+    });
+  }
 
-    if (bCode && (
-      bCode === inv.poNo ||
-      bCode === inv.code ||
-      bCode === inv.c3 ||
-      bCode === inv.invNo ||
-      bCode === rawBomRefText ||
-      (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
-      (invNum && (invNum.endsWith(bCode.replace('BOM-', '')) || invNum.endsWith(bCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
-    )) return true;
+  // Priority 2: Match on explicit invoice number linked to BOM (b.invoiceNo === invNum)
+  if (!matchingBom && invNum && invNum !== 'Pending Confirmation') {
+    matchingBom = (bomStore || []).find(b => {
+      if (!b) return false;
+      const bInv = (b.invoiceNo || '').trim().toLowerCase();
+      return bInv && bInv === invNum.toLowerCase();
+    });
+  }
 
-    if (bInv && invNum && bInv === invNum) return true;
+  // Priority 3: Fallback ONLY if rawBomRefText is completely missing (never override an explicit BOM reference)
+  if (!matchingBom && !rawBomRefText && custName && !['customer', 'customer order', 'pending'].includes(custName)) {
+    const customerBoms = (bomStore || []).filter(b => {
+      if (!b) return false;
+      const bCust = (b.customerName || b.companyName || '').trim().toLowerCase();
+      return bCust && bCust === custName;
+    });
+    if (customerBoms.length === 1) {
+      matchingBom = customerBoms[0];
+    } else if (customerBoms.length > 1) {
+      const invAmtVal = parseFloat(String(inv.invAmt || inv.total || 0).replace(/[^0-9.]/g, ''));
+      const amtMatch = customerBoms.find(b => {
+        const bAmt = parseFloat(String(b.grandTotal || b.subTotal || 0).replace(/[^0-9.]/g, ''));
+        return invAmtVal > 0 && Math.abs(invAmtVal - bAmt) < 1;
+      });
+      matchingBom = amtMatch || customerBoms[0];
+    }
+  }
 
-    const invDigits = invNum.match(/(?:VRM-INV-\d{4}-|INV-)(\d+)/i)?.[1];
-    const bomDigits = bCode.match(/(?:VRM-BOM-\d{4}-|BOM-)(\d+)/i)?.[1];
-    if (invDigits && bomDigits && parseInt(invDigits, 10) === parseInt(bomDigits, 10)) return true;
-
-    if (custName && bCust && custName === bCust && !['customer', 'customer order', 'pending'].includes(custName)) return true;
-
-    return false;
-  });
-
-  const targetBomRef = matchingBom?.bomCode || matchingBom?.code || rawBomRefText || 'VRM-BOM-2026-01';
+  const targetBomRef = (matchingBom && (matchingBom.bomCode || matchingBom.code)) || rawBomRefText || 'VRM-BOM-2026-01';
   const bomRefText = (typeof targetBomRef === 'string' && targetBomRef.trim()) ? targetBomRef.trim() : 'VRM-BOM-2026-01';
 
   useEffect(() => {
@@ -178,7 +212,7 @@ export default function InvoiceDetailModal({
         b.bomCode === targetCode ||
         b.salesOrderNo === targetCode ||
         b.code === targetCode ||
-        (inv.invNo && b.bomCode && (inv.invNo.endsWith(b.bomCode.replace('BOM-', '')) || inv.invNo.endsWith(b.bomCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
+        isBomCodeMatching(b.bomCode || b.code, targetCode)
       ) ? {
         ...b,
         status: 'Invoice Cancelled',
@@ -255,20 +289,24 @@ export default function InvoiceDetailModal({
       ? inv.items
       : null;
 
+  const packingList = (matchingBom && Array.isArray(matchingBom.dispatchPacking) && matchingBom.dispatchPacking.length > 0)
+    ? matchingBom.dispatchPacking
+    : (inv && Array.isArray(inv.dispatchPacking) && inv.dispatchPacking.length > 0)
+      ? inv.dispatchPacking
+      : null;
+
   const baseItemsList = rawItems ? rawItems.map((it, idx) => {
     let selectedState = undefined;
 
-    // 1. Check matchingBom dispatchPacking verification checklist by index or name
-    if (matchingBom && matchingBom.dispatchPacking && Array.isArray(matchingBom.dispatchPacking) && matchingBom.dispatchPacking.length > 0) {
-      if (matchingBom.dispatchPacking[idx] && matchingBom.dispatchPacking[idx].packed !== undefined) {
-        selectedState = Boolean(matchingBom.dispatchPacking[idx].packed);
-      } else {
-        const matchInDispatch = matchingBom.dispatchPacking.find(dp =>
-          dp.name === it.name || dp.code === it.code || (it.name && dp.name && dp.name.toLowerCase().trim() === it.name.toLowerCase().trim())
-        );
-        if (matchInDispatch !== undefined && matchInDispatch.packed !== undefined) {
-          selectedState = Boolean(matchInDispatch.packed);
-        }
+    // 1. Check dispatchPacking verification checklist by code, name, or index
+    if (packingList && packingList.length > 0) {
+      const matchInDispatch = packingList.find(dp =>
+        (dp.code && it.code && dp.code === it.code) ||
+        (dp.name && it.name && dp.name.toLowerCase().trim() === it.name.toLowerCase().trim())
+      ) || (packingList[idx] && packingList[idx].packed !== undefined ? packingList[idx] : null);
+
+      if (matchInDispatch !== null && matchInDispatch !== undefined && matchInDispatch.packed !== undefined) {
+        selectedState = Boolean(matchInDispatch.packed);
       }
     }
 
@@ -276,7 +314,34 @@ export default function InvoiceDetailModal({
     if (selectedState === undefined) {
       if (it.selected !== undefined) selectedState = Boolean(it.selected);
       else if (it.packed !== undefined) selectedState = Boolean(it.packed);
-      else selectedState = false;
+    }
+
+    // 3. Check corresponding item on the invoice record (inv.items)
+    if (selectedState === undefined && inv.items && Array.isArray(inv.items)) {
+      const invMatch = inv.items.find(invIt =>
+        (invIt.code && it.code && invIt.code === it.code) ||
+        (invIt.name && it.name && invIt.name.toLowerCase().trim() === it.name.toLowerCase().trim())
+      ) || inv.items[idx];
+      if (invMatch && (invMatch.selected !== undefined || invMatch.packed !== undefined)) {
+        selectedState = Boolean(invMatch.selected ?? invMatch.packed);
+      }
+    }
+
+    // 4. Fallback for verified/approved orders in Invoice Management:
+    // If the invoice is in Invoice Management or accounts verified, items default to packed (true)
+    if (selectedState === undefined) {
+      const isAlreadyVerified = Boolean(
+        inv.status === 'Invoice Confirmed' ||
+        inv.status === 'Accounts Verified & Passed to Invoice' ||
+        inv.status === 'Ready for Invoicing' ||
+        inv.status === 'Packing Verified - Ready for Billing' ||
+        inv.status === 'Ready for Payment' ||
+        matchingBom?.status === 'Invoice Confirmed' ||
+        matchingBom?.status === 'Accounts Verified & Passed to Invoice' ||
+        matchingBom?.status === 'Awaiting Vehicle Loading & Dispatch' ||
+        matchingBom?.accountsVerification?.verified
+      );
+      selectedState = isAlreadyVerified ? true : false;
     }
 
     const qty = Number(it.qty || it.bomQty || 1) || 1;
@@ -426,7 +491,7 @@ export default function InvoiceDetailModal({
         b.bomCode === targetCode ||
         b.salesOrderNo === targetCode ||
         b.code === targetCode ||
-        (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+        isBomCodeMatching(b.bomCode || b.code, targetCode)
       ) ? {
         ...b,
         customerName: invoiceEditForm.vendor || b.customerName,
@@ -571,10 +636,8 @@ export default function InvoiceDetailModal({
                   });
 
                   setBomStore(prev => prev.map(b => (
-                    b.bomCode === targetCode ||
-                    b.salesOrderNo === targetCode ||
-                    b.code === targetCode ||
-                    (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+                    isBomCodeMatching(b.bomCode || b.code, targetCode) ||
+                    (b.salesOrderNo && isBomCodeMatching(b.salesOrderNo, targetCode))
                   ) ? {
                     ...b,
                     status: 'Invoice Cancelled',
@@ -653,8 +716,8 @@ export default function InvoiceDetailModal({
                 }
 
                 // 2. Check address proof requirement for alternate delivery address
-                const targetRef = inv.poNo || inv.code || inv.bomCode || bomRefText;
-                const foundBom = (bomStore || []).find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+                const targetRef = bomRefText || inv.poNo || inv.bomCode || inv.code;
+                const foundBom = matchingBom || (bomStore || []).find(b => isBomCodeMatching(b.bomCode || b.code, targetRef));
                 const bAddr = inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
                 const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress || bAddr;
                 const isDifferentAddress = !Boolean(
@@ -930,15 +993,11 @@ export default function InvoiceDetailModal({
                 } catch (_) {}
 
                 // 6. Update matching BOM status to 'Awaiting Vehicle Loading & Dispatch'
-                const targetBomCode = matchingBom?.bomCode || matchingBom?.code || inv.bomCode || inv.poNo || inv.code || bomRefText;
+                const targetBomCode = (matchingBom && (matchingBom.bomCode || matchingBom.code)) || bomRefText || inv.bomCode || inv.poNo || inv.code;
                 setBomStore(prev => {
                   const updatedBoms = (prev || []).map(b => (
-                    b.bomCode === targetBomCode ||
-                    b.code === targetBomCode ||
-                    b.salesOrderNo === targetBomCode ||
-                    (matchingBom && (b.bomCode === matchingBom.bomCode || b.code === matchingBom.code || b.id === matchingBom.id)) ||
-                    (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', ''))) ||
-                    (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode))
+                    (targetBomCode && isBomCodeMatching(b.bomCode || b.code || b.salesOrderNo, targetBomCode)) ||
+                    (matchingBom && (b.bomCode === matchingBom.bomCode || b.code === matchingBom.code || b.id === matchingBom.id))
                   ) ? {
                     ...b,
                     status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch',
@@ -1379,8 +1438,8 @@ export default function InvoiceDetailModal({
           const packedItems = indexedItemsList.filter(it => it.selected !== false);
           const unpackedItems = indexedItemsList.filter(it => it.selected === false);
 
-          const targetRef = inv.poNo || inv.code || inv.bomCode || bomRefText;
-          const foundBom = (bomStore || []).find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+          const targetRef = bomRefText || inv.poNo || inv.bomCode || inv.code;
+          const foundBom = matchingBom || (bomStore || []).find(b => isBomCodeMatching(b.bomCode || b.code, targetRef));
 
           // Resolve authoritative preset groups from BOM / Invoice (preserving groupId keys)
           const rawInvPresetGroups = matchingBom?.presetGroups || foundBom?.presetGroups || inv.presetGroups || {};
@@ -1836,7 +1895,7 @@ export default function InvoiceDetailModal({
                             setBomStore(prev => {
                               const list = Array.isArray(prev) ? prev : [];
                               return list.map(b => {
-                                const isMatch = (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace('BOM-', ''))));
+                                const isMatch = (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || isBomCodeMatching(b.bomCode || b.code, targetCode));
                                 if (isMatch) {
                                   updatedBomRecord = {
                                     ...b,
@@ -2180,7 +2239,7 @@ export default function InvoiceDetailModal({
 
         {/* TAB CONTENT: ADDITIONAL INFORMATION (ADDRESSES & MANDATORY ADDRESS PROOF) */}
         {invoiceModalActiveTab === 'Additional Information' && (() => {
-          const foundBom = bomStore.find(b => (b.bomCode && b.bomCode === (inv.poNo || inv.code || bomRefText)) || (b.code && b.code === (inv.poNo || inv.code || bomRefText)) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+          const foundBom = matchingBom || (bomStore || []).find(b => isBomCodeMatching(b.bomCode || b.code, bomRefText || inv.poNo || inv.bomCode));
           const addressProofDoc = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
           const bObj = inv.billingAddressObj || matchingBom?.billingAddressObj || {};
           const dObj = inv.deliveryAddressObj || matchingBom?.deliveryAddressObj || {};
@@ -2468,12 +2527,28 @@ export default function InvoiceDetailModal({
               // Default SVG sample photo if none uploaded yet so user can preview interactive photo verification
               const effectivePhotoUrl = packingPhotosList[0]?.dataUrl || ("data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="380" viewBox="0 0 600 380"><rect width="100%" height="100%" fill="#0F172A"/><rect x="20" y="20" width="560" height="50" fill="#1E3A5F" rx="8"/><text x="40" y="52" fill="#FFFFFF" font-family="sans-serif" font-size="16" font-weight="bold">DISPATCH PACKING &amp; BOX INSPECTION PHOTO</text><rect x="40" y="90" width="240" height="180" fill="#1E293B" stroke="#334155" stroke-width="2" rx="10"/><rect x="320" y="90" width="240" height="180" fill="#1E293B" stroke="#334155" stroke-width="2" rx="10"/><text x="60" y="140" fill="#38BDF8" font-family="sans-serif" font-size="14" font-weight="bold">📦 Shipment Box #1</text><text x="60" y="170" fill="#94A3B8" font-family="sans-serif" font-size="12">Mid 30mm Clamps (500 Nos)</text><text x="60" y="195" fill="#94A3B8" font-family="sans-serif" font-size="12">Fasteners &amp; Hex Bolts</text><text x="60" y="235" fill="#4ADE80" font-family="sans-serif" font-size="12" font-weight="bold">✓ Physical QC Verified</text><text x="340" y="140" fill="#38BDF8" font-family="sans-serif" font-size="14" font-weight="bold">📦 Shipment Box #2</text><text x="340" y="170" fill="#94A3B8" font-family="sans-serif" font-size="12">Mini Rail 100mm Strips</text><text x="340" y="195" fill="#94A3B8" font-family="sans-serif" font-size="12">EPDM Rubber Gaskets</text><text x="340" y="235" fill="#4ADE80" font-family="sans-serif" font-size="12" font-weight="bold">✓ Labelled &amp; Strapped</text><rect x="40" y="300" width="520" height="50" fill="#064E3B" stroke="#059669" rx="8"/><text x="60" y="332" fill="#6EE7B7" font-family="sans-serif" font-size="13" font-weight="bold">✓ DISPATCH PACKING VERIFIED • PACKER: KARTHIK RAJA (DISPATCH HEAD)</text></svg>'));
 
-              // 3. Accounts Verification details
+              // 3. Accounts Verification details (Date of Amount Received)
               const accData = (matchingBom && matchingBom.accountsVerification) || inv.accountsVerification || {};
               const approverName = safeStringVal(accData.verifiedBy || inv.verifiedBy, 'Accounts Head (Venkatesh)');
               const approverRole = safeStringVal(accData.verifiedByRole, 'Accounts Approver');
-              const approvalTime = safeStringVal(accData.verifiedAt, `${invDateText}, 10:15 AM`);
+              const rawPaymentDate = accData.paymentDate || matchingBom?.paymentDate || inv.paymentDate || inv.accountsVerification?.paymentDate || null;
+              const formattedPaymentDate = (() => {
+                if (!rawPaymentDate) return null;
+                const str = String(rawPaymentDate).trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+                  const [y, m, d] = str.split('-');
+                  const dt = new Date(Number(y), Number(m) - 1, Number(d));
+                  if (!isNaN(dt.getTime())) {
+                    return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                  }
+                }
+                return str;
+              })();
+
               const isAccVerified = Boolean(accData.verified || inv.status === 'Accounts Verified & Passed to Invoice' || inv.status === 'Invoice Confirmed');
+              const approvalTime = formattedPaymentDate
+                ? formattedPaymentDate
+                : (isAccVerified ? safeStringVal(accData.verifiedAt, invDateText) : 'Pending Accounts Verification');
 
               // 4. Invoice details
               const isConfirmed = ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed', 'Fully Dispatched & Delivered'].includes(inv.status);
