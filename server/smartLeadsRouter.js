@@ -816,7 +816,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         l.temperature AS lead_temperature,
         l.score AS lead_score,
         l.estimated_value AS lead_value,
-        l.requirement AS lead_requirement
+        l.product_requirement AS lead_requirement
       FROM public.lead_followups f
       JOIN public.leads l ON f.lead_id = l.id
       ${whereClause}
@@ -865,7 +865,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
           assigned_salesperson_id, assigned_salesperson_name, created_by_user_id, created_by_name, created_at
         ) VALUES ($1,$2,$3,$4,$5,'PENDING',$6,$7,$8,$9,NOW())
         RETURNING *`,
-        [fid, cur.id, followupType, scheduledAt.toISOString(), notes, cur.assigned_salesperson || actor.id, cur.assigned_salesperson_name || actor.name, actor.id, actor.name]
+        [fid, cur.id, followupType, scheduledAt.toISOString(), notes, cur.assigned_to_user_id || cur.assigned_salesperson || actor.id, cur.assigned_to_name || actor.name, actor.id, actor.name]
       );
 
       // Update lead's next_action_due_at to the earliest pending follow-up
