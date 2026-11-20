@@ -1034,6 +1034,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     }
     const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
+    const settings = await getSettings();
     const [leadKpis, stageStats, followupStats, hotLeads] = await Promise.all([
       // Total leads, pipeline value, new this week, won, lost
       query(`
@@ -1041,12 +1042,10 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
           COUNT(*) AS total_leads,
           COUNT(*) FILTER (WHERE l.created_at >= NOW() - INTERVAL '7 days') AS new_this_week,
           COALESCE(SUM(l.estimated_value) FILTER (WHERE l.pipeline_stage NOT IN ('Won', 'Lost')), 0) AS pipeline_value,
-          COALESCE(SUM(l.estimated_value * COALESCE(s.win_probability, 10) / 100.0) FILTER (WHERE l.pipeline_stage NOT IN ('Won', 'Lost')), 0) AS weighted_forecast,
           COUNT(*) FILTER (WHERE l.pipeline_stage = 'Won') AS won_count,
           COUNT(*) FILTER (WHERE l.pipeline_stage = 'Lost') AS lost_count,
           COALESCE(SUM(l.estimated_value) FILTER (WHERE l.pipeline_stage = 'Won'), 0) AS won_value
         FROM public.leads l
-        LEFT JOIN public.pipeline_stages s ON s.label = l.pipeline_stage
         ${whereClause}
       `, params),
 
@@ -1085,6 +1084,17 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     const totalClosed = parseInt(kpi.won_count || 0, 10) + parseInt(kpi.lost_count || 0, 10);
     const winRate = totalClosed > 0 ? Math.round((parseInt(kpi.won_count || 0, 10) / totalClosed) * 100) : 0;
 
+    // Calculate weighted forecast using configurable stage probabilities from settings
+    const stageProbs = settings.stageProbabilities || {};
+    let weightedForecast = 0;
+    stageStats.rows.forEach(st => {
+      if (st.pipeline_stage !== 'Won' && st.pipeline_stage !== 'Lost') {
+        const val = parseFloat(st.total_value) || 0;
+        const prob = stageProbs[st.pipeline_stage] != null ? stageProbs[st.pipeline_stage] : 10;
+        weightedForecast += (val * prob) / 100.0;
+      }
+    });
+
     res.json({
       success: true,
       data: {
@@ -1092,7 +1102,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
           totalLeads: parseInt(kpi.total_leads || 0, 10),
           newThisWeek: parseInt(kpi.new_this_week || 0, 10),
           pipelineValue: parseFloat(kpi.pipeline_value || 0),
-          weightedForecast: Math.round(parseFloat(kpi.weighted_forecast || 0)),
+          weightedForecast: Math.round(weightedForecast),
           wonCount: parseInt(kpi.won_count || 0, 10),
           lostCount: parseInt(kpi.lost_count || 0, 10),
           wonValue: parseFloat(kpi.won_value || 0),
