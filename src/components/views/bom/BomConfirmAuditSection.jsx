@@ -410,15 +410,30 @@ export default function BomConfirmAuditSection({ ctx }) {
       };
     });
 
-    const packingItems = (confirmingBomModal.dispatchPacking && confirmingBomModal.dispatchPacking.length > 0 && confirmAndSend)
-      ? confirmingBomModal.dispatchPacking
-      : finalizedItems.map(it => ({
-          name: it.name || it.c2 || 'Item',
-          bomQty: it.totalDispatchQty || it.qty || 1,
-          qtyPerSet: it.qtyPerSet || it.qty || 1,
-          totalDispatchQty: it.totalDispatchQty || it.qty || 1,
-          packed: false
-        }));
+    // Packing list always follows the confirmed BOM lines, so Sales edits reach Dispatch.
+    // A line keeps its existing packed state only when its quantity is unchanged.
+    const prevPacking = Array.isArray(confirmingBomModal.dispatchPacking) ? confirmingBomModal.dispatchPacking : [];
+    const isSamePackingLine = (p, it) => Boolean(p) &&
+      String(p.presetGroupId || '') === String(it.presetGroupId || '') &&
+      ((p.code && it.code && p.code === it.code) || (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()));
+    const packingItems = finalizedItems.map((it, idx) => {
+      const dispatchQty = it.totalDispatchQty || it.qty || 1;
+      const prev = isSamePackingLine(prevPacking[idx], it) ? prevPacking[idx] : prevPacking.find(p => isSamePackingLine(p, it));
+      const qtyUnchanged = prev && Number(prev.totalDispatchQty || prev.bomQty || 0) === Number(dispatchQty);
+      return {
+        ...(qtyUnchanged ? prev : {}),
+        code: it.code || '',
+        name: it.name || it.c2 || 'Item',
+        bomQty: dispatchQty,
+        qtyPerSet: it.qtyPerSet || it.qty || 1,
+        totalDispatchQty: dispatchQty,
+        setCount: it.setCount || 1,
+        isPresetItem: Boolean(it.isPresetItem),
+        presetGroupId: it.presetGroupId || null,
+        presetName: it.presetName || null,
+        packed: qtyUnchanged ? Boolean(prev.packed) : false
+      };
+    });
 
     const prevBomRec = (bomStore || []).find(b => b && (b.bomCode === confirmingBomModal.bomCode || b.id === confirmingBomModal.id || b.code === confirmingBomModal.code));
     const nextEditedFields = { ...(prevBomRec?.editedFields || confirmingBomModal.editedFields || {}) };
