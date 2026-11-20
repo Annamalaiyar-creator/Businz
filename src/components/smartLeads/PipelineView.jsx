@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Columns3, List, RefreshCw, ChevronRight, User } from 'lucide-react';
+import { Columns3, RefreshCw, ChevronRight, User } from 'lucide-react';
 import { slApi, onSmartLeadChange, formatINR, formatDate, isOverdue } from './smartLeadsApi';
-import { StageBadge, TempBadge, SkeletonRows, EmptyState } from './SlShared';
+import { TempBadge, SkeletonRows, EmptyState } from './SlShared';
 import { StageModal } from './LeadActions';
 
 export default function PipelineView({ meta, onOpenLead, toast }) {
   const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'list'
   const [ownerFilter, setOwnerFilter] = useState('');
   const [stageModalLead, setStageModalLead] = useState(null);
 
@@ -65,24 +64,11 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
 
   return (
     <div>
-      {/* Top Controls & View Mode Segment */}
+      {/* Top Controls */}
       <div className="sl-toolbar" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="sl-seg" role="group" aria-label="Pipeline view mode">
-            <button
-              className={viewMode === 'kanban' ? 'active' : ''}
-              onClick={() => setViewMode('kanban')}
-              aria-label="Kanban board view"
-            >
-              <Columns3 size={13} /> Kanban
-            </button>
-            <button
-              className={viewMode === 'list' ? 'active' : ''}
-              onClick={() => setViewMode('list')}
-              aria-label="List view"
-            >
-              <List size={13} /> List
-            </button>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: '#0E7490', background: '#ECFEFF', padding: '6px 12px', borderRadius: 8 }}>
+            <Columns3 size={15} /> Kanban Pipeline
           </div>
 
           {isManager && (
@@ -140,8 +126,8 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
         <div className="sl-card"><SkeletonRows rows={6} /></div>
       ) : columns.length === 0 ? (
         <div className="sl-card"><EmptyState title="No pipeline data" text="No leads found for the selected filter." /></div>
-      ) : viewMode === 'kanban' ? (
-        /* KANBAN BOARD VIEW */
+      ) : (
+        /* KANBAN BOARD VIEW ONLY */
         <div className="sl-board">
           {columns.map(col => (
             <div key={col.stage} className="sl-col">
@@ -218,76 +204,6 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
                   ))
                 )}
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* LIST / TABLE VIEW GROUPED BY STAGE */
-        <div style={{ display: 'grid', gap: 16 }}>
-          {columns.map(col => (
-            <div key={col.stage} className="sl-card sl-table-wrap">
-              <div style={{ padding: '12px 16px', background: '#FAFAFA', borderBottom: '1px solid var(--sl-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <StageBadge stage={col.stage} />
-                  <span className="sl-strong" style={{ fontSize: 13 }}>{col.count} Leads</span>
-                  <span className="sl-faint">· Total: {formatINR(col.value)}</span>
-                </div>
-                <div className="sl-faint" style={{ fontSize: 12 }}>
-                  Probability: <strong>{col.probability}%</strong> {!['Won', 'Lost'].includes(col.stage) && `(Weighted: ${formatINR(col.weightedValue)})`}
-                </div>
-              </div>
-
-              {col.cards.length === 0 ? (
-                <div className="sl-faint" style={{ padding: 16, textAlign: 'center', fontSize: 12 }}>No leads in this stage</div>
-              ) : (
-                <table className="sl-table">
-                  <thead>
-                    <tr>
-                      <th>Lead</th>
-                      <th>Contact</th>
-                      <th>Priority / Score</th>
-                      <th>Owner</th>
-                      <th>Next Action</th>
-                      <th style={{ textAlign: 'right' }}>Est. Value</th>
-                      <th style={{ width: 80, textAlign: 'center' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {col.cards.map(l => (
-                      <tr key={l.id} onClick={() => onOpenLead(l.id)}>
-                        <td>
-                          <div className="sl-strong">{l.company_name}</div>
-                          <div className="sl-faint">{l.lead_number} · {l.source || '—'}</div>
-                        </td>
-                        <td>
-                          <div>{l.contact_person || '—'}</div>
-                          <div className="sl-faint">{l.phone || l.email || '—'}</div>
-                        </td>
-                        <td><TempBadge temperature={l.temperature} score={l.score} /></td>
-                        <td>{l.assigned_to_name || <span className="sl-faint">Unassigned</span>}</td>
-                        <td>
-                          {l.next_action_due_at ? (
-                            <span className={isOverdue(l.next_action_due_at) ? 'sl-overdue' : ''}>
-                              {formatDate(l.next_action_due_at, true)}
-                            </span>
-                          ) : <span className="sl-faint">—</span>}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {l.estimated_value ? formatINR(l.estimated_value) : <span className="sl-faint">—</span>}
-                        </td>
-                        <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className="sl-btn sl-btn-sm"
-                            onClick={(e) => advanceStage(e, l, col.stage)}
-                          >
-                            Move
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
             </div>
           ))}
         </div>
