@@ -1456,12 +1456,18 @@ export default function InvoiceDetailModal({
           if (invPresetGroups.length === 0 && (fallbackPresetName || fallbackKitPrice > 0 || packedItems.some(it => it.isPresetItem || it.presetGroupId))) {
             const defaultGstPct = extractGstRate(matchingBom?.gstRate ?? foundBom?.gstRate ?? inv.gstRate, 18);
             const fallbackSub = cleanAmtNum(matchingBom?.subTotal || foundBom?.subTotal || inv.subTotal) || (totalAmtRaw > 0 ? Math.round((totalAmtRaw / (1 + defaultGstPct / 100)) * 100) / 100 : 0);
+            const knownStandaloneSub = packedItems
+              .filter(it => !it.presetGroupId && !it.isPresetItem && parseFloat(it.rate || 0) > 0)
+              .reduce((sum, it) => sum + (parseFloat(it.rate || 0) * (Number(it.bomQty || it.qty || 1) || 1)), 0);
+            const resolvedKitSub = (fallbackKitPrice > 0)
+              ? (fallbackKitPrice * fallbackSetCount)
+              : (fallbackSub > knownStandaloneSub ? (fallbackSub - knownStandaloneSub) : fallbackSub);
             invPresetGroups = [{
               groupId: packedItems.find(it => it.presetGroupId)?.presetGroupId || 'preset-1',
               presetName: fallbackPresetName || 'Pre-Engineered Structure Kit Package',
               setCount: fallbackSetCount,
               unit: matchingBom?.presetUnit || foundBom?.presetUnit || (String(fallbackPresetName).toLowerCase().includes('kw') ? 'kW' : 'Sets'),
-              kitPrice: fallbackKitPrice > 0 ? fallbackKitPrice : (fallbackSub > 0 ? Math.round((fallbackSub / fallbackSetCount) * 100) / 100 : 0),
+              kitPrice: fallbackKitPrice > 0 ? fallbackKitPrice : (resolvedKitSub > 0 ? Math.round((resolvedKitSub / fallbackSetCount) * 100) / 100 : 0),
               gstRate: defaultGstPct
             }];
           }
@@ -1476,8 +1482,8 @@ export default function InvoiceDetailModal({
               if (assignedPackedIndices.has(pIdx)) return;
               const byGroupId = Boolean(grpId && it.presetGroupId && String(it.presetGroupId) === String(grpId));
               const byPresetName = Boolean(!it.presetGroupId && grpNameLower && String(it.presetName || '').trim().toLowerCase() === grpNameLower);
-              const legacyFirstFallback = Boolean(!it.presetGroupId && !it.presetName && it.isPresetItem && gIdx === 0);
-              if (byGroupId || byPresetName || legacyFirstFallback) {
+              const isZeroRateItem = Boolean(!it.presetGroupId && !it.presetName && (it.isPresetItem || parseFloat(it.rate || 0) === 0) && gIdx === 0);
+              if (byGroupId || byPresetName || isZeroRateItem) {
                 assignedPackedIndices.add(pIdx);
                 grpItems.push(it);
               }
@@ -1515,9 +1521,13 @@ export default function InvoiceDetailModal({
             const pct = extractGstRate(it.gstRate ?? it.tax, 18);
             return acc + (it.amt > 0 ? Number(it.amt) : (qty * rate * (1 + pct / 100)));
           }, 0);
+          const authoritativeTotal = cleanAmtNum(matchingBom?.grandTotal || inv.grandTotal || totalAmtRaw);
+          const computedSum = packedPresetsGrandTotal + standalonePackedTotal;
           const packedTotal = (visiblePackedPresetSections.length > 0 && packedPresetsGrandTotal === 0 && standalonePackedTotal === 0 && totalAmtRaw > 0)
             ? totalAmtRaw
-            : (packedPresetsGrandTotal + standalonePackedTotal);
+            : (authoritativeTotal > 0 && Math.abs(computedSum - authoritativeTotal) > 1 && visiblePackedPresetSections.length > 0
+                ? authoritativeTotal
+                : computedSum);
           const unpackedTotal = unpackedItems.reduce((acc, it) => acc + (it.isPresetItem ? 0 : (it.amt ?? ((it.qty || 1) * (it.rate || 0) * (1 + extractGstRate(it.gstRate ?? it.tax, 18) / 100)))), 0);
           const bomDoc = matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
           const invDoc = inv.deliveryAddressProofDoc || null;
