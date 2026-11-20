@@ -24,6 +24,9 @@ const BackupVaultView = lazy(() => import('./views/BackupVaultView'));
 const SupportMailInboxView = lazy(() => import('./views/SupportMailInboxView'));
 const FacebookMetaIntegrationView = lazy(() => import('./views/FacebookMetaIntegrationView'));
 const IntegrationsHubView = lazy(() => import('./views/IntegrationsHubView'));
+// Smart Leads (new CRM module) — only bundled into the UI path when VITE_ENABLE_SMART_LEADS=true
+const SMART_LEADS_ENABLED = import.meta.env.VITE_ENABLE_SMART_LEADS === 'true';
+const SmartLeadsApp = lazy(() => import('./smartLeads/SmartLeadsApp'));
 
 function ViewLoadingFallback({ activeTab }) {
   return (
@@ -204,6 +207,8 @@ export default function OtherViews(props) {
           />
         )}
 
+        {SMART_LEADS_ENABLED && activeTab === 'Smart Leads' && <SmartLeadsApp />}
+
         {/* CEO Executive View: New Monthly Customers by Sales Person */}
         {['Monthly Customers by Rep', 'New Monthly Customers', 'Monthly Customers', 'Customers by Rep'].includes(activeTab) && (
           <CeoMonthlyCustomersByRepView userRole={userRole} onNavigateTab={props.onChangeTab || props.onSelectTab} />
@@ -252,12 +257,13 @@ export default function OtherViews(props) {
           'Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration',
           'Monthly Customers by Rep', 'New Monthly Customers', 'Monthly Customers', 'Customers by Rep',
           'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Facebook Leads', 'Facebook Messenger',
-          'Integration', 'Integrations', 'Integration Hub', 'Omnichannel Integrations'
+          'Integration', 'Integrations', 'Integration Hub', 'Omnichannel Integrations',
+          'Smart Leads'
         ].includes(activeTab) || ['Work Orders', 'Planning & Scheduling', 'Production Monitoring',
           'Quality Control', 'Machine Maintenance', 'Inventory',
           'Production Reports', 'Efficiency Reports', 'Downtime Analytics',
           'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management', 'Delivery Challans'
-        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault', 'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Integration', 'Integrations', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration', 'Leads', 'Leads Directory', 'Monthly Customers by Rep', 'New Monthly Customers'].includes(activeTab) && (
+        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault', 'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Integration', 'Integrations', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration', 'Leads', 'Leads Directory', 'Monthly Customers by Rep', 'New Monthly Customers', 'Smart Leads'].includes(activeTab) && (
           <ProductionViewsEngine {...props} />
         )}
       </div>

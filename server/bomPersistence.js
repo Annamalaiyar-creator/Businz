@@ -169,38 +169,6 @@ export const toConsumerBomServer = (row) => {
   const createdBy = row.created_by || row.createdBy || rawSales || salesRep;
   const createdById = row.created_by_id || row.createdById || row.sales_person_code || row.salesPersonCode || extraData.createdById || salesPersonCode;
 
-  // --- Permanent Preset & Standalone Items Classification Normalization ---
-  const rawConsumerItems = Array.isArray(row.items) ? row.items : [];
-  const sTot = Number(row.sub_total || 0);
-  const pName = row.preset_name || extraData.presetName || '';
-  let pKitPrice = Number(row.preset_kit_price || extraData.presetKitPrice || 0);
-  const pSetCount = Math.max(1, Number(row.preset_set_count || extraData.presetSetCount || 1));
-
-  let normalizedConsumerItems = rawConsumerItems;
-  if (rawConsumerItems.length > 0 && (pName || pKitPrice > 0 || rawConsumerItems.some(it => it.isPresetItem || Number(it.rate || it.unitPrice || 0) === 0))) {
-    const standaloneSum = rawConsumerItems.reduce((acc, it) => {
-      const r = parseFloat(it.rate || it.unitPrice || it.unitRate || 0) || 0;
-      const q = parseFloat(it.qty || it.bomQty || 1) || 1;
-      const isStandalone = !it.presetGroupId && !it.isPresetItem && r > 0;
-      return acc + (isStandalone ? q * r : 0);
-    }, 0);
-
-    if (pKitPrice <= 0 || (sTot > standaloneSum && pKitPrice * pSetCount === sTot)) {
-      pKitPrice = Math.max(0, Math.round(((sTot - standaloneSum) / pSetCount) * 100) / 100);
-    }
-
-    normalizedConsumerItems = rawConsumerItems.map(it => {
-      const r = parseFloat(it.rate || it.unitPrice || it.unitRate || 0) || 0;
-      const isPreset = Boolean(it.isPresetItem || it.presetGroupId || r === 0);
-      return {
-        ...it,
-        isPresetItem: isPreset,
-        presetGroupId: isPreset ? (it.presetGroupId || 'preset-1') : null,
-        presetName: isPreset ? (it.presetName || pName || 'Pre-Engineered Structure Kit Package') : ''
-      };
-    });
-  }
-
   return {
     ...extraData,
     id,
@@ -290,7 +258,7 @@ export const toConsumerBomServer = (row) => {
     createdBy: createdBy,
     createdById: createdById,
     dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
-    items: normalizedConsumerItems,
+    items: Array.isArray(row.items) ? row.items : [],
     payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
     dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
@@ -340,9 +308,9 @@ export const toConsumerBomServer = (row) => {
     stockBlockedAt: row.stock_blocked_at || null,
     stockDeducted: Boolean(row.stock_deducted),
     stockDeductionDate: row.stock_deduction_date || extraData.stockDeductionDate || null,
-    presetName: pName,
-    presetKitPrice: pKitPrice,
-    presetSetCount: pSetCount,
+    presetName: row.preset_name || extraData.presetName || '',
+    presetKitPrice: Number(row.preset_kit_price || extraData.presetKitPrice || 0),
+    presetSetCount: Number(row.preset_set_count || extraData.presetSetCount || 0),
     presetGroups: Array.isArray(row.preset_groups) ? row.preset_groups : (extraData.presetGroups || []),
     subTotal: Number(row.sub_total || 0),
     gstAmount: Number(row.gst_amount || 0),
@@ -555,38 +523,6 @@ export const toDatabaseBomRowServer = (item) => {
     extraData.createdBy
   ].find(s => s && typeof s === 'string' && s.trim() && s.trim() !== 'Sales Department') || '';
 
-  // --- Permanent Database Preset & Standalone Items Classification Normalization ---
-  const rawDbItems = Array.isArray(item.items) ? item.items : [];
-  const dbSubTot = sanitizeNumber(item.subTotal, 0);
-  const dbPresetName = item.presetName || '';
-  let dbKitPrice = sanitizeNumber(item.presetKitPrice, 0);
-  const dbSetCount = Math.max(1, Math.round(sanitizeNumber(item.presetSetCount, 1)));
-
-  let normalizedDbItems = rawDbItems;
-  if (rawDbItems.length > 0 && (dbPresetName || dbKitPrice > 0 || rawDbItems.some(it => it.isPresetItem || Number(it.rate || it.unitPrice || 0) === 0))) {
-    const standaloneSum = rawDbItems.reduce((acc, it) => {
-      const r = parseFloat(it.rate || it.unitPrice || it.unitRate || 0) || 0;
-      const q = parseFloat(it.qty || it.bomQty || 1) || 1;
-      const isStandalone = !it.presetGroupId && !it.isPresetItem && r > 0;
-      return acc + (isStandalone ? q * r : 0);
-    }, 0);
-
-    if (dbKitPrice <= 0 || (dbSubTot > standaloneSum && dbKitPrice * dbSetCount === dbSubTot)) {
-      dbKitPrice = Math.max(0, Math.round(((dbSubTot - standaloneSum) / dbSetCount) * 100) / 100);
-    }
-
-    normalizedDbItems = rawDbItems.map(it => {
-      const r = parseFloat(it.rate || it.unitPrice || it.unitRate || 0) || 0;
-      const isPreset = Boolean(it.isPresetItem || it.presetGroupId || r === 0);
-      return {
-        ...it,
-        isPresetItem: isPreset,
-        presetGroupId: isPreset ? (it.presetGroupId || 'preset-1') : null,
-        presetName: isPreset ? (it.presetName || dbPresetName || 'Pre-Engineered Structure Kit Package') : ''
-      };
-    });
-  }
-
   return {
     id,
     bom_code: bomCode,
@@ -644,7 +580,7 @@ export const toDatabaseBomRowServer = (item) => {
     sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
     created_by: item.createdBy || item.created_by || cleanSalesPerson || item.salesPerson || item.sales_person || '',
     created_by_id: item.createdById || item.created_by_id || item.salesPersonCode || item.sales_person_code || extraData.createdById || '',
-    items: normalizedDbItems,
+    items: Array.isArray(item.items) ? item.items : [],
     payments: cleanPayments,
     dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
     accounts_verification: accountsVerification,
@@ -653,9 +589,9 @@ export const toDatabaseBomRowServer = (item) => {
     invoice_deducted: Boolean(item.invoiceDeducted || item.invoice_deducted),
     stock_blocked: Boolean(item.stockBlocked),
     stock_blocked_at: sanitizeTimestamp(item.stockBlockedAt),
-    preset_name: dbPresetName,
-    preset_kit_price: dbKitPrice,
-    preset_set_count: dbSetCount,
+    preset_name: item.presetName || '',
+    preset_kit_price: sanitizeNumber(item.presetKitPrice, 0),
+    preset_set_count: Math.round(sanitizeNumber(item.presetSetCount, 0)),
     preset_groups: Array.isArray(item.presetGroups) ? item.presetGroups : [],
     sub_total: sanitizeNumber(item.subTotal, 0),
     gst_amount: sanitizeNumber(item.gstAmount, 0),

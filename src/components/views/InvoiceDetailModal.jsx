@@ -26,12 +26,14 @@ const isBomCodeMatching = (codeA, codeB) => {
   const nB = sB.replace(/[^a-z0-9]/g, '');
   if (nA && nB && nA === nB) return true;
 
+  // Number-only match is allowed only when one side is a bare number (e.g. "663" vs "BOM-663").
+  // Two full BOM codes must match exactly, so VRM-BOM-2025-12 never matches VRM-BOM-2026-12.
   const matchA = sA.match(/(\d+)$/);
   const matchB = sB.match(/(\d+)$/);
   if (matchA && matchB && parseInt(matchA[1], 10) === parseInt(matchB[1], 10)) {
     const isPureA = /^\d+$/.test(sA);
     const isPureB = /^\d+$/.test(sB);
-    if ((sA.includes('bom') || isPureA) && (sB.includes('bom') || isPureB)) {
+    if ((isPureA && sB.includes('bom')) || (isPureB && sA.includes('bom'))) {
       return true;
     }
   }
@@ -394,9 +396,11 @@ export default function InvoiceDetailModal({
   const bomTotalAmt = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || 0;
   const invAmtNum = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.c5) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal) || 0;
 
+  // The confirmed BOM order total is the invoice amount; the stored invoice amount is only a fallback.
+  const bomGrandTotalAmt = cleanAmtNum(matchingBom?.grandTotal);
   const totalAmtRaw = isEditingInvoice
     ? computedGrandTotal
-    : (invAmtNum > 0 ? invAmtNum : (bomTotalAmt > 0 ? bomTotalAmt : (computedGrandTotal > 0 ? computedGrandTotal : 17400)));
+    : (bomGrandTotalAmt > 0 ? bomGrandTotalAmt : (invAmtNum > 0 ? invAmtNum : (bomTotalAmt > 0 ? bomTotalAmt : (computedGrandTotal > 0 ? computedGrandTotal : 17400))));
 
   const storedSub = cleanAmtNum(inv.subTotal) || cleanAmtNum(inv.subtotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.subtotal) || 0;
   const storedGst = cleanAmtNum(inv.gstAmount) || cleanAmtNum(inv.taxAmount) || cleanAmtNum(matchingBom?.gstAmount) || 0;
@@ -417,8 +421,14 @@ export default function InvoiceDetailModal({
   const invState = inv.deliveryState || inv.billingState || inv.state || matchingBom?.deliveryState || matchingBom?.billingState || '';
   const isInvIntra = isTamilNaduIntra(invGst, invState);
 
-  const advanceAmt = isFullAdvance ? totalAmtRaw : (is50Percent ? totalAmtRaw * 0.5 : totalAmtRaw);
-  const balanceAmt = isFullAdvance ? 0 : (is50Percent ? totalAmtRaw * 0.5 : 0);
+  // Amount received = what Accounts verified (slip + adjustment); invoice total stays the order value.
+  const verifiedReceivedAmt = cleanAmtNum(inv.accountsVerification?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount);
+  const advanceAmt = verifiedReceivedAmt > 0
+    ? Math.min(verifiedReceivedAmt, totalAmtRaw)
+    : (isFullAdvance ? totalAmtRaw : (is50Percent ? totalAmtRaw * 0.5 : totalAmtRaw));
+  const balanceAmt = verifiedReceivedAmt > 0
+    ? Math.max(0, Math.round((totalAmtRaw - verifiedReceivedAmt) * 100) / 100)
+    : (isFullAdvance ? 0 : (is50Percent ? totalAmtRaw * 0.5 : 0));
   const paymentStatusText = safeStringVal(inv.pay, balanceAmt === 0 ? 'Verified & Paid (100%)' : 'Ready for Payment');
 
   const getPaymentBadgeStyle = (term) => {
@@ -498,7 +508,6 @@ export default function InvoiceDetailModal({
         paymentType: invoiceEditForm.paymentType || b.paymentType,
         billingAddress: invoiceEditForm.billingAddress || b.billingAddress,
         deliveryAddress: invoiceEditForm.deliveryAddress || b.deliveryAddress,
-        grandTotal: computedGrandTotal,
         invoiceNo: invoiceEditForm.invNo || b.invoiceNo
       } : b);
       try {

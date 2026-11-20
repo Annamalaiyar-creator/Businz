@@ -122,18 +122,30 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 payVal = 'Ready for Payment';
               }
 
-              const packedItems = (b.dispatchPacking && Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
-                ? b.dispatchPacking.map((p, pIdx) => ({
+              // Invoice lines are an exact copy of the confirmed BOM lines; packing only sets packed / not packed.
+              const packingArr = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
+              const isSamePackingLine = (p, it) => Boolean(p) &&
+                String(p.presetGroupId || '') === String(it.presetGroupId || '') &&
+                ((p.code && it.code && p.code === it.code) || (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()));
+              const packedItems = (b.items || []).length > 0
+                ? b.items.map((it, idx) => {
+                  const p = isSamePackingLine(packingArr[idx], it) ? packingArr[idx] : packingArr.find(pk => isSamePackingLine(pk, it));
+                  const isPacked = p ? Boolean(p.packed) : true;
+                  return { ...it, selected: isPacked, packed: isPacked };
+                })
+                : packingArr.map((p, pIdx) => ({
                   code: p.code || `PRD-00${pIdx + 1}`,
                   name: p.name || `Item ${pIdx + 1}`,
                   qty: p.bomQty || p.qty || 1,
                   bomQty: p.bomQty || p.qty || 1,
                   invQty: p.bomQty || p.qty || 1,
-                  rate: p.rate || 1000,
+                  rate: p.rate || 0,
+                  isPresetItem: Boolean(p.isPresetItem),
+                  presetGroupId: p.presetGroupId || null,
+                  presetName: p.presetName || '',
                   selected: Boolean(p.packed),
                   packed: Boolean(p.packed)
-                }))
-                : (b.items || []).map(it => ({ ...it, selected: true, packed: true }));
+                }));
 
               const oVal = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
 
@@ -221,7 +233,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 if (ref.includes('bom') || isPure) {
                   for (const [key, idx] of bomByCodeIdxMap) {
                     const km = key.match(/(\d+)$/);
-                    if (km && parseInt(km[1], 10) === trailNum && (key.includes('bom') || /^\d+$/.test(key))) {
+                    // Number-only match only when one side is a bare number; two full BOM codes must match exactly
+                    if (km && parseInt(km[1], 10) === trailNum && ((isPure && key.includes('bom')) || (/^\d+$/.test(key) && ref.includes('bom')))) {
                       bestIdx = Math.min(bestIdx, idx); return;
                     }
                   }
@@ -458,7 +471,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                 const matchingBom = findMatchingBom(i);
                 const resolvedBomCode = safeStringVal(i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code, '—');
-                const resolvedAmt = cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || computeItemsTotal(i.items) || 0;
+                const resolvedAmt = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || computeItemsTotal(i.items) || 0;
                 const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
                 const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
                 const rawInvNo = safeStringVal(i.invNo, '');
@@ -717,8 +730,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     ? (Number(b.gstAmount || 0) > 0 ? baseSubAmt + Number(b.gstAmount) : Math.round(baseSubAmt * bGstMult * 100) / 100)
                     : 0;
                   let rawAmt = Number(
-                    acc.totalAmount || 
-                    b.grandTotal || 
+                    b.grandTotal ||
+                    acc.totalAmount ||
                     subWithGstAmt || 
                     b.totalAmount || 
                     b.amount || 

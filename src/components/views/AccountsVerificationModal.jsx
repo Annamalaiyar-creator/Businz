@@ -602,27 +602,32 @@ export default function AccountsVerificationModal({
       }).catch(() => {});
     } catch (_) {}
 
-    const packedItems = (verifiedBOM.dispatchPacking && Array.isArray(verifiedBOM.dispatchPacking) && verifiedBOM.dispatchPacking.length > 0)
-      ? verifiedBOM.dispatchPacking.map((p, pIdx) => {
-        const matchingBomItem = (verifiedBOM.items || []).find(it => (it.code && p.code && it.code === p.code) || (it.name && p.name && it.name.toLowerCase().trim() === p.name.toLowerCase().trim()));
-        let itemRate = cleanNum(p.rate) || cleanNum(matchingBomItem?.rate) || cleanNum(matchingBomItem?.unitPrice) || cleanNum(matchingBomItem?.price) || 0;
-        if (itemRate === 0 && cleanNum(currentTotalAmount) > 0) {
-          const totalQty = verifiedBOM.dispatchPacking.reduce((sum, item) => sum + cleanNum(item.bomQty || item.qty, 1), 0);
-          const taxableBase = Math.round((cleanNum(currentTotalAmount) / gstMultFallback) * 100) / 100;
-          itemRate = totalQty > 0 ? Math.round((taxableBase / totalQty) * 100) / 100 : 1000;
-        }
-        return {
-          code: p.code || `PRD-00${pIdx + 1}`,
-          name: p.name || `Item ${pIdx + 1}`,
-          qty: cleanNum(p.bomQty || p.qty, 1),
-          bomQty: cleanNum(p.bomQty || p.qty, 1),
-          invQty: cleanNum(p.bomQty || p.qty, 1),
-          rate: itemRate > 0 ? itemRate : 1000,
-          selected: Boolean(p.packed),
-          packed: Boolean(p.packed)
-        };
+    // Invoice lines are an exact copy of the confirmed BOM lines (rate, kit, GST unchanged).
+    // The packing list only decides packed / not packed for each line.
+    const packingArr = Array.isArray(verifiedBOM.dispatchPacking) ? verifiedBOM.dispatchPacking : [];
+    const isSamePackingLine = (p, it) => Boolean(p) &&
+      String(p.presetGroupId || '') === String(it.presetGroupId || '') &&
+      ((p.code && it.code && p.code === it.code) || (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()));
+    const packedItems = (verifiedBOM.items || []).length > 0
+      ? verifiedBOM.items.map((it, idx) => {
+        const p = isSamePackingLine(packingArr[idx], it) ? packingArr[idx] : packingArr.find(pk => isSamePackingLine(pk, it));
+        const isPacked = p ? Boolean(p.packed) : true;
+        return { ...it, selected: isPacked, packed: isPacked };
       })
-      : (verifiedBOM.items || []).map(it => ({ ...it, selected: true, packed: true }));
+      : packingArr.map((p, pIdx) => ({
+        code: p.code || `PRD-00${pIdx + 1}`,
+        name: p.name || `Item ${pIdx + 1}`,
+        qty: cleanNum(p.bomQty || p.qty, 1),
+        bomQty: cleanNum(p.bomQty || p.qty, 1),
+        invQty: cleanNum(p.bomQty || p.qty, 1),
+        rate: cleanNum(p.rate, 0),
+        isPresetItem: Boolean(p.isPresetItem),
+        presetGroupId: p.presetGroupId || null,
+        presetName: p.presetName || '',
+        selected: Boolean(p.packed),
+        packed: Boolean(p.packed)
+      }));
+    const orderTotalForInvoice = cleanNum(updatedBomData.grandTotal, 0) || effectiveTotalAmountNum;
 
     const newInvEntry = {
       invNo: finalInvNo,
@@ -637,9 +642,9 @@ export default function AccountsVerificationModal({
       poNo: targetCode,
       bomCode: targetCode,
       grnNo: 'GRN-VERIFIED',
-      invAmt: formatCurrency(effectiveTotalAmountNum),
-      poVal: formatCurrency(effectiveTotalAmountNum),
-      grnVal: formatCurrency(effectiveTotalAmountNum),
+      invAmt: formatCurrency(orderTotalForInvoice),
+      poVal: formatCurrency(orderTotalForInvoice),
+      grnVal: formatCurrency(orderTotalForInvoice),
       diff: '0.00', match: 'Matched',
       pay: 'Ready for Payment',
       status: 'Ready for Payment',
