@@ -359,7 +359,7 @@ export default function PiCreatorEditorSection({ ctx }) {
                       <option value="Credit Payment">Credit Payment</option>
                     )}
                   </select>
-                  {piCreditEval.approved && paymentTerms === 'Credit Payment' && (
+                  {piCreditEval.gateEnabled !== false && piCreditEval.approved && paymentTerms === 'Credit Payment' && (
                     <div style={{
                       marginTop: '6px',
                       padding: '8px 10px',
@@ -372,7 +372,9 @@ export default function PiCreatorEditorSection({ ctx }) {
                     }}>
                       {piCreditEval.exceedsLimit
                         ? `⛔ ${piCreditEval.reason}`
-                        : `✓ Credit Limit: ₹${piCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${piCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${piCreditEval.availableCredit.toLocaleString('en-IN')}`}
+                        : piCreditEval.isUnlimitedCredit
+                          ? `✓ Credit Limit: Unlimited • Used: ₹${piCreditEval.usedCredit.toLocaleString('en-IN')}`
+                          : `✓ Credit Limit: ₹${piCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${piCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${piCreditEval.availableCredit.toLocaleString('en-IN')}`}
                     </div>
                   )}
                   {piMatchedCustomer && !piCreditEval.approved && (

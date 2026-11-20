@@ -3531,7 +3531,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                     )}
                   </select>
                 )}
-                {!isAlreadyForwarded && !isDcOrder && reconfirmCreditEval.approved && normalizedPayType === 'Credit Payment' && (
+                {!isAlreadyForwarded && !isDcOrder && reconfirmCreditEval.gateEnabled !== false && reconfirmCreditEval.approved && normalizedPayType === 'Credit Payment' && (
                   <div style={{
                     marginTop: '6px',
                     padding: '8px 10px',
@@ -3544,7 +3544,9 @@ export default function BomConfirmAuditSection({ ctx }) {
                   }}>
                     {reconfirmCreditEval.exceedsLimit
                       ? `⛔ ${reconfirmCreditEval.reason}`
-                      : `✓ Credit Limit: ₹${reconfirmCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${reconfirmCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${reconfirmCreditEval.availableCredit.toLocaleString('en-IN')}`}
+                      : reconfirmCreditEval.isUnlimitedCredit
+                        ? `✓ Credit Limit: Unlimited • Used: ₹${reconfirmCreditEval.usedCredit.toLocaleString('en-IN')}`
+                        : `✓ Credit Limit: ₹${reconfirmCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${reconfirmCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${reconfirmCreditEval.availableCredit.toLocaleString('en-IN')}`}
                   </div>
                 )}
                 {!isAlreadyForwarded && !isDcOrder && reconfirmCreditCustomer && !reconfirmCreditEval.approved && (

@@ -116,22 +116,46 @@ export const calculateCustomerUnsettledCredit = (customer, bomStore = [], exclud
   return Math.round(used * 100) / 100;
 };
 
+// Feature toggle: set to true when ready to enforce CEO-only credit customer approval & credit limits.
+// Currently paused per user instruction so Credit Payment is available for all customers while keeping all logic intact.
+export const ENFORCE_CREDIT_APPROVAL_GATE = false;
+
 export const evaluateCreditEligibility = ({
   customer = null,
   bomStore = [],
   orderTotal = 0,
   excludeBomCode = null
 } = {}) => {
+  const orderAmt = Math.max(0, parseAmount(orderTotal));
+  if (!ENFORCE_CREDIT_APPROVAL_GATE) {
+    return {
+      approved: true,
+      status: 'approved',
+      gateEnabled: false,
+      isUnlimitedCredit: true,
+      creditLimit: -1,
+      creditDays: Math.max(1, Math.min(365, parseInt(customer?.creditDays ?? customer?.credit_days ?? 30, 10) || 30)),
+      usedCredit: 0,
+      availableCredit: Infinity,
+      orderAmt,
+      projectedTotal: orderAmt,
+      exceedsLimit: false,
+      canUseCredit: true,
+      reason: ''
+    };
+  }
+
   const approved = isCustomerCreditApproved(customer);
   const status = getCustomerCreditStatus(customer);
-  const creditLimit = Math.max(0, parseAmount(customer?.creditLimit ?? customer?.credit_limit ?? 0));
+  const rawCreditLimit = parseAmount(customer?.creditLimit ?? customer?.credit_limit ?? 0);
+  const isUnlimitedCredit = approved && rawCreditLimit < 0;
+  const creditLimit = isUnlimitedCredit ? -1 : Math.max(0, rawCreditLimit);
   const creditDays = Math.max(1, Math.min(365, parseInt(customer?.creditDays ?? customer?.credit_days ?? 30, 10) || 30));
   const usedCredit = approved ? calculateCustomerUnsettledCredit(customer, bomStore, excludeBomCode) : 0;
-  const orderAmt = Math.max(0, parseAmount(orderTotal));
-  const availableCredit = Math.max(0, Math.round((creditLimit - usedCredit) * 100) / 100);
+  const availableCredit = isUnlimitedCredit ? Infinity : Math.max(0, Math.round((creditLimit - usedCredit) * 100) / 100);
   const projectedTotal = Math.round((usedCredit + orderAmt) * 100) / 100;
-  const hasValidLimit = creditLimit > 0;
-  const exceedsLimit = approved && (!hasValidLimit || projectedTotal > creditLimit);
+  const hasValidLimit = isUnlimitedCredit || creditLimit > 0;
+  const exceedsLimit = approved && !isUnlimitedCredit && (!hasValidLimit || projectedTotal > creditLimit);
   const canUseCredit = approved && hasValidLimit && !exceedsLimit;
 
   let reason = '';
@@ -154,6 +178,7 @@ export const evaluateCreditEligibility = ({
   return {
     approved,
     status,
+    isUnlimitedCredit,
     creditLimit,
     creditDays,
     usedCredit,

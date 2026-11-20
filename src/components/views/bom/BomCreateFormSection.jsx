@@ -1993,7 +1993,7 @@ export default function BomCreateFormSection({ ctx }) {
                     )}
                   </select>
                 )}
-                {newBomDocType !== 'DC' && createBomCreditEval.approved && newBomPaymentType === 'Credit Payment' && (
+                {newBomDocType !== 'DC' && createBomCreditEval.gateEnabled !== false && createBomCreditEval.approved && newBomPaymentType === 'Credit Payment' && (
                   <div style={{
                     marginTop: '6px',
                     padding: '8px 10px',
@@ -2006,7 +2006,9 @@ export default function BomCreateFormSection({ ctx }) {
                   }}>
                     {createBomCreditEval.exceedsLimit
                       ? `⛔ ${createBomCreditEval.reason}`
-                      : `✓ Credit Limit: ₹${createBomCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${createBomCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${createBomCreditEval.availableCredit.toLocaleString('en-IN')}`}
+                      : createBomCreditEval.isUnlimitedCredit
+                        ? `✓ Credit Limit: Unlimited • Used: ₹${createBomCreditEval.usedCredit.toLocaleString('en-IN')}`
+                        : `✓ Credit Limit: ₹${createBomCreditEval.creditLimit.toLocaleString('en-IN')} • Used: ₹${createBomCreditEval.usedCredit.toLocaleString('en-IN')} • Available: ₹${createBomCreditEval.availableCredit.toLocaleString('en-IN')}`}
                   </div>
                 )}
                 {newBomDocType !== 'DC' && createBomCreditCustomer && !createBomCreditEval.approved && (
