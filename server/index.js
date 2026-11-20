@@ -3795,6 +3795,31 @@ export const requireRole = (allowedRoles = []) => {
   };
 };
 
+// Smart Leads (new CRM module) — mounted ONLY when ENABLE_SMART_LEADS=true; otherwise every route 404s.
+if (process.env.ENABLE_SMART_LEADS === 'true') {
+  const { createSmartLeadsRouter } = await import('./smartLeadsRouter.js');
+  const { ensureSmartLeadsSchema } = await import('./smartLeadsSchema.js');
+  ensureSmartLeadsSchema().catch(err => console.error('[Smart Leads Schema]', err.message));
+  app.use('/api/smart-leads', createSmartLeadsRouter({
+    requireSession: requireBusinzSession,
+    broadcast: (type, payload) => broadcastRealtimeEvent(type, payload),
+    notify: (params) => createInternalNotification(params),
+    getTeam: async () => {
+      const employees = await getDatabaseStore('employees_store').catch(() => []);
+      const seen = new Set();
+      return (Array.isArray(employees) ? employees : []).flatMap(emp => {
+        const user_id = emp.employee_code || emp.code || emp.id;
+        const role = emp.role || emp.designation || '';
+        const isSales = `${role} ${emp.department || ''}`.toLowerCase().includes('sales');
+        if (!user_id || !isSales || seen.has(user_id)) return [];
+        seen.add(user_id);
+        return [{ user_id: String(user_id), name: emp.employee_name || emp.name || String(user_id), role: role || 'Sales Executive' }];
+      });
+    }
+  }));
+  console.log('🧪 [Smart Leads] Module ENABLED (ENABLE_SMART_LEADS=true).');
+}
+
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   const cleanKey = String(key || '').trim();

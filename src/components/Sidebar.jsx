@@ -582,7 +582,14 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     return sections;
   };
 
-  const sections = getSectionsForRole(userRole);
+  // Smart Leads (new CRM module): visible only when VITE_ENABLE_SMART_LEADS=true (local testing)
+  const withSmartLeads = (list, role) => {
+    const r = String(role || '').toLowerCase();
+    const allowed = ['ceo', 'md', 'managing director', 'technical administrator', 'technical admin', 'developer', 'sales', 'tech support', 'technical support'].some(k => r.includes(k));
+    if (import.meta.env.VITE_ENABLE_SMART_LEADS !== 'true' || !allowed) return list;
+    return [...list, { category: 'SMART LEADS (TEST)', items: [{ label: 'Smart Leads', icon: Sparkles }] }];
+  };
+  const sections = withSmartLeads(getSectionsForRole(userRole), userRole);
 
   const normalizeTab = (tab) => {
     if (tab === 'Performa Invoice') return 'Proforma Invoice';
