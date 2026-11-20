@@ -83,7 +83,10 @@ export const toConsumerBomServer = (row) => {
         row.invoice_no
       );
   const cleanAccountsVerification = (av && typeof av === 'object')
-    ? { ...av }
+    ? {
+        ...av,
+        verified: Boolean(av.verified || row.invoice_confirmed || row.invoiceConfirmed)
+      }
     : {
         verified: isAccVerified,
         verifiedBy: row.accounts_verified_by || '',
@@ -259,6 +262,14 @@ export const toConsumerBomServer = (row) => {
     payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
     dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
+    isAccountsDone: Boolean(
+      row.is_accounts_done ||
+      row.isAccountsDone ||
+      extraData.isAccountsDone ||
+      cleanAccountsVerification?.verified ||
+      row.invoice_confirmed ||
+      row.invoiceConfirmed
+    ),
     packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
       (String(row.status || '').toLowerCase().includes('packed') || String(row.status || '').toLowerCase().includes('awaiting vehicle loading') || String(row.status || '').toLowerCase().includes('invoice confirmed')) ? 'PACKING_VERIFIED' :
       cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
@@ -824,7 +835,7 @@ export const AUTHORITATIVE_PI_STORE_KEYS = ['customer_pis_store', 'sales_pi_stor
  * 5. Update PI status and conversion fields in both relational table (if present) and controlroom_store.
  * 6. Strictly preserve existing customer, salesperson, and financial data on the PI.
  */
-export async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
+export async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord, { isExistingUpdate = false } = {}) {
   if (!cleanPi) return;
 
   const targetPi = String(cleanPi).trim();
@@ -833,6 +844,10 @@ export async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRe
   // 1. Confirm BOM does not point to a different source PI
   const existingBomPi = String(baseRecord?.sourcePiNo || baseRecord?.source_pi_no || '').trim();
   if (existingBomPi && existingBomPi.toLowerCase() !== lowerPi) {
+    if (isExistingUpdate) {
+      console.warn(`[PI Association Notice] Skipping PI re-sync on existing BOM "${finalCode}" (existing PI "${existingBomPi}" vs "${targetPi}").`);
+      return;
+    }
     throw new Error(
       `[PI Association Conflict] BOM "${finalCode}" is already linked to source PI "${existingBomPi}", cannot re-associate to "${targetPi}".`
     );
@@ -877,14 +892,18 @@ export async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRe
 
   // Validation: Source PI must exist in at least one authoritative store or relational table
   if (matchedStores.length === 0 && !matchedDbPi) {
+    if (isExistingUpdate) {
+      console.warn(`[PI Validation Notice] Legacy source PI "${targetPi}" not found for existing BOM "${finalCode}"; allowing BOM update.`);
+      return;
+    }
     throw new Error(
       `[PI Validation Error] Source PI "${targetPi}" does not exist in authoritative PI stores.`
     );
   }
 
   // 3. Confirm that an existing PI conversion does not point to a different BOM
-  // Strict Mandate: Reject EVERY attempt to associate a previously converted PI with another BOM, including cancelled BOMs.
-  // Client-supplied fields or unverified statuses MUST NOT bypass this check.
+  // Strict Mandate: Reject EVERY attempt to associate a previously converted PI with another NEW BOM, including cancelled BOMs.
+  // For updates to ALREADY-EXISTING BOM records (e.g. Accounts Verification, Dispatch Packing, Invoice), skip PI re-link instead of rolling back the BOM save.
   const conflictBomRes = await client.query(`
     SELECT bom_code, id, status FROM public.bom_orders
     WHERE LOWER(source_pi_no) = $1
@@ -895,6 +914,10 @@ export async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRe
   if (conflictBomRes?.rows?.length > 0) {
     const conflictingBom = conflictBomRes.rows[0];
     const conflictingCode = conflictingBom.bom_code || conflictingBom.id;
+    if (isExistingUpdate) {
+      console.warn(`[PI Association Notice] Skipping PI sync on existing BOM "${finalCode}" (source PI "${targetPi}" also linked to "${conflictingCode}").`);
+      return;
+    }
     const isCancelled = String(conflictingBom.status || '').toLowerCase().includes('cancel');
 
     if (isCancelled) {
@@ -924,6 +947,10 @@ export async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRe
   }
 
   for (const existingConvertedBomCode of existingConvertedCodes) {
+    if (isExistingUpdate) {
+      console.warn(`[PI Association Notice] Skipping PI sync on existing BOM "${finalCode}" (PI "${targetPi}" already points to "${existingConvertedBomCode}").`);
+      return;
+    }
     const otherBomRes = await client.query(`
       SELECT bom_code, status FROM public.bom_orders
       WHERE (bom_code = $1 OR id = $1)
@@ -1090,7 +1117,8 @@ export async function persistBomsTransactionSafe({
         (bom.id && (bom.id === existingPiBom.id || bom.id === existingPiBom.bomCode)) ||
         codeBelongsToSameRecord
       );
-      if (incomingPi && existingPiBom && !isSameBomRecord) {
+      const isUpdatingExistingBom = Boolean(existingRecordWithCode && !isNew);
+      if (incomingPi && existingPiBom && !isSameBomRecord && !isUpdatingExistingBom) {
         const activeCode = existingPiBom.bomCode || existingPiBom.id;
         const isCancelled = String(existingPiBom.status || '').toLowerCase().includes('cancel');
         if (isCancelled) {
@@ -1150,7 +1178,9 @@ export async function persistBomsTransactionSafe({
       // Synchronize source PI record status in database within the transaction first
       // General database-backed validation: zero hardcoded exceptions
       if (merged.sourcePiNo) {
-        await validateAndSyncSourcePi(client, merged.sourcePiNo, finalCode, baseRecord);
+        await validateAndSyncSourcePi(client, merged.sourcePiNo, finalCode, baseRecord, {
+          isExistingUpdate: Boolean(existingRecordWithCode && !isNew)
+        });
       }
 
       // Parameterized write to public.bom_orders
@@ -1186,7 +1216,9 @@ export async function persistBomsTransactionSafe({
 
         // Synchronize and validate source PI within transaction before BOM write
         if (merged.sourcePiNo) {
-          await validateAndSyncSourcePi(client, merged.sourcePiNo, cleanId, existing);
+          await validateAndSyncSourcePi(client, merged.sourcePiNo, cleanId, existing, {
+            isExistingUpdate: Boolean(existing)
+          });
         }
 
         const dbRow = toDatabaseBomRowServer(merged);

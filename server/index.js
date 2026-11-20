@@ -4168,7 +4168,7 @@ app.post('/api/store/:key', async (req, res) => {
       });
     }
   } else if (cleanKey === 'item_store' || cleanKey === 'raw_materials_store') {
-    if (!hasAnyUserRole(sessionRole, ['procurement', 'purchase', 'production', 'dispatch'])) {
+    if (!hasAnyUserRole(sessionRole, ['procurement', 'purchase', 'production', 'dispatch', 'accounts', 'billing', 'finance'])) {
       return res.status(403).json({
         success: false,
         error: `Forbidden: Role "${sessionRole}" is not authorized to write to ${cleanKey}.`
@@ -8176,6 +8176,11 @@ app.post('/api/invoices', async (req, res) => {
                 ...b,
                 invoiceNo: assignedInvNo,
                 invoiceConfirmed: true,
+                isAccountsDone: true,
+                accountsVerification: {
+                  ...(b.accountsVerification || {}),
+                  verified: true
+                },
                 status: nextStatus
               };
               return matchedBom;
@@ -8192,6 +8197,12 @@ app.post('/api/invoices', async (req, res) => {
                   `UPDATE public.bom_orders
                    SET invoice_no = $1,
                        invoice_confirmed = true,
+                       accounts_verification = jsonb_set(
+                         COALESCE(accounts_verification, '{}'::jsonb),
+                         '{verified}',
+                         'true'::jsonb,
+                         true
+                       ),
                        status = CASE
                          WHEN status ILIKE '%complete%' OR status ILIKE '%dispatched%' OR status ILIKE '%delivered%' THEN status
                          ELSE 'Awaiting Vehicle Loading & Dispatch'
