@@ -43,7 +43,12 @@ export const slApi = {
   checkDuplicates: (body) => request('POST', '/duplicates/check', body),
   saveSetting: (key, value) => request('PUT', `/settings/${key}`, { value }),
   addLostReason: (label) => request('POST', '/lost-reasons', { label }),
-  toggleLostReason: (id, is_active) => request('PATCH', `/lost-reasons/${encodeURIComponent(id)}`, { is_active })
+  toggleLostReason: (id, is_active) => request('PATCH', `/lost-reasons/${encodeURIComponent(id)}`, { is_active }),
+  listFollowups: (params) => request('GET', `/followups${qs(params)}`),
+  scheduleFollowup: (id, body) => request('POST', `/leads/${encodeURIComponent(id)}/followups`, body),
+  completeFollowup: (id, body) => request('POST', `/followups/${encodeURIComponent(id)}/complete`, body),
+  rescheduleFollowup: (id, body) => request('POST', `/followups/${encodeURIComponent(id)}/reschedule`, body),
+  overview: (params) => request('GET', `/overview${qs(params)}`)
 };
 
 // Realtime: subscribe to single-row Smart Leads changes broadcast over the existing SSE channel.

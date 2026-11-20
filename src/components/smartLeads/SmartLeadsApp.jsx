@@ -7,12 +7,14 @@ import AllLeadsView from './AllLeadsView';
 import LeadProfileView from './LeadProfileView';
 import LeadSettingsView from './LeadSettingsView';
 import PipelineView from './PipelineView';
+import FollowupsView from './FollowupsView';
+import OverviewView from './OverviewView';
 
 const SECTIONS = [
-  { key: 'overview', label: 'Overview', icon: LayoutDashboard, phase: 2 },
+  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
   { key: 'leads', label: 'All Leads', icon: Users },
   { key: 'pipeline', label: 'Pipeline', icon: Columns3 },
-  { key: 'followups', label: 'Follow-ups', icon: CalendarClock, phase: 2 },
+  { key: 'followups', label: 'Follow-ups', icon: CalendarClock },
   { key: 'automation', label: 'Automation', icon: Zap, phase: 3 },
   { key: 'team', label: 'Sales Team', icon: UsersRound, phase: 2 },
   { key: 'reports', label: 'Reports', icon: BarChart3, phase: 5 },
@@ -41,8 +43,10 @@ export default function SmartLeadsApp() {
   if (metaError) body = <div className="sl-alert sl-alert-error">{metaError} <button className="sl-btn sl-btn-sm" onClick={loadMeta}>Retry</button></div>;
   else if (!meta) body = <div className="sl-card"><SkeletonRows rows={6} /></div>;
   else if (openLeadId) body = <LeadProfileView meta={meta} leadId={openLeadId} onBack={closeLead} toast={toast} />;
+  else if (section === 'overview') body = <OverviewView meta={meta} onNavigate={go} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'leads') body = <AllLeadsView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'pipeline') body = <PipelineView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
+  else if (section === 'followups') body = <FollowupsView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'settings') body = <LeadSettingsView meta={meta} onMetaChange={loadMeta} toast={toast} />;
   else body = <div className="sl-card"><EmptyState title={`${current.label} — coming in phase ${current.phase}`} text="This screen is part of the approved Smart Leads plan and will be built in its phase." /></div>;
 

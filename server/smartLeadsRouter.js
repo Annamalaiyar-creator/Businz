@@ -713,5 +713,399 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     res.status(201).json({ success: true, lead });
   }));
 
+  // ============================================================================
+  // PHASE 2: FOLLOW-UP CENTER ENDPOINTS
+  // ============================================================================
+
+  // ---------- List follow-ups with counts & filters ----------
+  router.get('/followups', wrap(async (req, res) => {
+    const tab = String(req.query.tab || 'today').toLowerCase();
+    const type = String(req.query.type || '').toUpperCase();
+    const salespersonId = req.query.salesperson_id ? String(req.query.salesperson_id).trim() : null;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 10));
+    const offset = (page - 1) * pageSize;
+
+    const conds = ['l.deleted_at IS NULL'];
+    const params = [];
+    let pIdx = 1;
+
+    // Scoping by user role
+    if (!canViewAllLeads(req.userSession)) {
+      conds.push(`(f.assigned_salesperson_id = $${pIdx} OR l.assigned_salesperson = $${pIdx})`);
+      params.push(req.userSession.employee_code);
+      pIdx++;
+    } else if (salespersonId) {
+      conds.push(`f.assigned_salesperson_id = $${pIdx}`);
+      params.push(salespersonId);
+      pIdx++;
+    }
+
+    if (type && ['CALL', 'WHATSAPP', 'EMAIL', 'MEETING'].includes(type)) {
+      conds.push(`f.followup_type = $${pIdx}`);
+      params.push(type);
+      pIdx++;
+    }
+
+    // Filter by tab
+    if (tab === 'today') {
+      conds.push(`f.status = 'PENDING' AND f.scheduled_at::date = CURRENT_DATE`);
+    } else if (tab === 'overdue') {
+      conds.push(`f.status = 'PENDING' AND f.scheduled_at < NOW() AND f.scheduled_at::date < CURRENT_DATE`);
+    } else if (tab === 'upcoming') {
+      conds.push(`f.status = 'PENDING' AND f.scheduled_at::date > CURRENT_DATE`);
+    } else if (tab === 'completed') {
+      conds.push(`f.status = 'COMPLETED'`);
+    } else if (tab === 'pending') {
+      conds.push(`f.status = 'PENDING'`);
+    }
+    // 'all' includes all statuses without extra condition
+
+    const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+    // Fetch tab counts
+    const scopeConds = ['l.deleted_at IS NULL'];
+    const scopeParams = [];
+    let sIdx = 1;
+    if (!canViewAllLeads(req.userSession)) {
+      scopeConds.push(`(f.assigned_salesperson_id = $${sIdx} OR l.assigned_salesperson = $${sIdx})`);
+      scopeParams.push(req.userSession.employee_code);
+      sIdx++;
+    } else if (salespersonId) {
+      scopeConds.push(`f.assigned_salesperson_id = $${sIdx}`);
+      scopeParams.push(salespersonId);
+      sIdx++;
+    }
+    const scopeWhere = scopeConds.length ? `WHERE ${scopeConds.join(' AND ')}` : '';
+
+    const countSql = `
+      SELECT 
+        COUNT(*) FILTER (WHERE f.status = 'PENDING' AND f.scheduled_at::date = CURRENT_DATE) AS today,
+        COUNT(*) FILTER (WHERE f.status = 'PENDING' AND f.scheduled_at < NOW() AND f.scheduled_at::date < CURRENT_DATE) AS overdue,
+        COUNT(*) FILTER (WHERE f.status = 'PENDING' AND f.scheduled_at::date > CURRENT_DATE) AS upcoming,
+        COUNT(*) FILTER (WHERE f.status = 'COMPLETED') AS completed,
+        COUNT(*) AS total
+      FROM public.lead_followups f
+      JOIN public.leads l ON f.lead_id = l.id
+      ${scopeWhere}
+    `;
+    const countRes = await query(countSql, scopeParams);
+    const counts = {
+      today: parseInt(countRes.rows[0]?.today || 0, 10),
+      overdue: parseInt(countRes.rows[0]?.overdue || 0, 10),
+      upcoming: parseInt(countRes.rows[0]?.upcoming || 0, 10),
+      completed: parseInt(countRes.rows[0]?.completed || 0, 10),
+      total: parseInt(countRes.rows[0]?.total || 0, 10)
+    };
+
+    // Sort order: overdue/today first by scheduled_at ASC, completed by completed_at DESC
+    let orderBy = 'f.scheduled_at ASC';
+    if (tab === 'completed') orderBy = 'f.completed_at DESC NULLS LAST, f.scheduled_at DESC';
+
+    const listSql = `
+      SELECT 
+        f.id, f.lead_id, f.followup_type, f.scheduled_at, f.notes, f.status,
+        f.outcome, f.outcome_remarks, f.assigned_salesperson_id, f.assigned_salesperson_name,
+        f.completed_at, f.created_at,
+        l.company_name AS lead_company_name,
+        l.contact_person AS lead_contact_person,
+        l.phone AS lead_phone,
+        l.pipeline_stage AS lead_stage,
+        l.temperature AS lead_temperature,
+        l.score AS lead_score,
+        l.estimated_value AS lead_value,
+        l.requirement AS lead_requirement
+      FROM public.lead_followups f
+      JOIN public.leads l ON f.lead_id = l.id
+      ${whereClause}
+      ORDER BY ${orderBy}
+      LIMIT $${pIdx} OFFSET $${pIdx + 1}
+    `;
+    params.push(pageSize, offset);
+
+    const listRes = await query(listSql, params);
+
+    const currentTotal = tab === 'today' ? counts.today
+      : tab === 'overdue' ? counts.overdue
+      : tab === 'upcoming' ? counts.upcoming
+      : tab === 'completed' ? counts.completed
+      : counts.total;
+
+    res.json({
+      success: true,
+      data: listRes.rows,
+      counts,
+      total: currentTotal,
+      page,
+      pageSize
+    });
+  }));
+
+  // ---------- Schedule a follow-up for a lead ----------
+  router.post('/leads/:id/followups', wrap(async (req, res) => {
+    const followupType = String(req.body?.followup_type || req.body?.type || 'CALL').toUpperCase();
+    if (!['CALL', 'WHATSAPP', 'EMAIL', 'MEETING'].includes(followupType)) {
+      throw new HttpError(400, 'Invalid follow-up type (CALL, WHATSAPP, EMAIL, MEETING)');
+    }
+    const scheduledAt = new Date(req.body?.scheduled_at);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      throw new HttpError(400, 'Valid scheduled_at timestamp is required');
+    }
+    const notes = String(req.body?.notes || '').trim();
+    const actor = actorOf(req.userSession);
+
+    const followup = await withTx(async (client) => {
+      const cur = await loadLeadForWrite(client, req.params.id, req.userSession);
+      const fid = genId('LF');
+      const ins = await client.query(
+        `INSERT INTO public.lead_followups (
+          id, lead_id, followup_type, scheduled_at, notes, status,
+          assigned_salesperson_id, assigned_salesperson_name, created_by_user_id, created_by_name, created_at
+        ) VALUES ($1,$2,$3,$4,$5,'PENDING',$6,$7,$8,$9,NOW())
+        RETURNING *`,
+        [fid, cur.id, followupType, scheduledAt.toISOString(), notes, cur.assigned_salesperson || actor.id, cur.assigned_salesperson_name || actor.name, actor.id, actor.name]
+      );
+
+      // Update lead's next_action_due_at to the earliest pending follow-up
+      await client.query(
+        `UPDATE public.leads 
+         SET next_action_due_at = (
+           SELECT MIN(scheduled_at) FROM public.lead_followups WHERE lead_id = $1 AND status = 'PENDING'
+         ), updated_at = NOW()
+         WHERE id = $1`,
+        [cur.id]
+      );
+
+      // Audit activity
+      await client.query(
+        `INSERT INTO public.lead_activities (id, lead_id, activity_type, summary, conducted_by_user_id, conducted_by_name, conducted_by_role, created_at)
+         VALUES ($1,$2,'FOLLOWUP_SCHEDULED',$3,$4,$5,$6,NOW())`,
+        [genId('LAC'), cur.id, `Scheduled ${followupType}: ${notes || 'No notes'} for ${scheduledAt.toLocaleString('en-IN')}`, actor.id, actor.name, actor.role]
+      );
+
+      return ins.rows[0];
+    });
+
+    emit('followup', { action: 'create', followupId: followup.id, leadId: req.params.id });
+    res.status(201).json({ success: true, followup });
+  }));
+
+  // ---------- Complete a follow-up with outcome ----------
+  router.post('/followups/:id/complete', wrap(async (req, res) => {
+    const outcome = String(req.body?.outcome || 'INTERESTED').toUpperCase();
+    const outcomeRemarks = String(req.body?.outcome_remarks || req.body?.remarks || '').trim();
+    const nextFollowup = req.body?.next_followup || null;
+    const actor = actorOf(req.userSession);
+
+    const result = await withTx(async (client) => {
+      const fRes = await client.query(`SELECT * FROM public.lead_followups WHERE id = $1 FOR UPDATE`, [req.params.id]);
+      if (!fRes.rows.length) throw new HttpError(404, 'Follow-up not found');
+      const f = fRes.rows[0];
+
+      // Update follow-up as completed
+      const up = await client.query(
+        `UPDATE public.lead_followups 
+         SET status = 'COMPLETED', outcome = $2, outcome_remarks = $3, completed_at = NOW()
+         WHERE id = $1 RETURNING *`,
+        [f.id, outcome, outcomeRemarks]
+      );
+
+      // Log lead activity
+      await client.query(
+        `INSERT INTO public.lead_activities (id, lead_id, activity_type, summary, customer_response, conducted_by_user_id, conducted_by_name, conducted_by_role, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
+        [
+          genId('LAC'), f.lead_id, f.followup_type || 'CALL',
+          `Follow-up completed [Outcome: ${outcome}] - ${outcomeRemarks || 'Completed successfully'}`,
+          outcomeRemarks || outcome, actor.id, actor.name, actor.role
+        ]
+      );
+
+      // If next follow-up was provided, schedule it
+      let nextF = null;
+      if (nextFollowup && nextFollowup.scheduled_at) {
+        const nextDt = new Date(nextFollowup.scheduled_at);
+        if (!Number.isNaN(nextDt.getTime())) {
+          const nextType = String(nextFollowup.followup_type || nextFollowup.type || 'CALL').toUpperCase();
+          const nextNotes = String(nextFollowup.notes || '').trim();
+          const nIns = await client.query(
+            `INSERT INTO public.lead_followups (
+              id, lead_id, followup_type, scheduled_at, notes, status,
+              assigned_salesperson_id, assigned_salesperson_name, created_by_user_id, created_by_name, created_at
+            ) VALUES ($1,$2,$3,$4,$5,'PENDING',$6,$7,$8,$9,NOW())
+            RETURNING *`,
+            [genId('LF'), f.lead_id, nextType, nextDt.toISOString(), nextNotes, f.assigned_salesperson_id || actor.id, f.assigned_salesperson_name || actor.name, actor.id, actor.name]
+          );
+          nextF = nIns.rows[0];
+        }
+      }
+
+      // Refresh lead's next_action_due_at and last_activity
+      await client.query(
+        `UPDATE public.leads 
+         SET next_action_due_at = (
+           SELECT MIN(scheduled_at) FROM public.lead_followups WHERE lead_id = $1 AND status = 'PENDING'
+         ),
+         last_activity_at = NOW(),
+         last_activity_type = $2,
+         is_unattended_2h = FALSE,
+         is_unattended_24h = FALSE,
+         is_unattended_48h = FALSE,
+         updated_at = NOW()
+         WHERE id = $1`,
+        [f.lead_id, f.followup_type || 'CALL']
+      );
+
+      return { completed: up.rows[0], nextFollowup: nextF };
+    });
+
+    emit('followup', { action: 'complete', followupId: req.params.id });
+    res.json({ success: true, ...result });
+  }));
+
+  // ---------- Reschedule a follow-up ----------
+  router.post('/followups/:id/reschedule', wrap(async (req, res) => {
+    const scheduledAt = new Date(req.body?.scheduled_at);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      throw new HttpError(400, 'Valid scheduled_at timestamp is required');
+    }
+    const reason = String(req.body?.reason || req.body?.notes || '').trim();
+    const actor = actorOf(req.userSession);
+
+    const updated = await withTx(async (client) => {
+      const fRes = await client.query(`SELECT * FROM public.lead_followups WHERE id = $1 FOR UPDATE`, [req.params.id]);
+      if (!fRes.rows.length) throw new HttpError(404, 'Follow-up not found');
+      const f = fRes.rows[0];
+
+      // Mark old as rescheduled and create new one
+      await client.query(
+        `UPDATE public.lead_followups 
+         SET status = 'RESCHEDULED', outcome_remarks = $2
+         WHERE id = $1`,
+        [f.id, reason ? `Rescheduled: ${reason}` : 'Rescheduled by user']
+      );
+
+      const nId = genId('LF');
+      const ins = await client.query(
+        `INSERT INTO public.lead_followups (
+          id, lead_id, followup_type, scheduled_at, notes, status,
+          assigned_salesperson_id, assigned_salesperson_name, rescheduled_from_id,
+          created_by_user_id, created_by_name, created_at
+        ) VALUES ($1,$2,$3,$4,$5,'PENDING',$6,$7,$8,$9,$10,NOW())
+        RETURNING *`,
+        [nId, f.lead_id, f.followup_type, scheduledAt.toISOString(), f.notes, f.assigned_salesperson_id, f.assigned_salesperson_name, f.id, actor.id, actor.name]
+      );
+
+      // Update lead
+      await client.query(
+        `UPDATE public.leads 
+         SET next_action_due_at = (
+           SELECT MIN(scheduled_at) FROM public.lead_followups WHERE lead_id = $1 AND status = 'PENDING'
+         ), updated_at = NOW()
+         WHERE id = $1`,
+        [f.lead_id]
+      );
+
+      // Audit activity
+      await client.query(
+        `INSERT INTO public.lead_activities (id, lead_id, activity_type, summary, conducted_by_user_id, conducted_by_name, conducted_by_role, created_at)
+         VALUES ($1,$2,'FOLLOWUP_RESCHEDULED',$3,$4,$5,$6,NOW())`,
+        [genId('LAC'), f.lead_id, `Follow-up rescheduled to ${scheduledAt.toLocaleString('en-IN')}${reason ? ' (' + reason + ')' : ''}`, actor.id, actor.name, actor.role]
+      );
+
+      return ins.rows[0];
+    });
+
+    emit('followup', { action: 'reschedule', followupId: updated.id });
+    res.json({ success: true, followup: updated });
+  }));
+
+  // ---------- Command Center Overview KPIs ----------
+  router.get('/overview', wrap(async (req, res) => {
+    const isManager = canViewAllLeads(req.userSession);
+    const conds = ['l.deleted_at IS NULL'];
+    const params = [];
+    if (!isManager) {
+      conds.push('l.assigned_salesperson = $1');
+      params.push(req.userSession.employee_code);
+    }
+    const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+    const [leadKpis, stageStats, followupStats, hotLeads] = await Promise.all([
+      // Total leads, pipeline value, new this week, won, lost
+      query(`
+        SELECT 
+          COUNT(*) AS total_leads,
+          COUNT(*) FILTER (WHERE l.created_at >= NOW() - INTERVAL '7 days') AS new_this_week,
+          COALESCE(SUM(l.estimated_value) FILTER (WHERE l.pipeline_stage NOT IN ('Won', 'Lost')), 0) AS pipeline_value,
+          COALESCE(SUM(l.estimated_value * COALESCE(s.win_probability, 10) / 100.0) FILTER (WHERE l.pipeline_stage NOT IN ('Won', 'Lost')), 0) AS weighted_forecast,
+          COUNT(*) FILTER (WHERE l.pipeline_stage = 'Won') AS won_count,
+          COUNT(*) FILTER (WHERE l.pipeline_stage = 'Lost') AS lost_count,
+          COALESCE(SUM(l.estimated_value) FILTER (WHERE l.pipeline_stage = 'Won'), 0) AS won_value
+        FROM public.leads l
+        LEFT JOIN public.pipeline_stages s ON s.label = l.pipeline_stage
+        ${whereClause}
+      `, params),
+
+      // Stage distribution
+      query(`
+        SELECT l.pipeline_stage, COUNT(*) AS count, COALESCE(SUM(l.estimated_value), 0) AS total_value
+        FROM public.leads l
+        ${whereClause}
+        GROUP BY l.pipeline_stage
+      `, params),
+
+      // Follow-up counts
+      query(`
+        SELECT 
+          COUNT(*) FILTER (WHERE f.status = 'PENDING' AND f.scheduled_at::date = CURRENT_DATE) AS today,
+          COUNT(*) FILTER (WHERE f.status = 'PENDING' AND f.scheduled_at < NOW() AND f.scheduled_at::date < CURRENT_DATE) AS overdue,
+          COUNT(*) FILTER (WHERE f.status = 'PENDING' AND f.scheduled_at::date > CURRENT_DATE) AS upcoming,
+          COUNT(*) FILTER (WHERE f.status = 'COMPLETED') AS completed
+        FROM public.lead_followups f
+        JOIN public.leads l ON f.lead_id = l.id
+        ${whereClause}
+      `, params),
+
+      // Attention queue: Hot/Warm leads needing attention
+      query(`
+        SELECT l.id, l.company_name, l.contact_person, l.phone, l.pipeline_stage, l.temperature, l.score, l.estimated_value, l.next_action_due_at, l.assigned_salesperson_name
+        FROM public.leads l
+        ${whereClause ? whereClause + ' AND' : 'WHERE'} l.pipeline_stage NOT IN ('Won', 'Lost')
+          AND (l.temperature = 'HOT' OR l.score >= 60 OR l.next_action_due_at < NOW())
+        ORDER BY l.score DESC, l.created_at DESC
+        LIMIT 6
+      `, params)
+    ]);
+
+    const kpi = leadKpis.rows[0] || {};
+    const totalClosed = parseInt(kpi.won_count || 0, 10) + parseInt(kpi.lost_count || 0, 10);
+    const winRate = totalClosed > 0 ? Math.round((parseInt(kpi.won_count || 0, 10) / totalClosed) * 100) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalLeads: parseInt(kpi.total_leads || 0, 10),
+          newThisWeek: parseInt(kpi.new_this_week || 0, 10),
+          pipelineValue: parseFloat(kpi.pipeline_value || 0),
+          weightedForecast: Math.round(parseFloat(kpi.weighted_forecast || 0)),
+          wonCount: parseInt(kpi.won_count || 0, 10),
+          lostCount: parseInt(kpi.lost_count || 0, 10),
+          wonValue: parseFloat(kpi.won_value || 0),
+          winRate
+        },
+        stages: stageStats.rows,
+        followups: {
+          today: parseInt(followupStats.rows[0]?.today || 0, 10),
+          overdue: parseInt(followupStats.rows[0]?.overdue || 0, 10),
+          upcoming: parseInt(followupStats.rows[0]?.upcoming || 0, 10),
+          completed: parseInt(followupStats.rows[0]?.completed || 0, 10)
+        },
+        attentionQueue: hotLeads.rows
+      }
+    });
+  }));
+
   return router;
 }
