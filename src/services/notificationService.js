@@ -166,10 +166,71 @@ export function getVoiceAnnouncementText(notif) {
   }
 }
 
+const VOICE_DEDUP_WINDOW_MS = 5000;
+const recentSpokenNotifications = new Map();
+let pendingSpeakTimer = null;
+
+const MALE_VOICE_REGEX = /\b(rishi|prabhat|ravi|daniel|alex|fred|david|mark|george|thomas|arthur|aaron|albert|gordon|ralph|bruce|junior|reed|rocko|sandy|shelley|male|guy|ryan|christopher|eric|andrew|brian|roger|steffan)\b/i;
+const INDIAN_FEMALE_NAME_REGEX = /\b(neerja|veena|heera|priya|kavya|raveena|aditi|swara|ananya|neha|lekha|vani|meera|female|woman|girl)\b/i;
+const GENERAL_FEMALE_NAME_REGEX = /\b(neerja|veena|heera|priya|kavya|raveena|aditi|swara|samantha|karen|victoria|tessa|moira|zira|aria|jenny|ava|allison|susan|kate|serena|martha|siri|female|woman)\b/i;
+
+function selectIndianFemaleVoice(voices = []) {
+  if (!Array.isArray(voices) || voices.length === 0) return null;
+
+  const isIndianEng = (v) => {
+    const lang = String(v.lang || '').replace('_', '-').toLowerCase();
+    const name = String(v.name || '').toLowerCase();
+    return lang === 'en-in' || lang.startsWith('en-in-') || (lang.startsWith('en') && name.includes('india'));
+  };
+  const isNotMale = (v) => !MALE_VOICE_REGEX.test(String(v.name || ''));
+
+  // 1. Named Indian English female voices (e.g. Microsoft Neerja Online / Veena / Heera / Google en-IN female)
+  const tier1 = voices.find(v => isIndianEng(v) && isNotMale(v) && (INDIAN_FEMALE_NAME_REGEX.test(v.name) || /natural|neural|google/i.test(v.name)));
+  if (tier1) return tier1;
+
+  // 2. Any non-male Indian English voice (macOS Veena, Chrome en-IN, etc.)
+  const tier2 = voices.find(v => isIndianEng(v) && isNotMale(v));
+  if (tier2) return tier2;
+
+  // 3. Clear female English voice fallback (never male)
+  const tier3 = voices.find(v => String(v.lang || '').toLowerCase().startsWith('en') && isNotMale(v) && GENERAL_FEMALE_NAME_REGEX.test(v.name));
+  if (tier3) return tier3;
+
+  // 4. Any non-male English voice
+  return voices.find(v => String(v.lang || '').toLowerCase().startsWith('en') && isNotMale(v))
+    || voices.find(v => String(v.lang || '').toLowerCase().startsWith('en'))
+    || null;
+}
+
 export function speakNotificationVoice(textOrNotif) {
   if (typeof window === 'undefined') return;
 
-  // 1. Always play the dual-tone notification chime immediately
+  const text = typeof textOrNotif === 'object' ? getVoiceAnnouncementText(textOrNotif) : textOrNotif;
+  const cleanText = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!cleanText) return;
+
+  // Strict deduplication: prevent the same notification from chiming or speaking twice (e.g., SSE + Toast)
+  const now = Date.now();
+  for (const [k, ts] of recentSpokenNotifications.entries()) {
+    if (now - ts > VOICE_DEDUP_WINDOW_MS) recentSpokenNotifications.delete(k);
+  }
+  const notifObj = (textOrNotif && typeof textOrNotif === 'object') ? textOrNotif : null;
+  if (notifObj?._voiced) return;
+
+  const notifIdKey = notifObj?.id || notifObj?.dedupId ? `id:${String(notifObj.id || notifObj.dedupId)}` : null;
+  const docIdPart = notifObj?.document_id || notifObj?.docId || notifObj?.target_record_id || '';
+  const textKey = `txt:${cleanText.toLowerCase()}|${String(docIdPart).toLowerCase()}`;
+
+  if ((notifIdKey && recentSpokenNotifications.has(notifIdKey)) || recentSpokenNotifications.has(textKey)) {
+    return;
+  }
+  if (notifIdKey) recentSpokenNotifications.set(notifIdKey, now);
+  recentSpokenNotifications.set(textKey, now);
+  if (notifObj) {
+    try { notifObj._voiced = true; } catch (_) {}
+  }
+
+  // 1. Play the dual-tone notification chime once
   try {
     playWorkflowNotificationSound();
   } catch (_) {}
@@ -177,19 +238,21 @@ export function speakNotificationVoice(textOrNotif) {
   // 2. Check if voice announcements are enabled and supported
   if (!isVoiceNotificationEnabled() || !('speechSynthesis' in window)) return;
 
-  const text = typeof textOrNotif === 'object' ? getVoiceAnnouncementText(textOrNotif) : textOrNotif;
-  if (!text || typeof text !== 'string') return;
-
   try {
+    if (pendingSpeakTimer) {
+      clearTimeout(pendingSpeakTimer);
+      pendingSpeakTimer = null;
+    }
     if (window.speechSynthesis.paused) {
       window.speechSynthesis.resume();
     }
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.lang = 'en-US';
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'en-IN';
+    utterance.rate = 0.94;
+    utterance.pitch = 1.08;
+    utterance.volume = 1.0;
 
     // Store globally on window to protect against Chromium GC bug that silently cuts off speech
     window._businzSpeechUtterance = utterance;
@@ -197,15 +260,20 @@ export function speakNotificationVoice(textOrNotif) {
     const selectVoiceAndSpeak = () => {
       try {
         const voices = window.speechSynthesis.getVoices();
-        if (voices && voices.length > 0) {
-          const preferred = voices.find(v =>
-            v.lang.startsWith('en') &&
-            (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Daniel') || v.name.includes('Karen') || v.default)
-          ) || voices.find(v => v.lang.startsWith('en'));
-
-          if (preferred) utterance.voice = preferred;
+        const preferred = selectIndianFemaleVoice(voices);
+        if (preferred) {
+          utterance.voice = preferred;
+          if (preferred.lang) utterance.lang = preferred.lang;
         }
-        window.speechSynthesis.speak(utterance);
+        // Short delay after cancel() prevents Chromium/Safari from clipping the first word
+        pendingSpeakTimer = setTimeout(() => {
+          pendingSpeakTimer = null;
+          try {
+            window.speechSynthesis.speak(utterance);
+          } catch (speakErr) {
+            console.warn('[VoiceAlert] Delayed speak error:', speakErr);
+          }
+        }, 60);
       } catch (err) {
         console.warn('[VoiceAlert] Speak execution error:', err);
       }

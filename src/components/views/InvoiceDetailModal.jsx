@@ -279,8 +279,10 @@ export default function InvoiceDetailModal({
       else selectedState = false;
     }
 
-    const qty = it.qty || it.bomQty || 1;
-    const rate = it.rate || it.unitPrice || 1000;
+    const qty = Number(it.qty || it.bomQty || 1) || 1;
+    const isPresetFlag = Boolean(it.isPresetItem || it.presetGroupId || it.presetName);
+    const parsedRate = parseFloat(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : (it.unitPrice ?? 0));
+    const rate = Number.isFinite(parsedRate) ? parsedRate : 0;
     const itemTaxPct = extractGstRate(it.gstRate ?? it.tax, 18);
     return {
       code: it.code || `PRD-00${idx + 1}`,
@@ -293,8 +295,11 @@ export default function InvoiceDetailModal({
       discount: it.discount || 0,
       tax: itemTaxPct,
       gstRate: it.gstRate !== undefined ? it.gstRate : `${itemTaxPct}%`,
-      amt: it.amt ?? (qty * rate * (1 + itemTaxPct / 100)),
-      selected: selectedState
+      amt: isPresetFlag ? 0 : (it.amt !== undefined && it.amt !== null && Number(it.amt) > 0 ? Number(it.amt) : (qty * rate * (1 + itemTaxPct / 100))),
+      selected: selectedState,
+      isPresetItem: isPresetFlag,
+      presetGroupId: it.presetGroupId || null,
+      presetName: it.presetName || ''
     };
   }) : [
     { code: 'PRD-001', name: 'Long Rail 3000 mm', desc: '3 Meter Heavy Duty Rail', uom: 'Nos', bomQty: 8, invQty: 8, rate: 1800.00, discount: 0, tax: 18, amt: 14400.00 * 1.18, selected: true },
@@ -1373,11 +1378,88 @@ export default function InvoiceDetailModal({
           const indexedItemsList = itemsList.map((it, idx) => ({ ...it, originalIndex: idx }));
           const packedItems = indexedItemsList.filter(it => it.selected !== false);
           const unpackedItems = indexedItemsList.filter(it => it.selected === false);
-          const packedTotal = packedItems.reduce((acc, it) => acc + (it.amt ?? ((it.qty || 1) * (it.rate || 0) * (1 + extractGstRate(it.gstRate ?? it.tax, 18) / 100))), 0);
-          const unpackedTotal = unpackedItems.reduce((acc, it) => acc + (it.amt ?? ((it.qty || 1) * (it.rate || 0) * (1 + extractGstRate(it.gstRate ?? it.tax, 18) / 100))), 0);
 
           const targetRef = inv.poNo || inv.code || inv.bomCode || bomRefText;
           const foundBom = (bomStore || []).find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+
+          // Resolve authoritative preset groups from BOM / Invoice (preserving groupId keys)
+          const rawInvPresetGroups = matchingBom?.presetGroups || foundBom?.presetGroups || inv.presetGroups || {};
+          let invPresetGroups = (Array.isArray(rawInvPresetGroups) && rawInvPresetGroups.length > 0)
+            ? rawInvPresetGroups.map((g, i) => ({ ...g, groupId: g?.groupId || g?.id || `preset-${i + 1}` }))
+            : (typeof rawInvPresetGroups === 'object' && Object.keys(rawInvPresetGroups).length > 0)
+              ? Object.entries(rawInvPresetGroups).map(([key, val]) => ({ ...val, groupId: val?.groupId || val?.id || key }))
+              : [];
+
+          // Legacy single-preset fallback if presetGroups is empty but preset metadata exists
+          const fallbackPresetName = matchingBom?.presetName || foundBom?.presetName || inv.presetName || packedItems.find(it => it.presetName)?.presetName || '';
+          const fallbackKitPrice = cleanAmtNum(matchingBom?.presetKitPrice || foundBom?.presetKitPrice || inv.presetKitPrice || matchingBom?.kitPrice || inv.kitPrice);
+          const fallbackSetCount = parseFloat(matchingBom?.presetSetCount || foundBom?.presetSetCount || inv.presetSetCount || 1) || 1;
+          if (invPresetGroups.length === 0 && (fallbackPresetName || fallbackKitPrice > 0 || packedItems.some(it => it.isPresetItem || it.presetGroupId))) {
+            const defaultGstPct = extractGstRate(matchingBom?.gstRate ?? foundBom?.gstRate ?? inv.gstRate, 18);
+            const fallbackSub = cleanAmtNum(matchingBom?.subTotal || foundBom?.subTotal || inv.subTotal) || (totalAmtRaw > 0 ? Math.round((totalAmtRaw / (1 + defaultGstPct / 100)) * 100) / 100 : 0);
+            invPresetGroups = [{
+              groupId: packedItems.find(it => it.presetGroupId)?.presetGroupId || 'preset-1',
+              presetName: fallbackPresetName || 'Pre-Engineered Structure Kit Package',
+              setCount: fallbackSetCount,
+              unit: matchingBom?.presetUnit || foundBom?.presetUnit || (String(fallbackPresetName).toLowerCase().includes('kw') ? 'kW' : 'Sets'),
+              kitPrice: fallbackKitPrice > 0 ? fallbackKitPrice : (fallbackSub > 0 ? Math.round((fallbackSub / fallbackSetCount) * 100) / 100 : 0),
+              gstRate: defaultGstPct
+            }];
+          }
+
+          // Strictly assign each packed item to at most ONE preset group (never merge presets)
+          const assignedPackedIndices = new Set();
+          const packedPresetSections = invPresetGroups.map((grp, gIdx) => {
+            const grpId = grp.groupId || grp.id || null;
+            const grpNameLower = String(grp.presetName || '').trim().toLowerCase();
+            const grpItems = [];
+            packedItems.forEach((it, pIdx) => {
+              if (assignedPackedIndices.has(pIdx)) return;
+              const byGroupId = Boolean(grpId && it.presetGroupId && String(it.presetGroupId) === String(grpId));
+              const byPresetName = Boolean(!it.presetGroupId && grpNameLower && String(it.presetName || '').trim().toLowerCase() === grpNameLower);
+              const legacyFirstFallback = Boolean(!it.presetGroupId && !it.presetName && it.isPresetItem && gIdx === 0);
+              if (byGroupId || byPresetName || legacyFirstFallback) {
+                assignedPackedIndices.add(pIdx);
+                grpItems.push(it);
+              }
+            });
+            return { grp, gIdx, items: grpItems };
+          });
+          if (packedPresetSections.length === 1 && packedPresetSections[0].items.length === 0 && packedItems.every(it => Number(it.rate || 0) === 0)) {
+            packedItems.forEach((it, pIdx) => {
+              assignedPackedIndices.add(pIdx);
+              packedPresetSections[0].items.push(it);
+            });
+          }
+          const visiblePackedPresetSections = packedPresetSections.filter(s => s.items.length > 0);
+          const standalonePackedItems = packedItems.filter((_, pIdx) => !assignedPackedIndices.has(pIdx));
+
+          const INV_PRESET_THEMES = [
+            { primary: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC', badge: 'SET 1' },
+            { primary: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE', badge: 'SET 2' },
+            { primary: '#D97706', bg: '#FFFBEB', border: '#FDE68A', badge: 'SET 3' },
+            { primary: '#059669', bg: '#ECFDF5', border: '#A7F3D0', badge: 'SET 4' },
+            { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', badge: 'SET 5' },
+          ];
+
+          const packedPresetsGrandTotal = visiblePackedPresetSections.reduce((sum, sec) => {
+            const sCount = parseFloat(sec.grp.setCount) || 1;
+            const kPrice = cleanAmtNum(sec.grp.kitPrice);
+            const kSub = sCount * kPrice;
+            const rawGst = sec.grp.gstRate || sec.items[0]?.gstRate || (String(sec.grp.presetName || '').toLowerCase().includes('bos') && String(sec.grp.presetName || '').toLowerCase().includes('dcr') ? 5 : 18);
+            const kGstPct = extractGstRate(rawGst, 18);
+            return sum + kSub * (1 + kGstPct / 100);
+          }, 0);
+          const standalonePackedTotal = standalonePackedItems.reduce((acc, it) => {
+            const qty = Number(it.bomQty || it.qty || 1) || 1;
+            const rate = parseFloat(it.rate || 0) || 0;
+            const pct = extractGstRate(it.gstRate ?? it.tax, 18);
+            return acc + (it.amt > 0 ? Number(it.amt) : (qty * rate * (1 + pct / 100)));
+          }, 0);
+          const packedTotal = (visiblePackedPresetSections.length > 0 && packedPresetsGrandTotal === 0 && standalonePackedTotal === 0 && totalAmtRaw > 0)
+            ? totalAmtRaw
+            : (packedPresetsGrandTotal + standalonePackedTotal);
+          const unpackedTotal = unpackedItems.reduce((acc, it) => acc + (it.isPresetItem ? 0 : (it.amt ?? ((it.qty || 1) * (it.rate || 0) * (1 + extractGstRate(it.gstRate ?? it.tax, 18) / 100)))), 0);
           const bomDoc = matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
           const invDoc = inv.deliveryAddressProofDoc || null;
           let rawAddressProof = bomDoc || invDoc || null;
@@ -1440,42 +1522,144 @@ export default function InvoiceDetailModal({
                       </tr>
                     </thead>
                     <tbody>
-                      {packedItems.length > 0 ? packedItems.map((it, idx) => {
-                        const origIdx = it.originalIndex !== undefined ? it.originalIndex : idx;
-                        return (
-                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
-                              {safeStringVal(it.code, `PRD-00${idx + 1}`)}
-                            </td>
-                            <td style={{ padding: '10px', fontWeight: '700', color: '#0F172A' }}>
-                              {safeStringVal(it.name, 'Item')}
-                            </td>
-                            <td style={{ padding: '10px', color: '#64748B' }}>
-                              {safeStringVal(it.desc || it.category, 'High grade component')}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {safeStringVal(it.uom, 'Nos')}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>
-                              {Number(it.bomQty || it.qty || 1) || 1}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
-                              ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
-                              ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      }) : (
+                      {packedItems.length > 0 ? (
+                        <>
+                          {/* Preset Kit Groups — show Preset header & merged Preset Kit Price (NOT separate per-item prices) */}
+                          {visiblePackedPresetSections.map((sec, sIdx) => {
+                            const theme = INV_PRESET_THEMES[sIdx % INV_PRESET_THEMES.length];
+                            const sCount = parseFloat(sec.grp.setCount) || 1;
+                            const unitType = sec.grp.unit || sec.grp.unitType || (String(sec.grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
+                            const kPrice = cleanAmtNum(sec.grp.kitPrice);
+                            const kSub = sCount * kPrice;
+                            const rawGst = sec.grp.gstRate || sec.items[0]?.gstRate || (String(sec.grp.presetName || '').toLowerCase().includes('bos') && String(sec.grp.presetName || '').toLowerCase().includes('dcr') ? 5 : 18);
+                            const kGstPct = extractGstRate(rawGst, 18);
+                            const kGstAmt = kSub * (kGstPct / 100);
+                            const kGrandTotal = kSub + kGstAmt;
+
+                            return (
+                              <React.Fragment key={`inv-preset-${sec.grp.groupId || sIdx}`}>
+                                <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                                  <td colSpan={9} style={{ padding: '9px 14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                        <span style={{ backgroundColor: theme.primary, color: '#FFFFFF', fontSize: '10px', fontWeight: '900', padding: '2px 8px', borderRadius: '6px', letterSpacing: '0.5px' }}>
+                                          {theme.badge}
+                                        </span>
+                                        <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A' }}>
+                                          {sec.grp.presetName || 'Pre-Engineered Structure Kit'} ({sCount} {unitType})
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '11.5px', fontWeight: '700' }}>
+                                        <span style={{ color: '#475569' }}>
+                                          Kit Rate: <strong style={{ color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> / {unitType}
+                                        </span>
+                                        <span style={{ color: '#166534' }}>
+                                          GST ({kGstPct}%): <strong>₹ {kGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                        </span>
+                                        <span style={{ color: '#0E7490', fontWeight: '800' }}>
+                                          Preset Total: <strong>₹ {kGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {sec.items.map((it, kIdx) => (
+                                  <tr key={`inv-preset-item-${sIdx}-${kIdx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: theme.bg }}>
+                                    <td style={{ padding: '9px 10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
+                                      {safeStringVal(it.code, `PRD-00${kIdx + 1}`)}
+                                    </td>
+                                    <td style={{ padding: '9px 10px', fontWeight: '700', color: '#0F172A' }}>
+                                      {safeStringVal(it.name, 'Item')}
+                                    </td>
+                                    <td style={{ padding: '9px 10px', color: '#64748B' }}>
+                                      {safeStringVal(it.desc || it.category, 'Preset component')}
+                                    </td>
+                                    <td style={{ padding: '9px 10px', textAlign: 'center', color: '#64748B' }}>
+                                      {safeStringVal(it.uom, 'Nos')}
+                                    </td>
+                                    <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>
+                                      {Number(it.bomQty || it.qty || 1) || 1}
+                                    </td>
+                                    {kIdx === 0 && (
+                                      <>
+                                        <td rowSpan={sec.items.length} style={{ padding: '10px', textAlign: 'right', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderLeft: `1px solid ${theme.border}`, borderRight: `1px solid ${theme.border}` }}>
+                                          <div style={{ fontWeight: '800', color: theme.primary }}>
+                                            ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>
+                                            {sCount} {unitType}
+                                          </div>
+                                        </td>
+                                        <td rowSpan={sec.items.length} style={{ padding: '10px', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderRight: `1px solid ${theme.border}`, fontWeight: '700', color: '#475569' }}>
+                                          {kGstPct}%
+                                        </td>
+                                        <td rowSpan={sec.items.length} style={{ padding: '10px', textAlign: 'right', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderRight: `1px solid ${theme.border}` }}>
+                                          <div style={{ fontWeight: '800', color: '#166534' }}>
+                                            ₹ {kGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>
+                                            Sub: ₹ {kSub.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </div>
+                                        </td>
+                                      </>
+                                    )}
+                                    <td style={{ padding: '9px 10px', textAlign: 'center' }}>
+                                      <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                        <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            );
+                          })}
+
+                          {/* Separate / Standalone Products — show individual Unit Price, Tax & Amount */}
+                          {visiblePackedPresetSections.length > 0 && standalonePackedItems.length > 0 && (
+                            <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                              <td colSpan={9} style={{ padding: '8px 14px' }}>
+                                <span style={{ padding: '2px 8px', borderRadius: '6px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '10px', fontWeight: '900', letterSpacing: '0.5px' }}>
+                                  INDIVIDUAL / STANDALONE PRODUCTS
+                                </span>
+                              </td>
+                            </tr>
+                          )}
+
+                          {standalonePackedItems.map((it, idx) => (
+                            <tr key={`inv-standalone-${idx}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
+                                {safeStringVal(it.code, `PRD-00${idx + 1}`)}
+                              </td>
+                              <td style={{ padding: '10px', fontWeight: '700', color: '#0F172A' }}>
+                                {safeStringVal(it.name, 'Item')}
+                              </td>
+                              <td style={{ padding: '10px', color: '#64748B' }}>
+                                {safeStringVal(it.desc || it.category, 'High grade component')}
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
+                                {safeStringVal(it.uom, 'Nos')}
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>
+                                {Number(it.bomQty || it.qty || 1) || 1}
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
+                                ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
+                                {safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
+                                ₹ {(it.amt > 0 ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </>
+                      ) : (
                         <tr>
                           <td colSpan={9} style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontStyle: 'italic' }}>
                             No items packed in dispatch yet.

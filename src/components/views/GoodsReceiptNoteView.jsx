@@ -262,7 +262,7 @@ export default function GoodsReceiptNoteView(props) {
     if (row.poRef) setSelectedGRNPo(row.poRef);
     if (row.vendor) setSelectedGRNVendor(row.vendor);
     if (row.challanNo) setGrnChallanNo(row.challanNo);
-    if (row.createdBy) setGrnCreatedBy(row.createdBy);
+    setGrnCreatedBy(row.createdBy || row.created_by || row.creator || row.receivedBy || '—');
     if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
     if (row.inspectorName) setGrnInspectorName(row.inspectorName);
     if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
@@ -326,7 +326,7 @@ export default function GoodsReceiptNoteView(props) {
     if (row.poRef) setSelectedGRNPo(row.poRef);
     if (row.vendor) setSelectedGRNVendor(row.vendor);
     if (row.challanNo) setGrnChallanNo(row.challanNo);
-    if (row.createdBy) setGrnCreatedBy(row.createdBy);
+    setGrnCreatedBy(row.createdBy || row.created_by || row.creator || row.receivedBy || '—');
     if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
     if (row.inspectorName) setGrnInspectorName(row.inspectorName);
     if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
@@ -2992,7 +2992,9 @@ export default function GoodsReceiptNoteView(props) {
                           name="createdBy"
                           aria-label="Created By"
                           type="text"
-                          value={(isViewOnlyMode ? (selectedGrnForModal?.createdBy || selectedGrnForModal?.created_by || grnCreatedBy) : grnCreatedBy) || getLoggedInUserName() || 'Procurement'}
+                          value={isViewOnlyMode
+                            ? (selectedGrnForModal?.createdBy || selectedGrnForModal?.created_by || selectedGrnForModal?.creator || grnCreatedBy || '—')
+                            : (grnCreatedBy || getLoggedInUserName() || 'Procurement')}
                           readOnly
                           disabled
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: '600' }}
@@ -3072,14 +3074,45 @@ export default function GoodsReceiptNoteView(props) {
                           const statusBg = isPoClosed ? '#E6F7ED' : (isPoPartial ? '#FEF3C7' : '#EFF6FF');
                           const statusColor = isPoClosed ? '#137333' : (isPoPartial ? '#D97706' : '#2563EB');
 
-                          // Filter previous GRN history so when viewing a GRN, it does NOT list itself as a previous GRN!
-                          const viewingGrnNo = selectedGrnForModal?.id || selectedGrnForModal?.grnNo || editingGrnId;
+                          // Build complete date-wise GRN history for this PO (including current GRN in View mode) with running Pending balance
+                          const viewingGrnNo = String(selectedGrnForModal?.id || selectedGrnForModal?.grnNo || editingGrnId || '').trim();
                           const mergedHistory = mergePoReceivingHistory(selectedGRNPo, poReceivingHistory);
-                          const filteredHistory = mergedHistory.filter(g => {
-                            if (!isViewOnlyMode) return true;
-                            const gNo = String(g.grnNo || g.id || '').trim();
-                            const vNo = String(viewingGrnNo || '').trim();
-                            return gNo && vNo ? gNo !== vNo : true;
+                          const hasViewingInHistory = Boolean(
+                            viewingGrnNo && mergedHistory.some(g => String(g.grnNo || g.id || '').trim() === viewingGrnNo)
+                          );
+                          const allPoGrns = [...mergedHistory];
+                          if (isViewOnlyMode && viewingGrnNo && !hasViewingInHistory) {
+                            allPoGrns.push({
+                              id: viewingGrnNo,
+                              grnNo: viewingGrnNo,
+                              date: selectedGrnForModal?.date || receiptDate || '',
+                              receiptDate: receiptDate || '',
+                              receivedQty: totNow,
+                              acceptedQty: totNow,
+                              createdAt: selectedGrnForModal?.createdAt || ''
+                            });
+                          }
+                          // Sort chronologically (oldest first) so running Pending balance decreases date-by-date
+                          const toSortableTs = (g) => {
+                            const raw = g.createdAt || g.receiptDate || g.date || '';
+                            const t = Date.parse(raw);
+                            return Number.isFinite(t) ? t : 0;
+                          };
+                          allPoGrns.sort((a, b) => toSortableTs(a) - toSortableTs(b));
+                          let runningReceived = 0;
+                          const dateWiseHistory = allPoGrns.map(g => {
+                            const recCount = Number(g.receivedQty ?? g.acceptedQty ?? parseFloat(g.received)) || 0;
+                            runningReceived += recCount;
+                            const pendingAfter = Math.max(0, totOrd - runningReceived);
+                            const recDate = g.date || g.receiptDate || (g.createdAt ? new Date(g.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+                            const gNo = String(g.grnNo || g.id || '—').trim();
+                            return {
+                              grnNo: gNo,
+                              recDate,
+                              recCount,
+                              pendingAfter,
+                              isCurrent: Boolean(viewingGrnNo && gNo === viewingGrnNo)
+                            };
                           });
 
                           return (
@@ -3184,29 +3217,51 @@ export default function GoodsReceiptNoteView(props) {
                                 </div>
                               </div>
 
-                              {/* Previous GRN History List */}
-                              {filteredHistory.length > 0 && (
-                                <div style={{ marginTop: '4px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                              {/* Date-Wise GRN Receiving History (Date, Received Qty, Pending Balance) */}
+                              {dateWiseHistory.length > 0 && (
+                                <div style={{ marginTop: '4px', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>
-                                      Receive History &amp; Counts ({filteredHistory.length} {filteredHistory.length === 1 ? 'Receipt' : 'Receipts'})
+                                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A' }}>
+                                      Date-Wise GRN History ({dateWiseHistory.length} {dateWiseHistory.length === 1 ? 'Receipt' : 'Receipts'})
                                     </span>
                                     <span style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '2px 8px', borderRadius: '12px' }}>
-                                      Total: +{filteredHistory.reduce((sum, g) => sum + (Number(g.receivedQty ?? g.acceptedQty ?? parseFloat(g.received)) || 0), 0)} Qty
+                                      Total Received: +{dateWiseHistory.reduce((sum, g) => sum + g.recCount, 0)} Qty
                                     </span>
                                   </div>
-                                  <div style={{ maxHeight: '110px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    {filteredHistory.map((g, idx) => {
-                                      const recCount = Number(g.receivedQty ?? g.acceptedQty ?? parseFloat(g.received)) || 0;
-                                      const recDate = g.date || g.receiptDate || (g.createdAt ? new Date(g.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
-                                      return (
-                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
-                                          <span style={{ fontWeight: 'bold', color: '#2563EB' }}>{g.grnNo || g.id}</span>
-                                          <span style={{ color: '#64748B' }}>{recDate}</span>
-                                          <span style={{ fontWeight: 'bold', color: '#137333' }}>+{recCount} Qty</span>
-                                        </div>
-                                      );
-                                    })}
+                                  <div style={{ maxHeight: '140px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                                      <thead>
+                                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '10px', textTransform: 'uppercase' }}>
+                                          <th style={{ padding: '5px 8px', textAlign: 'left', fontWeight: '700' }}>GRN No</th>
+                                          <th style={{ padding: '5px 8px', textAlign: 'left', fontWeight: '700' }}>Date</th>
+                                          <th style={{ padding: '5px 8px', textAlign: 'right', fontWeight: '700' }}>Received</th>
+                                          <th style={{ padding: '5px 8px', textAlign: 'right', fontWeight: '700' }}>Pending</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {dateWiseHistory.map((row, idx) => (
+                                          <tr
+                                            key={`${row.grnNo}-${idx}`}
+                                            style={{
+                                              borderBottom: idx < dateWiseHistory.length - 1 ? '1px solid #F1F5F9' : 'none',
+                                              backgroundColor: row.isCurrent ? '#ECFEFF' : '#FFFFFF'
+                                            }}
+                                          >
+                                            <td style={{ padding: '6px 8px', fontWeight: '700', color: '#0E7490', whiteSpace: 'nowrap' }}>
+                                              {row.grnNo}
+                                              {row.isCurrent && (
+                                                <span style={{ marginLeft: '5px', fontSize: '9px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CFFAFE', padding: '1px 5px', borderRadius: '4px' }}>
+                                                  Current
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '6px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{row.recDate}</td>
+                                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '800', color: '#137333', whiteSpace: 'nowrap' }}>+{row.recCount}</td>
+                                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '800', color: row.pendingAfter === 0 ? '#137333' : '#DC2626', whiteSpace: 'nowrap' }}>{row.pendingAfter}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
                                   </div>
                                 </div>
                               )}
@@ -4974,26 +5029,6 @@ export default function GoodsReceiptNoteView(props) {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowCreateGRN(false);
-                      resetCreateGRNForm();
-                    }}
-                    style={{
-                      height: '38px',
-                      padding: '0 18px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255, 255, 255, 0.35)',
-                      backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                      color: '#FFFFFF',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isViewOnlyMode ? '← Back to GRNs' : '← Back to GRNs'}
-                  </button>
                 </div>
 
                 {/* Form Body layout */}
