@@ -24,8 +24,8 @@ const BackupVaultView = lazy(() => import('./views/BackupVaultView'));
 const SupportMailInboxView = lazy(() => import('./views/SupportMailInboxView'));
 const FacebookMetaIntegrationView = lazy(() => import('./views/FacebookMetaIntegrationView'));
 const IntegrationsHubView = lazy(() => import('./views/IntegrationsHubView'));
-// Smart Leads (new CRM module) — only bundled into the UI path when VITE_ENABLE_SMART_LEADS=true
-const SMART_LEADS_ENABLED = import.meta.env.VITE_ENABLE_SMART_LEADS === 'true';
+// Smart Leads (new CRM module) — active unless explicitly disabled
+const SMART_LEADS_ENABLED = import.meta.env.VITE_ENABLE_SMART_LEADS !== 'false';
 const SmartLeadsApp = lazy(() => import('./smartLeads/SmartLeadsApp'));
 
 function ViewLoadingFallback({ activeTab }) {

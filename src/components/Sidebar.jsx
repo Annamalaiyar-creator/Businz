@@ -582,11 +582,11 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     return sections;
   };
 
-  // Smart Leads (new CRM module): visible only when VITE_ENABLE_SMART_LEADS=true (local testing)
+  // Smart Leads (new CRM module): visible for sales, tech support, admin and management
   const withSmartLeads = (list, role) => {
     const r = String(role || '').toLowerCase();
     const allowed = ['ceo', 'md', 'managing director', 'technical administrator', 'technical admin', 'developer', 'sales', 'tech support', 'technical support'].some(k => r.includes(k));
-    if (import.meta.env.VITE_ENABLE_SMART_LEADS !== 'true' || !allowed) return list;
+    if (import.meta.env.VITE_ENABLE_SMART_LEADS === 'false' || !allowed) return list;
     return [...list, { category: 'SMART LEADS (TEST)', items: [{ label: 'Smart Leads', icon: Sparkles }] }];
   };
   const sections = withSmartLeads(getSectionsForRole(userRole), userRole);
