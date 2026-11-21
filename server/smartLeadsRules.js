@@ -51,10 +51,16 @@ export function isValidStage(stage) {
   return PIPELINE_STAGES.includes(stage);
 }
 
+export function countWords(text) {
+  if (!text) return 0;
+  return String(text).trim().split(/\s+/).filter(Boolean).length;
+}
+
 /**
  * Validate a stage transition. Stages only move forward (same rule as the old lead management).
  * Moving back or reopening a Won/Lost lead needs a manager (CEO / Technical Administrator / Tech Support) and a reason.
  * Lost requires a lost reason.
+ * All stage transitions strictly require remarks with a minimum of 50 words.
  */
 export function validateStageTransition({ from, to, lostReasonId, isManager, remarks }) {
   if (!isValidStage(to)) return { ok: false, error: `Invalid stage "${to}"` };
@@ -66,10 +72,15 @@ export function validateStageTransition({ from, to, lostReasonId, isManager, rem
       ? 'Only CEO, Technical Administrator or Tech Support can reopen a Won/Lost lead'
       : 'Stages can only move forward. Ask CEO, Technical Administrator or Tech Support to move a lead back' };
   }
-  if ((isReopen || isBackward) && !String(remarks || '').trim()) {
-    return { ok: false, error: 'A reason (remarks) is required to move a lead back' };
-  }
   if (to === 'Lost' && !lostReasonId) return { ok: false, error: 'A lost reason is required' };
+
+  const wordCount = countWords(remarks);
+  if (wordCount < 50) {
+    return {
+      ok: false,
+      error: `Stage change requires detailed remarks with a minimum of 50 words (currently ${wordCount} words). Please describe the customer conversation, status, and transition details.`
+    };
+  }
   return { ok: true };
 }
 

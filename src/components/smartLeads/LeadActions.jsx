@@ -18,11 +18,22 @@ export function StageModal({ meta, lead, bulkIds, initialStage, onClose, onDone 
   const [error, setError] = useState('');
   const reasons = (meta?.lostReasons || []).filter(r => r.is_active);
   const needsReason = Boolean(stage) && isBack(stage);
+
+  const wordCount = useMemo(() => {
+    if (!remarks) return 0;
+    return remarks.trim().split(/\s+/).filter(Boolean).length;
+  }, [remarks]);
+
+  const wordsRemaining = Math.max(0, 50 - wordCount);
+  const isRequirementMet = wordCount >= 50;
+
   const submit = async () => {
     setError('');
     if (!stage) return setError('Choose a stage.');
     if (stage === 'Lost' && !lostReasonId) return setError('Choose a lost reason.');
-    if (needsReason && !remarks.trim()) return setError('Give a reason for moving this lead back.');
+    if (wordCount < 50) {
+      return setError(`Stage change remarks must have a minimum of 50 words (currently ${wordCount} words). Please provide at least ${wordsRemaining} more words describing customer conversation & transition details.`);
+    }
     setSaving(true);
     try {
       if (bulkIds) {
@@ -36,7 +47,7 @@ export function StageModal({ meta, lead, bulkIds, initialStage, onClose, onDone 
   };
   return (
     <Modal small title={`Change stage · ${lead.company_name}`} onClose={onClose}
-      footer={<><button className="sl-btn" onClick={onClose}>Cancel</button><button className="sl-btn sl-btn-primary" disabled={saving} onClick={submit}>{saving ? 'Saving…' : 'Update stage'}</button></>}>
+      footer={<><button className="sl-btn" onClick={onClose}>Cancel</button><button className="sl-btn sl-btn-primary" disabled={saving || !isRequirementMet || !stage} onClick={submit}>{saving ? 'Saving…' : 'Update stage'}</button></>}>
       {error && <div className="sl-alert sl-alert-error">{error}</div>}
       <div className="sl-field">
         <label className="sl-label" htmlFor="sl-stage">Stage</label>
@@ -55,8 +66,42 @@ export function StageModal({ meta, lead, bulkIds, initialStage, onClose, onDone 
         </div>
       )}
       <div className="sl-field">
-        <label className="sl-label" htmlFor="sl-remarks">{needsReason ? 'Reason for moving back *' : 'Remarks'}</label>
-        <textarea id="sl-remarks" className="sl-textarea" value={remarks} onChange={e => setRemarks(e.target.value)} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <label className="sl-label" htmlFor="sl-remarks" style={{ margin: 0, fontWeight: 700 }}>
+            {needsReason ? 'Reason for moving back *' : 'Stage Change Remarks *'} <span style={{ color: '#DC2626' }}>(Min. 50 words)</span>
+          </label>
+          <span style={{
+            fontSize: '11px',
+            fontWeight: '700',
+            padding: '2px 8px',
+            borderRadius: '999px',
+            backgroundColor: isRequirementMet ? '#ECFDF5' : '#FEF2F2',
+            color: isRequirementMet ? '#059669' : '#DC2626',
+            border: `1px solid ${isRequirementMet ? '#A7F3D0' : '#FECACA'}`,
+            transition: 'all 0.2s ease'
+          }}>
+            {isRequirementMet ? `✓ ${wordCount} words (Met)` : `${wordCount}/50 words (${wordsRemaining} more needed)`}
+          </span>
+        </div>
+        <textarea
+          id="sl-remarks"
+          className="sl-textarea"
+          rows={5}
+          value={remarks}
+          onChange={e => setRemarks(e.target.value)}
+          placeholder="Please describe customer conversation, requirements discussed, next actions, pricing, or the detailed rationale for this stage transition (minimum 50 words required)..."
+          style={{ minHeight: '110px' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+          <span style={{ fontSize: '11.5px', color: isRequirementMet ? '#059669' : '#64748B' }}>
+            {isRequirementMet
+              ? '✓ Requirement satisfied: sufficient detail provided for audit log.'
+              : 'Minimum 50 words required to log accountability for this deal stage change.'}
+          </span>
+          <span style={{ fontSize: '11.5px', fontWeight: 600, color: isRequirementMet ? '#059669' : '#DC2626' }}>
+            {wordCount} / 50 words
+          </span>
+        </div>
       </div>
       {stage === 'Won' && <p className="sl-faint" style={{ margin: 0 }}>Won needs a quotation for this lead and the customer in the Customer master.</p>}
       {['Won', 'Lost'].includes(stage) && <p className="sl-faint" style={{ margin: 0 }}>Pending follow-ups for this lead will be closed automatically.</p>}
