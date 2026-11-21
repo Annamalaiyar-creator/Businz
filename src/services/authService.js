@@ -30,6 +30,19 @@ const mergeWithCoreEmployees = (incomingList = []) => {
   return Array.from(empMap.values());
 };
 
+const safeSetStorageItem = (key, value) => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  } catch (err) {
+    try {
+      const keysToEvict = ['controlroom_raw_materials_store', 'controlroom_temp_cache', 'controlroom_audit_logs_cache', 'vrm_preview_cache'];
+      for (const k of keysToEvict) localStorage.removeItem(k);
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } catch (_) {}
+  }
+};
+
 // Synchronous cached memory copy & async cloud fetch
 export const syncEmployeesFromCloud = async () => {
   try {
@@ -42,9 +55,9 @@ export const syncEmployeesFromCloud = async () => {
       if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
         // Authoritative: Server database overwrites local cache directly
         const merged = mergeWithCoreEmployees(json.data);
-        localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
+        safeSetStorageItem('controlroom_employees_list', merged);
         const registeredCodes = merged.map(e => (e.employee_code || e.code)).filter(Boolean);
-        localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
+        safeSetStorageItem('controlroom_registered_codes', registeredCodes);
         return merged;
       }
     }
@@ -54,16 +67,16 @@ export const syncEmployeesFromCloud = async () => {
     const list = await fetchCloudStore('employees_store', []);
     if (Array.isArray(list) && list.length > 0) {
       const merged = mergeWithCoreEmployees(list);
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
+      safeSetStorageItem('controlroom_employees_list', merged);
       const registeredCodes = merged.map(e => (e.employee_code || e.code)).filter(Boolean);
-      localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
+      safeSetStorageItem('controlroom_registered_codes', registeredCodes);
       return merged;
     }
   } catch(e) {}
 
   const currentLocal = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
   const merged = mergeWithCoreEmployees(currentLocal);
-  localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
+  safeSetStorageItem('controlroom_employees_list', merged);
   return merged;
 };
 

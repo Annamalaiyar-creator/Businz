@@ -3807,7 +3807,7 @@ if (process.env.ENABLE_SMART_LEADS === 'true') {
       return user_id ? [{ user_id: String(user_id), name: emp.employee_name || emp.name || String(user_id), role: emp.role || emp.designation || '' }] : [];
     });
   };
-  // 24h no-contact escalation to Tech Support (Smart Leads only), every 15 minutes
+  // Master SLA, Follow-up Reminders & Inactivity Automation (Smart Leads only), every 60 seconds
   let smartLeadsSlaRunning = false;
   const smartLeadsSlaTimer = setInterval(async () => {
     if (smartLeadsSlaRunning || isMaintenanceModeActive()) return;
@@ -3819,7 +3819,7 @@ if (process.env.ENABLE_SMART_LEADS === 'true') {
     } finally {
       smartLeadsSlaRunning = false;
     }
-  }, 15 * 60 * 1000);
+  }, 60 * 1000);
   smartLeadsSlaTimer.unref?.();
   app.use('/api/smart-leads', createSmartLeadsRouter({
     requireSession: requireBusinzSession,

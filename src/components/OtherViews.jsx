@@ -207,7 +207,7 @@ export default function OtherViews(props) {
           />
         )}
 
-        {SMART_LEADS_ENABLED && activeTab === 'Smart Leads' && <SmartLeadsApp />}
+        {SMART_LEADS_ENABLED && activeTab === 'Smart Leads' && <SmartLeadsApp userRole={userRole} />}
 
         {/* CEO Executive View: New Monthly Customers by Sales Person */}
         {['Monthly Customers by Rep', 'New Monthly Customers', 'Monthly Customers', 'Customers by Rep'].includes(activeTab) && (
@@ -240,7 +240,7 @@ export default function OtherViews(props) {
         )}
 
         {/* Omnichannel & ERP Integrations Hub view */}
-        {['Integration', 'Integrations', 'Integration Hub', 'Omnichannel Integrations'].includes(activeTab) && (
+        {['Integration', 'Integrations', 'Integration Hub', 'Omnichannel Integrations', 'Settings', 'System Settings'].includes(activeTab) && (
           <IntegrationsHubView userRole={userRole} onNavigateTab={props.onChangeTab || props.onSelectTab} />
         )}
 

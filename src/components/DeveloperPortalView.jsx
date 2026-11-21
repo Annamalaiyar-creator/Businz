@@ -150,6 +150,29 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
   const [revealedPasswords, setRevealedPasswords] = useState({});
   const [showAllPasswords, setShowAllPasswords] = useState(false);
 
+  // Safe LocalStorage helper with quota protection
+  const safeSetStorage = (key, value) => {
+    try {
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } catch (err) {
+      console.warn(`[DeveloperPortal] LocalStorage quota exceeded while setting ${key}. Attempting cleanup...`, err);
+      try {
+        const keysToEvict = [
+          'controlroom_raw_materials_store',
+          'controlroom_temp_cache',
+          'controlroom_audit_logs_cache',
+          'vrm_preview_cache'
+        ];
+        for (const k of keysToEvict) {
+          localStorage.removeItem(k);
+        }
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+      } catch (e2) {
+        console.warn(`[DeveloperPortal] LocalStorage full; skipping cache for ${key}. Database remains authoritative.`, e2);
+      }
+    }
+  };
+
   // Sync registered employee list from server & cloud database
   const refreshEmployeesList = async () => {
     setIsLoadingEmployees(true);
@@ -157,9 +180,9 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
       const cloudData = await fetchCloudStore('employees_store', []);
       if (Array.isArray(cloudData)) {
         setEmployeesList(cloudData);
-        localStorage.setItem('controlroom_employees_list', JSON.stringify(cloudData));
+        safeSetStorage('controlroom_employees_list', cloudData);
         const codes = cloudData.map(e => e.employee_code || e.code).filter(Boolean);
-        localStorage.setItem('controlroom_registered_codes', JSON.stringify(codes));
+        safeSetStorage('controlroom_registered_codes', codes);
       }
     } catch (e) {
       console.error('Error fetching employees from cloud:', e);
@@ -175,9 +198,9 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
     try {
       const updated = employeesList.filter(e => (e.employee_code || e.code) !== empCode);
       setEmployeesList(updated);
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+      safeSetStorage('controlroom_employees_list', updated);
       const registeredCodes = updated.map(e => e.employee_code || e.code).filter(Boolean);
-      localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
+      safeSetStorage('controlroom_registered_codes', registeredCodes);
       saveCloudStore('employees_store', updated);
       fetch(`/api/store/employees_store/${empCode}`, { method: 'DELETE' }).catch(() => {});
       if (showCustomAlert) showCustomAlert(`User account ${empCode} was permanently deleted.`, 'User Deleted', 'success');
@@ -1271,7 +1294,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                                     try {
                                       const updated = employeesList.map(e => ((e.employee_code || e.code) === empCode ? { ...e, status: 'Active' } : e));
                                       setEmployeesList(updated);
-                                      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+                                      safeSetStorage('controlroom_employees_list', updated);
                                       saveCloudStore('employees_store', updated);
                                       if (showCustomAlert) showCustomAlert(`Access granted to Employee ${empCode} (${emp.role}). Account is now Active!`, 'Access Granted', 'success');
                                     } catch(err) {}
@@ -1299,7 +1322,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                                     try {
                                       const updated = employeesList.map(e => ((e.employee_code || e.code) === empCode ? { ...e, status: 'Rejected' } : e));
                                       setEmployeesList(updated);
-                                      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+                                      safeSetStorage('controlroom_employees_list', updated);
                                       saveCloudStore('employees_store', updated);
                                       if (showCustomAlert) showCustomAlert(`Access request for Employee ${empCode} was rejected.`, 'Request Rejected', 'warning');
                                     } catch(err) {}
@@ -1350,7 +1373,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                                       try {
                                         const updated = employeesList.map(e => ((e.employee_code || e.code) === empCode ? { ...e, status: 'Active' } : e));
                                         setEmployeesList(updated);
-                                        localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+                                        safeSetStorage('controlroom_employees_list', updated);
                                         saveCloudStore('employees_store', updated);
                                         if (showCustomAlert) showCustomAlert(`Access granted to Employee ${empCode}. Account is now Active!`, 'Access Granted', 'success');
                                       } catch(err) {}
@@ -1366,7 +1389,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                                       const nextStatus = empStatus === 'Active' ? 'Disabled' : 'Active';
                                       const updated = employeesList.map(e => ((e.employee_code || e.code) === empCode ? { ...e, status: nextStatus } : e));
                                       setEmployeesList(updated);
-                                      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+                                      safeSetStorage('controlroom_employees_list', updated);
                                       saveCloudStore('employees_store', updated);
                                       if (showCustomAlert) showCustomAlert(`Employee Account ${empCode} status updated to ${nextStatus}.`, `Account ${nextStatus}`, nextStatus === 'Active' ? 'success' : 'warning');
                                     } catch(err) {}

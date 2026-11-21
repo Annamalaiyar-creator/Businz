@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ChevronDown, LogOut, 
-  Menu, ChevronRight, LayoutDashboard, GitBranch, Users, ShieldCheck, 
-  X, Share2, MessageSquare, Mail, Sliders, ExternalLink, Check, RefreshCw, Plus 
+  Menu, ChevronRight, GitBranch, Users, ShieldCheck, 
+  X, Check, RefreshCw, Plus, Settings
 } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { getSavedAccounts, normalizeAccountKey } from '../services/sessionService';
@@ -375,49 +375,18 @@ export default function Header({
                   className="bz-menu-item"
                   onClick={() => {
                     setShowRoleMenu(false);
-                    onSelectTab && onSelectTab('Dashboard');
+                    onSelectTab && onSelectTab('Settings');
                   }}
                 >
-                  <span className="bz-menu-icon"><LayoutDashboard size={16} /></span>
+                  <span className="bz-menu-icon" style={{ backgroundColor: '#F1F5F9', color: '#475569' }}>
+                    <Settings size={16} />
+                  </span>
                   <span style={{ flex: 1 }}>
-                    <span className="bz-menu-title">My Dashboard</span>
-                    <span className="bz-menu-sub">Go to your home screen</span>
+                    <span className="bz-menu-title">Settings</span>
+                    <span className="bz-menu-sub">Preferences, integrations & credentials</span>
                   </span>
                   <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
                 </button>
-
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="bz-menu-item"
-                  onClick={() => {
-                    setShowRoleMenu(false);
-                    onSelectTab && onSelectTab('Integration');
-                  }}
-                >
-                  <span className="bz-menu-icon" style={{ backgroundColor: '#EEF2FF', color: '#4F46E5' }}>
-                    <Share2 size={16} />
-                  </span>
-                  <span style={{ flex: 1 }}>
-                    <span className="bz-menu-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      Integration
-                      <span style={{
-                        fontSize: '9.5px',
-                        fontWeight: '800',
-                        backgroundColor: '#ECFDF5',
-                        color: '#059669',
-                        padding: '1px 6px',
-                        borderRadius: '6px',
-                        border: '1px solid #A7F3D0'
-                      }}>
-                        Live
-                      </span>
-                    </span>
-                    <span className="bz-menu-sub">IndiaMART, WhatsApp, Meta & Zoho APIs</span>
-                  </span>
-                  <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
-                </button>
-
 
                 <button
                   type="button"

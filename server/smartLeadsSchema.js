@@ -22,7 +22,14 @@ export async function ensureSmartLeadsSchema() {
       ADD COLUMN IF NOT EXISTS stage_changed_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS merged_into_lead_id TEXT,
-      ADD COLUMN IF NOT EXISTS sl_escalated_24h_at TIMESTAMPTZ;
+      ADD COLUMN IF NOT EXISTS sl_escalated_24h_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS customer_id TEXT,
+      ADD COLUMN IF NOT EXISTS customer_code TEXT,
+      ADD COLUMN IF NOT EXISTS last_qualifying_activity_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS first_qualifying_activity_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS sl_escalated_unassigned_3h_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS sl_escalated_2h_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS sl_escalated_48h_at TIMESTAMPTZ;
 
     ALTER TABLE public.lead_followups
       ADD COLUMN IF NOT EXISTS followup_type TEXT DEFAULT 'CALL',
@@ -30,7 +37,10 @@ export async function ensureSmartLeadsSchema() {
       ADD COLUMN IF NOT EXISTS rescheduled_from_id TEXT,
       ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS created_by_user_id TEXT,
-      ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+      ADD COLUMN IF NOT EXISTS created_by_name TEXT,
+      ADD COLUMN IF NOT EXISTS reminded_15m_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminded_due_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS escalated_missed_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS public.lead_settings (
       key TEXT PRIMARY KEY,
@@ -128,6 +138,9 @@ export async function ensureSmartLeadsSchema() {
     CREATE INDEX IF NOT EXISTS idx_lead_followups_due ON public.lead_followups (status, scheduled_at);
     CREATE INDEX IF NOT EXISTS idx_lead_field_audit_lead ON public.lead_field_audit (lead_id, changed_at DESC);
     CREATE INDEX IF NOT EXISTS idx_lead_notes_lead ON public.lead_notes (lead_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_leads_customer_id ON public.leads (customer_id);
+    CREATE INDEX IF NOT EXISTS idx_leads_unassigned_3h ON public.leads (created_at) WHERE assigned_to_user_id IS NULL AND deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_leads_inactivity_2h ON public.leads (assigned_at) WHERE assigned_to_user_id IS NOT NULL AND deleted_at IS NULL;
   `);
 
   // Seed defaults (only if missing — never overwrites admin-edited settings)

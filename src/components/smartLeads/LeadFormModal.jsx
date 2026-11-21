@@ -10,7 +10,7 @@ export default function LeadFormModal({ meta, lead, onClose, onSaved }) {
   const isEdit = !!lead;
   const [form, setForm] = useState(() => ({
     company_name: lead?.company_name || '', contact_person: lead?.contact_person || '', designation: lead?.designation || '',
-    phone: lead?.phone || '', whatsapp: lead?.whatsapp || '', email: lead?.email || '', source: lead?.source || 'Manual',
+    phone: lead?.phone || '', whatsapp: lead?.whatsapp || '', email: lead?.email || '', source: lead?.source || '',
     category: lead?.category || '', location: lead?.location || '', territory: lead?.territory || '',
     product_requirement: lead?.product_requirement || '', estimated_kw: lead?.estimated_kw ?? '', estimated_value: lead?.estimated_value ?? '',
     priority: lead?.priority || 'MEDIUM', next_action_exception: lead?.next_action_exception || '', assigned_to_user_id: ''
@@ -22,17 +22,19 @@ export default function LeadFormModal({ meta, lead, onClose, onSaved }) {
 
   const submit = async (force = false) => {
     setError('');
-    if (!form.company_name.trim()) return setError('Company name is required.');
-    if (form.phone.replace(/\D/g, '').length < 10 && !form.email.trim()) return setError('Enter a phone number (10+ digits) or an email.');
+    const cleanPhone = String(form.phone || '').replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 10) return setError('Phone number is required (at least 10 digits).');
+    if (!form.source || form.source === 'Select Source') return setError('Please select a lead source.');
+    const effectiveCompany = form.company_name.trim() || form.contact_person.trim() || (cleanPhone ? `Contact ${cleanPhone}` : 'Individual Customer');
     setSaving(true);
     try {
       let res;
       if (isEdit) {
         const { assigned_to_user_id, ...fields } = form;
-        res = await slApi.updateLead(lead.id, { ...fields, expected_updated_at: lead.updated_at });
+        res = await slApi.updateLead(lead.id, { ...fields, company_name: effectiveCompany, expected_updated_at: lead.updated_at });
       } else {
         const { next_action_exception, ...fields } = form;
-        res = await slApi.createLead({ ...fields, assigned_to_user_id: form.assigned_to_user_id || undefined, force });
+        res = await slApi.createLead({ ...fields, company_name: effectiveCompany, assigned_to_user_id: form.assigned_to_user_id || undefined, force });
       }
       onSaved(res.lead, isEdit ? 'Lead updated' : `Lead ${res.lead.lead_number} created`);
     } catch (err) {
@@ -75,17 +77,18 @@ export default function LeadFormModal({ meta, lead, onClose, onSaved }) {
         <>
           <div className="sl-form-grid">
             <div className="sl-field" style={{ gridColumn: '1 / -1' }}>
-              <label className="sl-label" htmlFor="sl-company">Company name *</label>
-              <input id="sl-company" className="sl-input" value={form.company_name} onChange={set('company_name')} autoFocus />
+              <label className="sl-label" htmlFor="sl-company">Company name</label>
+              <input id="sl-company" className="sl-input" value={form.company_name} onChange={set('company_name')} placeholder="Company / Organization (optional)" autoFocus />
             </div>
             <div className="sl-field"><label className="sl-label" htmlFor="sl-contact">Contact person</label><input id="sl-contact" className="sl-input" value={form.contact_person} onChange={set('contact_person')} /></div>
             <div className="sl-field"><label className="sl-label" htmlFor="sl-desig">Designation</label><input id="sl-desig" className="sl-input" value={form.designation} onChange={set('designation')} /></div>
-            <div className="sl-field"><label className="sl-label" htmlFor="sl-phone">Phone</label><input id="sl-phone" className="sl-input" inputMode="tel" value={form.phone} onChange={set('phone')} /></div>
+            <div className="sl-field"><label className="sl-label" htmlFor="sl-phone">Phone *</label><input id="sl-phone" className="sl-input" inputMode="tel" value={form.phone} onChange={set('phone')} placeholder="e.g. 9876543210" /></div>
             <div className="sl-field"><label className="sl-label" htmlFor="sl-wa">WhatsApp</label><input id="sl-wa" className="sl-input" inputMode="tel" value={form.whatsapp} onChange={set('whatsapp')} /></div>
             <div className="sl-field"><label className="sl-label" htmlFor="sl-email">Email</label><input id="sl-email" className="sl-input" type="email" value={form.email} onChange={set('email')} /></div>
-            <div className="sl-field"><label className="sl-label" htmlFor="sl-source">Source</label>
+            <div className="sl-field"><label className="sl-label" htmlFor="sl-source">Source *</label>
               <select id="sl-source" className="sl-select" value={form.source} onChange={set('source')}>
-                {[...new Set([form.source, ...SOURCES])].map(s => <option key={s} value={s}>{s}</option>)}
+                <option value="" disabled hidden>Select Source</option>
+                {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div className="sl-field"><label className="sl-label" htmlFor="sl-loc">Location</label><input id="sl-loc" className="sl-input" value={form.location} onChange={set('location')} /></div>
@@ -95,7 +98,6 @@ export default function LeadFormModal({ meta, lead, onClose, onSaved }) {
               <select id="sl-prio" className="sl-select" value={form.priority} onChange={set('priority')}>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select>
             </div>
             <div className="sl-field"><label className="sl-label" htmlFor="sl-kw">Estimated capacity (kW)</label><input id="sl-kw" className="sl-input" inputMode="decimal" value={form.estimated_kw} onChange={set('estimated_kw')} /></div>
-            <div className="sl-field"><label className="sl-label" htmlFor="sl-val">Estimated value (₹)</label><input id="sl-val" className="sl-input" inputMode="decimal" value={form.estimated_value} onChange={set('estimated_value')} /></div>
             {!isEdit && meta?.me?.isManager && (
               <div className="sl-field" style={{ gridColumn: '1 / -1' }}>
                 <label className="sl-label" htmlFor="sl-owner">Assign to</label>

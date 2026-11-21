@@ -916,6 +916,11 @@ function App() {
 
     // 2. Popstate listener for Back/Forward navigation
     const handlePopState = (event) => {
+      // If this was an in-page anchor hash jump (e.g. #section or #field), do NOT reset the active tab!
+      if (!event?.state?.tab && window.location.hash) {
+        return;
+      }
+
       let targetTab = event?.state?.tab;
 
       if (!targetTab) {

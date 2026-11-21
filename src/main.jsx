@@ -4,6 +4,63 @@ import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.jsx'
 
+// Bulletproof LocalStorage Quota Guard:
+// Automatically intercepts setItem to evict disposable caches and prevent QuotaExceededError
+// from ever halting database or business operations across BUSINZ.
+if (typeof window !== 'undefined' && typeof window.Storage !== 'undefined') {
+  const originalSetItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function(key, value) {
+    try {
+      originalSetItem.call(this, key, value);
+    } catch (err) {
+      const isQuota = err && (
+        err.name === 'QuotaExceededError' ||
+        err.code === 22 ||
+        err.code === 1014 ||
+        err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+        String(err?.message || '').toLowerCase().includes('quota')
+      );
+      if (isQuota) {
+        console.warn(`[LocalStorage] Quota reached while setting "${key}". Pruning non-critical cache...`);
+        const disposableKeys = [
+          'controlroom_temp_cache',
+          'controlroom_audit_logs_cache',
+          'vrm_preview_cache',
+          'controlroom_raw_materials_store',
+          'controlroom_grn_store',
+          'controlroom_quotations',
+          'crm_leads_cache'
+        ];
+        for (const k of disposableKeys) {
+          if (k !== key) {
+            try { this.removeItem(k); } catch (_) {}
+          }
+        }
+        try {
+          originalSetItem.call(this, key, value);
+          return;
+        } catch (_) {
+          // If still full, prune older keys that are not critical to active auth/session
+          const criticalKeys = ['controlroom_user', 'controlroom_session_id', 'controlroom_device_session_id', 'controlroom_role', 'businz_device_session_id'];
+          for (let i = 0; i < this.length; i++) {
+            const k = this.key(i);
+            if (k && !criticalKeys.includes(k) && k !== key) {
+              try { this.removeItem(k); } catch (_) {}
+              try {
+                originalSetItem.call(this, key, value);
+                return;
+              } catch (_) {}
+            }
+          }
+          console.warn(`[LocalStorage] Cache skipped for "${key}" (Database remains authoritative source of truth).`);
+        }
+      } else {
+        throw err;
+      }
+    }
+  };
+}
+
 // Ensure all same-origin /api/* calls carry the active Businz session token automatically
 if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
   const originalFetch = window.fetch.bind(window);

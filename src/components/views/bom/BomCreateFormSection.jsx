@@ -882,12 +882,30 @@ export default function BomCreateFormSection({ ctx }) {
                               ✓ {deliveryDocs.length} Image{deliveryDocs.length > 1 ? 's' : ''} Attached Below
                             </span>
                           ) : (
-                            <a
-                              href="#field-bom-attachments-section"
-                              style={{ textDecoration: 'none', fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '4px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const el = document.getElementById('field-bom-attachments-section');
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                              }}
+                              style={{
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                color: '#B45309',
+                                backgroundColor: '#FEF3C7',
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                whiteSpace: 'nowrap'
+                              }}
                             >
                               📷 Upload in Section 6 ↓
-                            </a>
+                            </button>
                           )}
                         </div>
                       );
@@ -2135,12 +2153,33 @@ export default function BomCreateFormSection({ ctx }) {
                       ✓ {paymentDocs.length} Payment Document{paymentDocs.length > 1 ? 's' : ''} Attached Below
                     </div>
                   ) : (
-                    <a
-                      href="#field-newBomPaymentProofDoc"
-                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const el = document.getElementById('field-newBomPaymentProofDoc') || document.getElementById('field-bom-attachments-section');
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }}
+                      style={{
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        color: '#B45309',
+                        backgroundColor: '#FEF3C7',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        width: 'fit-content'
+                      }}
                     >
                       Attach slip in Section 6 ↓
-                    </a>
+                    </button>
                   )}
                 </div>
               )}

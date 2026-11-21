@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   CalendarClock, Phone, MessageCircle, Mail, Users, CheckCircle2,
-  Clock, AlertTriangle, RefreshCw, Plus, ArrowRight, X, ChevronRight
+  Calendar, Search, X, RotateCcw, Building2, User, Eye
 } from 'lucide-react';
 import { slApi, onSmartLeadChange, formatINR, formatDate, isOverdue } from './smartLeadsApi';
-import { StageBadge, TempBadge, EmptyState, SkeletonRows, Pager, BusinzKpiGrid, BusinzKpiCard } from './SlShared';
+import { StageBadge, TempBadge, EmptyState, SkeletonRows, Pager } from './SlShared';
+import { ScheduleFollowupModal } from './LeadActions';
 
 const OUTCOMES = [
   { value: 'INTERESTED', label: 'Interested / Active', color: '#059669' },
@@ -15,14 +16,23 @@ const OUTCOMES = [
   { value: 'MEETING_DONE', label: 'Meeting Done', color: '#7C3AED' }
 ];
 
+const TYPE_CONFIG = {
+  CALL: { label: 'Call', icon: Phone, bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
+  WHATSAPP: { label: 'WhatsApp', icon: MessageCircle, bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' },
+  EMAIL: { label: 'Email', icon: Mail, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
+  MEETING: { label: 'Meeting', icon: Users, bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF' }
+};
+
 export default function FollowupsView({ meta, onOpenLead, toast }) {
   const [tab, setTab] = useState('today');
   const [typeFilter, setTypeFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [data, setData] = useState({ rows: [], counts: { today: 0, overdue: 0, upcoming: 0, completed: 0, total: 0 }, total: 0 });
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [modal, setModal] = useState(null); // { type: 'complete' | 'reschedule', item: {} }
+  const [selected, setSelected] = useState([]);
+  const [modal, setModal] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,8 +47,6 @@ export default function FollowupsView({ meta, onOpenLead, toast }) {
   }, [tab, typeFilter, page, pageSize, toast]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Realtime update listener
   useEffect(() => onSmartLeadChange(({ type }) => {
     if (type === 'followup') load();
   }), [load]);
@@ -48,6 +56,7 @@ export default function FollowupsView({ meta, onOpenLead, toast }) {
       await slApi.completeFollowup(item.id, payload);
       toast('Follow-up marked as completed!', 'success');
       setModal(null);
+      setSelected([]);
       load();
     } catch (err) {
       toast(err.message, 'error');
@@ -59,355 +68,499 @@ export default function FollowupsView({ meta, onOpenLead, toast }) {
       await slApi.rescheduleFollowup(item.id, payload);
       toast('Follow-up rescheduled successfully!', 'success');
       setModal(null);
+      setSelected([]);
       load();
     } catch (err) {
       toast(err.message, 'error');
     }
   };
 
+  const toggle = (id) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const allOnPage = data.rows.length > 0 && data.rows.every(r => selected.includes(r.id));
+  const toggleAll = () => {
+    if (allOnPage) setSelected(s => s.filter(id => !data.rows.some(r => r.id === id)));
+    else setSelected(s => [...new Set([...s, ...data.rows.map(r => r.id)])]);
+  };
+
   const counts = data.counts || {};
 
+  const tabs = [
+    { key: 'today', label: 'Today', count: counts.today || 0 },
+    { key: 'overdue', label: 'Overdue', count: counts.overdue || 0 },
+    { key: 'upcoming', label: 'Upcoming', count: counts.upcoming || 0 },
+    { key: 'completed', label: 'Completed', count: counts.completed || 0 },
+    { key: 'all', label: 'All', count: counts.total || 0 }
+  ];
+
+  // Client-side quick filter for search
+  const filteredRows = search.trim()
+    ? data.rows.filter(r => {
+        const q = search.toLowerCase();
+        return (
+          (r.lead_company_name || '').toLowerCase().includes(q) ||
+          (r.lead_contact_person || '').toLowerCase().includes(q) ||
+          (r.lead_phone || '').includes(q) ||
+          (r.notes || '').toLowerCase().includes(q) ||
+          (r.assigned_salesperson_name || '').toLowerCase().includes(q)
+        );
+      })
+    : data.rows;
+
+  const singleSelectedItem = selected.length === 1 ? data.rows.find(r => r.id === selected[0]) : null;
+  const singleCleanPhone = (singleSelectedItem?.lead_phone || '').replace(/[^0-9]/g, '');
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Signature BUSINZ Follow-up KPI Cards */}
-      <BusinzKpiGrid minWidth="200px">
-        <BusinzKpiCard
-          title="TODAY'S TASKS"
-          value={String(counts.today || 0)}
-          valColor="#0E7490"
-          icon={CalendarClock}
-          iconColor="#0E7490"
-          iconBg="#ECFEFF"
-          trend="Scheduled"
-          trendNeutral={true}
-          bottomPrefix="Due today"
-          bottomHighlight={`${counts.today || 0} Follow-ups`}
-          bottomHighlightColor="#0E7490"
-          onClick={() => { setTab('today'); setPage(1); }}
-          isSelected={tab === 'today'}
-        />
-
-        <BusinzKpiCard
-          title="OVERDUE SLA"
-          value={String(counts.overdue || 0)}
-          valColor={counts.overdue > 0 ? '#DC2626' : '#059669'}
-          icon={AlertTriangle}
-          iconColor={counts.overdue > 0 ? '#DC2626' : '#059669'}
-          iconBg={counts.overdue > 0 ? '#FEF2F2' : '#ECFDF5'}
-          trend={counts.overdue > 0 ? 'Urgent Action' : 'All Clear'}
-          trendUp={counts.overdue === 0}
-          trendNeutral={false}
-          bottomPrefix="SLA missed / delayed"
-          bottomHighlight={`${counts.overdue || 0} Overdue`}
-          bottomHighlightColor={counts.overdue > 0 ? '#DC2626' : '#059669'}
-          onClick={() => { setTab('overdue'); setPage(1); }}
-          isSelected={tab === 'overdue'}
-          highlightCard={counts.overdue > 0}
-        />
-
-        <BusinzKpiCard
-          title="UPCOMING SCHEDULED"
-          value={String(counts.upcoming || 0)}
-          valColor="#0F172A"
-          icon={Clock}
-          iconColor="#64748B"
-          iconBg="#F8FAFC"
-          trend="Pipeline"
-          trendNeutral={true}
-          bottomPrefix="Future client interactions"
-          bottomHighlight={`${counts.upcoming || 0} Scheduled`}
-          bottomHighlightColor="#0F172A"
-          onClick={() => { setTab('upcoming'); setPage(1); }}
-          isSelected={tab === 'upcoming'}
-        />
-
-        <BusinzKpiCard
-          title="COMPLETED INTERACTIONS"
-          value={String(counts.completed || 0)}
-          valColor="#059669"
-          icon={CheckCircle2}
-          iconColor="#059669"
-          iconBg="#ECFDF5"
-          trend="Logged"
-          trendUp={true}
-          bottomPrefix="Successfully logged"
-          bottomHighlight={`${counts.completed || 0} Done`}
-          bottomHighlightColor="#059669"
-          onClick={() => { setTab('completed'); setPage(1); }}
-          isSelected={tab === 'completed'}
-        />
-      </BusinzKpiGrid>
-
-      {/* Filter Tabs & Type Selector */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', gap: '8px', background: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
-          {[
-            { key: 'today', label: `Today (${counts.today || 0})` },
-            { key: 'overdue', label: `Overdue (${counts.overdue || 0})` },
-            { key: 'upcoming', label: `Upcoming (${counts.upcoming || 0})` },
-            { key: 'completed', label: `Completed (${counts.completed || 0})` },
-            { key: 'all', label: `All (${counts.total || 0})` }
-          ].map(t => (
-            <button
-              key={t.key}
-              onClick={() => { setTab(t.key); setPage(1); }}
-              style={{
-                border: 'none',
-                background: tab === t.key ? '#FFFFFF' : 'transparent',
-                color: tab === t.key ? '#0F172A' : '#64748B',
-                fontWeight: tab === t.key ? '700' : '600',
-                fontSize: '13px',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Standard BUSINZ Search & Filter Toolbar (Matches AllLeadsView & CrmLeadsView) */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        background: '#fafbfc',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '10px 16px',
+        flexWrap: 'wrap'
+      }}>
+        {/* Left: Search Box */}
+        <div style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          padding: '0 12px',
+          height: '38px',
+          backgroundColor: '#FFFFFF',
+          flex: '1 1 260px',
+          maxWidth: '420px'
+        }}>
+          <Search size={15} color="#94A3B8" style={{ flexShrink: 0 }} />
+          <input
+            id="smart-leads-followup-search"
+            type="text"
+            placeholder="Search Follow-ups (Company, Contact, Phone)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
+            aria-label="Search follow-ups"
+          />
+          {search && (
+            <X size={15} color="#94A3B8" style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => setSearch('')} />
+          )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select
-            value={typeFilter}
-            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-            style={{
-              height: '36px',
-              padding: '0 12px',
-              fontSize: '13px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              background: '#FFFFFF',
-              color: '#334155',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="">All Follow-up Types</option>
-            <option value="CALL">📞 Phone Calls</option>
-            <option value="WHATSAPP">💬 WhatsApp</option>
-            <option value="EMAIL">✉️ Emails</option>
-            <option value="MEETING">🤝 Meetings</option>
-          </select>
+        {/* Right: Type Filter Dropdown & Reset */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0, marginLeft: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#FFFFFF' }}>
+            <Building2 style={{ width: '14px', height: '14px', color: '#64748b', flexShrink: 0 }} />
+            <select
+              id="smart-leads-followup-type-select"
+              aria-label="Filter by follow-up type"
+              value={typeFilter}
+              onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+              style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent', cursor: 'pointer' }}
+            >
+              <option value="">All Follow-up Types</option>
+              <option value="CALL">Phone Calls</option>
+              <option value="WHATSAPP">WhatsApp</option>
+              <option value="EMAIL">Emails</option>
+              <option value="MEETING">Meetings</option>
+            </select>
+          </div>
 
           <button
-            onClick={load}
+            onClick={() => {
+              setSearch('');
+              setTypeFilter('');
+              setPage(1);
+              setSelected([]);
+              load();
+            }}
+            title="Reset Filters"
             style={{
-              height: '36px',
-              width: '36px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              background: '#FFFFFF',
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              color: '#475569',
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#64748B'
+              borderRadius: '8px',
+              height: '38px',
+              width: '38px',
+              flexShrink: 0
             }}
-            title="Refresh list"
           >
-            <RefreshCw size={15} />
+            <RotateCcw style={{ width: '15px', height: '15px' }} />
+          </button>
+
+          <button
+            onClick={() => setModal({ type: 'create' })}
+            style={{
+              height: '38px',
+              padding: '0 16px',
+              borderRadius: '8px',
+              border: '1px solid #0E7490',
+              background: '#0E7490',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 1px 2px rgba(14,116,144,0.2)'
+            }}
+          >
+            <CalendarClock size={15} /> Schedule Follow-up
           </button>
         </div>
       </div>
 
-      {/* Main List */}
-      <div style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ padding: '24px' }}>
-            <SkeletonRows rows={5} />
-          </div>
-        ) : data.rows.length === 0 ? (
-          <div style={{ padding: '48px 24px' }}>
-            <EmptyState
-              title={tab === 'today' ? "No follow-ups due today" : tab === 'overdue' ? "Zero overdue follow-ups!" : "No follow-ups found"}
-              text={tab === 'overdue' ? "Great job! All customer follow-ups are on schedule." : "Schedule follow-ups on your leads to stay on top of communications."}
-            />
-          </div>
+      {/* Main Authoritative Table Card (Matching Stock Status & CrmLeadsView Design System) */}
+      <div className="sl-card sl-table-wrap" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+        
+        {/* Status Sub-Tabs Row (Exact Design from Stock Status / CRM Leads) */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid #E2E8F0',
+          padding: '0 20px',
+          gap: '20px',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          backgroundColor: '#FFFFFF',
+          overflowX: 'auto'
+        }}>
+          {tabs.map(t => {
+            const isActive = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => { setTab(t.key); setPage(1); setSelected([]); }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  padding: '13px 4px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  color: isActive ? '#0E7490' : '#64748B',
+                  borderBottom: isActive ? '2px solid #0E7490' : '2px solid transparent',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {t.label}
+                <span style={{
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  backgroundColor: isActive ? '#ECFEFF' : '#F1F5F9',
+                  color: isActive ? '#0E7490' : '#64748B',
+                  fontWeight: 'bold'
+                }}>
+                  {t.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Table Body */}
+        {loading && data.rows.length === 0 ? (
+          <SkeletonRows />
+        ) : filteredRows.length === 0 ? (
+          <EmptyState
+            title={tab === 'today' ? "No follow-ups due today" : tab === 'overdue' ? "Zero overdue follow-ups!" : "No follow-ups found"}
+            text={tab === 'overdue' ? "Great job! All customer follow-ups are on schedule." : "Schedule follow-ups on your leads to stay on top of communications."}
+          />
         ) : (
-          <div>
-            {data.rows.map(item => {
-              const overdueFlag = item.status === 'PENDING' && isOverdue(item.scheduled_at);
-              const cleanPhone = (item.lead_phone || '').replace(/[^0-9]/g, '');
+          <>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <table className="sl-table custom-table" style={{ width: '100%', minWidth: '980px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
+                    <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
+                      <input
+                        type="checkbox"
+                        checked={allOnPage}
+                        onChange={toggleAll}
+                        style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '16px', height: '16px' }}
+                        aria-label="Select all on page"
+                      />
+                    </th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Lead & Company</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Primary Contact</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Follow-up Type</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Scheduled Date</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap', textAlign: 'center' }}>Status</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Assigned To</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map(item => {
+                    const isChecked = selected.includes(item.id);
+                    const overdueFlag = item.status === 'PENDING' && isOverdue(item.scheduled_at);
+                    const typeInfo = TYPE_CONFIG[item.followup_type] || TYPE_CONFIG.CALL;
+                    const TypeIcon = typeInfo.icon;
 
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '16px 20px',
-                    borderBottom: '1px solid #F1F5F9',
-                    backgroundColor: overdueFlag ? '#FEF2F2' : '#FFFFFF',
-                    transition: 'background 0.15s ease',
-                    gap: '16px',
-                    flexWrap: 'wrap'
-                  }}
-                >
-                  {/* Left: Type Icon & Lead Info */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 320px' }}>
-                    <div style={{
-                      width: '42px',
-                      height: '42px',
-                      borderRadius: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: item.followup_type === 'CALL' ? '#EFF6FF' : item.followup_type === 'WHATSAPP' ? '#ECFDF5' : item.followup_type === 'EMAIL' ? '#FEF3C7' : '#F5F3FF',
-                      color: item.followup_type === 'CALL' ? '#2563EB' : item.followup_type === 'WHATSAPP' ? '#059669' : item.followup_type === 'EMAIL' ? '#D97706' : '#7C3AED'
-                    }}>
-                      {item.followup_type === 'CALL' && <Phone size={20} />}
-                      {item.followup_type === 'WHATSAPP' && <MessageCircle size={20} />}
-                      {item.followup_type === 'EMAIL' && <Mail size={20} />}
-                      {item.followup_type === 'MEETING' && <Users size={20} />}
-                    </div>
-
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span
-                          onClick={() => onOpenLead(item.lead_id)}
-                          style={{ fontSize: '15px', fontWeight: '700', color: '#0F172A', cursor: 'pointer', textDecoration: 'underline' }}
+                    return (
+                      <tr
+                        key={item.id}
+                        className={`table-row-hover ${isChecked ? 'selected' : ''}`}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                        onClick={() => toggle(item.id)}
+                      >
+                        {/* Checkbox Column */}
+                        <td
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            width: '48px',
+                            minWidth: '48px',
+                            maxWidth: '48px',
+                            padding: '12px 0',
+                            textAlign: 'center',
+                            verticalAlign: 'middle',
+                            boxSizing: 'border-box',
+                            borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                          }}
                         >
-                          {item.lead_company_name || 'Individual Lead'}
-                        </span>
-                        <StageBadge stage={item.lead_stage} />
-                        {item.lead_temperature && <TempBadge temp={item.lead_temperature} />}
-                      </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggle(item.id)}
+                            style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '16px', height: '16px' }}
+                            aria-label={`Select ${item.lead_company_name}`}
+                          />
+                        </td>
 
-                      <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span>👤 {item.lead_contact_person || 'No contact name'}</span>
-                        {item.lead_phone && <span>📞 {item.lead_phone}</span>}
-                        {item.lead_value > 0 && <span style={{ fontWeight: '700', color: '#0E7490' }}>{formatINR(item.lead_value)}</span>}
-                      </div>
-
-                      {item.notes && (
-                        <div style={{ fontSize: '12px', color: '#334155', background: '#F8FAFC', padding: '4px 8px', borderRadius: '6px', marginTop: '6px', borderLeft: '3px solid #0E7490' }}>
-                          <strong>Agenda:</strong> {item.notes}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Middle: Scheduled Time & Status */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: '180px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Clock size={14} color={overdueFlag ? '#DC2626' : '#64748B'} />
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: overdueFlag ? '#DC2626' : '#0F172A' }}>
-                        {formatDate(item.scheduled_at, true)}
-                      </span>
-                    </div>
-
-                    {overdueFlag && (
-                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#DC2626', background: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', marginTop: '3px' }}>
-                        OVERDUE SLA
-                      </span>
-                    )}
-
-                    {item.status === 'COMPLETED' && (
-                      <div style={{ marginTop: '4px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#059669', background: '#DCFCE7', padding: '2px 6px', borderRadius: '4px' }}>
-                          ✓ Completed: {item.outcome || 'DONE'}
-                        </span>
-                        {item.outcome_remarks && (
-                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                            {item.outcome_remarks}
+                        {/* Lead & Company */}
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>
+                            {item.lead_company_name || 'Individual Lead'}
                           </div>
-                        )}
-                      </div>
-                    )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                            <StageBadge stage={item.lead_stage} />
+                            {item.lead_temperature && <TempBadge temperature={item.lead_temperature} score={item.lead_score} />}
+                            {item.lead_value > 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: '#0E7490' }}>{formatINR(item.lead_value)}</span>}
+                          </div>
+                        </td>
 
-                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>
-                      Assigned: {item.assigned_salesperson_name || 'Sales Team'}
-                    </div>
-                  </div>
+                        {/* Primary Contact */}
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ fontWeight: 600, color: '#1E293B', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <User size={13} style={{ color: '#64748B' }} />
+                            <span>{item.lead_contact_person || '—'}</span>
+                          </div>
+                          {item.lead_phone && (
+                            <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                              <Phone size={11} style={{ color: '#94A3B8' }} />
+                              <span>{item.lead_phone}</span>
+                            </div>
+                          )}
+                        </td>
 
-                  {/* Right: Quick Action Buttons */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {cleanPhone && (
-                      <>
-                        <a
-                          href={`tel:${cleanPhone}`}
-                          style={{
-                            width: '34px', height: '34px', borderRadius: '8px', border: '1px solid #E2E8F0',
-                            background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#2563EB', textDecoration: 'none'
-                          }}
-                          title="Call Lead"
-                        >
-                          <Phone size={15} />
-                        </a>
-                        <a
-                          href={`https://wa.me/91${cleanPhone.slice(-10)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            width: '34px', height: '34px', borderRadius: '8px', border: '1px solid #E2E8F0',
-                            background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#059669', textDecoration: 'none'
-                          }}
-                          title="WhatsApp Chat"
-                        >
-                          <MessageCircle size={15} />
-                        </a>
-                      </>
-                    )}
+                        {/* Follow-up Type & Agenda */}
+                        <td style={{ padding: '12px 14px' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            backgroundColor: typeInfo.bg,
+                            color: typeInfo.color,
+                            border: `1px solid ${typeInfo.border}`
+                          }}>
+                            <TypeIcon size={12} /> {typeInfo.label}
+                          </span>
+                          {item.notes && (
+                            <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.notes}>
+                              {item.notes}
+                            </div>
+                          )}
+                        </td>
 
-                    {item.status === 'PENDING' && (
-                      <>
-                        <button
-                          onClick={() => setModal({ type: 'complete', item })}
-                          style={{
-                            height: '34px', padding: '0 12px', borderRadius: '8px',
-                            background: '#0E7490', border: 'none', color: '#FFFFFF',
-                            fontSize: '12px', fontWeight: '700', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '5px'
-                          }}
-                        >
-                          <CheckCircle2 size={14} /> Complete
-                        </button>
-                        <button
-                          onClick={() => setModal({ type: 'reschedule', item })}
-                          style={{
-                            height: '34px', padding: '0 10px', borderRadius: '8px',
-                            background: '#F1F5F9', border: '1px solid #CBD5E1', color: '#475569',
-                            fontSize: '12px', fontWeight: '600', cursor: 'pointer'
-                          }}
-                        >
-                          Reschedule
-                        </button>
-                      </>
-                    )}
+                        {/* Scheduled Date */}
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <Calendar size={13} style={{ color: overdueFlag ? '#DC2626' : '#0E7490' }} />
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: overdueFlag ? '#DC2626' : '#0F172A' }}>
+                              {formatDate(item.scheduled_at, true)}
+                            </span>
+                          </div>
+                          {overdueFlag && (
+                            <span style={{ display: 'inline-block', fontSize: '10px', fontWeight: 800, color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px', marginTop: '3px' }}>
+                              OVERDUE SLA
+                            </span>
+                          )}
+                        </td>
 
-                    <button
-                      onClick={() => onOpenLead(item.lead_id)}
-                      style={{
-                        height: '34px', width: '34px', borderRadius: '8px',
-                        background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-                      }}
-                      title="Open Lead Profile"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                        {/* Status */}
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          {item.status === 'COMPLETED' ? (
+                            <span style={{ display: 'inline-block', fontSize: '11px', fontWeight: 700, color: '#15803D', backgroundColor: '#DCFCE7', padding: '3px 10px', borderRadius: '12px' }}>
+                              ✓ Done
+                            </span>
+                          ) : overdueFlag ? (
+                            <span style={{ display: 'inline-block', fontSize: '11px', fontWeight: 700, color: '#B91C1C', backgroundColor: '#FEE2E2', padding: '3px 10px', borderRadius: '12px' }}>
+                              Overdue
+                            </span>
+                          ) : (
+                            <span style={{ display: 'inline-block', fontSize: '11px', fontWeight: 700, color: '#0E7490', backgroundColor: '#ECFEFF', padding: '3px 10px', borderRadius: '12px' }}>
+                              Pending
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Assigned To (Avatar Circle) */}
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              backgroundColor: '#E0F2FE',
+                              color: '#0369A1',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              {(item.assigned_salesperson_name || 'S').charAt(0).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '13px', color: '#334155', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                              {item.assigned_salesperson_name || 'Sales Team'}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Footer */}
+            {data.total > 0 && (
+              <Pager
+                page={page}
+                pageSize={pageSize}
+                total={data.total}
+                onPage={setPage}
+                onPageSize={(ps) => { setPageSize(ps); setPage(1); }}
+              />
+            )}
+          </>
         )}
       </div>
 
-      {/* Pagination Footer */}
-      {data.total > 0 && (
-        <Pager
-          page={page}
-          pageSize={pageSize}
-          total={data.total}
-          onPageChange={setPage}
-          onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
-        />
+      {/* Floating Action Bar (Single Line with All Action Buttons) */}
+      {selected.length > 0 && (
+        <div className="sl-actionbar">
+          <span style={{ fontWeight: 700, fontSize: '13px', color: '#0E7490', marginRight: '4px' }}>
+            {selected.length} Selected
+          </span>
+          <div className="sep" />
+
+          {/* Quick Contact buttons if single lead selected */}
+          {singleSelectedItem && singleCleanPhone && (
+            <>
+              <a
+                href={`tel:${singleCleanPhone}`}
+                style={{
+                  color: '#2563EB',
+                  textDecoration: 'none',
+                  background: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  padding: '6px 14px',
+                  borderRadius: '50px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Call Lead"
+              >
+                <Phone size={13} /> Call Lead
+              </a>
+              <a
+                href={`https://wa.me/91${singleCleanPhone.slice(-10)}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  color: '#059669',
+                  textDecoration: 'none',
+                  background: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  padding: '6px 14px',
+                  borderRadius: '50px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="WhatsApp Chat"
+              >
+                <MessageCircle size={13} /> WhatsApp
+              </a>
+            </>
+          )}
+
+          {/* Complete Button */}
+          <button
+            onClick={() => {
+              const targetItem = singleSelectedItem || data.rows.find(r => selected.includes(r.id) && r.status === 'PENDING');
+              if (targetItem) setModal({ type: 'complete', item: targetItem });
+            }}
+            style={{
+              background: '#0E7490',
+              color: '#FFFFFF',
+              borderColor: '#0E7490',
+              fontWeight: 700
+            }}
+          >
+            <CheckCircle2 size={13} /> Complete {selected.length > 1 ? 'Selected' : 'Follow-up'}
+          </button>
+
+          {/* Reschedule Button */}
+          <button
+            onClick={() => {
+              const targetItem = singleSelectedItem || data.rows.find(r => selected.includes(r.id) && r.status === 'PENDING');
+              if (targetItem) setModal({ type: 'reschedule', item: targetItem });
+            }}
+          >
+            <CalendarClock size={13} /> Reschedule {selected.length > 1 ? 'Selected' : 'Follow-up'}
+          </button>
+
+          {/* View Lead Details if single selected */}
+          {singleSelectedItem && (
+            <button onClick={() => onOpenLead(singleSelectedItem.lead_id)}>
+              <Eye size={13} /> View Lead Details
+            </button>
+          )}
+
+          {/* Deselect / Close */}
+          <button className="sl-actionbar-close" onClick={() => setSelected([])} aria-label="Clear selection">✕</button>
+        </div>
       )}
 
       {/* Complete Outcome Modal */}
@@ -425,6 +578,18 @@ export default function FollowupsView({ meta, onOpenLead, toast }) {
           item={modal.item}
           onClose={() => setModal(null)}
           onSubmit={(payload) => handleReschedule(modal.item, payload)}
+        />
+      )}
+
+      {/* Schedule New Follow-up Modal */}
+      {modal?.type === 'create' && (
+        <ScheduleFollowupModal
+          onClose={() => setModal(null)}
+          onDone={(_res, msg) => {
+            if (msg) toast(msg, 'success');
+            setModal(null);
+            load();
+          }}
         />
       )}
     </div>
@@ -530,10 +695,10 @@ function CompleteModal({ item, onClose, onSubmit }) {
                     onChange={(e) => setNextType(e.target.value)}
                     style={{ height: '36px', padding: '0 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
                   >
-                    <option value="CALL">📞 Phone Call</option>
-                    <option value="WHATSAPP">💬 WhatsApp</option>
-                    <option value="EMAIL">✉️ Email</option>
-                    <option value="MEETING">🤝 Meeting</option>
+                    <option value="CALL">Phone Call</option>
+                    <option value="WHATSAPP">WhatsApp</option>
+                    <option value="EMAIL">Email</option>
+                    <option value="MEETING">Meeting</option>
                   </select>
                   <input
                     type="datetime-local"
