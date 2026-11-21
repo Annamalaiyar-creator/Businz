@@ -33,6 +33,7 @@ export const slApi = {
   leadSummary: (id) => request('GET', `/leads/${encodeURIComponent(id)}/summary`),
   createLead: (body) => request('POST', '/leads', body),
   updateLead: (id, body) => request('PATCH', `/leads/${encodeURIComponent(id)}`, body),
+  convertToCustomer: (id) => request('POST', `/leads/${encodeURIComponent(id)}/convert-customer`),
   changeStage: (id, body) => request('POST', `/leads/${encodeURIComponent(id)}/stage`, body),
   assign: (id, body) => request('POST', `/leads/${encodeURIComponent(id)}/assign`, body),
   bulk: (body) => request('POST', '/leads/bulk', body),

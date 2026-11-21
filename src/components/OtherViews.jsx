@@ -207,7 +207,12 @@ export default function OtherViews(props) {
           />
         )}
 
-        {SMART_LEADS_ENABLED && activeTab === 'Smart Leads' && <SmartLeadsApp userRole={userRole} />}
+        {SMART_LEADS_ENABLED && activeTab === 'Smart Leads' && (
+          <SmartLeadsApp
+            userRole={userRole}
+            onNavigateTab={props.onChangeTab || props.onSelectTab}
+          />
+        )}
 
         {/* CEO Executive View: New Monthly Customers by Sales Person */}
         {['Monthly Customers by Rep', 'New Monthly Customers', 'Monthly Customers', 'Customers by Rep'].includes(activeTab) && (

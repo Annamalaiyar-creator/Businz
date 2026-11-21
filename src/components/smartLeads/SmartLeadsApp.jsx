@@ -25,7 +25,7 @@ const SECTIONS = [
 ];
 const MOBILE_KEYS = ['overview', 'leads', 'pipeline', 'followups', 'settings'];
 
-export default function SmartLeadsApp({ userRole: propUserRole }) {
+export default function SmartLeadsApp({ userRole: propUserRole, onNavigateTab }) {
   const [meta, setMeta] = useState(null);
   const [metaError, setMetaError] = useState('');
   const [section, setSection] = useState('leads');
@@ -61,8 +61,8 @@ export default function SmartLeadsApp({ userRole: propUserRole }) {
   if (metaError) body = <div className="sl-alert sl-alert-error">{metaError} <button className="sl-btn sl-btn-sm" onClick={loadMeta}>Retry</button></div>;
   else if (!meta) body = <div className="sl-card"><SkeletonRows rows={6} /></div>;
   else if (section === 'overview') body = <OverviewView meta={meta} onNavigate={go} onOpenLead={setOpenLeadId} toast={toast} />;
-  else if (section === 'leads') body = <AllLeadsView meta={meta} onOpenLead={setOpenLeadId} toast={toast} canCreateLead={canCreateLead} />;
-  else if (section === 'pipeline') body = <PipelineView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
+  else if (section === 'leads') body = <AllLeadsView meta={meta} onOpenLead={setOpenLeadId} toast={toast} canCreateLead={canCreateLead} onNavigateTab={onNavigateTab} />;
+  else if (section === 'pipeline') body = <PipelineView meta={meta} onOpenLead={setOpenLeadId} toast={toast} onNavigateTab={onNavigateTab} />;
   else if (section === 'followups') body = <FollowupsView meta={meta} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'team' && isCeoOrTechSupport) body = <TeamView meta={meta} onNavigate={go} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'reports') body = <ReportsView meta={meta} onNavigate={go} toast={toast} />;
@@ -94,6 +94,7 @@ export default function SmartLeadsApp({ userRole: propUserRole }) {
           leadId={openLeadId}
           onClose={closeLead}
           toast={toast}
+          onNavigateTab={onNavigateTab}
         />
       )}
       <nav className="sl-bottomnav" aria-label="Smart Leads sections">
