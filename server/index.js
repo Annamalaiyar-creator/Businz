@@ -3795,8 +3795,8 @@ export const requireRole = (allowedRoles = []) => {
   };
 };
 
-// Smart Leads (new CRM module) — mounted ONLY when ENABLE_SMART_LEADS=true; otherwise every route 404s.
-if (process.env.ENABLE_SMART_LEADS === 'true') {
+// Smart Leads (new CRM module) — active unless explicitly disabled
+if (process.env.ENABLE_SMART_LEADS !== 'false') {
   const { createSmartLeadsRouter, runSmartLeadsSlaEscalation } = await import('./smartLeadsRouter.js');
   const { ensureSmartLeadsSchema } = await import('./smartLeadsSchema.js');
   ensureSmartLeadsSchema().catch(err => console.error('[Smart Leads Schema]', err.message));

@@ -1,5 +1,5 @@
 // BUSINZ Smart Leads — API client. The global fetch interceptor (src/main.jsx) attaches x-session-id.
-export const SMART_LEADS_ENABLED = import.meta.env.VITE_ENABLE_SMART_LEADS === 'true';
+export const SMART_LEADS_ENABLED = import.meta.env.VITE_ENABLE_SMART_LEADS !== 'false';
 
 async function request(method, path, body) {
   const res = await fetch(`/api/smart-leads${path}`, {
