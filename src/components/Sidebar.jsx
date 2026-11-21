@@ -331,8 +331,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SALES & CRM',
           items: [
             { label: 'Dashboard', icon: LayoutDashboard },
-            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
-            { label: 'Leads', icon: Users, badge: 'New' },
+            { label: 'Smart Leads', icon: Sparkles },
+            { label: 'Leads', icon: Users },
             { label: 'Customers', icon: Building2 },
             { label: 'New Monthly Customers', targetTab: 'Monthly Customers by Rep', icon: UserCheck },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
@@ -380,7 +380,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'SUPPORT CHANNELS & CRM',
           items: [
-            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
+            { label: 'Smart Leads', icon: Sparkles },
             { label: 'Leads Directory', targetTab: 'Leads', icon: Users },
             { label: 'Customers', targetTab: 'Customers', icon: Building2 },
             { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
@@ -420,8 +420,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'executive_dashboard',
           dashboardSubTab: 'overview',
           items: [
-            { label: role === 'HR' ? 'Operations Overview' : 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard },
-            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' }
+            { label: role === 'HR' ? 'Operations Overview' : 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard }
           ]
         },
         {
@@ -429,7 +428,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'crm_leads',
           dashboardSubTab: 'crm-dashboard',
           items: [
-            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
+            { label: 'Smart Leads', icon: Sparkles },
             { label: 'All Leads', targetTab: 'Leads', icon: Users },
             { label: 'Customer Management', targetTab: 'Customers', icon: Building2 }
           ]
@@ -516,7 +515,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SYSTEM ADMINISTRATION',
           items: [
             { label: 'Admin Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
-            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
+            { label: 'Smart Leads', icon: Sparkles },
             { label: 'User & Access Control', targetTab: 'User Management', icon: Users },
             { label: 'Database & DB Health', targetTab: 'System Health', icon: Activity },
             { label: 'Active Sessions', targetTab: 'Active Sessions', icon: Lock },
@@ -587,14 +586,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     return sections;
   };
 
-  // Smart Leads (new CRM module): visible for sales, tech support, admin and management
-  const withSmartLeads = (list, role) => {
-    const r = String(role || '').toLowerCase();
-    const allowed = ['ceo', 'md', 'managing director', 'technical administrator', 'technical admin', 'developer', 'sales', 'tech support', 'technical support'].some(k => r.includes(k));
-    if (import.meta.env.VITE_ENABLE_SMART_LEADS === 'false' || !allowed) return list;
-    return [...list, { category: 'SMART LEADS (TEST)', items: [{ label: 'Smart Leads', icon: Sparkles }] }];
-  };
-  const sections = withSmartLeads(getSectionsForRole(userRole), userRole);
+  const sections = getSectionsForRole(userRole);
 
   const normalizeTab = (tab) => {
     if (tab === 'Performa Invoice') return 'Proforma Invoice';
