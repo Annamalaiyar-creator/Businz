@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, Search, Phone, MessageCircle, RotateCcw, Building2, X, User, Calendar, CalendarClock, Eye, Edit3, UserCheck, ArrowRightLeft, Trash2 } from 'lucide-react';
+import { Plus, Search, Phone, MessageCircle, RotateCcw, Building2, X, User, Calendar, CalendarClock, Eye, Edit3, UserCheck, ArrowRightLeft, Trash2, UserPlus } from 'lucide-react';
 import { slApi, onSmartLeadChange, formatDate, isOverdue } from './smartLeadsApi';
 import { StageBadge, TempBadge, Pager, EmptyState, SkeletonRows } from './SlShared';
 import LeadFormModal from './LeadFormModal';
@@ -7,7 +7,7 @@ import { StageModal, AssignModal, ScheduleFollowupModal } from './LeadActions';
 
 const EMPTY_FILTERS = { search: '', stage: '', source: '', owner: '', temperature: '', due: '', sort: 'newest' };
 
-export default function AllLeadsView({ meta, onOpenLead, toast, canCreateLead = true }) {
+export default function AllLeadsView({ meta, onOpenLead, toast, canCreateLead = true, onNavigateTab }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(1);
@@ -404,6 +404,26 @@ export default function AllLeadsView({ meta, onOpenLead, toast, canCreateLead = 
           {selected.length === 1 && (
             <button onClick={() => setModal({ type: 'followup', lead: selectedLeads[0] })}>
               <CalendarClock size={13} style={{ color: '#64748B' }} /> Follow-up
+            </button>
+          )}
+          {selected.length === 1 && !selectedLeads[0]?.is_converted && (
+            <button
+              onClick={async () => {
+                const lead = selectedLeads[0];
+                if (!lead) return;
+                try {
+                  const res = await slApi.convertToCustomer(lead.id);
+                  toast(res.message || 'Converted to Customer successfully!');
+                  load();
+                  setSelected([]);
+                } catch (err) {
+                  toast(err.message, 'error');
+                }
+              }}
+              style={{ color: '#0E7490', fontWeight: 700 }}
+              title="Convert this lead to an official Customer Master record"
+            >
+              <UserPlus size={13} style={{ color: '#0E7490' }} /> Convert to Customer
             </button>
           )}
           {isManager && (

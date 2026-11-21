@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Phone, MessageCircle, Mail, PhoneCall, StickyNote,
   ArrowRightLeft, UserCheck, Pencil, CalendarClock, FileText,
-  Clock, User, ArrowRight, Users, X, Check
+  Clock, User, ArrowRight, Users, X, Check, UserPlus, Building2, Plus
 } from 'lucide-react';
 import { slApi, onSmartLeadChange, formatINR, formatDate, isOverdue } from './smartLeadsApi';
 import { StageBadge, TempBadge, EmptyState, SkeletonRows } from './SlShared';
@@ -22,13 +22,14 @@ const EVENT_CONFIG = {
   followup: { icon: CalendarClock, bg: '#F0FDF4', color: '#16A34A', label: 'Follow-up' }
 };
 
-export default function LeadProfileView({ meta, leadId, onBack, toast, isModal = false }) {
+export default function LeadProfileView({ meta, leadId, onBack, toast, isModal = false, onNavigateTab }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('all');
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [convertingCustomer, setConvertingCustomer] = useState(false);
   const lastLocalWrite = useRef(0);
 
   const load = useCallback(async () => {
@@ -150,6 +151,68 @@ export default function LeadProfileView({ meta, leadId, onBack, toast, isModal =
     }
   };
 
+  const handleConvertToCustomer = async () => {
+    setConvertingCustomer(true);
+    try {
+      const res = await slApi.convertToCustomer(leadId);
+      lastLocalWrite.current = Date.now();
+      toast(res.message || 'Converted to Customer successfully!');
+      await load();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setConvertingCustomer(false);
+    }
+  };
+
+  const handleCreateQuotation = () => {
+    if (!l) return;
+    try {
+      const payload = {
+        customer: l.company_name,
+        companyName: l.company_name,
+        customerName: l.contact_person || l.company_name,
+        phone: l.phone || l.whatsapp || '',
+        email: l.email || '',
+        city: l.location || '',
+        customerCode: l.converted_customer_code || l.customer_code || '',
+        leadId: l.id,
+        leadNumber: l.lead_number,
+        estimatedKw: l.estimated_kw,
+        productRequirement: l.product_requirement
+      };
+      sessionStorage.setItem('vrm_prefill_lead_for_quotation', JSON.stringify(payload));
+      localStorage.setItem('vrm_prefill_lead_for_quotation', JSON.stringify(payload));
+    } catch (_) {}
+    if (onNavigateTab) {
+      onNavigateTab('Quotations');
+    } else {
+      toast('Opening Quotations...', 'info');
+    }
+  };
+
+  const handleConvertToPI = (quote) => {
+    try {
+      sessionStorage.setItem('vrm_prefill_quote_for_pi', JSON.stringify(quote));
+    } catch (_) {}
+    if (onNavigateTab) {
+      onNavigateTab('Performa Invoice', quote);
+    } else {
+      toast('Opening Proforma Invoice...', 'info');
+    }
+  };
+
+  const handleConvertToBOM = (pi) => {
+    try {
+      sessionStorage.setItem('vrm_prefill_pi_for_bom', JSON.stringify(pi));
+    } catch (_) {}
+    if (onNavigateTab) {
+      onNavigateTab('BOM Orders', pi);
+    } else {
+      toast('Opening BOM Orders...', 'info');
+    }
+  };
+
   if (error) {
     return (
       <div>
@@ -202,6 +265,43 @@ export default function LeadProfileView({ meta, leadId, onBack, toast, isModal =
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {/* Convert to Customer / View Customer */}
+            {!l.is_converted && !detail.customerMaster ? (
+              <button
+                className="sl-btn sl-btn-accent"
+                onClick={handleConvertToCustomer}
+                disabled={convertingCustomer}
+                style={{
+                  backgroundColor: '#ECFEFF',
+                  color: '#0E7490',
+                  borderColor: '#A5F3FC',
+                  fontWeight: 700
+                }}
+                title="Convert this lead to an official Customer Master record"
+              >
+                <UserPlus size={14} /> {convertingCustomer ? 'Converting…' : 'Convert to Customer'}
+              </button>
+            ) : (
+              <button
+                className="sl-btn"
+                onClick={() => onNavigateTab && onNavigateTab('Customers')}
+                style={{ backgroundColor: '#F0FDF4', color: '#16A34A', borderColor: '#BBF7D0', fontWeight: 700 }}
+                title="View Customer in Customer Master"
+              >
+                <Building2 size={14} /> Customer: {l.converted_customer_code || detail.customerMaster?.customer_code || 'Master'}
+              </button>
+            )}
+
+            {/* Create Quotation Button */}
+            <button
+              className="sl-btn"
+              onClick={handleCreateQuotation}
+              style={{ fontWeight: 700, color: '#0F172A', borderColor: '#CBD5E1' }}
+              title="Create a new Quotation for this deal"
+            >
+              <FileText size={14} color="#0E7490" /> + Create Quote
+            </button>
+
             {l.phone && <a className="sl-btn" href={`tel:${l.phone}`}><Phone size={14} /> Call</a>}
             {waNumber && <a className="sl-btn" href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer"><MessageCircle size={14} /> WhatsApp</a>}
             {l.email && <a className="sl-btn" href={`mailto:${l.email}`}><Mail size={14} /> Email</a>}
@@ -527,52 +627,147 @@ export default function LeadProfileView({ meta, leadId, onBack, toast, isModal =
           <div className="sl-card sl-card-pad">
             <h4 className="sl-section-title">Sales Documents & Lifecycle</h4>
             
+            {/* Customer Master Status Banner */}
+            <div style={{
+              marginBottom: 14,
+              padding: '10px 12px',
+              borderRadius: '8px',
+              backgroundColor: (l.is_converted || detail.customerMaster) ? '#F0FDF4' : '#F8FAFC',
+              border: `1px solid ${(l.is_converted || detail.customerMaster) ? '#BBF7D0' : '#E2E8F0'}`
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: (l.is_converted || detail.customerMaster) ? '#166534' : '#64748B', textTransform: 'uppercase' }}>
+                    Customer Master
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', marginTop: 2 }}>
+                    {(l.is_converted || detail.customerMaster)
+                      ? (l.converted_customer_code || detail.customerMaster?.customer_code || detail.customerMaster?.company_name || 'Enrolled')
+                      : 'Not Enrolled in Customer Master'}
+                  </div>
+                </div>
+                {(!l.is_converted && !detail.customerMaster) ? (
+                  <button
+                    className="sl-btn sl-btn-sm"
+                    onClick={handleConvertToCustomer}
+                    disabled={convertingCustomer}
+                    style={{ backgroundColor: '#0E7490', color: '#FFFFFF', border: 'none', fontWeight: 700, padding: '4px 10px', fontSize: 11 }}
+                  >
+                    <UserPlus size={12} /> {convertingCustomer ? 'Converting…' : 'Convert Now'}
+                  </button>
+                ) : (
+                  <button
+                    className="sl-btn sl-btn-sm"
+                    onClick={() => onNavigateTab && onNavigateTab('Customers')}
+                    style={{ backgroundColor: '#FFFFFF', color: '#166534', border: '1px solid #BBF7D0', fontWeight: 700, padding: '4px 10px', fontSize: 11 }}
+                  >
+                    View Record ›
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Quotations */}
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
-                Quotations ({(detail.quotations || []).length})
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                  Quotations ({(detail.quotations || []).length})
+                </div>
+                <button
+                  className="sl-btn sl-btn-sm"
+                  onClick={handleCreateQuotation}
+                  style={{ fontSize: 11, padding: '2px 8px', fontWeight: 700, color: '#0E7490', borderColor: '#A5F3FC', backgroundColor: '#ECFEFF' }}
+                >
+                  <Plus size={11} /> New Quote
+                </button>
               </div>
               {(!detail.quotations || detail.quotations.length === 0) ? (
-                <div className="sl-faint" style={{ fontSize: 12 }}>No quotation created yet.</div>
+                <div className="sl-faint" style={{ fontSize: 12 }}>No quotation created yet. Click "+ New Quote" to prepare proposal.</div>
               ) : (
                 detail.quotations.map(q => (
-                  <div key={q.id} className="sl-score-row" style={{ fontSize: 12.5 }}>
-                    <span>{q.quote_number} · <span className="sl-muted">{q.status}</span>{q.converted_pi_no ? ` → PI ${q.converted_pi_no}` : ''}</span>
-                    <span className="sl-strong">{formatINR(q.grand_total)}</span>
+                  <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12.5 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#0F172A' }}>{q.quote_number}</div>
+                      <div className="sl-muted" style={{ fontSize: 11 }}>
+                        {q.status}{q.converted_pi_no ? ` → PI ${q.converted_pi_no}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="sl-strong">{formatINR(q.grand_total)}</span>
+                      {!q.converted_pi_no && (
+                        <button
+                          className="sl-btn sl-btn-sm"
+                          onClick={() => handleConvertToPI(q)}
+                          style={{ fontSize: 11, padding: '2px 8px', color: '#0E7490', borderColor: '#0E7490', fontWeight: 700 }}
+                          title="Convert this quote into an official Proforma Invoice (PI)"
+                        >
+                          Convert to PI →
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
             </div>
 
             {/* Proforma Invoices (PI) */}
-            {(detail.proformaInvoices && detail.proformaInvoices.length > 0) && (
-              <div style={{ marginBottom: 12, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
-                  Proforma Invoices ({detail.proformaInvoices.length})
-                </div>
-                {detail.proformaInvoices.map(pi => (
-                  <div key={pi.id || pi.pi_no} className="sl-score-row" style={{ fontSize: 12.5 }}>
-                    <span>{pi.pi_no} · <span className="sl-muted">{pi.status || 'Confirmed'}</span></span>
-                    <span className="sl-strong">{formatINR(pi.grand_total || pi.total_amount)}</span>
-                  </div>
-                ))}
+            <div style={{ marginBottom: 12, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
+                Proforma Invoices ({detail.proformaInvoices?.length || 0})
               </div>
-            )}
+              {(!detail.proformaInvoices || detail.proformaInvoices.length === 0) ? (
+                <div className="sl-faint" style={{ fontSize: 12 }}>No Proforma Invoice issued yet. Convert an approved quotation to PI.</div>
+              ) : (
+                detail.proformaInvoices.map(pi => (
+                  <div key={pi.id || pi.pi_no} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12.5 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#0F172A' }}>{pi.pi_no}</div>
+                      <div className="sl-muted" style={{ fontSize: 11 }}>{pi.status || 'Confirmed'}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="sl-strong">{formatINR(pi.grand_total || pi.total_amount)}</span>
+                      <button
+                        className="sl-btn sl-btn-sm"
+                        onClick={() => handleConvertToBOM(pi)}
+                        style={{ fontSize: 11, padding: '2px 8px', color: '#7C3AED', borderColor: '#DDD6FE', backgroundColor: '#F5F3FF', fontWeight: 700 }}
+                        title="Convert this PI into a Bill of Materials (BOM) production order"
+                      >
+                        Convert to BOM →
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
 
             {/* BOM Production Orders */}
-            {(detail.bomOrders && detail.bomOrders.length > 0) && (
-              <div style={{ marginBottom: 12, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
-                  BOM Production Orders ({detail.bomOrders.length})
-                </div>
-                {detail.bomOrders.map(b => (
-                  <div key={b.id || b.bom_code} className="sl-score-row" style={{ fontSize: 12.5 }}>
-                    <span>{b.bom_code} · <span className="sl-muted">{b.status || 'Active'}</span></span>
-                    <span className="sl-strong">{formatINR(b.grand_total)}</span>
-                  </div>
-                ))}
+            <div style={{ marginBottom: 12, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
+                BOM Production Orders ({detail.bomOrders?.length || 0})
               </div>
-            )}
+              {(!detail.bomOrders || detail.bomOrders.length === 0) ? (
+                <div className="sl-faint" style={{ fontSize: 12 }}>No BOM order created yet. Convert a confirmed PI to BOM.</div>
+              ) : (
+                detail.bomOrders.map(b => (
+                  <div key={b.id || b.bom_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12.5 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#0F172A' }}>{b.bom_code}</div>
+                      <div className="sl-muted" style={{ fontSize: 11 }}>{b.status || 'Active Production'}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="sl-strong">{formatINR(b.grand_total)}</span>
+                      <button
+                        className="sl-btn sl-btn-sm"
+                        onClick={() => onNavigateTab && onNavigateTab('BOM Orders', null, b.bom_code)}
+                        style={{ fontSize: 11, padding: '2px 8px', color: '#475569', fontWeight: 600 }}
+                      >
+                        View BOM ›
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
 
             {/* Final Tax Invoices */}
             {(detail.invoices && detail.invoices.length > 0) && (
@@ -603,7 +798,7 @@ export default function LeadProfileView({ meta, leadId, onBack, toast, isModal =
   );
 }
 
-export function LeadProfileModal({ meta, leadId, onClose, toast }) {
+export function LeadProfileModal({ meta, leadId, onClose, toast, onNavigateTab }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
@@ -684,7 +879,7 @@ export function LeadProfileModal({ meta, leadId, onClose, toast }) {
           </button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', backgroundColor: '#F8FAFC' }}>
-          <LeadProfileView meta={meta} leadId={leadId} onBack={onClose} toast={toast} isModal={true} />
+          <LeadProfileView meta={meta} leadId={leadId} onBack={onClose} toast={toast} isModal={true} onNavigateTab={onNavigateTab} />
         </div>
       </div>
     </div>

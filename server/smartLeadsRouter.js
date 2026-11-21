@@ -692,6 +692,137 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     res.json({ success: true, lead });
   }));
 
+  // ---------- Convert Lead to Customer Master ----------
+  router.post('/leads/:id/convert-customer', wrap(async (req, res) => {
+    const actor = actorOf(req.userSession);
+    const settings = await getSettings();
+    const result = await withTx(async (client) => {
+      const cur = await loadLeadForWrite(client, req.params.id, req.userSession);
+
+      let customer = null;
+      if (cur.converted_customer_id) {
+        const c = await client.query(`SELECT * FROM public.customers WHERE id = $1 LIMIT 1`, [cur.converted_customer_id]);
+        if (c.rows[0]) customer = c.rows[0];
+      }
+      if (!customer) {
+        const match = await findExistingCustomerMatch(client, {
+          phone: cur.phone,
+          whatsapp: cur.whatsapp,
+          email: cur.email,
+          companyName: cur.company_name
+        });
+        if (match) {
+          const c = await client.query(`SELECT * FROM public.customers WHERE id = $1 LIMIT 1`, [match.id]);
+          if (c.rows[0]) customer = c.rows[0];
+        }
+      }
+
+      if (customer) {
+        await client.query(
+          `UPDATE public.leads
+              SET is_converted = TRUE,
+                  converted_customer_id = $2,
+                  converted_customer_code = $3,
+                  customer_id = $2,
+                  customer_code = $3,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [cur.id, customer.id, customer.customer_code || customer.code || customer.id]
+        );
+        await client.query(
+          `INSERT INTO public.lead_activities (id, lead_id, activity_type, summary, conducted_by_user_id, conducted_by_name, conducted_by_role, created_at)
+           VALUES ($1,$2,'CONVERTED_TO_CUSTOMER',$3,$4,$5,$6,NOW())`,
+          [genId('LAC'), cur.id, `Lead linked to existing Customer Master: ${customer.company_name || customer.customer_name} (${customer.customer_code || customer.id})`, actor.id, actor.name, actor.role]
+        );
+        return { customer, leadId: cur.id, alreadyExisted: true };
+      }
+
+      // Generate sequential customer code: VRM-CS-YYYY-XX
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext('customer_sequence_number'))`);
+      const year = new Date().getFullYear();
+      const seqRes = await client.query(
+        `SELECT COALESCE(MAX((regexp_match(customer_code, '^VRM-CS-\\d{4}-(\\d+)$'))[1]::int), 0) AS max_seq
+           FROM public.customers
+          WHERE customer_code LIKE $1`,
+        [`VRM-CS-${year}-%`]
+      );
+      const nextSeq = (seqRes.rows[0]?.max_seq || 0) + 1;
+      const customerCode = `VRM-CS-${year}-${String(nextSeq).padStart(2, '0')}`;
+
+      const compName = (cur.company_name || 'New Customer').trim();
+      const contactPerson = (cur.contact_person || compName).trim();
+      const phone = (cur.phone || cur.whatsapp || '').trim();
+      const email = (cur.email || '').trim();
+      const city = cur.location || 'Chennai';
+      const state = 'Tamil Nadu';
+      const rep = cur.assigned_to_name || actor.name || '';
+
+      const insRes = await client.query(
+        `INSERT INTO public.customers (
+          id, customer_code, company_name, customer_name, customer_type, industry,
+          city, state, assigned_salesperson, source, email, phone, status,
+          credit_limit, credit_days, payment_terms, primary_contact, created_at, updated_at
+        ) VALUES (
+          $1, $1, $2, $3, 'EPC Contractor', 'Solar Energy / Utility Scale',
+          $4, $5, $6, $7, $8, $9, 'ACTIVE',
+          2500000, 30, '50% Advance + 50% Dispatch',
+          $10::jsonb, NOW(), NOW()
+        ) RETURNING *`,
+        [
+          customerCode,
+          compName,
+          contactPerson,
+          city,
+          state,
+          rep,
+          cur.source || 'Smart Leads',
+          email,
+          phone,
+          JSON.stringify({
+            name: contactPerson,
+            designation: cur.designation || 'Project Head',
+            phone,
+            whatsapp: cur.whatsapp || phone,
+            email
+          })
+        ]
+      );
+      const newCustomer = insRes.rows[0];
+
+      await client.query(
+        `UPDATE public.leads
+            SET is_converted = TRUE,
+                converted_customer_id = $2,
+                converted_customer_code = $2,
+                customer_id = $2,
+                customer_code = $2,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [cur.id, customerCode]
+      );
+
+      await client.query(
+        `INSERT INTO public.lead_activities (id, lead_id, activity_type, summary, conducted_by_user_id, conducted_by_name, conducted_by_role, created_at)
+         VALUES ($1,$2,'CONVERTED_TO_CUSTOMER',$3,$4,$5,$6,NOW())`,
+        [genId('LAC'), cur.id, `Lead converted to official Customer Master: ${compName} (${customerCode})`, actor.id, actor.name, actor.role]
+      );
+
+      return { customer: newCustomer, leadId: cur.id, created: true };
+    });
+
+    const refreshed = await withTx(client => refreshDerived(client, result.leadId, settings.scoring));
+    emit('update', refreshed);
+
+    res.json({
+      success: true,
+      customer: result.customer,
+      lead: refreshed,
+      message: result.alreadyExisted
+        ? `Linked to existing Customer Master: ${result.customer.customer_code || result.customer.id}`
+        : `Successfully converted to Customer: ${result.customer.customer_code || result.customer.id}`
+    });
+  }));
+
   // ---------- Assign / reassign ----------
   async function assignOne(client, cur, assignee, reason, actor) {
     if (cur.assigned_to_user_id === assignee.user_id) return false;
