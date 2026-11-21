@@ -25,19 +25,37 @@ test('stage maps back to a legacy status the old CRM understands', () => {
   assert.equal(mapStageToLegacyStatus('Negotiation'), 'Proposal Sent'); // old screens have no "Negotiating"
 });
 
-test('stage transitions: lost needs reason, reopen needs manager', () => {
-  assert.equal(validateStageTransition({ from: 'New', to: 'Lost', isManager: false }).ok, false);
-  assert.equal(validateStageTransition({ from: 'New', to: 'Lost', lostReasonId: 'LR-01', isManager: false }).ok, true);
-  // forward-only: Sales cannot move back; managers can, but only with a reason
-  assert.equal(validateStageTransition({ from: 'Contacted', to: 'Negotiation', isManager: false }).ok, true);
-  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: false }).ok, false);
-  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: true }).ok, false);
-  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: true, remarks: 'Wrong stage' }).ok, true);
-  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: false, remarks: 'x' }).ok, false);
-  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: true }).ok, false);
-  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: true, remarks: 'Order revised' }).ok, true);
-  assert.equal(validateStageTransition({ from: 'New', to: 'Bogus', isManager: true }).ok, false);
-  assert.equal(validateStageTransition({ from: 'New', to: 'New', isManager: true }).ok, false);
+test('stage transitions: lost needs reason, reopen needs manager, and minimum 50 words remarks', () => {
+  const sample50Words = "The customer requested an in-depth revision of the commercial quotation and technical specification for the project. We conducted a comprehensive discovery call to understand their electrical capacity and delivery timelines. They confirmed satisfaction with our standard terms and indicated willingness to proceed to the next milestone once formal approval is granted.";
+  const shortRemarks = "Customer agreed to move forward.";
+
+  // Missing lost reason
+  assert.equal(validateStageTransition({ from: 'New', to: 'Lost', isManager: false, remarks: sample50Words }).ok, false);
+  // Valid Lost with reason and 50 words
+  assert.equal(validateStageTransition({ from: 'New', to: 'Lost', lostReasonId: 'LR-01', isManager: false, remarks: sample50Words }).ok, true);
+
+  // Less than 50 words remarks fails
+  assert.equal(validateStageTransition({ from: 'Contacted', to: 'Negotiation', isManager: false, remarks: shortRemarks }).ok, false);
+  // 50+ words remarks succeeds
+  assert.equal(validateStageTransition({ from: 'Contacted', to: 'Negotiation', isManager: false, remarks: sample50Words }).ok, true);
+
+  // Backward transition: sales cannot move back even with 50 words
+  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: false, remarks: sample50Words }).ok, false);
+  // Backward transition: manager without 50 words fails
+  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: true, remarks: 'Wrong stage' }).ok, false);
+  // Backward transition: manager with 50 words succeeds
+  assert.equal(validateStageTransition({ from: 'Negotiation', to: 'Contacted', isManager: true, remarks: sample50Words }).ok, true);
+
+  // Reopen closed lead: sales cannot reopen
+  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: false, remarks: sample50Words }).ok, false);
+  // Reopen closed lead: manager without 50 words fails
+  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: true, remarks: 'Order revised' }).ok, false);
+  // Reopen closed lead: manager with 50 words succeeds
+  assert.equal(validateStageTransition({ from: 'Won', to: 'Negotiation', isManager: true, remarks: sample50Words }).ok, true);
+
+  // Invalid stage and same stage
+  assert.equal(validateStageTransition({ from: 'New', to: 'Bogus', isManager: true, remarks: sample50Words }).ok, false);
+  assert.equal(validateStageTransition({ from: 'New', to: 'New', isManager: true, remarks: sample50Words }).ok, false);
 });
 
 test('phone normalisation keeps last 10 digits', () => {
