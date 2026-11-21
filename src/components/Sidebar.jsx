@@ -331,6 +331,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SALES & CRM',
           items: [
             { label: 'Dashboard', icon: LayoutDashboard },
+            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
             { label: 'Leads', icon: Users, badge: 'New' },
             { label: 'Customers', icon: Building2 },
             { label: 'New Monthly Customers', targetTab: 'Monthly Customers by Rep', icon: UserCheck },
@@ -379,6 +380,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'SUPPORT CHANNELS & CRM',
           items: [
+            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
             { label: 'Leads Directory', targetTab: 'Leads', icon: Users },
             { label: 'Customers', targetTab: 'Customers', icon: Building2 },
             { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
@@ -418,7 +420,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'executive_dashboard',
           dashboardSubTab: 'overview',
           items: [
-            { label: role === 'HR' ? 'Operations Overview' : 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard }
+            { label: role === 'HR' ? 'Operations Overview' : 'Company Overview', targetTab: 'Dashboard', subTabTarget: 'overview', icon: LayoutDashboard },
+            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' }
           ]
         },
         {
@@ -426,6 +429,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'crm_leads',
           dashboardSubTab: 'crm-dashboard',
           items: [
+            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
             { label: 'All Leads', targetTab: 'Leads', icon: Users },
             { label: 'Customer Management', targetTab: 'Customers', icon: Building2 }
           ]
@@ -512,6 +516,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SYSTEM ADMINISTRATION',
           items: [
             { label: 'Admin Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
+            { label: 'Smart Leads', icon: Sparkles, badge: 'Smart' },
             { label: 'User & Access Control', targetTab: 'User Management', icon: Users },
             { label: 'Database & DB Health', targetTab: 'System Health', icon: Activity },
             { label: 'Active Sessions', targetTab: 'Active Sessions', icon: Lock },
@@ -601,6 +606,13 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   };
 
   const getBadgeStyle = (label) => {
+    if (label === 'Smart Leads') {
+      return {
+        backgroundColor: '#ECFEFF',
+        color: '#0E7490',
+        border: '1px solid #A5F3FC'
+      };
+    }
     if (label === 'Purchase Orders' || label === 'Purchase Order Approvals') {
       return {
         backgroundColor: '#FEF3C7',
