@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, Search, Phone, MessageCircle, RefreshCw } from 'lucide-react';
-import { slApi, onSmartLeadChange, formatINR, formatDate, isOverdue } from './smartLeadsApi';
+import { Plus, Search, Phone, MessageCircle, RotateCcw, Building2, X, User, Calendar, CalendarClock, Eye, Edit3, UserCheck, ArrowRightLeft, Trash2 } from 'lucide-react';
+import { slApi, onSmartLeadChange, formatDate, isOverdue } from './smartLeadsApi';
 import { StageBadge, TempBadge, Pager, EmptyState, SkeletonRows } from './SlShared';
 import LeadFormModal from './LeadFormModal';
-import { StageModal, AssignModal } from './LeadActions';
+import { StageModal, AssignModal, ScheduleFollowupModal } from './LeadActions';
 
 const EMPTY_FILTERS = { search: '', stage: '', source: '', owner: '', temperature: '', due: '', sort: 'newest' };
 
-export default function AllLeadsView({ meta, onOpenLead, toast }) {
+export default function AllLeadsView({ meta, onOpenLead, toast, canCreateLead = true }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(1);
@@ -20,6 +20,9 @@ export default function AllLeadsView({ meta, onOpenLead, toast }) {
   const reqId = useRef(0);
   const isManager = !!meta?.me?.isManager;
   const isAdmin = !!meta?.me?.isAdmin;
+  const activeRole = String(meta?.me?.role || localStorage.getItem('vrm_user_role') || '').toLowerCase().trim();
+  const isSales = /sales/i.test(activeRole) && !/ceo|tech\s*support|technical\s*support|technical\s*admin|admin|md/i.test(activeRole);
+  const effectiveCanCreate = canCreateLead && !isSales;
 
   const load = useCallback(async () => {
     const id = ++reqId.current;
@@ -84,93 +87,277 @@ export default function AllLeadsView({ meta, onOpenLead, toast }) {
 
   return (
     <div>
-      <div className="sl-toolbar">
-        <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 360 }}>
-          <Search size={15} style={{ position: 'absolute', left: 10, top: 11, color: '#9CA3AF' }} />
-          <input className="sl-input" style={{ paddingLeft: 32, maxWidth: 'none' }} placeholder="Search company, contact, phone, lead no." value={searchInput} onChange={e => setSearchInput(e.target.value)} aria-label="Search leads" />
+      {/* Search & Filter Bar (Matching CRM Customers Standard Design) */}
+      <div style={{
+        display: 'flex',
+        padding: '12px 16px',
+        backgroundColor: '#fafbfc',
+        borderRadius: '12px',
+        border: '1px solid #e2e8f0',
+        alignItems: 'center',
+        width: '100%',
+        boxSizing: 'border-box',
+        justifyContent: 'space-between',
+        gap: '12px',
+        flexWrap: 'wrap',
+        marginBottom: '14px'
+      }}>
+        {/* Left Search Input */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          padding: '0 12px',
+          height: '38px',
+          backgroundColor: '#f8fafc',
+          width: '360px',
+          maxWidth: '100%'
+        }}>
+          <Search style={{ width: '15px', height: '15px', color: '#64748b', flexShrink: 0 }} />
+          <input
+            id="smart-leads-search-term"
+            type="text"
+            placeholder="Search Leads (Company, Contact, Phone, Lead No)..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
+            aria-label="Search leads"
+          />
+          {searchInput && (
+            <X size={15} color="#94A3B8" style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => setSearchInput('')} />
+          )}
         </div>
-        <select className="sl-select" value={filters.source} onChange={e => setFilter('source', e.target.value)} aria-label="Source">
-          <option value="">All sources</option>
-          {['IndiaMART', 'Website', 'WhatsApp', 'Referral', 'Manual', 'Direct', 'Meta'].map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {isManager && (
-          <select className="sl-select" value={filters.owner} onChange={e => setFilter('owner', e.target.value)} aria-label="Owner">
-            <option value="">All owners</option>
-            <option value="unassigned">Unassigned</option>
-            {(meta?.team || []).map(t => <option key={t.user_id} value={t.user_id}>{t.name}</option>)}
-          </select>
-        )}
-        <select className="sl-select" value={filters.temperature} onChange={e => setFilter('temperature', e.target.value)} aria-label="Priority">
-          <option value="">Hot / Warm / Cold</option>
-          {['Hot', 'Warm', 'Cold'].map(t => <option key={t}>{t}</option>)}
-        </select>
-        <select className="sl-select" value={filters.due} onChange={e => setFilter('due', e.target.value)} aria-label="Next action">
-          <option value="">Any next action</option>
-          <option value="overdue">Overdue</option>
-          <option value="today">Due today</option>
-          <option value="none">No next action</option>
-        </select>
-        <select className="sl-select" value={filters.sort} onChange={e => setFilter('sort', e.target.value)} aria-label="Sort">
-          <option value="newest">Newest</option>
-          <option value="score">Highest score</option>
-          <option value="due">Next action due</option>
-          <option value="value">Highest value</option>
-          <option value="updated">Recently updated</option>
-        </select>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button className="sl-btn" onClick={load} aria-label="Refresh"><RefreshCw size={14} /></button>
-          <button className="sl-btn sl-btn-primary" onClick={() => setModal({ type: 'create' })}><Plus size={15} /> New lead</button>
-        </div>
-      </div>
 
-      <div className="sl-chips" role="tablist" aria-label="Stage filter">
-        <button className={`sl-chip ${!filters.stage ? 'active' : ''}`} onClick={() => setFilter('stage', '')}>All<span className="n">{filters.stage ? '' : totalAll}</span></button>
-        {stages.map(s => (
-          <button key={s} className={`sl-chip ${filters.stage === s ? 'active' : ''}`} onClick={() => setFilter('stage', s)}>
-            {s}{!filters.stage && <span className="n">{data.stageCounts[s] || 0}</span>}
+        {/* Right Stage Dropdown, Reset & Actions */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0, marginLeft: 'auto' }}>
+          {/* Stage Dropdown (All, New, Contacted, Qualified, Quotation Sent, Negotiation, Won, Lost) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#FFFFFF' }}>
+            <Building2 style={{ width: '14px', height: '14px', color: '#64748b', flexShrink: 0 }} />
+            <select
+              id="smart-leads-stage-select"
+              aria-label="Filter by stage"
+              value={filters.stage}
+              onChange={(e) => setFilter('stage', e.target.value)}
+              style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent', cursor: 'pointer' }}
+            >
+              <option value="">All Stages {totalAll > 0 ? `(${totalAll})` : ''}</option>
+              {stages.map(s => (
+                <option key={s} value={s}>
+                  {s} {data.stageCounts[s] ? `(${data.stageCounts[s]})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Reset / Reload Filter button (RotateCcw) */}
+          <button
+            onClick={() => {
+              setSearchInput('');
+              setFilters(EMPTY_FILTERS);
+              setPage(1);
+              setSelected([]);
+              load();
+            }}
+            title="Reset Filters"
+            style={{
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              color: '#475569',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '8px',
+              height: '38px',
+              width: '38px',
+              flexShrink: 0
+            }}
+          >
+            <RotateCcw style={{ width: '15px', height: '15px' }} />
           </button>
-        ))}
+
+          {/* New Lead (Admin / Privileged Only) */}
+          {effectiveCanCreate && (
+            <button
+              onClick={() => setModal({ type: 'create' })}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '38px',
+                padding: '0 14px',
+                borderRadius: '8px',
+                border: '1px solid #0E7490',
+                background: '#0E7490',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 1px 2px rgba(14,116,144,0.2)'
+              }}
+            >
+              <Plus size={15} /> New lead
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="sl-alert sl-alert-error">{error} <button className="sl-btn sl-btn-sm" style={{ marginLeft: 8 }} onClick={load}>Retry</button></div>}
 
       <div className="sl-card sl-table-wrap">
         {loading && data.rows.length === 0 ? <SkeletonRows /> : data.rows.length === 0 ? (
-          <EmptyState title="No leads found" text="Try adjusting filters, or create a new lead." action={<button className="sl-btn sl-btn-primary" onClick={() => setModal({ type: 'create' })}><Plus size={15} /> New lead</button>} />
+          <EmptyState
+            title="No leads found"
+            text={effectiveCanCreate ? "Try adjusting filters, or create a new lead." : "Try adjusting your filters to find leads."}
+            action={effectiveCanCreate ? <button className="sl-btn sl-btn-primary" onClick={() => setModal({ type: 'create' })}><Plus size={15} /> New lead</button> : null}
+          />
         ) : (
           <>
-            <table className="sl-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 36 }}><input type="checkbox" checked={allOnPage} onChange={toggleAll} aria-label="Select all on page" /></th>
-                  <th>Lead</th>
-                  <th>Contact</th>
-                  <th>Stage</th>
-                  <th>Priority</th>
-                  <th>Owner</th>
-                  <th>Next action</th>
-                  <th style={{ textAlign: 'right' }}>Est. value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map(l => (
-                  <tr key={l.id} className={selected.includes(l.id) ? 'selected' : ''} onClick={() => onOpenLead(l.id)}>
-                    <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${l.company_name}`} /></td>
-                    <td><div className="sl-strong">{l.company_name}</div><div className="sl-faint">{l.lead_number} · {l.source || '—'} · {formatDate(l.created_at)}</div></td>
-                    <td><div>{l.contact_person || '—'}</div><div className="sl-faint">{l.phone || l.email || '—'}</div></td>
-                    <td><StageBadge stage={l.pipeline_stage} /></td>
-                    <td><TempBadge temperature={l.temperature} score={l.score} /></td>
-                    <td>{l.assigned_to_name || <span className="sl-faint">Unassigned</span>}</td>
-                    <td>
-                      {l.next_action_due_at ? (
-                        <><div className={isOverdue(l.next_action_due_at) ? 'sl-overdue' : ''}>{formatDate(l.next_action_due_at, true)}</div><div className="sl-faint sl-ellipsis" style={{ maxWidth: 180 }}>{l.next_action}</div></>
-                      ) : <span className="sl-faint">{['Won', 'Lost'].includes(l.pipeline_stage) ? '—' : 'Not set'}</span>}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{l.estimated_value ? formatINR(l.estimated_value) : <span className="sl-faint">—</span>}</td>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <table className="sl-table custom-table" style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
+                    <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
+                      <input
+                        type="checkbox"
+                        checked={allOnPage}
+                        onChange={toggleAll}
+                        style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '16px', height: '16px' }}
+                        aria-label="Select all on page"
+                      />
+                    </th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Lead & Company</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Primary Contact</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap', textAlign: 'center' }}>Stage</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Priority</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Assigned To</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Next Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.rows.map(l => {
+                    const isChecked = selected.includes(l.id);
+                    return (
+                      <tr
+                        key={l.id}
+                        className={`table-row-hover ${isChecked ? 'selected' : ''}`}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                        onClick={() => onOpenLead(l.id)}
+                      >
+                        <td
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            width: '48px',
+                            minWidth: '48px',
+                            maxWidth: '48px',
+                            padding: '12px 0',
+                            textAlign: 'center',
+                            verticalAlign: 'middle',
+                            boxSizing: 'border-box',
+                            borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggle(l.id)}
+                            style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '16px', height: '16px' }}
+                            aria-label={`Select ${l.company_name}`}
+                          />
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>{l.company_name}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 700 }}>{l.lead_number}</span>
+                            {l.source && <span style={{ fontSize: '11px', color: '#64748B' }}>• {l.source}</span>}
+                            {l.created_at && <span style={{ fontSize: '11px', color: '#94A3B8' }}>• {formatDate(l.created_at)}</span>}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ fontWeight: 600, color: '#1E293B', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <User size={13} style={{ color: '#64748B' }} />
+                            <span>{l.contact_person || '—'}</span>
+                          </div>
+                          {(l.phone || l.email) && (
+                            <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                              {l.phone && <><Phone size={11} style={{ color: '#94A3B8' }} /> <span>{l.phone}</span></>}
+                              {l.phone && l.email && <span>·</span>}
+                              {l.email && <span style={{ color: '#94A3B8' }}>{l.email}</span>}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <StageBadge stage={l.pipeline_stage} />
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          <TempBadge temperature={l.temperature} score={l.score} />
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          {l.assigned_to_name ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                backgroundColor: '#E0F2FE',
+                                color: '#0369A1',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                {l.assigned_to_name.charAt(0).toUpperCase()}
+                              </div>
+                              <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '12px' }}>
+                                {l.assigned_to_name}
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#D97706', fontWeight: 600, backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '4px' }}>
+                              Unassigned
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          {l.next_action_due_at ? (
+                            <div>
+                              <div style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: isOverdue(l.next_action_due_at) ? '#DC2626' : '#0E7490',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                <Calendar size={11} /> {formatDate(l.next_action_due_at, true)}
+                              </div>
+                              {l.next_action && (
+                                <div style={{ fontSize: '11px', color: '#64748B', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
+                                  {l.next_action}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                              {['Won', 'Lost'].includes(l.pipeline_stage) ? '—' : 'Not set'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             <div className="sl-mlist">
               {data.rows.map(l => (
@@ -200,19 +387,47 @@ export default function AllLeadsView({ meta, onOpenLead, toast }) {
 
       {selected.length > 0 && (
         <div className="sl-actionbar" role="toolbar" aria-label="Selected leads actions">
-          <span>{selected.length} Selected</span>
+          <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px', paddingRight: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selected.length}</strong> Selected
+          </span>
           <span className="sep" />
-          {selected.length === 1 && <button onClick={() => onOpenLead(selected[0])}>👁️ View Details</button>}
-          {selected.length === 1 && <button onClick={() => setModal({ type: 'edit', lead: selectedLeads[0] })}>✏️ Edit Info</button>}
-          {isManager && <button onClick={() => setModal({ type: 'assign' })}>👤 Reassign</button>}
-          {isManager && <button onClick={() => setModal({ type: 'stage' })}>↔️ Change Stage</button>}
-          {isAdmin && <button onClick={bulkDelete}>🗑️ Delete</button>}
-          <button onClick={() => setSelected([])} aria-label="Clear selection">✕</button>
+          {selected.length === 1 && (
+            <button onClick={() => onOpenLead(selected[0])}>
+              <Eye size={13} style={{ color: '#64748B' }} /> View Details
+            </button>
+          )}
+          {selected.length === 1 && (
+            <button onClick={() => setModal({ type: 'edit', lead: selectedLeads[0] })}>
+              <Edit3 size={13} style={{ color: '#64748B' }} /> Edit Info
+            </button>
+          )}
+          {selected.length === 1 && (
+            <button onClick={() => setModal({ type: 'followup', lead: selectedLeads[0] })}>
+              <CalendarClock size={13} style={{ color: '#64748B' }} /> Follow-up
+            </button>
+          )}
+          {isManager && (
+            <button onClick={() => setModal({ type: 'assign' })}>
+              <UserCheck size={13} style={{ color: '#64748B' }} /> Reassign
+            </button>
+          )}
+          {isManager && (
+            <button onClick={() => setModal({ type: 'stage' })}>
+              <ArrowRightLeft size={13} style={{ color: '#64748B' }} /> Change Stage
+            </button>
+          )}
+          {isAdmin && (
+            <button className="sl-actionbar-danger" onClick={bulkDelete}>
+              <Trash2 size={13} /> Delete
+            </button>
+          )}
+          <button className="sl-actionbar-close" onClick={() => setSelected([])} aria-label="Clear selection">✕</button>
         </div>
       )}
 
       {modal?.type === 'create' && <LeadFormModal meta={meta} onClose={() => setModal(null)} onSaved={afterAction} />}
       {modal?.type === 'edit' && <LeadEditLoader lead={modal.lead} meta={meta} onClose={() => setModal(null)} onSaved={afterAction} toast={toast} />}
+      {modal?.type === 'followup' && <ScheduleFollowupModal lead={modal.lead} onClose={() => setModal(null)} onDone={afterAction} />}
       {modal?.type === 'assign' && <AssignModal meta={meta} leads={selectedLeads} onClose={() => setModal(null)} onDone={afterAction} />}
       {modal?.type === 'stage' && (
         selectedLeads.length === 1

@@ -14,7 +14,8 @@ const SUMMARY_COLS = `
   l.id, l.lead_number, l.company_name, l.contact_person, l.phone, l.whatsapp, l.email, l.source,
   l.status, l.pipeline_stage, l.priority, l.temperature, l.score, l.estimated_value, l.estimated_kw,
   l.category, l.location, l.territory, l.assigned_to_user_id, l.assigned_to_name, l.next_action,
-  l.next_action_due_at, l.next_action_exception, l.last_activity_at, l.lost_reason_id, l.created_at, l.updated_at`;
+  l.next_action_due_at, l.next_action_exception, l.last_activity_at, l.last_qualifying_activity_at,
+  l.customer_id, l.customer_code, l.lost_reason_id, l.created_at, l.updated_at`;
 
 const EDITABLE_FIELDS = {
   company_name: 'text', contact_person: 'text', designation: 'text', phone: 'text', whatsapp: 'text',
@@ -78,7 +79,18 @@ export async function getSettings() {
   return {
     stageProbabilities: { ...DEFAULT_STAGE_PROBABILITIES, ...(map.stage_probabilities || {}) },
     sla: { ...DEFAULT_SLA, ...(map.sla || {}) },
-    scoring: { ...DEFAULT_SCORING, ...(map.scoring || {}) }
+    scoring: { ...DEFAULT_SCORING, ...(map.scoring || {}) },
+    workspace: {
+      name: 'BUSINZ Industrial Dynamics',
+      url: 'businz.cloud/app',
+      industry: 'Solar & Heavy Industrial Manufacturing',
+      description: 'Unified enterprise CRM, quotation engine, proforma invoice generation, BOM production tracking, and dispatch control system.',
+      weekStartsOn: 'Monday',
+      language: 'English (US)',
+      timezone: 'UTC+05:30 Asia/Kolkata (IST)',
+      allowMemberLeadCreation: true,
+      ...(map.workspace || {})
+    }
   };
 }
 
@@ -183,6 +195,64 @@ async function insertAudit(client, leadId, field, oldV, newV, actor) {
   );
 }
 
+async function getNextRoundRobinAssignee(client, team) {
+  if (!team || team.length === 0) return null;
+  // Concurrency-safe advisory lock specifically for round-robin pointer
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext('smart_leads_round_robin'))`);
+  const cur = await client.query(`SELECT value FROM public.lead_settings WHERE key = 'round_robin_pointer' FOR UPDATE`);
+  let lastIndex = cur.rows[0]?.value?.index != null ? Number(cur.rows[0].value.index) : -1;
+  const nextIndex = (lastIndex + 1) % team.length;
+  await client.query(`
+    INSERT INTO public.lead_settings (key, value, updated_at)
+    VALUES ('round_robin_pointer', $1::jsonb, NOW())
+    ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = NOW()
+  `, [JSON.stringify({ index: nextIndex, last_assigned_user_id: team[nextIndex].user_id, last_assigned_at: new Date().toISOString() })]);
+  return team[nextIndex];
+}
+
+async function findExistingCustomerMatch(client, { phone, whatsapp, email, company_name }) {
+  const p1 = normalizePhone(phone);
+  const p2 = normalizePhone(whatsapp);
+  const mail = normalizeEmail(email);
+  const comp = String(company_name || '').trim().toLowerCase();
+  
+  if (!p1 && !p2 && !mail && !comp) return null;
+
+  // 1. Search Customer Master
+  const cmRes = await client.query(`
+    SELECT id, customer_code, company_name, customer_name, assigned_salesperson
+    FROM public.customers
+    WHERE (company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $1)
+       OR ($2 <> '' AND (RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $2))
+       OR ($3 <> '' AND (RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $3))
+       OR ($4 <> '' AND LOWER(COALESCE(email, '')) = $4)
+    ORDER BY created_at DESC LIMIT 1
+  `, [comp, p1, p2, mail]);
+
+  if (cmRes.rows.length) {
+    return { type: 'CUSTOMER_MASTER', record: cmRes.rows[0] };
+  }
+
+  // 2. Search existing active leads
+  const leadRes = await client.query(`
+    SELECT id, lead_number, company_name, assigned_to_user_id, assigned_to_name, assigned_to_role, customer_id, customer_code
+    FROM public.leads
+    WHERE deleted_at IS NULL AND assigned_to_user_id IS NOT NULL
+      AND (
+        (company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $1)
+        OR ($2 <> '' AND (RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $2))
+        OR ($3 <> '' AND (RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $3))
+        OR ($4 <> '' AND LOWER(COALESCE(email, '')) = $4)
+      )
+    ORDER BY created_at DESC LIMIT 1
+  `, [comp, p1, p2, mail]);
+
+  if (leadRes.rows.length) {
+    return { type: 'EXISTING_LEAD', record: leadRes.rows[0] };
+  }
+  return null;
+}
+
 /**
  * @param {object} deps
  * @param {Function} deps.requireSession  Express middleware that sets req.userSession ({ empCode, user, role })
@@ -239,7 +309,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
   router.put('/settings/:key', wrap(async (req, res) => {
     requireAdmin(req);
-    const keyMap = { stageProbabilities: 'stage_probabilities', sla: 'sla', scoring: 'scoring' };
+    const keyMap = { stageProbabilities: 'stage_probabilities', sla: 'sla', scoring: 'scoring', workspace: 'workspace' };
     const key = keyMap[req.params.key];
     if (!key) throw new HttpError(400, 'Unknown setting');
     const value = req.body?.value;
@@ -387,7 +457,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     const phone10 = normalizePhone(lead.phone || lead.whatsapp);
     const companyClean = String(lead.company_name || '').trim().toLowerCase();
 
-    const [notes, activities, statusHist, assignHist, audit, followups, quotations, customerMatch, relatedLeads] = await Promise.all([
+    const [notes, activities, statusHist, assignHist, audit, followups, quotations, customerMatch, relatedLeads, proformaInvoices, bomOrders, invoices] = await Promise.all([
       query(`SELECT id, body, created_by_name, created_at FROM public.lead_notes WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 100`, [id]),
       query(`SELECT id, activity_type, summary, customer_response, conducted_by_name, created_at FROM public.lead_activities WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 100`, [id]),
       query(`SELECT id, previous_status, new_status, remarks, updated_by_name, created_at FROM public.lead_status_history WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 100`, [id]),
@@ -408,14 +478,40 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
               WHERE id <> $1 AND deleted_at IS NULL
                 AND ((company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $2)
                      OR ($3 <> '' AND (RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $3)))
-              ORDER BY created_at DESC LIMIT 5`, [id, companyClean, phone10])
+              ORDER BY created_at DESC LIMIT 5`, [id, companyClean, phone10]),
+      // Linked Proforma Invoices (PIs)
+      query(`SELECT id, pi_no, customer_name, grand_total, total_amount, pi_date, status, sales_person
+               FROM public.proforma_invoices
+              WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
+                 OR (pi_no IN (SELECT converted_pi_no FROM public.quotations WHERE lead_id = $2 AND converted_pi_no IS NOT NULL))
+              ORDER BY pi_date DESC LIMIT 50`, [companyClean, id]).catch(() => ({ rows: [] })),
+      // Linked BOM Production Orders
+      query(`SELECT id, bom_code, source_pi_no, customer_name, company_name, grand_total, date, status
+               FROM public.bom_orders
+              WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
+                 OR (company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $1)
+                 OR (source_pi_no IN (SELECT converted_pi_no FROM public.quotations WHERE lead_id = $2 AND converted_pi_no IS NOT NULL))
+              ORDER BY date DESC LIMIT 50`, [companyClean, id]).catch(() => ({ rows: [] })),
+      // Linked Final Tax Invoices
+      query(`SELECT id, inv_no, bom_code, inv_amt, status, created_at
+               FROM public.invoices
+              WHERE bom_code IN (
+                SELECT bom_code FROM public.bom_orders
+                WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
+                   OR (source_pi_no IN (SELECT converted_pi_no FROM public.quotations WHERE lead_id = $2 AND converted_pi_no IS NOT NULL))
+              )
+              ORDER BY created_at DESC LIMIT 50`, [companyClean, id]).catch(() => ({ rows: [] }))
     ]);
     res.json({
       success: true, lead,
       customerMaster: customerMatch.rows[0] || null,
       relatedLeads: relatedLeads.rows,
       notes: notes.rows, activities: activities.rows, statusHistory: statusHist.rows,
-      assignmentHistory: assignHist.rows, audit: audit.rows, followups: followups.rows, quotations: quotations.rows
+      assignmentHistory: assignHist.rows, audit: audit.rows, followups: followups.rows,
+      quotations: quotations.rows,
+      proformaInvoices: proformaInvoices.rows,
+      bomOrders: bomOrders.rows,
+      invoices: invoices.rows
     });
   }));
 
@@ -427,13 +523,16 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
   // ---------- Create ----------
   router.post('/leads', wrap(async (req, res) => {
-    const b = req.body || {};
-    const company = String(b.company_name || '').trim();
-    if (!company) throw new HttpError(400, 'Company name is required');
-    if (company.length > 200) throw new HttpError(400, 'Company name too long');
-    if (!normalizePhone(b.phone) && !normalizeEmail(b.email)) throw new HttpError(400, 'Phone (10+ digits) or email is required');
-    if (b.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(b.email).trim())) throw new HttpError(400, 'Invalid email');
     const actor = actorOf(req.userSession);
+    if (/sales/i.test(actor.role) && !isLeadManager(actor.role)) {
+      throw new HttpError(403, 'Sales accounts do not have permission to manually create new leads.');
+    }
+    const b = req.body || {};
+    const company = String(b.company_name || '').trim() || String(b.contact_person || '').trim() || (b.phone ? `Contact ${b.phone}` : 'Individual Customer');
+    if (company.length > 200) throw new HttpError(400, 'Company name too long');
+    const phoneClean = String(b.phone || '').replace(/\D/g, '');
+    if (!phoneClean || phoneClean.length < 10) throw new HttpError(400, 'Phone number is required (at least 10 digits)');
+    if (b.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(b.email).trim())) throw new HttpError(400, 'Invalid email');
     const settings = await getSettings();
     const team = await getTeam();
 
@@ -521,7 +620,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         if (type === 'number') v = v === '' || v == null ? null : Number(v);
         else v = v == null ? null : String(v).trim() || null;
         if (type === 'number' && v != null && !Number.isFinite(v)) throw new HttpError(400, `${field} must be a number`);
-        if (field === 'company_name' && !v) throw new HttpError(400, 'Company name is required');
+        if (field === 'phone' && (!v || v.replace(/\D/g, '').length < 10)) throw new HttpError(400, 'Phone number is required (at least 10 digits)');
         if (field === 'email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new HttpError(400, 'Invalid email');
         if (field === 'priority' && v) v = v.toUpperCase();
         const old = cur[field];
@@ -762,8 +861,17 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
          VALUES ($1,$2,$3,TRUE,$4,$5,$6,$7,$8,NOW())`,
         [genId('LAC'), cur.id, type, summary, req.body?.customerResponse || null, actor.id, actor.name, actor.role]
       );
+      // Single entry notes integration: persist logged activity summary into notes timeline
+      const noteBody = `[${type} Logged] ${summary}${req.body?.customerResponse ? ` · Customer response: ${req.body.customerResponse}` : ''}`;
       await client.query(
-        `UPDATE public.leads SET last_activity_at = NOW(), last_qualifying_activity_at = NOW(), last_activity_type = $2,
+        `INSERT INTO public.lead_notes (id, lead_id, body, created_by_user_id, created_by_name, created_at)
+         VALUES ($1,$2,$3,$4,$5,NOW())`,
+        [genId('LNT'), cur.id, noteBody, actor.id, actor.name]
+      );
+      await client.query(
+        `UPDATE public.leads SET last_activity_at = NOW(), last_qualifying_activity_at = NOW(),
+            first_qualifying_activity_at = COALESCE(first_qualifying_activity_at, NOW()),
+            last_activity_type = $2,
             is_unattended_2h = FALSE, is_unattended_24h = FALSE, is_unattended_48h = FALSE, updated_at = NOW()
           WHERE id = $1`, [cur.id, type]
       );
@@ -949,6 +1057,15 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         [genId('LAC'), cur.id, `Scheduled ${followupType}: ${notes || 'No notes'} for ${scheduledAt.toLocaleString('en-IN')}`, actor.id, actor.name, actor.role]
       );
 
+      // Single entry notes integration: persist to lead notes timeline without duplicate typing
+      if (notes) {
+        await client.query(
+          `INSERT INTO public.lead_notes (id, lead_id, body, created_by_user_id, created_by_name, created_at)
+           VALUES ($1,$2,$3,$4,$5,NOW())`,
+          [genId('LNT'), cur.id, `[Follow-up Scheduled: ${followupType} for ${scheduledAt.toLocaleString('en-IN')}] ${notes}`, actor.id, actor.name]
+        );
+      }
+
       return ins.rows[0];
     });
 
@@ -978,14 +1095,23 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
       // Log lead activity
       await client.query(
-        `INSERT INTO public.lead_activities (id, lead_id, activity_type, summary, customer_response, conducted_by_user_id, conducted_by_name, conducted_by_role, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
+        `INSERT INTO public.lead_activities (id, lead_id, activity_type, is_qualifying_activity, summary, customer_response, conducted_by_user_id, conducted_by_name, conducted_by_role, created_at)
+         VALUES ($1,$2,$3,TRUE,$4,$5,$6,$7,$8,NOW())`,
         [
           genId('LAC'), f.lead_id, f.followup_type || 'CALL',
           `Follow-up completed [Outcome: ${outcome}] - ${outcomeRemarks || 'Completed successfully'}`,
           outcomeRemarks || outcome, actor.id, actor.name, actor.role
         ]
       );
+
+      // Single entry notes integration: persist outcome remarks to notes timeline
+      if (outcomeRemarks) {
+        await client.query(
+          `INSERT INTO public.lead_notes (id, lead_id, body, created_by_user_id, created_by_name, created_at)
+           VALUES ($1,$2,$3,$4,$5,NOW())`,
+          [genId('LNT'), f.lead_id, `[Follow-up Completed - ${outcome}] ${outcomeRemarks}`, actor.id, actor.name]
+        );
+      }
 
       // If next follow-up was provided, schedule it
       let nextF = null;
@@ -1006,7 +1132,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         }
       }
 
-      // Refresh lead's next_action_due_at and last_activity
+      // Refresh lead's next_action_due_at, last_activity, and qualifying activity
       await client.query(
         `UPDATE public.leads 
          SET next_action_due_at = (
@@ -1014,6 +1140,8 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
          ),
          last_activity_at = NOW(),
          last_activity_type = $2,
+         last_qualifying_activity_at = NOW(),
+         first_qualifying_activity_at = COALESCE(first_qualifying_activity_at, NOW()),
          is_unattended_2h = FALSE,
          is_unattended_24h = FALSE,
          is_unattended_48h = FALSE,
@@ -1187,6 +1315,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
   // ── 9. Sales Team Workload & Performance ────────────────────────────────────
   router.get('/team', wrap(async (req, res) => {
+    requireManager(req);
     const team = await getTeam();
     const [leadAgg, followupAgg] = await Promise.all([
       query(`
@@ -1482,6 +1611,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
 
   // ── 11. Lead Automation & Inbound Rules ─────────────────────────────────────
   router.get('/automation', wrap(async (req, res) => {
+    requireManager(req);
     const s = await query(`SELECT value FROM public.lead_settings WHERE key = 'automation_rules'`);
     const val = s.rows[0]?.value || DEFAULT_AUTOMATION;
     res.json({ success: true, data: val });
@@ -1570,51 +1700,405 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     res.json({ success: true, message: `Inbound lead created successfully via webhook simulator!`, lead: leadNum });
   }));
 
+  // ── Unified Inbound Lead Intake (Website, WhatsApp, Meta Ads, IndiaMART) ─────
+  router.post('/inbound', wrap(async (req, res) => {
+    const b = req.body || {};
+    const source = String(b.source || 'Website Inbound').trim();
+    const phoneClean = String(b.phone || b.mobile || '').replace(/\D/g, '');
+    if (!phoneClean || phoneClean.length < 10) {
+      throw new HttpError(400, 'Valid phone number is required (at least 10 digits)');
+    }
+    const company = String(b.company_name || '').trim() || String(b.contact_person || '').trim() || `Contact ${phoneClean.slice(-10)}`;
+    const email = b.email ? String(b.email).trim() : null;
+    const team = await getTeam();
+    const settings = await getSettings();
+
+    // Idempotency check
+    const idempKey = String(b.idempotency_key || b.external_enquiry_id || `${source}_${phoneClean.slice(-10)}_${Date.now()}`);
+
+    const lead = await withTx(async (client) => {
+      // 1. Check idempotency table
+      const idempRes = await client.query(
+        `SELECT lead_id FROM public.lead_webhook_events WHERE idempotency_key = $1`, [idempKey]
+      );
+      if (idempRes.rows.length && idempRes.rows[0].lead_id) {
+        const existing = await client.query(`SELECT ${SUMMARY_COLS} FROM public.leads l WHERE id = $1`, [idempRes.rows[0].lead_id]);
+        if (existing.rows.length) return existing.rows[0];
+      }
+
+      // 2. Customer Master match or active lead match
+      const custMatch = await findExistingCustomerMatch(client, {
+        phone: phoneClean, whatsapp: b.whatsapp, email, company_name: company
+      });
+      let customerId = null;
+      let customerCode = null;
+      let assignee = null;
+
+      if (custMatch) {
+        if (custMatch.type === 'CUSTOMER_MASTER') {
+          customerId = custMatch.record.id;
+          customerCode = custMatch.record.customer_code;
+          if (custMatch.record.assigned_salesperson) {
+            assignee = team.find(t => 
+              t.user_id === custMatch.record.assigned_salesperson ||
+              t.name.toLowerCase() === custMatch.record.assigned_salesperson.toLowerCase()
+            );
+          }
+        } else if (custMatch.type === 'EXISTING_LEAD') {
+          customerId = custMatch.record.customer_id;
+          customerCode = custMatch.record.customer_code;
+          if (custMatch.record.assigned_to_user_id) {
+            assignee = team.find(t => t.user_id === custMatch.record.assigned_to_user_id);
+          }
+        }
+      }
+
+      // 3. Concurrency-Safe Round-Robin if no existing rep matched
+      if (!assignee && team.length > 0) {
+        assignee = await getNextRoundRobinAssignee(client, team);
+      }
+
+      // 4. Create Lead
+      const id = genId('SLD');
+      const leadNumber = await nextLeadNumber(client);
+      const stage = 'New';
+      await client.query(
+        `INSERT INTO public.leads (
+          id, lead_number, company_name, contact_person, designation, phone, whatsapp, email, source,
+          status, pipeline_stage, priority, category, location, territory, product_requirement, estimated_kw, estimated_value,
+          customer_id, customer_code, external_enquiry_id,
+          lead_created_by_id, lead_created_by_name, assigned_to_user_id, assigned_to_name, assigned_to_role,
+          assigned_by_user_id, assigned_by_name, assigned_by_role, assigned_at, assigned_salesperson, stage_changed_at, created_at, updated_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,
+          $10,$11,$12,$13,$14,$15,$16,$17,$18,
+          $19,$20,$21,
+          'INBOUND_SYSTEM','Inbound Integration',$22,$23,$24,
+          'SYSTEM','Smart Leads System','System',
+          CASE WHEN $22::text IS NULL THEN NULL ELSE NOW() END,
+          $23, NOW(), NOW(), NOW()
+        )`,
+        [
+          id, leadNumber, company, b.contact_person || null, b.designation || null, phoneClean, b.whatsapp || null, email, source,
+          mapStageToLegacyStatus(stage, !!assignee), stage, String(b.priority || 'HIGH').toUpperCase(),
+          b.category || null, b.location || null, b.territory || null, b.product_requirement || null,
+          Number(b.estimated_kw) || null, Number(b.estimated_value) || null,
+          customerId, customerCode, b.external_enquiry_id || null,
+          assignee?.user_id || null, assignee?.name || null, assignee?.role || null
+        ]
+      );
+
+      await insertStatusHistory(client, id, null, 'New', `Inbound lead received via ${source}`, { id: 'SYSTEM', name: 'Inbound Integration' });
+
+      if (assignee) {
+        await client.query(
+          `INSERT INTO public.lead_assignment_history (
+            id, lead_id, assigned_by_user_id, assigned_by_name, assigned_by_role,
+            assigned_to_user_id, assigned_to_name, assigned_to_role, assignment_reason, assignment_type, created_at
+          ) VALUES ($1,$2,'SYSTEM','Smart Leads System','System',$3,$4,$5,$6,'ROUND_ROBIN',NOW())`,
+          [genId('LAH'), id, assignee.user_id, assignee.name, assignee.role || null, custMatch ? 'Assigned to existing account owner' : 'Round-Robin Inbound Distribution']
+        );
+      }
+
+      await client.query(
+        `INSERT INTO public.lead_webhook_events (source, idempotency_key, payload, status, lead_id, received_at, processed_at)
+         VALUES ($1,$2,$3::jsonb,'PROCESSED',$4,NOW(),NOW())
+         ON CONFLICT (idempotency_key) DO UPDATE SET status = 'PROCESSED', processed_at = NOW(), lead_id = $4`,
+        [source, idempKey, JSON.stringify(b), id]
+      );
+
+      return refreshDerived(client, id, settings.scoring);
+    });
+
+    if (lead.assigned_to_user_id) {
+      notify({
+        recipientEmpCode: lead.assigned_to_user_id,
+        eventType: 'LEAD_ASSIGNED',
+        documentType: 'LEAD',
+        documentId: lead.id,
+        title: `New Inbound Lead Assigned (${source})`,
+        message: `${lead.lead_number} – ${lead.company_name} was assigned to you via Round-Robin.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads System',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: lead.id,
+        dedupId: `smart-lead-inbound-${lead.id}-${lead.assigned_to_user_id}`
+      }).catch(() => {});
+    }
+
+    emit('create', lead);
+    res.status(201).json({ success: true, lead });
+  }));
+
   return router;
 }
 
 /**
- * 24-hour escalation (Smart Leads only): an open lead with no customer contact
- * (call / WhatsApp / email / meeting) within `uncontactedHours` of assignment — or of creation if still
- * unassigned — is escalated once to every Tech Support user. The old lead management's own 2h / 48h
- * alerts keep running unchanged. Uses the existing Automation setting `slaAlerts`.
- * @param {{ notify: Function, getStaff: Function }} deps
+ * Master Smart Leads Automation Engine:
+ * 1. 3h Unassigned Escalation to CEO & Tech Support
+ * 2. 2h Inactivity on Assigned Lead Escalation to CEO & Tech Support + Sales Rep Reminder
+ * 3. 48h Inactivity on Active Open Leads Escalation to CEO & Tech Support + Sales Rep Reminder
+ * 4. 15-Minute Follow-up Reminder to Sales Rep
+ * 5. Due-Now Follow-up Notification to Sales Rep
+ * 6. Missed Follow-up Escalation to CEO & Tech Support
  */
-export async function runSmartLeadsSlaEscalation({ notify = async () => {}, getStaff = async () => [] } = {}) {
-  const s = await query(`SELECT value FROM public.lead_settings WHERE key = 'automation_rules'`);
-  const sla = { ...DEFAULT_AUTOMATION.slaAlerts, ...(s.rows[0]?.value?.slaAlerts || {}) };
-  if (sla.escalateToManager === false) return { escalated: 0, skipped: 'disabled' };
-  const hours = Math.max(1, Number(sla.uncontactedHours) || 24);
-  const techSupport = (await getStaff().catch(() => [])).filter(p => /tech(nical)?\s*support/i.test(String(p.role || '')));
-  if (!techSupport.length) return { escalated: 0, skipped: 'no tech support users' };
+export async function runSmartLeadsAutomations({ notify = async () => {}, getStaff = async () => [] } = {}) {
+  const staff = await getStaff().catch(() => []);
+  const managers = staff.filter(s => isLeadManager(s.role));
+  const techSupport = staff.filter(s => /tech(nical)?\s*support/i.test(String(s.role || '')));
+  const execs = managers.length ? managers : techSupport;
 
-  // Mark first (one UPDATE), then notify — each lead is escalated at most once per assignment
-  const res = await query(
-    `UPDATE public.leads SET sl_escalated_24h_at = NOW()
-      WHERE id IN (
-        SELECT id FROM public.leads
-         WHERE deleted_at IS NULL
-           AND pipeline_stage = ANY($1::text[])
-           AND last_qualifying_activity_at IS NULL
-           AND sl_escalated_24h_at IS NULL
-           AND COALESCE(assigned_at, created_at) <= NOW() - ($2 || ' hours')::interval
-           -- only leads that crossed the limit in the last 2 days, so old backlog does not flood Tech Support on go-live
-           AND COALESCE(assigned_at, created_at) > NOW() - (($2::int + 48) || ' hours')::interval
-         LIMIT 200)
-      RETURNING id, lead_number, company_name, assigned_to_name`,
-    [OPEN_STAGES, String(hours)]
-  );
-  for (const lead of res.rows) {
-    const who = lead.assigned_to_name ? `assigned to ${lead.assigned_to_name}` : 'still unassigned';
-    for (const ts of techSupport) {
+  const report = {
+    unassigned3h: 0,
+    inactivity2h: 0,
+    inactivity48h: 0,
+    followup15m: 0,
+    followupDue: 0,
+    followupMissed: 0
+  };
+
+  // 1. 3-Hour Unassigned Lead Escalation (Phase 4)
+  const unassignedRes = await query(`
+    UPDATE public.leads
+    SET sl_escalated_unassigned_3h_at = NOW(), updated_at = NOW()
+    WHERE id IN (
+      SELECT id FROM public.leads
+      WHERE deleted_at IS NULL
+        AND assigned_to_user_id IS NULL
+        AND sl_escalated_unassigned_3h_at IS NULL
+        AND created_at <= NOW() - INTERVAL '3 hours'
+      LIMIT 100
+    )
+    RETURNING id, lead_number, company_name, created_at
+  `);
+  for (const row of unassignedRes.rows) {
+    report.unassigned3h++;
+    for (const mgr of execs) {
       await notify({
-        recipientEmpCode: ts.user_id, eventType: 'LEAD_SLA_24H', documentType: 'LEAD', documentId: lead.id,
-        title: `Lead not contacted in ${hours} hours`,
-        message: `${lead.lead_number} – ${lead.company_name} (${who}) has had no customer contact for ${hours} hours.`,
-        actorEmpCode: 'SYSTEM', actorName: 'Smart Leads', actorRole: 'System', targetTab: 'Smart Leads', targetRecordId: lead.id,
-        dedupId: `smart-lead-sla24-${lead.id}-${ts.user_id}`
+        recipientEmpCode: mgr.user_id,
+        eventType: 'LEAD_UNASSIGNED_3H',
+        documentType: 'LEAD',
+        documentId: row.id,
+        title: 'Lead unassigned for 3+ hours',
+        message: `${row.lead_number} – ${row.company_name} was created 3+ hours ago and remains unassigned.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: row.id,
+        dedupId: `smart-lead-unassigned-3h-${row.id}-${mgr.user_id}`
       }).catch(() => {});
     }
   }
-  return { escalated: res.rows.length };
+
+  // 2. 2-Hour Assigned Lead Inactivity Alert (Phase 6)
+  const inactivity2hRes = await query(`
+    UPDATE public.leads
+    SET sl_escalated_2h_at = NOW(), updated_at = NOW()
+    WHERE id IN (
+      SELECT id FROM public.leads
+      WHERE deleted_at IS NULL
+        AND assigned_to_user_id IS NOT NULL
+        AND pipeline_stage = 'New'
+        AND last_qualifying_activity_at IS NULL
+        AND sl_escalated_2h_at IS NULL
+        AND assigned_at <= NOW() - INTERVAL '2 hours'
+      LIMIT 100
+    )
+    RETURNING id, lead_number, company_name, assigned_to_user_id, assigned_to_name, assigned_at
+  `);
+  for (const row of inactivity2hRes.rows) {
+    report.inactivity2h++;
+    for (const mgr of execs) {
+      await notify({
+        recipientEmpCode: mgr.user_id,
+        eventType: 'LEAD_INACTIVITY_2H',
+        documentType: 'LEAD',
+        documentId: row.id,
+        title: 'Lead uncontacted for 2+ hours',
+        message: `${row.lead_number} – ${row.company_name} assigned to ${row.assigned_to_name || 'sales rep'} has had no customer contact for 2 hours.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: row.id,
+        dedupId: `smart-lead-inactivity-2h-${row.id}-${mgr.user_id}`
+      }).catch(() => {});
+    }
+    if (row.assigned_to_user_id) {
+      await notify({
+        recipientEmpCode: row.assigned_to_user_id,
+        eventType: 'LEAD_ACTION_REQUIRED',
+        documentType: 'LEAD',
+        documentId: row.id,
+        title: 'Action required on assigned lead',
+        message: `${row.lead_number} – ${row.company_name} was assigned 2 hours ago. Please make initial contact and log activity.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: row.id,
+        dedupId: `smart-lead-rep-reminder-2h-${row.id}-${row.assigned_to_user_id}`
+      }).catch(() => {});
+    }
+  }
+
+  // 3. 48-Hour Inactivity Monitoring (Phase 7)
+  const inactivity48hRes = await query(`
+    UPDATE public.leads
+    SET sl_escalated_48h_at = NOW(), updated_at = NOW()
+    WHERE id IN (
+      SELECT id FROM public.leads
+      WHERE deleted_at IS NULL
+        AND assigned_to_user_id IS NOT NULL
+        AND pipeline_stage = ANY($1::text[])
+        AND sl_escalated_48h_at IS NULL
+        AND COALESCE(last_qualifying_activity_at, assigned_at, created_at) <= NOW() - INTERVAL '48 hours'
+      LIMIT 100
+    )
+    RETURNING id, lead_number, company_name, assigned_to_user_id, assigned_to_name, pipeline_stage
+  `, [OPEN_STAGES]);
+  for (const row of inactivity48hRes.rows) {
+    report.inactivity48h++;
+    for (const mgr of execs) {
+      await notify({
+        recipientEmpCode: mgr.user_id,
+        eventType: 'LEAD_INACTIVITY_48H',
+        documentType: 'LEAD',
+        documentId: row.id,
+        title: 'Lead stalled for 48+ hours',
+        message: `${row.lead_number} – ${row.company_name} (${row.assigned_to_name || 'sales rep'}) has had no activity for 48+ hours in stage ${row.pipeline_stage}.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: row.id,
+        dedupId: `smart-lead-inactivity-48h-${row.id}-${mgr.user_id}`
+      }).catch(() => {});
+    }
+    if (row.assigned_to_user_id) {
+      await notify({
+        recipientEmpCode: row.assigned_to_user_id,
+        eventType: 'LEAD_STALLED',
+        documentType: 'LEAD',
+        documentId: row.id,
+        title: 'Follow-up needed: 48h inactive',
+        message: `${row.lead_number} – ${row.company_name} has had no logged activity for 48 hours. Please update customer status.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: row.id,
+        dedupId: `smart-lead-rep-reminder-48h-${row.id}-${row.assigned_to_user_id}`
+      }).catch(() => {});
+    }
+  }
+
+  // 4. 15-Minute Follow-Up Reminder (Phase 9)
+  const followup15mRes = await query(`
+    UPDATE public.lead_followups
+    SET reminded_15m_at = NOW()
+    WHERE id IN (
+      SELECT f.id FROM public.lead_followups f
+      WHERE f.status = 'PENDING'
+        AND f.reminded_15m_at IS NULL
+        AND f.scheduled_at > NOW()
+        AND f.scheduled_at <= NOW() + INTERVAL '15 minutes'
+      LIMIT 100
+    )
+    RETURNING id, lead_id, followup_type, scheduled_at, assigned_salesperson_id, assigned_salesperson_name
+  `);
+  for (const f of followup15mRes.rows) {
+    report.followup15m++;
+    if (f.assigned_salesperson_id) {
+      const dtStr = new Date(f.scheduled_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      await notify({
+        recipientEmpCode: f.assigned_salesperson_id,
+        eventType: 'FOLLOWUP_REMINDER_15M',
+        documentType: 'LEAD_FOLLOWUP',
+        documentId: f.id,
+        title: `Follow-up in 15 minutes (${f.followup_type})`,
+        message: `Your ${f.followup_type} follow-up is scheduled for ${dtStr}.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: f.lead_id,
+        dedupId: `smart-followup-15m-${f.id}-${f.assigned_salesperson_id}`
+      }).catch(() => {});
+    }
+  }
+
+  // 5. Follow-Up Due Now (Phase 9)
+  const followupDueRes = await query(`
+    UPDATE public.lead_followups
+    SET reminded_due_at = NOW()
+    WHERE id IN (
+      SELECT f.id FROM public.lead_followups f
+      WHERE f.status = 'PENDING'
+        AND f.reminded_due_at IS NULL
+        AND f.scheduled_at <= NOW()
+        AND f.scheduled_at >= NOW() - INTERVAL '10 minutes'
+      LIMIT 100
+    )
+    RETURNING id, lead_id, followup_type, scheduled_at, assigned_salesperson_id, assigned_salesperson_name
+  `);
+  for (const f of followupDueRes.rows) {
+    report.followupDue++;
+    if (f.assigned_salesperson_id) {
+      await notify({
+        recipientEmpCode: f.assigned_salesperson_id,
+        eventType: 'FOLLOWUP_DUE_NOW',
+        documentType: 'LEAD_FOLLOWUP',
+        documentId: f.id,
+        title: `Follow-up due now (${f.followup_type})`,
+        message: `Your ${f.followup_type} follow-up is due now.`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: f.lead_id,
+        dedupId: `smart-followup-due-${f.id}-${f.assigned_salesperson_id}`
+      }).catch(() => {});
+    }
+  }
+
+  // 6. Missed Follow-Up Escalation (Phase 9)
+  const followupMissedRes = await query(`
+    UPDATE public.lead_followups
+    SET escalated_missed_at = NOW()
+    WHERE id IN (
+      SELECT f.id FROM public.lead_followups f
+      WHERE f.status = 'PENDING'
+        AND f.escalated_missed_at IS NULL
+        AND f.scheduled_at < NOW() - INTERVAL '15 minutes'
+      LIMIT 100
+    )
+    RETURNING id, lead_id, followup_type, scheduled_at, assigned_salesperson_id, assigned_salesperson_name
+  `);
+  for (const f of followupMissedRes.rows) {
+    report.followupMissed++;
+    const dtStr = new Date(f.scheduled_at).toLocaleString('en-IN');
+    for (const mgr of execs) {
+      await notify({
+        recipientEmpCode: mgr.user_id,
+        eventType: 'FOLLOWUP_MISSED',
+        documentType: 'LEAD_FOLLOWUP',
+        documentId: f.id,
+        title: `Missed Follow-up: ${f.assigned_salesperson_name || 'Sales Rep'}`,
+        message: `${f.assigned_salesperson_name || 'Sales rep'} missed a scheduled ${f.followup_type} follow-up (was due ${dtStr}).`,
+        actorEmpCode: 'SYSTEM',
+        actorName: 'Smart Leads Automation',
+        actorRole: 'System',
+        targetTab: 'Smart Leads',
+        targetRecordId: f.lead_id,
+        dedupId: `smart-followup-missed-${f.id}-${mgr.user_id}`
+      }).catch(() => {});
+    }
+  }
+
+  return report;
 }
+
+export const runSmartLeadsSlaEscalation = runSmartLeadsAutomations;

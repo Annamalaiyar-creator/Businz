@@ -88,6 +88,29 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
     setTimeout(() => setActionMessage(null), 4000);
   };
 
+  // Safe LocalStorage helper with quota protection
+  const safeSetStorage = (key, value) => {
+    try {
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } catch (err) {
+      console.warn(`[TechnicalAdmin] LocalStorage quota exceeded while setting ${key}. Attempting cleanup...`, err);
+      try {
+        const keysToEvict = [
+          'controlroom_raw_materials_store',
+          'controlroom_temp_cache',
+          'controlroom_audit_logs_cache',
+          'vrm_preview_cache'
+        ];
+        for (const k of keysToEvict) {
+          localStorage.removeItem(k);
+        }
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+      } catch (e2) {
+        console.warn(`[TechnicalAdmin] LocalStorage full; skipping cache for ${key}. Database remains authoritative.`, e2);
+      }
+    }
+  };
+
   // Switch tab and notify parent Sidebar
   const handleTabSwitch = (targetSubTab, targetParentTab) => {
     setSubTab(targetSubTab);
@@ -104,14 +127,14 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
           setEmployeesList(json.data);
-          localStorage.setItem('controlroom_employees_list', JSON.stringify(json.data));
+          safeSetStorage('controlroom_employees_list', json.data);
           return json.data;
         }
       }
       const cloudData = await fetchCloudStore('employees_store', []);
       if (Array.isArray(cloudData) && cloudData.length > 0) {
         setEmployeesList(cloudData);
-        localStorage.setItem('controlroom_employees_list', JSON.stringify(cloudData));
+        safeSetStorage('controlroom_employees_list', cloudData);
         return cloudData;
       }
     } catch (err) {
@@ -239,7 +262,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
     try {
       const updated = employeesList.map(e => ((e.employee_code || e.code) === empCode ? { ...e, status: 'Active' } : e));
       setEmployeesList(updated);
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+      safeSetStorage('controlroom_employees_list', updated);
       await saveCloudStore('employees_store', updated);
       triggerNotice(`Access approved: Employee ${empCode} is now Active.`);
     } catch (e) {
@@ -251,7 +274,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
     try {
       const updated = employeesList.map(e => ((e.employee_code || e.code) === empCode ? { ...e, status: 'Rejected' } : e));
       setEmployeesList(updated);
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+      safeSetStorage('controlroom_employees_list', updated);
       await saveCloudStore('employees_store', updated);
       triggerNotice(`Access rejected for Employee ${empCode}.`, 'warning');
     } catch (e) {
@@ -264,7 +287,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
       const nextStatus = currentStatus === 'Active' ? 'Disabled' : 'Active';
       const updated = employeesList.map(e => ((e.employee_code || e.code) === empCode ? { ...e, status: nextStatus } : e));
       setEmployeesList(updated);
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+      safeSetStorage('controlroom_employees_list', updated);
       await saveCloudStore('employees_store', updated);
       triggerNotice(`Employee ${empCode} status changed to ${nextStatus}.`);
     } catch (e) {
@@ -279,9 +302,9 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
     try {
       const updated = employeesList.filter(e => (e.employee_code || e.code) !== empCode);
       setEmployeesList(updated);
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+      safeSetStorage('controlroom_employees_list', updated);
       const registeredCodes = updated.map(e => e.employee_code || e.code).filter(Boolean);
-      localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
+      safeSetStorage('controlroom_registered_codes', registeredCodes);
       await saveCloudStore('employees_store', updated);
       await fetch(`/api/store/employees_store/${empCode}`, { method: 'DELETE' }).catch(() => {});
       setSelectedRowCodes(prev => {
@@ -392,14 +415,17 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
     try {
       const updated = [newRecord, ...employeesList];
       setEmployeesList(updated);
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+
+      try {
+        safeSetStorage('controlroom_employees_list', updated);
+      } catch (_) {}
 
       // 1. Save directly to authoritative PostgreSQL database
       await saveCloudStoreImmediate('employees_store', updated);
 
       // 2. Register on server session & auth system with admin session token
       try {
-        const sesId = localStorage.getItem('controlroom_session_id');
+        const sesId = localStorage.getItem('controlroom_session_id') || localStorage.getItem('controlroom_device_session_id');
         await fetch('/api/employees/register', {
           method: 'POST',
           headers: {
@@ -2139,7 +2165,7 @@ export default function TechnicalAdminDashboardView({ activeTab = 'Dashboard', o
                 const code = editingUser.employee_code || editingUser.code;
                 const updated = employeesList.map(emp => ((emp.employee_code || emp.code) === code ? editingUser : emp));
                 setEmployeesList(updated);
-                localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+                safeSetStorage('controlroom_employees_list', updated);
                 await saveCloudStore('employees_store', updated);
                 setEditingUser(null);
                 triggerNotice(`User ${code} updated successfully.`);

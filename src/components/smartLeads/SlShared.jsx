@@ -121,22 +121,27 @@ export function BusinzKpiGrid({ children, minWidth = '200px' }) {
  */
 export function BusinzKpiCard({
   title,
+  label,
   value,
   valColor,
   icon: Icon,
   iconColor = '#0E7490',
   iconBg = '#ECFEFF',
+  color,
   trend,
   trendUp,
   trendNeutral,
   bottomPrefix,
+  subtext,
   bottomHighlight,
   bottomHighlightColor,
   onClick,
   isSelected,
   highlightCard
 }) {
-  const [hovered, setHovered] = useState(false);
+  const displayTitle = title || label;
+  const displayBottom = bottomPrefix || subtext;
+  const resolvedIconColor = iconColor || color || '#0E7490';
   const isUp = trendUp;
   const isNeutral = trendNeutral;
   const trendBg = isUp ? '#ECFDF5' : (isNeutral ? '#F1F5F9' : '#FEF2F2');
@@ -147,16 +152,14 @@ export function BusinzKpiCard({
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       style={{
-        backgroundColor: isSelected ? '#F0FDFA' : (hovered && onClick ? '#F8FAFC' : '#FFFFFF'),
+        backgroundColor: isSelected ? '#F0FDFA' : '#FFFFFF',
         borderRadius: '16px',
         border: isSelected
           ? '1.5px solid #0E7490'
-          : (hovered && onClick ? '1.5px solid #0E7490' : (highlightCard ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0')),
+          : (highlightCard ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0'),
         padding: '12px 14px',
         display: 'flex',
         flexDirection: 'column',
@@ -167,7 +170,6 @@ export function BusinzKpiCard({
               ? '0 4px 18px rgba(220, 38, 38, 0.08)'
               : '0 4px 18px rgba(15, 23, 42, 0.03)'),
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.15s ease',
         minWidth: 0,
         boxSizing: 'border-box'
       }}
@@ -186,7 +188,7 @@ export function BusinzKpiCard({
             textOverflow: 'ellipsis'
           }}
         >
-          {title}
+          {displayTitle}
         </span>
         {Icon && (
           <div
@@ -201,7 +203,7 @@ export function BusinzKpiCard({
               flexShrink: 0
             }}
           >
-            <Icon size={16} color={isSelected ? '#0E7490' : iconColor} />
+            <Icon size={16} color={isSelected ? '#0E7490' : resolvedIconColor} />
           </div>
         )}
       </div>
@@ -242,7 +244,7 @@ export function BusinzKpiCard({
       </div>
 
       {/* Signature Bottom Sub-Card Box */}
-      {(bottomPrefix || bottomHighlight) && (
+      {(displayBottom || bottomHighlight) && (
         <div
           style={{
             backgroundColor: isSelected ? '#E6FFFA' : '#F8FAFC',
@@ -263,7 +265,7 @@ export function BusinzKpiCard({
           }}
         >
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <span>{bottomPrefix}</span>
+            <span>{displayBottom}</span>
             {bottomHighlight && (
               <span style={{ color: resolvedBottomHighlightColor, fontWeight: '800', marginLeft: '3px' }}>
                 {bottomHighlight}

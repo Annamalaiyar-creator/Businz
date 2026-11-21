@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, User, TrendingUp, DollarSign, CheckCircle2, Award } from 'lucide-react';
+import {
+  ChevronRight, User, TrendingUp, DollarSign, CheckCircle2,
+  Search, X, RotateCcw, Filter, Clock
+} from 'lucide-react';
 import { slApi, onSmartLeadChange, formatINR, formatDate, isOverdue } from './smartLeadsApi';
-import { TempBadge, SkeletonRows, EmptyState, BusinzKpiGrid, BusinzKpiCard } from './SlShared';
+import { TempBadge, SkeletonRows, EmptyState } from './SlShared';
 import { StageModal } from './LeadActions';
 
 export default function PipelineView({ meta, onOpenLead, toast }) {
@@ -9,6 +12,8 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
+  const [tempFilter, setTempFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [stageModalLead, setStageModalLead] = useState(null);
 
   const isManager = !!meta?.me?.isManager;
@@ -17,7 +22,7 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
     setLoading(true);
     setError('');
     try {
-      const res = await slApi.pipeline({ owner: ownerFilter || undefined, perStage: 30 });
+      const res = await slApi.pipeline({ owner: ownerFilter || undefined, perStage: 40 });
       setColumns(res.columns || []);
     } catch (err) {
       setError(err.message);
@@ -54,7 +59,7 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
     e.stopPropagation();
     const stages = meta?.stages || [];
     const idx = stages.indexOf(currentStage);
-    if (idx >= 0 && idx < stages.length - 2) { // Won is idx 5, Lost is idx 6
+    if (idx >= 0 && idx < stages.length - 2) {
       const next = stages[idx + 1];
       setStageModalLead({ lead, initialStage: next });
     } else {
@@ -62,79 +67,215 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
     }
   };
 
+  // Filter cards per column based on search & temperature
+  const filteredColumns = columns.map(col => {
+    const matchingCards = (col.cards || []).filter(card => {
+      if (tempFilter && card.temperature !== tempFilter) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const matchesName = (card.company_name || '').toLowerCase().includes(q);
+        const matchesContact = (card.contact_person || '').toLowerCase().includes(q);
+        const matchesPhone = (card.phone || '').includes(q);
+        const matchesLeadNo = (card.lead_number || '').toLowerCase().includes(q);
+        const matchesRep = (card.assigned_to_name || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesContact && !matchesPhone && !matchesLeadNo && !matchesRep) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const filteredValue = matchingCards.reduce((s, c) => s + (c.estimated_value || 0), 0);
+
+    return {
+      ...col,
+      cards: matchingCards,
+      displayCount: matchingCards.length,
+      displayValue: search.trim() || tempFilter ? filteredValue : col.value
+    };
+  });
+
   return (
-    <div>
-      {/* Top Controls */}
-      <div className="sl-toolbar" style={{ justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {isManager && (
-            <select
-              className="sl-select"
-              value={ownerFilter}
-              onChange={(e) => setOwnerFilter(e.target.value)}
-              aria-label="Filter by owner"
-              style={{ width: 'auto', minWidth: 150 }}
-            >
-              <option value="">All Team Members</option>
-              {(meta?.team || []).map(t => (
-                <option key={t.user_id} value={t.user_id}>{t.name}</option>
-              ))}
-            </select>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* 1. Integrated Search & Filter Toolbar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        background: '#fafbfc',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '10px 16px',
+        flexWrap: 'wrap'
+      }}>
+        {/* Left: Search Box */}
+        <div style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          padding: '0 12px',
+          height: '38px',
+          backgroundColor: '#FFFFFF',
+          flex: '1 1 260px',
+          maxWidth: '420px'
+        }}>
+          <Search size={15} color="#94A3B8" style={{ flexShrink: 0 }} />
+          <input
+            id="smart-leads-pipeline-search"
+            type="text"
+            placeholder="Search deals (Company, Contact, Phone, Value)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
+            aria-label="Search pipeline deals"
+          />
+          {search && (
+            <X size={15} color="#94A3B8" style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => setSearch('')} />
           )}
         </div>
 
-        {/* Forecast disclaimer pill */}
-        <div className="sl-faint" style={{ fontSize: 11 }}>
-          Weighted Forecast = Stage Value × Probability. Probabilities are estimates.
+        {/* Right: Priority, Owner & Reset */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0, marginLeft: 'auto' }}>
+          {/* Priority Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#FFFFFF' }}>
+            <Filter style={{ width: '14px', height: '14px', color: '#64748b', flexShrink: 0 }} />
+            <select
+              aria-label="Filter by priority"
+              value={tempFilter}
+              onChange={(e) => setTempFilter(e.target.value)}
+              style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent', cursor: 'pointer' }}
+            >
+              <option value="">All Priorities</option>
+              <option value="Hot">Hot Deals</option>
+              <option value="Warm">Warm Deals</option>
+              <option value="Cold">Cold Deals</option>
+            </select>
+          </div>
+
+          {/* Team Member Filter (for managers) */}
+          {isManager && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#FFFFFF' }}>
+              <User style={{ width: '14px', height: '14px', color: '#64748b', flexShrink: 0 }} />
+              <select
+                aria-label="Filter by sales rep"
+                value={ownerFilter}
+                onChange={(e) => setOwnerFilter(e.target.value)}
+                style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent', cursor: 'pointer' }}
+              >
+                <option value="">All Team Members</option>
+                {(meta?.team || []).map(t => (
+                  <option key={t.user_id} value={t.user_id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Reset button */}
+          <button
+            onClick={() => {
+              setSearch('');
+              setTempFilter('');
+              setOwnerFilter('');
+              load();
+            }}
+            title="Reset Filters"
+            style={{
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              color: '#475569',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '8px',
+              height: '38px',
+              width: '38px',
+              flexShrink: 0
+            }}
+          >
+            <RotateCcw style={{ width: '15px', height: '15px' }} />
+          </button>
         </div>
       </div>
 
-      {/* Signature BUSINZ KPI Cards Banner */}
-      <div style={{ marginBottom: '16px' }}>
-        <BusinzKpiGrid minWidth="220px">
-          <BusinzKpiCard
-            title="OPEN PIPELINE VALUE"
-            value={formatINR(totalOpenValue)}
-            valColor="#0E7490"
-            icon={TrendingUp}
-            iconColor="#0E7490"
-            iconBg="#ECFEFF"
-            trend={`${totalOpenCount} Deals`}
-            trendNeutral={true}
-            bottomPrefix="Open deal volume"
-            bottomHighlight={`${totalOpenCount} Active Leads`}
-            bottomHighlightColor="#0E7490"
-          />
+      {/* 2. Flat Summary Stats Cards (Clean, No Colored Borders) */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: '12px'
+      }}>
+        <div style={{
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Open Pipeline Value
+            </span>
+            <TrendingUp size={16} color="#0E7490" />
+          </div>
+          <span style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+            {formatINR(totalOpenValue)}
+          </span>
+          <span style={{ fontSize: '11px', color: '#64748B' }}>
+            {totalOpenCount} Active Deals in Pipeline
+          </span>
+        </div>
 
-          <BusinzKpiCard
-            title="WEIGHTED SALES FORECAST"
-            value={formatINR(totalWeightedForecast)}
-            valColor="#2563EB"
-            icon={DollarSign}
-            iconColor="#2563EB"
-            iconBg="#EFF6FF"
-            trend="Stage Weighted"
-            trendNeutral={true}
-            bottomPrefix="Probability adjusted"
-            bottomHighlight={formatINR(totalWeightedForecast)}
-            bottomHighlightColor="#2563EB"
-          />
+        <div style={{
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Weighted Sales Forecast
+            </span>
+            <DollarSign size={16} color="#2563EB" />
+          </div>
+          <span style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+            {formatINR(totalWeightedForecast)}
+          </span>
+          <span style={{ fontSize: '11px', color: '#64748B' }}>
+            Probability adjusted forecast
+          </span>
+        </div>
 
-          <BusinzKpiCard
-            title="CLOSED WON REVENUE"
-            value={formatINR(wonValue)}
-            valColor="#059669"
-            icon={CheckCircle2}
-            iconColor="#059669"
-            iconBg="#ECFDF5"
-            trend={`${wonCount} Converted`}
-            trendUp={wonCount > 0}
-            trendNeutral={wonCount === 0}
-            bottomPrefix="Won order count"
-            bottomHighlight={`${wonCount} Won Deals`}
-            bottomHighlightColor="#059669"
-          />
-        </BusinzKpiGrid>
+        <div style={{
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Closed Won Revenue
+            </span>
+            <CheckCircle2 size={16} color="#059669" />
+          </div>
+          <span style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+            {formatINR(wonValue)}
+          </span>
+          <span style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>
+            {wonCount} Converted Orders
+          </span>
+        </div>
       </div>
 
       {error && (
@@ -143,90 +284,232 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
         </div>
       )}
 
+      {/* 3. Clean Kanban Board (No Colored Borders Anywhere) */}
       {loading && columns.length === 0 ? (
         <div className="sl-card"><SkeletonRows rows={6} /></div>
       ) : columns.length === 0 ? (
         <div className="sl-card"><EmptyState title="No pipeline data" text="No leads found for the selected filter." /></div>
       ) : (
-        /* KANBAN BOARD VIEW ONLY */
-        <div className="sl-board">
-          {columns.map(col => (
-            <div key={col.stage} className="sl-col">
-              <div className="sl-col-head">
-                <div className="sl-col-top">
-                  <div className="sl-col-title">
-                    <span>{col.stage}</span>
-                    <span className="sl-badge" style={{ fontSize: 10, padding: '1px 6px' }}>
-                      {col.count}
-                    </span>
+        <div className="sl-board" style={{ gap: '14px', paddingBottom: '16px' }}>
+          {filteredColumns.map(col => {
+            const isWon = col.stage === 'Won';
+            const isLost = col.stage === 'Lost';
+
+            return (
+              <div
+                key={col.stage}
+                className="sl-col"
+                style={{
+                  flex: '0 0 290px',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  maxHeight: 'calc(100vh - 220px)'
+                }}
+              >
+                {/* Column Head: Clean & Neutral, NO colored top border */}
+                <div style={{
+                  padding: '12px 14px',
+                  borderBottom: '1px solid #E2E8F0',
+                  background: '#FFFFFF',
+                  borderRadius: '12px 12px 0 0'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
+                        {col.stage}
+                      </span>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '1px 7px',
+                        borderRadius: '10px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#475569'
+                      }}>
+                        {col.displayCount}
+                      </span>
+                    </div>
+
+                    {!isWon && !isLost && (
+                      <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>
+                        {col.probability}%
+                      </span>
+                    )}
                   </div>
-                  <span className="sl-faint" style={{ fontSize: 11, fontWeight: 600 }}>
-                    {col.probability}%
-                  </span>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '6px', fontSize: '11px', color: '#64748B' }}>
+                    <span>Total Pipeline: <strong style={{ color: '#0F172A', fontWeight: 700 }}>{formatINR(col.displayValue)}</strong></span>
+                  </div>
                 </div>
-                <div className="sl-col-metrics">
-                  <span>Total: <strong className="sl-col-val">{formatINR(col.value)}</strong></span>
-                  {!['Won', 'Lost'].includes(col.stage) && (
-                    <span className="sl-faint">Est: {formatINR(col.weightedValue)}</span>
+
+                {/* Column Cards Container */}
+                <div style={{ padding: '10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+                  {col.cards.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '36px 8px', color: '#94A3B8', fontSize: '12px' }}>
+                      No leads in this stage
+                    </div>
+                  ) : (
+                    col.cards.map(card => {
+                      const overdueFlag = card.next_action_due_at && isOverdue(card.next_action_due_at);
+
+                      return (
+                        <div
+                          key={card.id}
+                          onClick={() => onOpenLead(card.id)}
+                          role="button"
+                          tabIndex={0}
+                          style={{
+                            background: '#FFFFFF',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: '10px',
+                            padding: '12px',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = '#CBD5E1';
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = '#E2E8F0';
+                            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                          }}
+                        >
+                          {/* Company Name & Lead No */}
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', lineHeight: 1.3 }}>
+                              {card.company_name || 'Individual Lead'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ color: '#0E7490', fontWeight: 600 }}>{card.lead_number}</span>
+                              {card.source && (
+                                <>
+                                  <span>•</span>
+                                  <span>{card.source}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Contact Person */}
+                          {card.contact_person && (
+                            <div style={{ fontSize: '12px', color: '#334155', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <User size={12} color="#64748B" />
+                              <span>{card.contact_person}</span>
+                              {card.phone && (
+                                <span style={{ color: '#94A3B8', fontSize: '11px' }}>({card.phone})</span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Priority Pill & Deal Value */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                            <TempBadge temperature={card.temperature} score={card.score} />
+                            {card.estimated_value > 0 ? (
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
+                                {formatINR(card.estimated_value)}
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {/* Due Date Indicator */}
+                          {card.next_action_due_at && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11px',
+                              color: overdueFlag ? '#DC2626' : '#64748B',
+                              backgroundColor: overdueFlag ? '#FEF2F2' : '#F8FAFC',
+                              padding: '3px 6px',
+                              borderRadius: '4px',
+                              marginTop: '2px'
+                            }}>
+                              <Clock size={11} color={overdueFlag ? '#DC2626' : '#64748B'} />
+                              <span>Due: {formatDate(card.next_action_due_at, true)}</span>
+                              {overdueFlag && (
+                                <strong style={{ marginLeft: 'auto', fontSize: '10px' }}>OVERDUE</strong>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Card Footer: Sales Rep + Move Button */}
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginTop: '6px',
+                            paddingTop: '6px',
+                            borderTop: '1px solid #F1F5F9'
+                          }}>
+                            {/* Assigned Rep Avatar */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <div style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                backgroundColor: '#E0F2FE',
+                                color: '#0369A1',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                {(card.assigned_to_name || 'S').charAt(0).toUpperCase()}
+                              </div>
+                              <span style={{ fontSize: '11px', color: '#64748B' }}>
+                                {card.assigned_to_name ? card.assigned_to_name.split(' ')[0] : 'Unassigned'}
+                              </span>
+                            </div>
+
+                            {/* Move Stage Button */}
+                            <button
+                              onClick={(e) => advanceStage(e, card, col.stage)}
+                              title="Advance deal to next stage"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                background: '#F1F5F9',
+                                border: '1px solid #E2E8F0',
+                                color: '#475569',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.backgroundColor = '#0E7490';
+                                e.currentTarget.style.color = '#FFFFFF';
+                                e.currentTarget.style.borderColor = '#0E7490';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.backgroundColor = '#F1F5F9';
+                                e.currentTarget.style.color = '#475569';
+                                e.currentTarget.style.borderColor = '#E2E8F0';
+                              }}
+                            >
+                              Move <ChevronRight size={11} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
-
-              <div className="sl-col-cards">
-                {col.cards.length === 0 ? (
-                  <div className="sl-faint" style={{ textAlign: 'center', padding: '24px 8px', fontSize: 12 }}>
-                    No leads in this stage
-                  </div>
-                ) : (
-                  col.cards.map(card => (
-                    <div
-                      key={card.id}
-                      className="sl-card-kanban"
-                      onClick={() => onOpenLead(card.id)}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      <div className="k-name">{card.company_name}</div>
-                      <div className="k-meta">{card.lead_number} · {card.source || 'Manual'}</div>
-
-                      {card.contact_person && (
-                        <div className="k-contact">{card.contact_person}{card.phone ? ` · ${card.phone}` : ''}</div>
-                      )}
-
-                      <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <TempBadge temperature={card.temperature} score={card.score} />
-                        {card.estimated_value ? (
-                          <span className="sl-strong" style={{ fontSize: 12 }}>{formatINR(card.estimated_value)}</span>
-                        ) : null}
-                      </div>
-
-                      {card.next_action_due_at && (
-                        <div
-                          className={`k-meta ${isOverdue(card.next_action_due_at) ? 'sl-overdue' : ''}`}
-                          style={{ marginTop: 6 }}
-                        >
-                          Due: {formatDate(card.next_action_due_at, true)}
-                        </div>
-                      )}
-
-                      <div className="k-foot">
-                        <span className="sl-faint" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <User size={11} /> {card.assigned_to_name ? card.assigned_to_name.split(' ')[0] : 'Unassigned'}
-                        </span>
-                        <button
-                          className="k-action"
-                          onClick={(e) => advanceStage(e, card, col.stage)}
-                          title="Move or advance stage"
-                        >
-                          Move <ChevronRight size={10} style={{ verticalAlign: -1 }} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
