@@ -893,6 +893,31 @@ export default function CrmQuotationsView({
     setShowBOMQuoteForm(true);
   };
 
+  // Auto-fill and open Create Form from Smart Leads if user triggered "+ Create Quote"
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('vrm_prefill_lead_for_quotation') || localStorage.getItem('vrm_prefill_lead_for_quotation');
+      if (stored) {
+        const lead = JSON.parse(stored);
+        sessionStorage.removeItem('vrm_prefill_lead_for_quotation');
+        localStorage.removeItem('vrm_prefill_lead_for_quotation');
+
+        handleOpenCreateForm();
+        if (lead.companyName || lead.customer) setCustomerName(lead.companyName || lead.customer);
+        if (lead.customerName || lead.contactPerson) setContactPerson(lead.customerName || lead.contactPerson);
+        if (lead.phone) setPhone(lead.phone);
+        if (lead.email) setEmail(lead.email);
+        if (lead.city) {
+          setBillingCity(lead.city);
+          setDeliveryCity(lead.city);
+        }
+        if (lead.estimatedKw) setCapacityKw(String(lead.estimatedKw));
+        if (lead.gstNumber || lead.gstNo) setGstNumber(lead.gstNumber || lead.gstNo);
+        if (lead.productRequirement) setStructureType(lead.productRequirement);
+      }
+    } catch (_) {}
+  }, []);
+
   // Open Edit / Revise Quote
   const handleStartEditQuote = (quote) => {
     setQuoteCode(quote.quoteNumber || quote.code || quote.id);
