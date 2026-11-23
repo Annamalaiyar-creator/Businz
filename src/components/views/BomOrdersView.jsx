@@ -870,7 +870,11 @@ export default function BomOrdersView(props) {
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
     if (userRole === 'Procurement Head') return 'ARUN BOOPATHI M';
     if (userRole === 'Production Head') return 'Senthil Kumar';
-    if (userRole === 'Sales Executive') return 'Mohith JV';
+    if (userRole === 'Sales Executive') {
+      const stored = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') || '' : '').trim();
+      if (stored && stored !== 'undefined' && stored !== 'null' && stored !== 'Sales Executive') return stored;
+      return 'Sales Executive';
+    }
     return userRole || 'Sales Executive';
   };
   const defaultSalesPersonName = getEffectiveSalesPerson();
@@ -887,7 +891,7 @@ export default function BomOrdersView(props) {
   const curEmail = (currentLoggedEmail || '').trim().toLowerCase();
 
   // Generic Sales Department (SE-1000 / sales / Sales Head) has full visibility across sales department BOMs
-  const isGenericSales = curCode === 'SE-1000' || curName === 'sales' || curName === 'sales department' || (userRole && userRole.toLowerCase().includes('sales head')) || (!curCode && !curName && !curEmail);
+  const isGenericSales = curCode === 'SE-1000' || curName === 'sales' || curName === 'sales department' || (userRole && userRole.toLowerCase().includes('sales head'));
 
   // Role check: Only individual Sales personnel are isolated to their own BOMs.
   // Management & Fulfillment roles (Dispatch Head, Dispatch, Production Head, Floor Supervisor, Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Procurement Head, Billing) see all BOMs.
@@ -918,6 +922,9 @@ export default function BomOrdersView(props) {
     const effectiveCurName = (currentEmpName || (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : '') || '').trim();
     const curName = effectiveCurName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
     const curEmail = (currentLoggedEmail || '').trim().toLowerCase();
+
+    // Strict sales scoping: If credentials are still resolving, return empty list to prevent leaking other reps' BOMs
+    if (!curCode && !curName && !curEmail) return [];
 
     // Collect all employee aliases (e.g. SE-004, SE-VRM004, EMP-SE-004, Amit Verma)
     const userAliases = new Set([curCode, curName, curEmail].filter(Boolean));

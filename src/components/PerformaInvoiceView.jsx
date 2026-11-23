@@ -650,8 +650,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const curName = currentEmpName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
     const curEmail = currentLoggedEmail;
 
-    // If no specific employee profile is configured, show all records safely
-    if (!curCode && !curName && !curEmail) return raw;
+    // Strict sales scoping: If employee credentials are still resolving, return empty array to prevent data leaking
+    if (!curCode && !curName && !curEmail) return [];
 
     // Canonical Sales Team Definitions with Name matchers
     const SALES_TEAM = [
@@ -666,10 +666,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       { code: 'SE-009', name: 'KALAISELVI T', matchNames: ['kalaiselvi', 'kalai'], emails: ['mms@'], oldCodes: ['SE-VRM090'] }
     ];
 
-    // Detect which sales rep is currently logged in (Name-First, then Code)
+    // Detect which sales rep is currently logged in (Canonical Employee Code first, then Name, then Email)
     const activeRep = SALES_TEAM.find(rep => 
+      (curCode && (rep.code === curCode || (rep.oldCodes && rep.oldCodes.includes(curCode)))) ||
       (curName && rep.matchNames.some(m => curName.includes(m) && (!rep.excludeNames || !rep.excludeNames.some(ex => curName.includes(ex))))) ||
-      (curCode && rep.code === curCode) ||
       (curEmail && rep.emails.some(e => curEmail.includes(e)))
     );
 

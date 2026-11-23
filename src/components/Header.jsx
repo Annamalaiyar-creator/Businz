@@ -44,52 +44,61 @@ export default function Header({
 
 
   // Map userRole and logged_emp_id to person's actual name with strict role-affinity verification
-  const storedName = localStorage.getItem('controlroom_logged_user_name');
+  const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const storedEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
   const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
   let userName = '';
-  try {
-    const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-    const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-    const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+  // 1. Authoritative identity: Use the stored name from login if present and valid
+  if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName !== 'Executive Leadership (CEO)') {
+    userName = storedName;
+  } else {
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
 
-    // Check if storedEmpId matches an employee whose role is compatible with current userRole
-    let matchedEmp = null;
-    if (storedEmpId) {
-      const emp = allEmps.find(e => e && (e.employee_code === storedEmpId || e.code === storedEmpId));
-      if (emp) {
-        const empRole = String(emp.role || '').toLowerCase();
-        const curRole = String(userRole || '').toLowerCase();
-        const isCompatible = empRole === curRole ||
-          (curRole.includes('sales') && empRole.includes('sales')) ||
-          (curRole.includes('account') && empRole.includes('account')) ||
-          (curRole.includes('dispatch') && empRole.includes('dispatch')) ||
-          (curRole.includes('production') && empRole.includes('production')) ||
-          (curRole.includes('design') && empRole.includes('design')) ||
-          (curRole.includes('admin') && empRole.includes('admin'));
-        if (isCompatible) {
+      // Match strictly by storedEmpId first (e.g. SE-007, SE-001, EMP-101)
+      let matchedEmp = null;
+      if (storedEmpId) {
+        const emp = allEmps.find(e => e && (e.employee_code === storedEmpId || e.code === storedEmpId));
+        if (emp) {
+          const empRole = String(emp.role || '').toLowerCase();
+          const curRole = String(userRole || '').toLowerCase();
+          const isCompatible = empRole === curRole ||
+            (curRole.includes('sales') && empRole.includes('sales')) ||
+            (curRole.includes('account') && empRole.includes('account')) ||
+            (curRole.includes('dispatch') && empRole.includes('dispatch')) ||
+            (curRole.includes('production') && empRole.includes('production')) ||
+            (curRole.includes('design') && empRole.includes('design')) ||
+            (curRole.includes('admin') && empRole.includes('admin'));
+          if (isCompatible) {
+            matchedEmp = emp;
+          }
+        }
+      }
+
+      if (!matchedEmp && storedEmail) {
+        const emp = allEmps.find(e => e && String(e.email || '').toLowerCase() === storedEmail);
+        if (emp && String(emp.role || '').toLowerCase() === String(userRole || '').toLowerCase()) {
           matchedEmp = emp;
         }
       }
-    }
 
-    if (!matchedEmp && storedEmail) {
-      const emp = allEmps.find(e => e && String(e.email || '').toLowerCase() === storedEmail);
-      if (emp && String(emp.role || '').toLowerCase() === String(userRole || '').toLowerCase()) {
-        matchedEmp = emp;
+      // Only match by unique role for singular leadership positions (never for shared roles like Sales/Floor)
+      if (!matchedEmp && userRole) {
+        const normR = String(userRole).toLowerCase();
+        const isSingularRole = normR.includes('ceo') || normR.includes('md') || normR.includes('managing director') || normR.includes('technical admin');
+        if (isSingularRole) {
+          matchedEmp = allEmps.find(e => e && e.role === userRole && (e.employee_name || e.name));
+        }
       }
-    }
 
-    // If no employee matched for this role, lookup the canonical employee for userRole
-    if (!matchedEmp) {
-      matchedEmp = allEmps.find(e => e && e.role === userRole && (e.employee_name || e.name));
-    }
-
-    if (matchedEmp && (matchedEmp.employee_name || matchedEmp.name)) {
-      userName = matchedEmp.employee_name || matchedEmp.name;
-    }
-  } catch (_) {}
+      if (matchedEmp && (matchedEmp.employee_name || matchedEmp.name)) {
+        userName = matchedEmp.employee_name || matchedEmp.name;
+      }
+    } catch (_) {}
+  }
 
   // Canonical role defaults if not discovered from employee directory
   if (!userName || userName === 'Executive Leadership (CEO)' || userName === 'CEO') {
@@ -127,8 +136,8 @@ export default function Header({
     }
   }
 
-  // Synchronize validated identity to localStorage so heartbeats and notifications stay accurate
-  if (userName && userName !== storedName) {
+  // Only initialize stored name if empty, NEVER overwrite an existing authentic user name
+  if (userName && !storedName) {
     try { localStorage.setItem('controlroom_logged_user_name', userName); } catch (_) {}
   }
   const safeName = (userName && userName !== 'undefined' && userName !== 'null') ? userName : (userRole || 'Annamalaiyar');

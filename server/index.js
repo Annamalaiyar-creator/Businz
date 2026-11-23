@@ -3536,6 +3536,8 @@ app.post('/api/sessions/register', async (req, res) => {
 app.post('/api/sessions/heartbeat', async (req, res) => {
   const sessionId = req.headers['x-session-id'] || req.body?.sessionId;
   const callerEmpCode = req.headers['x-emp-code'] || req.body?.empCode || req.body?.employee_code;
+  const callerRole = req.headers['x-user-role'] || req.body?.role;
+  const callerName = req.body?.userName;
 
   let result = heartbeatSessionInMap(sessionId, activeSessionsMap, callerEmpCode);
   if (!result.success && result.status !== 'revoked' && result.status !== 'forbidden') {
@@ -3569,6 +3571,38 @@ app.post('/api/sessions/heartbeat', async (req, res) => {
         }
       }
     } catch (_) {}
+  }
+
+  // Gracefully rehydrate active session if server memory was wiped by PM2 reload
+  if (!result.success && result.status !== 'revoked' && result.status !== 'forbidden' && (callerEmpCode || sessionId)) {
+    const cleanId = String(sessionId || '').trim();
+    if (cleanId && cleanId.length >= 3) {
+      const now = Date.now();
+      const autoRevived = {
+        id: cleanId,
+        sessionId: cleanId,
+        user: callerName || callerEmpCode || 'Active Employee',
+        email: req.body?.email || `${String(callerEmpCode || 'emp').toLowerCase()}@vrmstructures.in`,
+        empCode: callerEmpCode || 'EMP',
+        role: callerRole || 'Employee',
+        lastActiveTimestamp: now,
+        expiresAt: now + SESSION_TTL_MS,
+        status: 'active'
+      };
+      activeSessionsMap.set(cleanId, autoRevived);
+      saveActiveSessionsToDisk();
+      persistSessionToDb(autoRevived).catch(() => {});
+      result = {
+        success: true,
+        status: 'active',
+        sessionId: cleanId,
+        lastActiveTimestamp: now,
+        role: autoRevived.role,
+        empCode: autoRevived.empCode,
+        email: autoRevived.email,
+        user: autoRevived.user
+      };
+    }
   }
 
   if (result.success) {
