@@ -515,7 +515,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SYSTEM ADMINISTRATION',
           items: [
             { label: 'Admin Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
-            { label: 'Smart Leads', icon: Sparkles },
             { label: 'User & Access Control', targetTab: 'User Management', icon: Users },
             { label: 'Database & DB Health', targetTab: 'System Health', icon: Activity },
             { label: 'Active Sessions', targetTab: 'Active Sessions', icon: Lock },

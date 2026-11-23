@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { LayoutDashboard, Users, Columns3, CalendarClock, Settings, Zap, UsersRound, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Users, Columns3, CalendarClock, Zap, UsersRound, BarChart3 } from 'lucide-react';
 import './smartLeads.css';
 import { slApi } from './smartLeadsApi';
 import { useToast, EmptyState, SkeletonRows } from './SlShared';
 import AllLeadsView from './AllLeadsView';
 import LeadProfileView, { LeadProfileModal } from './LeadProfileView';
-import LeadSettingsView from './LeadSettingsView';
 import PipelineView from './PipelineView';
 import FollowupsView from './FollowupsView';
 import OverviewView from './OverviewView';
@@ -20,10 +19,9 @@ const SECTIONS = [
   { key: 'followups', label: 'Follow-ups', icon: CalendarClock },
   { key: 'automation', label: 'Automation', icon: Zap, adminOnly: true },
   { key: 'team', label: 'Sales Team', icon: UsersRound, adminOnly: true },
-  { key: 'reports', label: 'Reports', icon: BarChart3 },
-  { key: 'settings', label: 'Settings', icon: Settings, adminOnly: true }
+  { key: 'reports', label: 'Reports', icon: BarChart3 }
 ];
-const MOBILE_KEYS = ['overview', 'leads', 'pipeline', 'followups', 'settings'];
+const MOBILE_KEYS = ['overview', 'leads', 'pipeline', 'followups'];
 
 export default function SmartLeadsApp({ userRole: propUserRole, onNavigateTab }) {
   const [meta, setMeta] = useState(null);
@@ -33,16 +31,17 @@ export default function SmartLeadsApp({ userRole: propUserRole, onNavigateTab })
   const [toast, toastNode] = useToast();
 
   const effectiveRole = String(propUserRole || meta?.me?.role || localStorage.getItem('vrm_user_role') || '').toLowerCase().trim();
-  const isCeoOrTechSupport = /ceo|tech\s*support|technical\s*support|technical\s*admin|admin|super\s*admin|md|managing\s*director/i.test(effectiveRole);
+  const isTechAdmin = /technical\s*admin|developer|^ta-/i.test(effectiveRole);
+  const isCeoOrTechSupport = /ceo|tech\s*support|technical\s*support|admin|super\s*admin|md|managing\s*director/i.test(effectiveRole) && !isTechAdmin;
   const isSales = /sales/i.test(effectiveRole) && !isCeoOrTechSupport;
   const canCreateLead = !isSales;
 
-  // Visible sections: Automation, Sales Team, Settings are strictly visible to CEO and Tech Support only
+  // Visible sections: Automation, Sales Team are strictly visible to CEO and Tech Support only
   const availableSections = SECTIONS.filter(s => !s.adminOnly || isCeoOrTechSupport);
 
   // Redirect if currently on a restricted section
   useEffect(() => {
-    if (!isCeoOrTechSupport && ['automation', 'team', 'settings'].includes(section)) {
+    if (!isCeoOrTechSupport && ['automation', 'team'].includes(section)) {
       setSection('leads');
     }
   }, [isCeoOrTechSupport, section]);
@@ -52,6 +51,17 @@ export default function SmartLeadsApp({ userRole: propUserRole, onNavigateTab })
     catch (err) { setMetaError(err.status === 404 ? 'Smart Leads is not enabled on this server.' : err.message); }
   }, []);
   useEffect(() => { loadMeta(); }, [loadMeta]);
+
+  if (isTechAdmin) {
+    return (
+      <div className="sl-card" style={{ padding: '36px 24px', textAlign: 'center', maxWidth: '600px', margin: '40px auto' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', marginBottom: '8px' }}>Technical Administrator Workspace</h3>
+        <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6' }}>
+          Smart Leads CRM is designated for Sales, Commercial, and Technical Support teams. System administration, database health, access control, and audit logs are available in the Admin Dashboard.
+        </p>
+      </div>
+    );
+  }
 
   const go = (key) => { setSection(key); setOpenLeadId(null); };
   const closeLead = useCallback(() => setOpenLeadId(null), []);
@@ -67,10 +77,9 @@ export default function SmartLeadsApp({ userRole: propUserRole, onNavigateTab })
   else if (section === 'team' && isCeoOrTechSupport) body = <TeamView meta={meta} onNavigate={go} onOpenLead={setOpenLeadId} toast={toast} />;
   else if (section === 'reports') body = <ReportsView meta={meta} onNavigate={go} toast={toast} />;
   else if (section === 'automation' && isCeoOrTechSupport) body = <AutomationView meta={meta} toast={toast} />;
-  else if (section === 'settings' && isCeoOrTechSupport) body = <LeadSettingsView meta={meta} onMetaChange={loadMeta} toast={toast} />;
   else body = <div className="sl-card"><EmptyState title={`${current.label}`} text="Section under active development or restricted." /></div>;
 
-  const visibleMobileKeys = MOBILE_KEYS.filter(k => k !== 'settings' || isCeoOrTechSupport);
+  const visibleMobileKeys = MOBILE_KEYS;
 
   return (
     <div className="sl-root">
