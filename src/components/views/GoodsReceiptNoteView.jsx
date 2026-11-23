@@ -19,6 +19,7 @@ import { notifyGrnCompletedToAccounts } from '../../services/notificationService
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 import { getNextSequence } from '../../utils/sequenceGenerator';
+import { CODE_TO_SALES_NAME } from '../pi/piHelpers';
 
 
 
@@ -79,23 +80,31 @@ export default function GoodsReceiptNoteView(props) {
   );
 
   const getLoggedInUserName = () => {
+    const curEmp = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '')?.trim()?.toUpperCase();
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
     const storedName = typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '';
     if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      if (curEmp) {
+        const match = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === curEmp || 
+          String(e.code || '').toUpperCase() === curEmp ||
+          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
+        ));
+        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      }
     } catch(e) {}
     if (userRole === 'Production Head') return 'Senthil Kumar';
     if (userRole === 'Technical Administrator' || userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD') return 'Annamalaiyar';
-    if (userRole === 'Procurement Head' || userRole === 'Procurement Admin' || (userRole || '').includes('Procurement')) return 'Annamalaiyar';
+    if (userRole === 'Procurement Head' || userRole === 'Procurement Admin') return 'ARUN BOOPATHI M';
     if (userRole === 'Dispatch Head') return 'Kalpana';
     if (userRole === 'Floor Supervisor') return 'Floor Supervisor';
     if (userRole === 'Floor Employee') return 'Floor Employee';
     if (userRole === 'Accounts Head') return 'Venkatesh';
-    return storedName || 'Annamalaiyar';
+    return storedName || userRole || 'User';
   };
 
   // Common states

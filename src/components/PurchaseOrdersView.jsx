@@ -15,6 +15,7 @@ import TypeableVendorSelect from './TypeableVendorSelect';
 import VRMPurchaseOrderPrintTemplate from './VRMPurchaseOrderPrintTemplate';
 import { getHsnCode } from '../utils/hsnCodeService';
 import { extractGstRate } from '../utils/gstHelper';
+import { CODE_TO_SALES_NAME } from './pi/piHelpers';
 
 export const COMPANY_LOCATIONS = {
   'VRM Structures India Pvt Ltd': {
@@ -166,14 +167,22 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const isCeoLogin = Boolean(isExecutiveOrMD || activeRole === 'CEO' || activeRole === 'Managing Director' || activeRole === 'MD');
   
   const getLoggedInUserName = () => {
+    const curEmp = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '')?.trim()?.toUpperCase();
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
     const storedName = localStorage.getItem('controlroom_logged_user_name');
     if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      if (curEmp) {
+        const match = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === curEmp || 
+          String(e.code || '').toUpperCase() === curEmp ||
+          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
+        ));
+        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      }
     } catch(e) {}
     if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
     if (userRole === 'Production Head') return 'Senthil Kumar';
@@ -185,12 +194,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     if (userRole === 'Accounts Executive') return 'Priya';
     if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'Sales Executive') return localStorage.getItem('controlroom_logged_user_name') || 'Sales Executive';
-    if (userRole === 'Design Engineer') return 'Dinesh';
-    if (userRole === 'Design Executive') return 'Kavitha';
-    if (userRole === 'Invoice Executive' || userRole === 'Billing') return 'Anand';
-    if (userRole === 'BOM Executive') return 'Balaji';
-    if (userRole === 'Procurement Head' || userRole === 'Procurement Admin') return 'Annamalaiyar';
-    return 'Annamalaiyar';
+    if (userRole === 'Procurement Head' || userRole === 'Procurement Admin') return 'ARUN BOOPATHI M';
+    return storedName || userRole || 'User';
   };
 
   const loggedInUserName = getLoggedInUserName();

@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "businz-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "businz-main-repro",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /private/tmp/claude-501/-Users-annamalaiyar-Desktop-Businz/97bb79fd-677f-4ded-b6c2-ed0c7312ad97/scratchpad/main-repro && npm run dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

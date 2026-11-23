@@ -7,8 +7,28 @@ import App from './App.jsx'
 // Bulletproof LocalStorage Quota Guard:
 // Automatically intercepts setItem to evict disposable caches and prevent QuotaExceededError
 // from ever halting database or business operations across BUSINZ.
+// CRITICAL: NEVER evict active user authentication, role, emp_id, or session credentials.
 if (typeof window !== 'undefined' && typeof window.Storage !== 'undefined') {
   const originalSetItem = Storage.prototype.setItem;
+
+  const isProtectedSessionKey = (k) => {
+    if (!k) return false;
+    return (
+      k.startsWith('controlroom_is_') ||
+      k.startsWith('controlroom_user_') ||
+      k.startsWith('controlroom_logged_') ||
+      k.startsWith('controlroom_device_') ||
+      k.startsWith('controlroom_session_') ||
+      k.startsWith('controlroom_active_') ||
+      k.startsWith('businz_') ||
+      k === 'controlroom_user' ||
+      k === 'controlroom_role' ||
+      k === 'controlroom_session_id' ||
+      k === 'controlroom_employees_list' ||
+      k === 'controlroom_registered_codes'
+    );
+  };
+
   Storage.prototype.setItem = function(key, value) {
     try {
       originalSetItem.call(this, key, value);
@@ -29,10 +49,18 @@ if (typeof window !== 'undefined' && typeof window.Storage !== 'undefined') {
           'controlroom_raw_materials_store',
           'controlroom_grn_store',
           'controlroom_quotations',
-          'crm_leads_cache'
+          'crm_leads_cache',
+          'controlroom_customer_store',
+          'businz_crm_customers',
+          'controlroom_presets_store',
+          'controlroom_items_list',
+          'controlroom_sales_pi_store',
+          'controlroom_procurement_pi_store',
+          'controlroom_bom_store',
+          'controlroom_invoice_store'
         ];
         for (const k of disposableKeys) {
-          if (k !== key) {
+          if (k !== key && !isProtectedSessionKey(k)) {
             try { this.removeItem(k); } catch (_) {}
           }
         }
@@ -40,19 +68,11 @@ if (typeof window !== 'undefined' && typeof window.Storage !== 'undefined') {
           originalSetItem.call(this, key, value);
           return;
         } catch (_) {
-          // If still full, prune older keys that are not critical to active auth/session
-          const criticalKeys = ['controlroom_user', 'controlroom_session_id', 'controlroom_device_session_id', 'controlroom_role', 'businz_device_session_id'];
-          for (let i = 0; i < this.length; i++) {
-            const k = this.key(i);
-            if (k && !criticalKeys.includes(k) && k !== key) {
-              try { this.removeItem(k); } catch (_) {}
-              try {
-                originalSetItem.call(this, key, value);
-                return;
-              } catch (_) {}
-            }
-          }
-          console.warn(`[LocalStorage] Cache skipped for "${key}" (Database remains authoritative source of truth).`);
+          // If the payload is still too large to fit in ~5MB LocalStorage:
+          // Under AGENTS.md Rule 1: Database is the authoritative source of truth; LocalStorage is only a cache.
+          // CRITICAL: NEVER touch authentication, role, emp_id or session keys.
+          console.warn(`[LocalStorage] Payload too large for cache: skipped "${key}" (Database remains authoritative source of truth).`);
+          return;
         }
       } else {
         throw err;

@@ -93,7 +93,8 @@
       "SH-001",
       "SH-VRM001"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "Miru@1103"
   },
   {
     "employee_code": "SE-002",
@@ -105,10 +106,10 @@
     "dashboard_type": "Sales",
     "status": "Active",
     "alias_codes": [
-      "SE-001",
       "SE-VRM002"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "sanjai007"
   },
   {
     "employee_code": "SE-003",
@@ -123,7 +124,8 @@
       "SE-004",
       "SE-VRM006"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "Vasanth2001@"
   },
   {
     "employee_code": "SE-004",
@@ -137,10 +139,10 @@
     "alias_codes": [
       "SE-015",
       "SE-VRM002",
-      "SE-VRM006",
-      "SE-003"
+      "SE-VRM006"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "vrm@2018"
   },
   {
     "employee_code": "SE-005",
@@ -155,7 +157,8 @@
       "SE-002",
       "SE-VRM003"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "12345"
   },
   {
     "employee_code": "SE-006",
@@ -169,7 +172,8 @@
     "alias_codes": [
       "SE-020"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "12345"
   },
   {
     "employee_code": "SE-007",
@@ -181,7 +185,8 @@
     "dashboard_type": "Sales",
     "status": "Active",
     "alias_codes": [],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "12345"
   },
   {
     "employee_code": "SE-008",
@@ -195,7 +200,8 @@
     "alias_codes": [
       "SE-010"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "application"
   },
   {
     "employee_code": "SE-009",
@@ -210,7 +216,8 @@
       "SE-VRM090",
       "SE-VRM005"
     ],
-    "department": "Sales & Marketing"
+    "department": "Sales & Marketing",
+    "password": "12345"
   },
   {
     "employee_code": "TS-001",
@@ -226,7 +233,8 @@
       "TS-VRM002",
       "TS-VRM001",
       "DH-VRM001"
-    ]
+    ],
+    "password": "Kalpana@1712"
   },
   {
     "employee_code": "TS-002",
@@ -240,7 +248,8 @@
     "status": "Active",
     "alias_codes": [
       "TS-VRM003"
-    ]
+    ],
+    "password": "12345"
   },
   {
     "employee_code": "AC-002",
@@ -256,7 +265,8 @@
       "AH-002",
       "AE-002",
       "AH-VRM002"
-    ]
+    ],
+    "password": "12345"
   },
   {
     "employee_code": "AC-003",
@@ -272,6 +282,54 @@
       "AH-003",
       "AE-003",
       "AH-VRM003"
+    ],
+    "password": "12345"
+  },
+  {
+    "employee_code": "PR-001",
+    "code": "PR-001",
+    "employee_name": "ARUN BOOPATHI M",
+    "name": "ARUN BOOPATHI M",
+    "email": "scm@vrmstructures.in",
+    "role": "Procurement",
+    "dashboard_type": "Procurement",
+    "status": "Active",
+    "password": "SCM@2027",
+    "department": "Procurement & Supply Chain",
+    "alias_codes": [
+      "PR-VRMOO1",
+      "PR-VRM001"
+    ]
+  },
+  {
+    "employee_code": "PH-001",
+    "code": "PH-001",
+    "employee_name": "Senthil Kumar",
+    "name": "Senthil Kumar",
+    "email": "production@vrm.com",
+    "role": "Production",
+    "dashboard_type": "Production",
+    "status": "Active",
+    "password": "123456",
+    "department": "Production & Manufacturing",
+    "alias_codes": [
+      "PH-VRM001"
+    ]
+  },
+  {
+    "employee_code": "DH-001",
+    "code": "DH-001",
+    "employee_name": "Kalpana",
+    "name": "Kalpana",
+    "email": "dispatch@vrmstructures.in",
+    "role": "Dispatch",
+    "dashboard_type": "Dispatch",
+    "status": "Active",
+    "password": "12345",
+    "department": "Logistics & Dispatch",
+    "alias_codes": [
+      "DH-VRM001",
+      "DH-200"
     ]
   }
 ]

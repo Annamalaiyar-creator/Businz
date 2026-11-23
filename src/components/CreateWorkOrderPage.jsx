@@ -23,6 +23,7 @@ import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { VRM_PRODUCTS } from '../utils/vrmProductsData';
 import NotificationToast from './NotificationToast';
 import { addLiveNotification } from './Header';
+import { CODE_TO_SALES_NAME } from './pi/piHelpers';
 import { notifyStockShortageToProcurement } from '../services/notificationService';
 
 export const PRODUCT_CATALOG_OPTIONS = [
@@ -124,26 +125,26 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
     }
 
     // Attempt to match from registered employees list
+    const curEmp = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '')?.trim()?.toUpperCase();
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
     try {
       const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...emps, ...cloudEmps];
-      const found = allEmps.find(e => 
-        (e.email && e.email.toLowerCase() === storedUser.toLowerCase()) ||
-        (storedName && e.employee_name && e.employee_name.toLowerCase() === storedName.toLowerCase()) ||
-        (e.role && e.role === userRole)
-      );
-      if (found && found.employee_name) {
-        return found.employee_name;
+      if (curEmp) {
+        const found = allEmps.find(e => 
+          String(e.employee_code || '').toUpperCase() === curEmp || 
+          String(e.code || '').toUpperCase() === curEmp ||
+          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
+        );
+        if (found && (found.employee_name || found.name)) return found.employee_name || found.name;
       }
     } catch (e) {}
 
     // Fallbacks mapped by role
     if (userRole === 'Production Head') return 'Senthil Kumar';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
-    if (userRole === 'Dispatch Head') return getAssignedHeadPersonName('Dispatch Head');
-    if (userRole === 'Floor Supervisor') return getAssignedHeadPersonName('Floor Supervisor');
-    if (userRole === 'Floor Employee') return 'Ramesh';
+    return storedName || userRole || 'Production Team';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Accounts Executive') return 'Priya';
     if (userRole === 'Sales Head') return 'Sales Head';
