@@ -1505,7 +1505,7 @@ export default function ProductionViewsEngine(props) {
 
       let matchesDate = true;
       const skipDateForKpi = activeTab === 'Invoice Management' && Boolean(invKpiFilterMeta && invKpiFilterMeta.targetKeys);
-      const rDateStr = r.salesConfirmedAt || r.invDate || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && r.c4 !== '—' ? r.c4 : null);
+      const rDateStr = (activeTab === 'Accounts Verification' ? (r.dispatchPushedDateStr || r.accountsVerification?.packedAt || r.packedAt) : null) || r.salesConfirmedAt || r.invDate || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && r.c4 !== '—' ? r.c4 : null);
       if (!skipDateForKpi && rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
         const rIso = toIsoDateStr(rDateStr);
         if (rIso) {

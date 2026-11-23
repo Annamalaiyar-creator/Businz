@@ -657,7 +657,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'AwaitingPaymentProof', label: 'Payment Proof Pending', count: paymentProofPendingBoms.length, bg: '#FFEDD5', fg: '#C2410C' },
                   { id: 'Verified', label: 'Verified', count: attachedAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Document', 'Payment Type', 'Total Amount', 'Credit Amount', 'Status'],
+                headers: ['BOM Code', 'Customer Name', 'Received Date', 'Document', 'Payment Type', 'Total Amount', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
@@ -680,20 +680,46 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const rawCode = b.bomCode || b.code || b.id || '';
                   const resolvedBomCode = rawCode;
 
-                  // Format BOM Created Date for display below BOM Code
-                  const rawCreatedDate = b.date || b.createdAt || b.bomDate || b.salesConfirmedAt;
-                  let createdDateFormatted = '';
-                  if (rawCreatedDate) {
+                  // Strict User Mandate: In Accounts BOM Verification, the date column MUST show the date when
+                  // the Dispatch person packed/pushed the BOM to Accounts — NEVER the BOM created date!
+                  const rawDispatchPushed = b.accountsVerification?.packedAt || 
+                                            b.packedAt || 
+                                            b.packingCompletedAt || 
+                                            b.packingVerifiedAt || 
+                                            b.sentToAccountsAt || 
+                                            b.accountsVerification?.sentToAccountsAt || 
+                                            b.accountsSentAt ||
+                                            b.salesPaymentProofUploadedAt ||
+                                            b.paymentProofUploadedAt;
+
+                  let dispatchPushedDateStr = '—';
+                  let dispatchPushedTimeStr = '';
+                  if (rawDispatchPushed) {
                     try {
-                      const d = new Date(rawCreatedDate);
+                      const d = new Date(rawDispatchPushed);
                       if (!isNaN(d.getTime())) {
-                        createdDateFormatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                        dispatchPushedDateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                        dispatchPushedTimeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
                       } else {
-                        createdDateFormatted = String(rawCreatedDate).slice(0, 10);
+                        dispatchPushedDateStr = String(rawDispatchPushed).slice(0, 10);
                       }
                     } catch (_) {
-                      createdDateFormatted = String(rawCreatedDate).slice(0, 10);
+                      dispatchPushedDateStr = String(rawDispatchPushed).slice(0, 10);
                     }
+                  } else {
+                    const s = String(b.status || '').toLowerCase();
+                    if (s.includes('sent to accounts') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED' || b.dispatchPackingVerified) {
+                      if (b.updatedAt) {
+                        try {
+                          const d = new Date(b.updatedAt);
+                          if (!isNaN(d.getTime())) {
+                            dispatchPushedDateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                            dispatchPushedTimeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                          }
+                        } catch (_) {}
+                      }
+                    }
+                    // Strict rule: NEVER fall back to BOM created date (b.date / b.createdAt)
                   }
 
                   // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
@@ -815,13 +841,16 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     ...b,
                     code: resolvedBomCode,
                     bomCode: resolvedBomCode,
-                    createdDateFormatted: createdDateFormatted,
+                    dispatchPushedDateStr: dispatchPushedDateStr,
+                    dispatchPushedTimeStr: dispatchPushedTimeStr,
+                    dateTimeObj: { date: dispatchPushedDateStr, time: dispatchPushedTimeStr },
                     c2: customerDisplayName,
+                    c3: { date: dispatchPushedDateStr, time: dispatchPushedTimeStr },
                     docType: docTypeVal,
-                    c3: docTypeVal,
-                    c4: b.paymentType || b.paymentTerms || b.piPaymentTerms || '100% Paid',
-                    c5: totalAmtFormatted,
-                    c6: creditAmtFormatted,
+                    c4: docTypeVal,
+                    c5: b.paymentType || b.paymentTerms || b.piPaymentTerms || '100% Paid',
+                    c6: totalAmtFormatted,
+                    c7: creditAmtFormatted,
                     paymentStatusText: payStatus,
                     packingProgressText: null,
                     status: statusText,

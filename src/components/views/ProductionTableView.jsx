@@ -450,42 +450,22 @@ export default function ProductionTableView({
                         color: '#475569',
                         fontWeight: '500',
                         whiteSpace: 'nowrap',
-                        textAlign: activeTab === 'Accounts Verification' ? 'center' : 'left'
+                        textAlign: 'left'
                       }}>
                         {activeTab === 'Accounts Verification' ? (
-                          (row.docType === 'DC' || row.c3 === 'DC') ? (
-                            <span style={{
-                              backgroundColor: '#FEF3C7',
-                              color: '#92400E',
-                              border: '1px solid #FCD34D',
-                              padding: '3px 10px',
-                              borderRadius: '12px',
-                              fontSize: '11.5px',
-                              fontWeight: '800',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px'
-                            }}>
-                              <Truck size={13} strokeWidth={2.2} />
-                              <span>DC</span>
-                            </span>
-                          ) : (
-                            <span style={{
-                              backgroundColor: '#EFF6FF',
-                              color: '#1D4ED8',
-                              border: '1px solid #BFDBFE',
-                              padding: '3px 10px',
-                              borderRadius: '12px',
-                              fontSize: '11.5px',
-                              fontWeight: '800',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px'
-                            }}>
-                              <FileText size={13} strokeWidth={2.2} />
-                              <span>Invoice</span>
-                            </span>
-                          )
+                          (() => {
+                            const dateStr = row.dispatchPushedDateStr || (row.c3 && typeof row.c3 === 'object' ? row.c3.date : (typeof row.c3 === 'string' ? row.c3 : '—'));
+                            const timeStr = row.dispatchPushedTimeStr || (row.c3 && typeof row.c3 === 'object' ? row.c3.time : '');
+                            const safeDate = (dateStr && typeof dateStr === 'string' && dateStr !== '[object Object]') ? dateStr : '—';
+                            return (
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
+                                <span style={{ fontWeight: '700', color: '#1E293B', fontSize: '13px' }}>{safeDate}</span>
+                                {timeStr && typeof timeStr === 'string' && (
+                                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{timeStr}</span>
+                                )}
+                              </div>
+                            );
+                          })()
                         ) : (activeTab === 'Dispatch Orders' || String(activeTab || '').toLowerCase().includes('dispatch') || (pageConfig.headers[2] && (pageConfig.headers[2].includes('Date') || pageConfig.headers[2].includes('Time')))) ? (
                           (() => {
                             const dObj = (row.dateTimeObj && typeof row.dateTimeObj === 'object') ? row.dateTimeObj : (typeof row.c3 === 'object' ? row.c3 : null);
@@ -567,33 +547,47 @@ export default function ProductionTableView({
                           safeText(row.c3 || row.date1, '—')
                         )}
                       </td>
-                      <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                      <td style={{
+                        padding: '14px 16px',
+                        color: '#475569',
+                        fontWeight: '500',
+                        whiteSpace: 'nowrap',
+                        textAlign: activeTab === 'Accounts Verification' ? 'center' : 'left'
+                      }}>
                         {activeTab === 'Accounts Verification' ? (
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', lineHeight: '1.2' }}>
-                            <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
-                              {safeText(row.paymentType || row.c4, '100% Paid')}
+                          (row.docType === 'DC' || row.c4 === 'DC') ? (
+                            <span style={{
+                              backgroundColor: '#FEF3C7',
+                              color: '#92400E',
+                              border: '1px solid #FCD34D',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11.5px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              <Truck size={13} strokeWidth={2.2} />
+                              <span>DC</span>
                             </span>
-                            {(row.paymentStatusText || row.c7) && (() => {
-                              const pTxt = String(row.paymentStatusText || row.c7 || '');
-                              const isGreenProof = pTxt.includes('Attached') || pTxt.includes('Received') || pTxt.includes('Settled') || pTxt.includes('100%');
-                              const isBlueCredit = pTxt.includes('Credit');
-                              return (
-                                <span style={{
-                                  fontSize: '10.5px',
-                                  fontWeight: '700',
-                                  color: isGreenProof ? '#15803D' : (isBlueCredit ? '#1D4ED8' : '#B45309'),
-                                  backgroundColor: isGreenProof ? '#DCFCE7' : (isBlueCredit ? '#EFF6FF' : '#FEF3C7'),
-                                  border: isGreenProof ? '1px solid #BBF7D0' : (isBlueCredit ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
-                                  padding: '1px 6px',
-                                  borderRadius: '4px',
-                                  display: 'inline-block',
-                                  width: 'fit-content'
-                                }}>
-                                  {safeText(row.paymentStatusText || row.c7)}
-                                </span>
-                              );
-                            })()}
-                          </div>
+                          ) : (
+                            <span style={{
+                              backgroundColor: '#EFF6FF',
+                              color: '#1D4ED8',
+                              border: '1px solid #BFDBFE',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11.5px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              <FileText size={13} strokeWidth={2.2} />
+                              <span>Invoice</span>
+                            </span>
+                          )
                         ) : (
                           safeText(row.c4 || row.date2, '—')
                         )}
@@ -606,7 +600,35 @@ export default function ProductionTableView({
                           textAlign: (String(row.c5 || '').includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value')) ? 'right' : 'left',
                           whiteSpace: 'nowrap'
                         }}>
-                          {safeText(row.c5 || row.value, '—')}
+                          {activeTab === 'Accounts Verification' ? (
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', lineHeight: '1.2' }}>
+                              <span style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>
+                                {safeText(row.paymentType || row.c5, '100% Paid')}
+                              </span>
+                              {(row.paymentStatusText || row.c7) && (() => {
+                                const pTxt = String(row.paymentStatusText || row.c7 || '');
+                                const isGreenProof = pTxt.includes('Attached') || pTxt.includes('Received') || pTxt.includes('Settled') || pTxt.includes('100%');
+                                const isBlueCredit = pTxt.includes('Credit');
+                                return (
+                                  <span style={{
+                                    fontSize: '10.5px',
+                                    fontWeight: '700',
+                                    color: isGreenProof ? '#15803D' : (isBlueCredit ? '#1D4ED8' : '#B45309'),
+                                    backgroundColor: isGreenProof ? '#DCFCE7' : (isBlueCredit ? '#EFF6FF' : '#FEF3C7'),
+                                    border: isGreenProof ? '1px solid #BBF7D0' : (isBlueCredit ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    display: 'inline-block',
+                                    width: 'fit-content'
+                                  }}>
+                                    {safeText(row.paymentStatusText || row.c7)}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            safeText(row.c5 || row.value, '—')
+                          )}
                         </td>
                       )}
                       {row.c6 !== undefined && activeTab !== 'Customer Management' && pageConfig.headers.length > 6 && (

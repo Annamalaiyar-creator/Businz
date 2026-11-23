@@ -340,6 +340,31 @@ export default function AccountsVerificationModal({
   })();
   const payTypeText = (accountsVerificationModal && (accountsVerificationModal.paymentType || accountsVerificationModal.c3)) || 'Net 30 Days';
 
+  const rawDispatchPushed = accountsVerificationModal?.accountsVerification?.packedAt || 
+                            accountsVerificationModal?.packedAt || 
+                            accountsVerificationModal?.packingCompletedAt || 
+                            accountsVerificationModal?.packingVerifiedAt || 
+                            accountsVerificationModal?.sentToAccountsAt || 
+                            accountsVerificationModal?.accountsVerification?.sentToAccountsAt || 
+                            accountsVerificationModal?.accountsSentAt ||
+                            accountsVerificationModal?.salesPaymentProofUploadedAt ||
+                            accountsVerificationModal?.paymentProofUploadedAt;
+
+  const dispatchReceivedText = (() => {
+    if (!rawDispatchPushed) return null;
+    try {
+      const d = new Date(rawDispatchPushed);
+      if (!isNaN(d.getTime())) {
+        const dStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        const tStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        return `${dStr} at ${tStr}`;
+      }
+      return String(rawDispatchPushed);
+    } catch (_) {
+      return String(rawDispatchPushed);
+    }
+  })();
+
   // Resolve linked source PI early so Accounts has full GST total & PI-level payment proofs
   const resolvedMatchedPi = (() => {
     const targetPiNo = accountsVerificationModal?.sourcePiNo || accountsVerificationModal?.piNo;
@@ -807,6 +832,12 @@ export default function AccountsVerificationModal({
               <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
               <span className="dispatch-banner-bullet">•</span>
               <span>Payment Terms: <strong style={{ color: '#FFFFFF' }}>{payTypeText}</strong></span>
+              {dispatchReceivedText && (
+                <>
+                  <span className="dispatch-banner-bullet">•</span>
+                  <span>Received from Dispatch: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.15)', padding: '2px 8px', borderRadius: '6px' }}>{dispatchReceivedText}</strong></span>
+                </>
+              )}
             </div>
           </div>
         </div>
