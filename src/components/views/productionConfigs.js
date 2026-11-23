@@ -3,6 +3,487 @@ import { formatCurrency } from '../../utils/otherViewsShared.js';
 import { compareBomDescending, parseBomSequenceNumber } from '../../utils/sequenceGenerator.js';
 import { extractGstRate } from '../../utils/gstHelper.js';
 
+const safeStringVal = (val, fallback = '') => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val.trim();
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (typeof val === 'object') {
+    const candidate = val.name || val.customerName || val.companyName || val.title || val.label || val.code || val.invNo || val.status || val.pay;
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+    return fallback;
+  }
+  return String(val);
+};
+
+const cleanDateStr = (rawDate) => {
+  if (!rawDate) return '-';
+  if (typeof rawDate === 'object') {
+    const innerDate = rawDate.date || rawDate.formatted || rawDate.val || rawDate.dateStr;
+    if (typeof innerDate === 'string' && innerDate.trim()) return cleanDateStr(innerDate);
+    return '-';
+  }
+  const s = String(rawDate).trim();
+  if (s.includes('T')) {
+    const parts = s.split('T')[0].split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const mIdx = parseInt(m, 10) - 1;
+      if (mIdx >= 0 && mIdx < 12) {
+        return `${d} ${months[mIdx]} ${y}`;
+      }
+    }
+  }
+  return s;
+};
+
+const cleanAmtNum = (amt) => {
+  if (typeof amt === 'number' && !isNaN(amt) && amt > 0) return amt;
+  if (!amt) return 0;
+  const n = parseFloat(String(amt).replace(/[^0-9.]/g, ''));
+  return (isNaN(n) || n <= 0) ? 0 : n;
+};
+
+const computeItemsTotal = (items) => {
+  if (!Array.isArray(items) || items.length === 0) return 0;
+  return items.reduce((sum, it) => {
+    if (!it) return sum;
+    const explicitAmt = cleanAmtNum(it.amt || it.total || it.amount);
+    if (explicitAmt > 0) return sum + explicitAmt;
+    const qty = Number(it.bomQty || it.qty || 1) || 1;
+    const rate = cleanAmtNum(it.rate || it.unitPrice || it.price);
+    const tax = it.tax !== undefined ? (Number(it.tax) || 0) : 18;
+    return sum + (qty * rate * (1 + tax / 100));
+  }, 0);
+};
+
+/**
+ * Builds the canonical, deduplicated invoice list for Invoice Management and CEO Dashboard
+ * Guaranteeing strict 1-BOM = 1-Invoice correspondence and zero duplicate records.
+ */
+export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList: rawInvoiceList = [] }) {
+  const isLegacyMockBom = (b) => {
+    if (!b) return true;
+    const code = String(b.bomCode || b.code || b.id || '').trim();
+    if (/^BOM-6\d{2}$/i.test(code)) return true;
+    if (/^BOM-(STAGING|USER|POST)/i.test(code)) return true;
+    return false;
+  };
+  const isLegacyMockInvoice = (inv) => {
+    if (!inv) return true;
+    const code = String(inv.invNo || inv.invoiceNo || inv.code || inv.id || '').trim();
+    const bom = String(inv.bomCode || inv.poNo || inv.bomRef || '').trim();
+    if (/^INV-(POST|STAGING|USER|MOCK)/i.test(code)) return true;
+    if (/^BOM-(6\d{2}|POST|STAGING|USER|MOCK)/i.test(bom)) return true;
+    return false;
+  };
+
+  const bomStore = (rawBomStore || []).filter(b => !isLegacyMockBom(b));
+  const invoiceList = (rawInvoiceList || []).filter(i => !isLegacyMockInvoice(i));
+
+  const isInvoiceEligibleBom = (b) => {
+    if (!b) return false;
+    if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+    const s = String(b.status || '').toLowerCase().trim();
+    const acc = b.accountsVerification || {};
+    const isAccVerified = Boolean(
+      acc.verified === true ||
+      b.isAccountsDone === true ||
+      s.includes('accounts verified') ||
+      s.includes('passed to invoice') ||
+      b.invoiceConfirmed === true ||
+      s.includes('invoice confirmed') ||
+      (Boolean(b.invoiceNo) && b.invoiceNo !== 'Pending Confirmation') ||
+      s.includes('awaiting vehicle load') ||
+      s.includes('dispatched') ||
+      s.includes('delivered') ||
+      s.includes('completed') ||
+      s.includes('closed')
+    );
+    return isAccVerified;
+  };
+
+  const verifiedBomInvoices = (bomStore || [])
+    .filter(isInvoiceEligibleBom)
+    .map(b => {
+      const bCode = b.bomCode || b.code || 'BOM-2026';
+      const matchSeq = bCode.match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || bCode.match(/BOM-(\d+)/i);
+      const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-${(bCode.match(/(\d+)$/)?.[1] || '01')}`;
+      const hasExplicitInv = b.invoiceNo && b.invoiceNo !== 'Pending Confirmation' && !b.invoiceNo.toLowerCase().includes('pending');
+      const invNo = hasExplicitInv ? b.invoiceNo : derivedInvNo;
+      const isConf = Boolean(b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
+      const s = String(b.status || '').toLowerCase();
+      const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
+
+      let statusVal = 'Ready for Invoicing';
+      let payVal = 'Ready for Payment';
+      if (isConf) {
+        statusVal = 'Invoice Confirmed';
+        payVal = 'Completed & Locked';
+      } else if (isAccDone || s.includes('passed to invoice')) {
+        statusVal = 'Accounts Verified & Passed to Invoice';
+        payVal = 'Ready for Payment';
+      } else if (s.includes('packed') || s.includes('ready for dispatch')) {
+        statusVal = 'Packing Verified - Ready for Billing';
+        payVal = 'Ready for Payment';
+      }
+
+      const packingArr = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
+      const isSamePackingLine = (p, it) => Boolean(p) &&
+        String(p.presetGroupId || '') === String(it.presetGroupId || '') &&
+        ((p.code && it.code && p.code === it.code) || (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()));
+      const packedItems = (b.items || []).length > 0
+        ? b.items.map((it, idx) => {
+          const p = isSamePackingLine(packingArr[idx], it) ? packingArr[idx] : packingArr.find(pk => isSamePackingLine(pk, it));
+          const isPacked = p ? Boolean(p.packed) : true;
+          return { ...it, selected: isPacked, packed: isPacked };
+        })
+        : packingArr.map((p, pIdx) => ({
+          code: p.code || `PRD-00${pIdx + 1}`,
+          name: p.name || `Item ${pIdx + 1}`,
+          qty: p.bomQty || p.qty || 1,
+          bomQty: p.bomQty || p.qty || 1,
+          invQty: p.bomQty || p.qty || 1,
+          rate: p.rate || 0,
+          isPresetItem: Boolean(p.isPresetItem),
+          presetGroupId: p.presetGroupId || null,
+          presetName: p.presetName || '',
+          selected: Boolean(p.packed),
+          packed: Boolean(p.packed)
+        }));
+
+      const oVal = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
+
+      return {
+        invNo: invNo,
+        code: invNo,
+        date: b.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        vendor: b.customerName || b.companyName || b.customer || 'Customer',
+        customerName: b.customerName || b.companyName || b.customer || 'Customer',
+        poNo: bCode,
+        bomCode: bCode,
+        grnNo: 'GRN-VERIFIED',
+        invAmt: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+        poVal: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+        grnVal: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+        diff: '0.00', match: 'Matched',
+        pay: payVal,
+        status: statusVal,
+        items: packedItems,
+        dispatchPacking: b.dispatchPacking,
+        billingAddress: b.billingAddress,
+        billingAddressObj: b.billingAddressObj,
+        deliveryAddress: b.deliveryAddress,
+        deliveryAddressObj: b.deliveryAddressObj,
+        deliveryAddressProofDoc: b.deliveryAddressProofDoc || null,
+        sameAsBilling: b.sameAsBilling,
+        accountsVerification: b.accountsVerification,
+        proofDoc: b.proofDoc || b.payments?.proofDoc || b.paymentProofDoc?.name || null,
+        proofDocData: b.proofDocData || b.payments?.proofDocData || b.paymentProofDoc?.dataUrl || null,
+        paymentProofDoc: b.paymentProofDoc || null
+      };
+    });
+
+  const bomByCodeIdxMap = new Map();
+  const bomBySoIdxMap = new Map();
+  const bomByInvIdxMap = new Map();
+  const bomByNormInvIdxMap = new Map();
+  const bomByCustIdxMap = new Map();
+  for (let i = 0; i < bomStore.length; i++) {
+    const b = bomStore[i];
+    if (!b) continue;
+    const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
+    const soNo = (b.salesOrderNo || '').toLowerCase().trim();
+    const bInv = (b.invoiceNo || '').toLowerCase().trim();
+    const bCust = (b.customerName || b.companyName || '').toLowerCase().trim();
+    if (bCode && !bomByCodeIdxMap.has(bCode)) bomByCodeIdxMap.set(bCode, i);
+    if (soNo && !bomBySoIdxMap.has(soNo)) bomBySoIdxMap.set(soNo, i);
+    if (bInv && bInv !== 'pending confirmation' && !bInv.includes('pending')) {
+      if (!bomByInvIdxMap.has(bInv)) bomByInvIdxMap.set(bInv, i);
+      const normInv = bInv.replace(/[^a-z0-9]/gi, '');
+      if (normInv && !bomByNormInvIdxMap.has(normInv)) bomByNormInvIdxMap.set(normInv, i);
+    }
+    if (bCust && !['customer', 'customer order', 'pending'].includes(bCust)) {
+      if (!bomByCustIdxMap.has(bCust)) bomByCustIdxMap.set(bCust, i);
+    }
+  }
+
+  const findMatchingBom = (inv) => {
+    if (!inv) return null;
+    const directRef = (inv.poNo || inv.bomCode || '').toLowerCase().trim();
+    const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|VRMS\/BOM\/[\d-]+\/\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
+    const invNum = (inv.invNo || inv.invoiceNo || inv.code || inv.id || '').toLowerCase().trim();
+
+    let bestIdx = Infinity;
+
+    const tryCodeMatch = (ref) => {
+      if (!ref) return;
+      if (bomByCodeIdxMap.has(ref)) { bestIdx = Math.min(bestIdx, bomByCodeIdxMap.get(ref)); return; }
+      if (bomBySoIdxMap.has(ref)) { bestIdx = Math.min(bestIdx, bomBySoIdxMap.get(ref)); return; }
+      const normRef = ref.replace(/[^a-z0-9]/g, '');
+      for (const [key, idx] of bomByCodeIdxMap) {
+        if (key.replace(/[^a-z0-9]/g, '') === normRef) { bestIdx = Math.min(bestIdx, idx); return; }
+      }
+      for (const [key, idx] of bomBySoIdxMap) {
+        if (key.replace(/[^a-z0-9]/g, '') === normRef) { bestIdx = Math.min(bestIdx, idx); return; }
+      }
+      const trailMatch = ref.match(/(\d+)$/);
+      if (trailMatch) {
+        const trailNum = parseInt(trailMatch[1], 10);
+        const isPure = /^\d+$/.test(ref);
+        if (ref.includes('bom') || isPure) {
+          for (const [key, idx] of bomByCodeIdxMap) {
+            const km = key.match(/(\d+)$/);
+            if (km && parseInt(km[1], 10) === trailNum && ((isPure && key.includes('bom')) || (/^\d+$/.test(key) && ref.includes('bom')))) {
+              bestIdx = Math.min(bestIdx, idx); return;
+            }
+          }
+        }
+      }
+    };
+
+    tryCodeMatch(directRef);
+    if (bestIdx === Infinity) tryCodeMatch(fromNotes);
+
+    if (bestIdx === Infinity && invNum) {
+      if (bomByInvIdxMap.has(invNum)) bestIdx = Math.min(bestIdx, bomByInvIdxMap.get(invNum));
+      const normInv = invNum.replace(/[^a-z0-9]/gi, '');
+      if (normInv && bomByNormInvIdxMap.has(normInv)) bestIdx = Math.min(bestIdx, bomByNormInvIdxMap.get(normInv));
+    }
+    if (bestIdx < bomStore.length) return bomStore[bestIdx];
+
+    if (!directRef && !fromNotes) {
+      const custName = (inv.vendor || inv.customerName || inv.c2 || '').toLowerCase().trim();
+      if (custName && !['customer', 'customer order', 'pending'].includes(custName) && bomByCustIdxMap.has(custName)) {
+        return bomStore[bomByCustIdxMap.get(custName)];
+      }
+    }
+    return null;
+  };
+
+  const mergedInvoices = (invoiceList || []).filter(inv => {
+    const matchingBom = findMatchingBom(inv);
+    if (matchingBom) {
+      if (matchingBom.cancelled || matchingBom.status === 'Cancelled' || matchingBom.status === 'Cancelled & Stock Restored') return false;
+      return isInvoiceEligibleBom(matchingBom);
+    }
+    return true;
+  }).map(inv => {
+    const matchingBom = findMatchingBom(inv);
+    const explicitInvBom = inv.poNo || inv.bomCode || '';
+    const resolvedBomCode = explicitInvBom || matchingBom?.bomCode || matchingBom?.code || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
+    const isConf = Boolean(
+      (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed === true)) ||
+      inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed === true
+    );
+    
+    const resolvedCustomer = (matchingBom?.customerName && matchingBom.customerName !== 'Customer Order' && matchingBom.customerName !== 'Customer')
+      ? matchingBom.customerName
+      : (inv.vendor && inv.vendor !== 'Customer Order' ? inv.vendor : (inv.customerName || matchingBom?.customerName || 'Customer'));
+
+    const bomTotal = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || 0;
+    const existingAmt = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal);
+    const itemsTotal = computeItemsTotal(inv.items);
+    const resolvedAmount = existingAmt > 0 ? existingAmt : (bomTotal > 0 ? bomTotal : (itemsTotal > 0 ? itemsTotal : 0));
+
+    const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
+    const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : '';
+    const rawInv = inv.invNo || inv.invoiceNo || inv.code || '';
+    const hasExplicitInv = rawInv && rawInv !== 'Pending Confirmation' && !rawInv.toLowerCase().includes('pending');
+    const matchingBomInv = matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' && !matchingBom.invoiceNo.toLowerCase().includes('pending');
+    const resolvedInvNo = hasExplicitInv ? rawInv : (matchingBomInv ? matchingBom.invoiceNo : (derivedInvNo || rawInv || 'VRM-INV-2026-01'));
+
+    return {
+      ...inv,
+      poNo: resolvedBomCode,
+      bomCode: resolvedBomCode,
+      invNo: resolvedInvNo,
+      code: resolvedInvNo,
+      invoiceNo: resolvedInvNo,
+      vendor: resolvedCustomer,
+      customerName: resolvedCustomer,
+      billingAddress: inv.billingAddress || matchingBom?.billingAddress,
+      deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
+      deliveryAddressProofDoc: inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc,
+      accountsVerification: matchingBom?.accountsVerification || inv.accountsVerification,
+      status: isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment'),
+      pay: isConf ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
+      invAmt: resolvedAmount,
+      total: resolvedAmount,
+      amount: formatCurrency(resolvedAmount),
+      items: (inv.items && inv.items.length > 0) ? inv.items : (matchingBom?.dispatchPacking || matchingBom?.items || [])
+    };
+  });
+
+  const extractOrderSeq = (str) => {
+    if (!str || typeof str !== 'string') return '';
+    const m = str.match(/(?:VRM-(?:INV|BOM)-(\d{4}-\d+)|(?:INV|BOM)-(\d+)|VRM-INV-(\d+)|VRM-BOM-(\d+))/i);
+    if (m) return m[1] || m[2] || m[3] || m[4] || '';
+    const digits = str.replace(/[^0-9]/g, '');
+    return digits || '';
+  };
+
+  const isSameInvoiceOrOrder = (a, b) => {
+    if (!a || !b) return false;
+    if (a.id && b.id && a.id === b.id) return true;
+
+    const aInv = (a.invNo || a.invoiceNo || a.code || a.invoice_number || '').toUpperCase().trim();
+    const bInv = (b.invNo || b.invoiceNo || b.code || b.invoice_number || '').toUpperCase().trim();
+    const aHasRealInv = aInv && aInv !== 'PENDING CONFIRMATION' && !aInv.includes('PENDING');
+    const bHasRealInv = bInv && bInv !== 'PENDING CONFIRMATION' && !bInv.includes('PENDING');
+    if (aHasRealInv && bHasRealInv && (aInv === bInv || aInv.replace(/[^A-Z0-9]/g, '') === bInv.replace(/[^A-Z0-9]/g, ''))) {
+      return true;
+    }
+
+    const aBom = (a.bomCode || a.poNo || a.bom_code || a.bomRef || '').toUpperCase().trim();
+    const bBom = (b.bomCode || b.poNo || b.bom_code || b.bomRef || '').toUpperCase().trim();
+    if (aBom && bBom && (aBom === bBom || aBom.replace(/[^A-Z0-9]/g, '') === bBom.replace(/[^A-Z0-9]/g, ''))) {
+      return true;
+    }
+
+    const seqA = extractOrderSeq(aBom) || extractOrderSeq(aInv);
+    const seqB = extractOrderSeq(bBom) || extractOrderSeq(bInv);
+    if (seqA && seqB && seqA === seqB) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const canonicalInvoices = [];
+
+  const upsertCanonicalInvoice = (item) => {
+    if (!item) return;
+    const existingIdx = canonicalInvoices.findIndex(ex => isSameInvoiceOrOrder(ex, item));
+
+    if (existingIdx === -1) {
+      canonicalInvoices.push(item);
+    } else {
+      const existing = canonicalInvoices[existingIdx];
+      const isCurrConf = item.status === 'Invoice Confirmed' || item.pay === 'Completed & Locked';
+      const isExistConf = existing.status === 'Invoice Confirmed' || existing.pay === 'Completed & Locked';
+
+      const itemInv = (item.invNo || item.invoiceNo || item.code || '').trim();
+      const existInv = (existing.invNo || existing.invoiceNo || existing.code || '').trim();
+      const itemHasRealInv = itemInv && itemInv !== 'Pending Confirmation' && !itemInv.toLowerCase().includes('pending');
+      const existHasRealInv = existInv && existInv !== 'Pending Confirmation' && !existInv.toLowerCase().includes('pending');
+
+      let master, secondary;
+      if (isCurrConf && !isExistConf) {
+        master = item; secondary = existing;
+      } else if (!isCurrConf && isExistConf) {
+        master = existing; secondary = item;
+      } else if (itemHasRealInv && !existHasRealInv) {
+        master = item; secondary = existing;
+      } else if (!itemHasRealInv && existHasRealInv) {
+        master = existing; secondary = item;
+      } else {
+        master = item; secondary = existing;
+      }
+
+      const bestInvNo = (master.invNo && master.invNo !== 'Pending Confirmation' && !master.invNo.toLowerCase().includes('pending'))
+        ? master.invNo
+        : ((secondary.invNo && secondary.invNo !== 'Pending Confirmation' && !secondary.invNo.toLowerCase().includes('pending')) ? secondary.invNo : master.invNo);
+
+      canonicalInvoices[existingIdx] = {
+        ...secondary,
+        ...master,
+        invNo: bestInvNo,
+        code: bestInvNo,
+        invoiceNo: bestInvNo,
+        bomCode: master.bomCode || secondary.bomCode,
+        poNo: master.poNo || secondary.poNo,
+        items: (master.items && master.items.length > 0) ? master.items : (secondary.items || []),
+        dispatchPacking: master.dispatchPacking || secondary.dispatchPacking,
+        accountsVerification: master.accountsVerification || secondary.accountsVerification,
+        billingAddress: master.billingAddress || secondary.billingAddress,
+        deliveryAddress: master.deliveryAddress || secondary.deliveryAddress,
+        deliveryAddressProofDoc: master.deliveryAddressProofDoc || secondary.deliveryAddressProofDoc,
+        sameAsBilling: master.sameAsBilling !== undefined ? master.sameAsBilling : secondary.sameAsBilling
+      };
+    }
+  };
+
+  mergedInvoices.forEach(upsertCanonicalInvoice);
+  verifiedBomInvoices.forEach(upsertCanonicalInvoice);
+
+  const seenBoms = new Set();
+  const seenInvs = new Set();
+  const dedupedInvoices = [];
+
+  canonicalInvoices.forEach(item => {
+    const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
+    const invNum = (item.invNo || item.invoiceNo || item.code || '').toUpperCase().trim();
+    const seq = extractOrderSeq(bRef) || extractOrderSeq(invNum);
+
+    if (bRef && seenBoms.has(bRef)) return;
+    if (invNum && seenInvs.has(invNum)) return;
+    if (seq && (seenBoms.has(`SEQ_${seq}`) || seenInvs.has(`SEQ_${seq}`))) return;
+
+    if (bRef) seenBoms.add(bRef);
+    if (invNum) seenInvs.add(invNum);
+    if (seq) {
+      seenBoms.add(`SEQ_${seq}`);
+      seenInvs.add(`SEQ_${seq}`);
+    }
+
+    dedupedInvoices.push(item);
+  });
+
+  const allInvoicesUnified = dedupedInvoices.sort((a, b) => {
+    const seqA = parseBomSequenceNumber(a.poNo || a.bomCode || a.invNo || a.code || '');
+    const seqB = parseBomSequenceNumber(b.poNo || b.bomCode || b.invNo || b.code || '');
+    if (seqA !== seqB) return seqB - seqA;
+    const dateA = new Date(a.date || a.createdAt || 0).getTime() || 0;
+    const dateB = new Date(b.date || b.createdAt || 0).getTime() || 0;
+    return dateB - dateA;
+  });
+
+  return allInvoicesUnified.map(i => {
+    const statusStr = safeStringVal(i.status, '');
+    const payStr = safeStringVal(i.pay, '');
+    const isConfirmed = statusStr === 'Invoice Confirmed' || statusStr === 'Completed' || statusStr === 'Confirmed' || payStr === 'Completed & Locked';
+    const isReady = statusStr === 'Ready for Payment' || statusStr === 'Accounts Verified & Passed to Invoice' || statusStr === 'Packing Verified - Ready for Billing' || statusStr === 'Ready for Invoicing' || payStr === 'Ready' || payStr === 'Ready for Payment';
+
+    const matchingBom = findMatchingBom(i);
+    const resolvedBomCode = safeStringVal(i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code, '—');
+    const resolvedAmt = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || computeItemsTotal(i.items) || 0;
+    const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
+    const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
+    const rawInvNo = safeStringVal(i.invNo, '');
+    const finalCode = (rawInvNo && rawInvNo !== 'Pending Confirmation' && !rawInvNo.toLowerCase().includes('pending')) ? rawInvNo : safeStringVal(matchingBom?.invoiceNo, fallbackInvNo);
+
+    const vendorName = safeStringVal(i.vendor || i.customerName || matchingBom?.customerName, 'Customer');
+    const paymentStatus = isConfirmed ? 'Completed & Locked' : (payStr || 'Ready for Payment');
+    const finalStatus = isConfirmed ? 'Invoice Confirmed' : (statusStr || 'Ready for Payment');
+    const formattedAmt = resolvedAmt > 0 ? formatCurrency(resolvedAmt) : (typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (typeof i.invAmt === 'string' ? i.invAmt : '₹ 0.00'));
+
+    const rowObj = {
+      ...i,
+      code: finalCode,
+      invNo: finalCode,
+      invoiceNo: finalCode,
+      c2: vendorName,
+      c3: resolvedBomCode,
+      c4: cleanDateStr(i.date),
+      c5: formattedAmt,
+      c6: paymentStatus,
+      status: finalStatus,
+      total: resolvedAmt,
+      invAmt: resolvedAmt,
+      amount: formattedAmt,
+      stBg: isConfirmed ? '#DCFCE7' : (isReady ? '#EFF6FF' : '#FEF3C7'),
+      stFg: isConfirmed ? '#166534' : (isReady ? '#2563EB' : '#B45309'),
+      stBorder: isConfirmed ? '1px solid #86EFAC' : (isReady ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
+      tabGroup: isConfirmed ? 'Invoice Confirmed' : (isReady ? 'Ready for Payment' : 'On Hold')
+    };
+    delete rowObj.c7;
+    delete rowObj.dateTimeObj;
+    return rowObj;
+  });
+}
+
 export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [], activeTab = null }) {
   const shouldBuild = (tabName) => !activeTab || activeTab === tabName;
   const isLegacyMockBom = (b) => {
@@ -15,438 +496,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
   const bomStore = (rawBomStore || []).filter(b => !isLegacyMockBom(b));
   const visibleBomStore = (passedVisibleBom || bomStore || []).filter(b => !isLegacyMockBom(b));
 
-  const safeStringVal = (val, fallback = '') => {
-    if (val === null || val === undefined) return fallback;
-    if (typeof val === 'string') return val.trim();
-    if (typeof val === 'number') return String(val);
-    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-    if (typeof val === 'object') {
-      const candidate = val.name || val.customerName || val.companyName || val.title || val.label || val.code || val.invNo || val.status || val.pay;
-      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
-      return fallback;
-    }
-    return String(val);
-  };
-
-  const cleanDateStr = (rawDate) => {
-    if (!rawDate) return '-';
-    if (typeof rawDate === 'object') {
-      const innerDate = rawDate.date || rawDate.formatted || rawDate.val || rawDate.dateStr;
-      if (typeof innerDate === 'string' && innerDate.trim()) return cleanDateStr(innerDate);
-      return '-';
-    }
-    const s = String(rawDate).trim();
-    if (s.includes('T')) {
-      const parts = s.split('T')[0].split('-');
-      if (parts.length === 3) {
-        const [y, m, d] = parts;
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const mIdx = parseInt(m, 10) - 1;
-        if (mIdx >= 0 && mIdx < 12) {
-          return `${d} ${months[mIdx]} ${y}`;
-        }
-      }
-    }
-    return s;
-  };
-
-  const cleanAmtNum = (amt) => {
-    if (typeof amt === 'number' && !isNaN(amt) && amt > 0) return amt;
-    if (!amt) return 0;
-    const n = parseFloat(String(amt).replace(/[^0-9.]/g, ''));
-    return (isNaN(n) || n <= 0) ? 0 : n;
-  };
-
-  const computeItemsTotal = (items) => {
-    if (!Array.isArray(items) || items.length === 0) return 0;
-    return items.reduce((sum, it) => {
-      if (!it) return sum;
-      const explicitAmt = cleanAmtNum(it.amt || it.total || it.amount);
-      if (explicitAmt > 0) return sum + explicitAmt;
-      const qty = Number(it.bomQty || it.qty || 1) || 1;
-      const rate = cleanAmtNum(it.rate || it.unitPrice || it.price);
-      const tax = it.tax !== undefined ? (Number(it.tax) || 0) : 18;
-      return sum + (qty * rate * (1 + tax / 100));
-    }, 0);
-  };
-
-  let findMatchingBom = () => null;
   let allInvoicesUnified = [];
 
   if (shouldBuild('Invoice Management')) {
-          // Dynamically compute unified invoices list ensuring packed and Accounts-Verified BOMs show up in Invoice Management seamlessly
-          const isInvoiceEligibleBom = (b) => {
-            if (!b) return false;
-            if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
-            const s = String(b.status || '').toLowerCase().trim();
-            const acc = b.accountsVerification || {};
-            const isAccVerified = Boolean(
-              acc.verified === true ||
-              b.isAccountsDone === true ||
-              s.includes('accounts verified') ||
-              s.includes('passed to invoice') ||
-              b.invoiceConfirmed === true ||
-              s.includes('invoice confirmed') ||
-              (Boolean(b.invoiceNo) && b.invoiceNo !== 'Pending Confirmation') ||
-              s.includes('awaiting vehicle load') ||
-              s.includes('dispatched') ||
-              s.includes('delivered') ||
-              s.includes('completed') ||
-              s.includes('closed')
-            );
-            return isAccVerified;
-          };
-
-          const verifiedBomInvoices = (bomStore || [])
-            .filter(isInvoiceEligibleBom)
-            .map(b => {
-              const bCode = b.bomCode || b.code || 'BOM-2026';
-              const matchSeq = bCode.match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || bCode.match(/BOM-(\d+)/i);
-              const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-${(bCode.match(/(\d+)$/)?.[1] || '01')}`;
-              const hasExplicitInv = b.invoiceNo && b.invoiceNo !== 'Pending Confirmation' && !b.invoiceNo.toLowerCase().includes('pending');
-              const invNo = hasExplicitInv ? b.invoiceNo : derivedInvNo;
-              const isConf = Boolean(b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
-              const s = String(b.status || '').toLowerCase();
-              const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
-
-              let statusVal = 'Ready for Invoicing';
-              let payVal = 'Ready for Payment';
-              if (isConf) {
-                statusVal = 'Invoice Confirmed';
-                payVal = 'Completed & Locked';
-              } else if (isAccDone || s.includes('passed to invoice')) {
-                statusVal = 'Accounts Verified & Passed to Invoice';
-                payVal = 'Ready for Payment';
-              } else if (s.includes('packed') || s.includes('ready for dispatch')) {
-                statusVal = 'Packing Verified - Ready for Billing';
-                payVal = 'Ready for Payment';
-              }
-
-              // Invoice lines are an exact copy of the confirmed BOM lines; packing only sets packed / not packed.
-              const packingArr = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
-              const isSamePackingLine = (p, it) => Boolean(p) &&
-                String(p.presetGroupId || '') === String(it.presetGroupId || '') &&
-                ((p.code && it.code && p.code === it.code) || (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()));
-              const packedItems = (b.items || []).length > 0
-                ? b.items.map((it, idx) => {
-                  const p = isSamePackingLine(packingArr[idx], it) ? packingArr[idx] : packingArr.find(pk => isSamePackingLine(pk, it));
-                  const isPacked = p ? Boolean(p.packed) : true;
-                  return { ...it, selected: isPacked, packed: isPacked };
-                })
-                : packingArr.map((p, pIdx) => ({
-                  code: p.code || `PRD-00${pIdx + 1}`,
-                  name: p.name || `Item ${pIdx + 1}`,
-                  qty: p.bomQty || p.qty || 1,
-                  bomQty: p.bomQty || p.qty || 1,
-                  invQty: p.bomQty || p.qty || 1,
-                  rate: p.rate || 0,
-                  isPresetItem: Boolean(p.isPresetItem),
-                  presetGroupId: p.presetGroupId || null,
-                  presetName: p.presetName || '',
-                  selected: Boolean(p.packed),
-                  packed: Boolean(p.packed)
-                }));
-
-              const oVal = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
-
-              return {
-                invNo: invNo,
-                code: invNo,
-                date: b.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-                vendor: b.customerName || b.companyName || b.customer || 'Customer',
-                customerName: b.customerName || b.companyName || b.customer || 'Customer',
-                poNo: bCode,
-                bomCode: bCode,
-                grnNo: 'GRN-VERIFIED',
-                invAmt: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-                poVal: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-                grnVal: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-                diff: '0.00', match: 'Matched',
-                pay: payVal,
-                status: statusVal,
-                items: packedItems,
-                dispatchPacking: b.dispatchPacking,
-                billingAddress: b.billingAddress,
-                billingAddressObj: b.billingAddressObj,
-                deliveryAddress: b.deliveryAddress,
-                deliveryAddressObj: b.deliveryAddressObj,
-                deliveryAddressProofDoc: b.deliveryAddressProofDoc || null,
-                sameAsBilling: b.sameAsBilling,
-                accountsVerification: b.accountsVerification,
-                proofDoc: b.proofDoc || b.payments?.proofDoc || b.paymentProofDoc?.name || null,
-                proofDocData: b.proofDocData || b.payments?.proofDocData || b.paymentProofDoc?.dataUrl || null,
-                paymentProofDoc: b.paymentProofDoc || null
-              };
-            });
-
-          // O(1) BOM lookup maps preserving exact first-match priority of Array.prototype.find
-          const bomByCodeIdxMap = new Map();
-          const bomBySoIdxMap = new Map();
-          const bomByInvIdxMap = new Map();
-          const bomByNormInvIdxMap = new Map();
-          const bomByCustIdxMap = new Map();
-          for (let i = 0; i < bomStore.length; i++) {
-            const b = bomStore[i];
-            if (!b) continue;
-            const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
-            const soNo = (b.salesOrderNo || '').toLowerCase().trim();
-            const bInv = (b.invoiceNo || '').toLowerCase().trim();
-            const bCust = (b.customerName || b.companyName || '').toLowerCase().trim();
-            if (bCode && !bomByCodeIdxMap.has(bCode)) bomByCodeIdxMap.set(bCode, i);
-            if (soNo && !bomBySoIdxMap.has(soNo)) bomBySoIdxMap.set(soNo, i);
-            if (bInv && bInv !== 'pending confirmation' && !bInv.includes('pending')) {
-              if (!bomByInvIdxMap.has(bInv)) bomByInvIdxMap.set(bInv, i);
-              const normInv = bInv.replace(/[^a-z0-9]/gi, '');
-              if (normInv && !bomByNormInvIdxMap.has(normInv)) bomByNormInvIdxMap.set(normInv, i);
-            }
-            if (bCust && !['customer', 'customer order', 'pending'].includes(bCust)) {
-              if (!bomByCustIdxMap.has(bCust)) bomByCustIdxMap.set(bCust, i);
-            }
-          }
-
-          findMatchingBom = (inv) => {
-            if (!inv) return null;
-            const directRef = (inv.poNo || inv.bomCode || '').toLowerCase().trim();
-            const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|VRMS\/BOM\/[\d-]+\/\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
-            const invNum = (inv.invNo || inv.invoiceNo || inv.code || inv.id || '').toLowerCase().trim();
-
-            let bestIdx = Infinity;
-
-            // --- Strict code / sales-order matching (exact + normalized + trailing-number) ---
-            const tryCodeMatch = (ref) => {
-              if (!ref) return;
-              if (bomByCodeIdxMap.has(ref)) { bestIdx = Math.min(bestIdx, bomByCodeIdxMap.get(ref)); return; }
-              if (bomBySoIdxMap.has(ref)) { bestIdx = Math.min(bestIdx, bomBySoIdxMap.get(ref)); return; }
-              // Normalized match (strip non-alphanumeric)
-              const normRef = ref.replace(/[^a-z0-9]/g, '');
-              for (const [key, idx] of bomByCodeIdxMap) {
-                if (key.replace(/[^a-z0-9]/g, '') === normRef) { bestIdx = Math.min(bestIdx, idx); return; }
-              }
-              for (const [key, idx] of bomBySoIdxMap) {
-                if (key.replace(/[^a-z0-9]/g, '') === normRef) { bestIdx = Math.min(bestIdx, idx); return; }
-              }
-              // Trailing-number match (e.g. "745" matches "vrms/bom/26-27/745") only if ref contains 'bom' or is pure number
-              const trailMatch = ref.match(/(\d+)$/);
-              if (trailMatch) {
-                const trailNum = parseInt(trailMatch[1], 10);
-                const isPure = /^\d+$/.test(ref);
-                if (ref.includes('bom') || isPure) {
-                  for (const [key, idx] of bomByCodeIdxMap) {
-                    const km = key.match(/(\d+)$/);
-                    // Number-only match only when one side is a bare number; two full BOM codes must match exactly
-                    if (km && parseInt(km[1], 10) === trailNum && ((isPure && key.includes('bom')) || (/^\d+$/.test(key) && ref.includes('bom')))) {
-                      bestIdx = Math.min(bestIdx, idx); return;
-                    }
-                  }
-                }
-              }
-            };
-
-            tryCodeMatch(directRef);
-            if (bestIdx === Infinity) tryCodeMatch(fromNotes);
-
-            if (bestIdx === Infinity && invNum) {
-              if (bomByInvIdxMap.has(invNum)) bestIdx = Math.min(bestIdx, bomByInvIdxMap.get(invNum));
-              const normInv = invNum.replace(/[^a-z0-9]/gi, '');
-              if (normInv && bomByNormInvIdxMap.has(normInv)) bestIdx = Math.min(bestIdx, bomByNormInvIdxMap.get(normInv));
-            }
-            if (bestIdx < bomStore.length) return bomStore[bestIdx];
-
-            // Customer-name fallback: ONLY when directRef AND fromNotes are both empty
-            if (!directRef && !fromNotes) {
-              const custName = (inv.vendor || inv.customerName || inv.c2 || '').toLowerCase().trim();
-              if (custName && !['customer', 'customer order', 'pending'].includes(custName) && bomByCustIdxMap.has(custName)) {
-                return bomStore[bomByCustIdxMap.get(custName)];
-              }
-            }
-            return null;
-          };
-
-          const mergedInvoices = (invoiceList || []).filter(inv => {
-            const matchingBom = findMatchingBom(inv);
-            if (matchingBom) {
-              if (matchingBom.cancelled || matchingBom.status === 'Cancelled' || matchingBom.status === 'Cancelled & Stock Restored') return false;
-              return isInvoiceEligibleBom(matchingBom);
-            }
-            return true;
-          }).map(inv => {
-            const matchingBom = findMatchingBom(inv);
-            // Prioritize the invoice's own explicit BOM code when present (prevents wrong BOM from customer-name fallback)
-            const explicitInvBom = inv.poNo || inv.bomCode || '';
-            const resolvedBomCode = explicitInvBom || matchingBom?.bomCode || matchingBom?.code || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
-            const isConf = Boolean(
-              (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed === true)) ||
-              inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed === true
-            );
-            
-            const resolvedCustomer = (matchingBom?.customerName && matchingBom.customerName !== 'Customer Order' && matchingBom.customerName !== 'Customer')
-              ? matchingBom.customerName
-              : (inv.vendor && inv.vendor !== 'Customer Order' ? inv.vendor : (inv.customerName || matchingBom?.customerName || 'Customer'));
-
-            const bomTotal = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || 0;
-            const existingAmt = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal);
-            const itemsTotal = computeItemsTotal(inv.items);
-            const resolvedAmount = existingAmt > 0 ? existingAmt : (bomTotal > 0 ? bomTotal : (itemsTotal > 0 ? itemsTotal : 0));
-
-            const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
-            const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : '';
-            const rawInv = inv.invNo || inv.invoiceNo || inv.code || '';
-            const hasExplicitInv = rawInv && rawInv !== 'Pending Confirmation' && !rawInv.toLowerCase().includes('pending');
-            const matchingBomInv = matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' && !matchingBom.invoiceNo.toLowerCase().includes('pending');
-            const resolvedInvNo = hasExplicitInv ? rawInv : (matchingBomInv ? matchingBom.invoiceNo : (derivedInvNo || rawInv || 'VRM-INV-2026-01'));
-
-            return {
-              ...inv,
-              poNo: resolvedBomCode,
-              bomCode: resolvedBomCode,
-              invNo: resolvedInvNo,
-              code: resolvedInvNo,
-              invoiceNo: resolvedInvNo,
-              vendor: resolvedCustomer,
-              customerName: resolvedCustomer,
-              billingAddress: inv.billingAddress || matchingBom?.billingAddress,
-              deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
-              deliveryAddressProofDoc: inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc,
-              accountsVerification: matchingBom?.accountsVerification || inv.accountsVerification,
-              status: isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment'),
-              pay: isConf ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
-              invAmt: resolvedAmount,
-              total: resolvedAmount,
-              amount: formatCurrency(resolvedAmount),
-              items: (inv.items && inv.items.length > 0) ? inv.items : (matchingBom?.dispatchPacking || matchingBom?.items || [])
-            };
-          });
-
-          // Strict order-level and sequence-level deduplication engine
-          const extractOrderSeq = (str) => {
-            if (!str || typeof str !== 'string') return '';
-            const m = str.match(/(?:VRM-(?:INV|BOM)-(\d{4}-\d+)|(?:INV|BOM)-(\d+)|VRM-INV-(\d+)|VRM-BOM-(\d+))/i);
-            if (m) return m[1] || m[2] || m[3] || m[4] || '';
-            const digits = str.replace(/[^0-9]/g, '');
-            return digits || '';
-          };
-
-          const isSameInvoiceOrOrder = (a, b) => {
-            if (!a || !b) return false;
-            if (a.id && b.id && a.id === b.id) return true;
-
-            const aInv = (a.invNo || a.invoiceNo || a.code || a.invoice_number || '').toUpperCase().trim();
-            const bInv = (b.invNo || b.invoiceNo || b.code || b.invoice_number || '').toUpperCase().trim();
-            const aHasRealInv = aInv && aInv !== 'PENDING CONFIRMATION' && !aInv.includes('PENDING');
-            const bHasRealInv = bInv && bInv !== 'PENDING CONFIRMATION' && !bInv.includes('PENDING');
-            if (aHasRealInv && bHasRealInv && (aInv === bInv || aInv.replace(/[^A-Z0-9]/g, '') === bInv.replace(/[^A-Z0-9]/g, ''))) {
-              return true;
-            }
-
-            const aBom = (a.bomCode || a.poNo || a.bom_code || a.bomRef || '').toUpperCase().trim();
-            const bBom = (b.bomCode || b.poNo || b.bom_code || b.bomRef || '').toUpperCase().trim();
-            if (aBom && bBom && (aBom === bBom || aBom.replace(/[^A-Z0-9]/g, '') === bBom.replace(/[^A-Z0-9]/g, ''))) {
-              return true;
-            }
-
-            // Sequence-level matching (e.g. 2026-04 or 665)
-            const seqA = extractOrderSeq(aBom) || extractOrderSeq(aInv);
-            const seqB = extractOrderSeq(bBom) || extractOrderSeq(bInv);
-            if (seqA && seqB && seqA === seqB) {
-              return true;
-            }
-
-            return false;
-          };
-
-          const canonicalInvoices = [];
-
-          const upsertCanonicalInvoice = (item) => {
-            if (!item) return;
-            const existingIdx = canonicalInvoices.findIndex(ex => isSameInvoiceOrOrder(ex, item));
-
-            if (existingIdx === -1) {
-              canonicalInvoices.push(item);
-            } else {
-              const existing = canonicalInvoices[existingIdx];
-              const isCurrConf = item.status === 'Invoice Confirmed' || item.pay === 'Completed & Locked';
-              const isExistConf = existing.status === 'Invoice Confirmed' || existing.pay === 'Completed & Locked';
-
-              const itemInv = (item.invNo || item.invoiceNo || item.code || '').trim();
-              const existInv = (existing.invNo || existing.invoiceNo || existing.code || '').trim();
-              const itemHasRealInv = itemInv && itemInv !== 'Pending Confirmation' && !itemInv.toLowerCase().includes('pending');
-              const existHasRealInv = existInv && existInv !== 'Pending Confirmation' && !existInv.toLowerCase().includes('pending');
-
-              let master, secondary;
-              if (isCurrConf && !isExistConf) {
-                master = item; secondary = existing;
-              } else if (!isCurrConf && isExistConf) {
-                master = existing; secondary = item;
-              } else if (itemHasRealInv && !existHasRealInv) {
-                master = item; secondary = existing;
-              } else if (!itemHasRealInv && existHasRealInv) {
-                master = existing; secondary = item;
-              } else {
-                master = item; secondary = existing;
-              }
-
-              const bestInvNo = (master.invNo && master.invNo !== 'Pending Confirmation' && !master.invNo.toLowerCase().includes('pending'))
-                ? master.invNo
-                : ((secondary.invNo && secondary.invNo !== 'Pending Confirmation' && !secondary.invNo.toLowerCase().includes('pending')) ? secondary.invNo : master.invNo);
-
-              canonicalInvoices[existingIdx] = {
-                ...secondary,
-                ...master,
-                invNo: bestInvNo,
-                code: bestInvNo,
-                invoiceNo: bestInvNo,
-                bomCode: master.bomCode || secondary.bomCode,
-                poNo: master.poNo || secondary.poNo,
-                items: (master.items && master.items.length > 0) ? master.items : (secondary.items || []),
-                dispatchPacking: master.dispatchPacking || secondary.dispatchPacking,
-                accountsVerification: master.accountsVerification || secondary.accountsVerification,
-                billingAddress: master.billingAddress || secondary.billingAddress,
-                deliveryAddress: master.deliveryAddress || secondary.deliveryAddress,
-                deliveryAddressProofDoc: master.deliveryAddressProofDoc || secondary.deliveryAddressProofDoc,
-                sameAsBilling: master.sameAsBilling !== undefined ? master.sameAsBilling : secondary.sameAsBilling
-              };
-            }
-          };
-
-          // 1. Process merged invoices from invoiceList
-          mergedInvoices.forEach(upsertCanonicalInvoice);
-
-          // 2. Process verified BOM invoices from bomStore
-          verifiedBomInvoices.forEach(upsertCanonicalInvoice);
-
-          // 3. Strict 1-BOM = 1-Invoice guarantee
-          const seenBoms = new Set();
-          const seenInvs = new Set();
-          const dedupedInvoices = [];
-
-          canonicalInvoices.forEach(item => {
-            const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
-            const invNum = (item.invNo || item.invoiceNo || item.code || '').toUpperCase().trim();
-            const seq = extractOrderSeq(bRef) || extractOrderSeq(invNum);
-
-            // If we have already seen this BOM or Invoice sequence, don't duplicate
-            if (bRef && seenBoms.has(bRef)) return;
-            if (invNum && seenInvs.has(invNum)) return;
-            if (seq && (seenBoms.has(`SEQ_${seq}`) || seenInvs.has(`SEQ_${seq}`))) return;
-
-            if (bRef) seenBoms.add(bRef);
-            if (invNum) seenInvs.add(invNum);
-            if (seq) {
-              seenBoms.add(`SEQ_${seq}`);
-              seenInvs.add(`SEQ_${seq}`);
-            }
-
-            dedupedInvoices.push(item);
-          });
-
-          allInvoicesUnified = dedupedInvoices.sort((a, b) => {
-            const seqA = parseBomSequenceNumber(a.poNo || a.bomCode || a.invNo || a.code || '');
-            const seqB = parseBomSequenceNumber(b.poNo || b.bomCode || b.invNo || b.code || '');
-            if (seqA !== seqB) return seqB - seqA;
-            const dateA = new Date(a.date || a.createdAt || 0).getTime() || 0;
-            const dateB = new Date(b.date || b.createdAt || 0).getTime() || 0;
-            return dateB - dateA;
-          });
+    allInvoicesUnified = buildCanonicalInvoices({ bomStore: rawBomStore, invoiceList });
   }
 
           // Domain-specific Page Configs for all Production Admin views using the Purchase Orders 5-part layout template
@@ -463,45 +516,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 { id: 'On Hold', label: 'On Hold', count: allInvoicesUnified.filter(i => i.status === 'On Hold' || i.pay === 'Hold').length, bg: '#fee2e2', fg: '#991b1b' }
               ],
               headers: ['Invoice No.', 'Customer / Vendor', 'BOM Ref', 'Invoice Date', 'Invoice Amount (₹)', 'Payment Status', 'Status'],
-              rows: allInvoicesUnified.map(i => {
-                const statusStr = safeStringVal(i.status, '');
-                const payStr = safeStringVal(i.pay, '');
-                const isConfirmed = statusStr === 'Invoice Confirmed' || statusStr === 'Completed' || statusStr === 'Confirmed' || payStr === 'Completed & Locked';
-                const isReady = statusStr === 'Ready for Payment' || statusStr === 'Accounts Verified & Passed to Invoice' || statusStr === 'Packing Verified - Ready for Billing' || statusStr === 'Ready for Invoicing' || payStr === 'Ready' || payStr === 'Ready for Payment';
-
-                const matchingBom = findMatchingBom(i);
-                const resolvedBomCode = safeStringVal(i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code, '—');
-                const resolvedAmt = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || computeItemsTotal(i.items) || 0;
-                const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
-                const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
-                const rawInvNo = safeStringVal(i.invNo, '');
-                const finalCode = (rawInvNo && rawInvNo !== 'Pending Confirmation' && !rawInvNo.toLowerCase().includes('pending')) ? rawInvNo : safeStringVal(matchingBom?.invoiceNo, fallbackInvNo);
-
-                const vendorName = safeStringVal(i.vendor || i.customerName || matchingBom?.customerName, 'Customer');
-                const paymentStatus = isConfirmed ? 'Completed & Locked' : (payStr || 'Ready for Payment');
-                const finalStatus = isConfirmed ? 'Invoice Confirmed' : (statusStr || 'Ready for Payment');
-                const formattedAmt = resolvedAmt > 0 ? formatCurrency(resolvedAmt) : (typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (typeof i.invAmt === 'string' ? i.invAmt : '₹ 0.00'));
-
-                const rowObj = {
-                  ...i,
-                  code: finalCode,
-                  invNo: finalCode,
-                  invoiceNo: finalCode,
-                  c2: vendorName,
-                  c3: resolvedBomCode,
-                  c4: cleanDateStr(i.date),
-                  c5: formattedAmt,
-                  c6: paymentStatus,
-                  status: finalStatus,
-                  stBg: isConfirmed ? '#DCFCE7' : (isReady ? '#EFF6FF' : '#FEF3C7'),
-                  stFg: isConfirmed ? '#166534' : (isReady ? '#2563EB' : '#B45309'),
-                  stBorder: isConfirmed ? '1px solid #86EFAC' : (isReady ? '1px solid #BFDBFE' : '1px solid #FDE68A'),
-                  tabGroup: isConfirmed ? 'Invoice Confirmed' : (isReady ? 'Ready for Payment' : 'On Hold')
-                };
-                delete rowObj.c7;
-                delete rowObj.dateTimeObj;
-                return rowObj;
-              })
+              rows: allInvoicesUnified
             } : undefined,
             'Accounts Verification': shouldBuild('Accounts Verification') ? (() => {
               const hasAnyOrderPaymentProof = (b) => {

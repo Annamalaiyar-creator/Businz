@@ -25,6 +25,7 @@ import CeoSalesAnalyticsSection from './CeoSalesAnalyticsSection';
 import CeoCreditApprovalsCard from './CeoCreditApprovalsCard';
 import { getBomStageTiming } from './BomOrdersView';
 import { isBomAddressProofPending } from './bom/bomStageHelpers';
+import { buildCanonicalInvoices } from './productionConfigs';
 
 // Canonical BUSINZ KPI Grid Component for all CEO Dashboards
 export function CeoKpiGrid({ kpis }) {
@@ -400,7 +401,10 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const poList = useMemo(() => allPoList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allPoList, selectedPeriod]);
   const piList = useMemo(() => allPiList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allPiList, selectedPeriod]);
   const bomList = useMemo(() => allBomList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allBomList, selectedPeriod]);
-  const invList = useMemo(() => allInvList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allInvList, selectedPeriod]);
+  const canonicalInvoices = useMemo(() => {
+    return buildCanonicalInvoices({ bomStore: allBomList, invoiceList: allInvList });
+  }, [allBomList, allInvList]);
+  const invList = useMemo(() => canonicalInvoices.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [canonicalInvoices, selectedPeriod]);
   const quotesList = useMemo(() => allQuotesList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allQuotesList, selectedPeriod]);
   const paymentsList = useMemo(() => allPaymentsList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allPaymentsList, selectedPeriod]);
   const leadsList = useMemo(() => allLeadsList.filter(r => matchesSelectedPeriod(r, selectedPeriod)), [allLeadsList, selectedPeriod]);
@@ -2356,7 +2360,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
   const handleNavigateWithInvFilter = (period = selectedPeriod, customSourceLabel = 'Company Overview') => {
     const { start, end } = getPeriodDateRange(period);
-    const targetInvs = period === selectedPeriod ? (invList || []) : (allInvList || []).filter(r => matchesSelectedPeriod(r, period));
+    const targetInvs = period === selectedPeriod ? (invList || []) : (canonicalInvoices || []).filter(r => matchesSelectedPeriod(r, period));
     const rawKeys = (targetInvs || []).flatMap(inv => [
       inv.invNo,
       inv.invoiceNo,
