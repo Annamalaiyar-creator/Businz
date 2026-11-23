@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ChevronDown, LogOut, 
-  Menu, ChevronRight, GitBranch, Users, ShieldCheck, 
-  X, Check, RefreshCw, Plus, Settings
+  Menu, ChevronRight, GitBranch, ShieldCheck, 
+  Settings
 } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
-import { getSavedAccounts, normalizeAccountKey } from '../services/sessionService';
 
 export const filterCompletedBomNotifications = () => [];
 export const addLiveNotification = () => {};
@@ -25,25 +24,6 @@ export default function Header({
 }) {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
-  const [switchingKey, setSwitchingKey] = useState('');
-  const [savedAccounts, setSavedAccounts] = useState(() => getSavedAccounts());
-
-  useEffect(() => {
-    setSavedAccounts(getSavedAccounts());
-    if (!showRoleMenu) {
-      setShowAccountSwitcher(false);
-      setSwitchingKey('');
-    }
-  }, [showRoleMenu, accountVersion, userRole]);
-
-  const activeAccountKey = typeof window !== 'undefined'
-    ? normalizeAccountKey(
-        localStorage.getItem('controlroom_logged_emp_id') || '',
-        localStorage.getItem('controlroom_logged_user_email') || localStorage.getItem('controlroom_logged_user') || '',
-        userRole
-      )
-    : '';
   const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD';
   const isTechAdmin = userRole === 'Technical Administrator' || userRole === 'Technical Admin' || userRole === 'Developer' || (userRole || '').startsWith('TA');
 
@@ -398,211 +378,6 @@ export default function Header({
                   </span>
                   <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
                 </button>
-
-                <button
-                  type="button"
-                  role="menuitem"
-                  aria-expanded={showAccountSwitcher}
-                  className="bz-menu-item"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSavedAccounts(getSavedAccounts());
-                    setShowAccountSwitcher((prev) => !prev);
-                  }}
-                >
-                  <span className="bz-menu-icon"><Users size={16} /></span>
-                  <span style={{ flex: 1 }}>
-                    <span className="bz-menu-title">Switch Account</span>
-                    <span className="bz-menu-sub">
-                      {savedAccounts.length > 1
-                        ? `${savedAccounts.length} saved accounts on this browser`
-                        : 'Add or switch BUSINZ accounts'}
-                    </span>
-                  </span>
-                  <ChevronRight
-                    size={15}
-                    style={{
-                      color: '#CBD5E1',
-                      transform: showAccountSwitcher ? 'rotate(90deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.15s ease'
-                    }}
-                  />
-                </button>
-
-                {showAccountSwitcher && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      margin: '6px 4px 2px 4px',
-                      padding: '6px',
-                      borderRadius: '12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}
-                  >
-                    <div style={{ maxHeight: '190px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {savedAccounts.map((acc) => {
-                        const rowKey = acc.key || normalizeAccountKey(acc.empCode, acc.email, acc.role);
-                        const isActive = Boolean(activeAccountKey && rowKey === activeAccountKey);
-                        const isBusy = switchingKey === rowKey;
-                        const labelName = acc.name || acc.empCode || acc.email || acc.role || 'User';
-                        const accInitial = labelName.charAt(0).toUpperCase();
-                        const metaText = [acc.role, acc.empCode || acc.email].filter(Boolean).join(' · ');
-
-                        return (
-                          <div
-                            key={rowKey}
-                            role="button"
-                            tabIndex={0}
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (isActive || switchingKey) return;
-                              setSwitchingKey(rowKey);
-                              try {
-                                if (onSwitchAccount) {
-                                  await onSwitchAccount(acc);
-                                }
-                              } finally {
-                                setSwitchingKey('');
-                                setShowRoleMenu(false);
-                              }
-                            }}
-                            onKeyDown={async (e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (isActive || switchingKey) return;
-                                setSwitchingKey(rowKey);
-                                try {
-                                  if (onSwitchAccount) {
-                                    await onSwitchAccount(acc);
-                                  }
-                                } finally {
-                                  setSwitchingKey('');
-                                  setShowRoleMenu(false);
-                                }
-                              }
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '9px',
-                              padding: '7px 8px',
-                              borderRadius: '9px',
-                              backgroundColor: isActive ? '#ECFEFF' : '#FFFFFF',
-                              border: isActive ? '1px solid #A5F3FC' : '1px solid #F1F5F9',
-                              cursor: isActive ? 'default' : (switchingKey ? 'wait' : 'pointer'),
-                              transition: 'background-color 0.15s ease'
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: '28px',
-                                height: '28px',
-                                borderRadius: '50%',
-                                flexShrink: 0,
-                                backgroundColor: isActive ? '#0E7490' : '#E2E8F0',
-                                color: isActive ? '#FFFFFF' : '#334155',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '12px',
-                                fontWeight: '800'
-                              }}
-                            >
-                              {accInitial}
-                            </div>
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {labelName}
-                              </div>
-                              <div style={{ fontSize: '10.5px', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {isBusy ? 'Verifying session...' : metaText}
-                              </div>
-                            </div>
-                            {isActive ? (
-                              <span
-                                title="Active account"
-                                style={{
-                                  width: '20px',
-                                  height: '20px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#DCFCE7',
-                                  color: '#16A34A',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  flexShrink: 0
-                                }}
-                              >
-                                <Check size={12} strokeWidth={2.8} />
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                title="Remove saved account"
-                                aria-label={`Remove ${labelName}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (switchingKey) return;
-                                  onRemoveAccount && onRemoveAccount(acc);
-                                }}
-                                style={{
-                                  width: '20px',
-                                  height: '20px',
-                                  borderRadius: '50%',
-                                  border: 'none',
-                                  backgroundColor: 'transparent',
-                                  color: '#94A3B8',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  flexShrink: 0,
-                                  padding: 0
-                                }}
-                              >
-                                <X size={13} />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowRoleMenu(false);
-                        onAddAccount && onAddAccount();
-                      }}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        padding: '7px 10px',
-                        marginTop: '2px',
-                        borderRadius: '9px',
-                        border: '1px dashed #0E7490',
-                        backgroundColor: '#ECFEFF',
-                        color: '#0E7490',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit'
-                      }}
-                    >
-                      <Plus size={14} />
-                      <span>Add Account</span>
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Logout */}
@@ -620,11 +395,6 @@ export default function Header({
                   <span className="bz-menu-icon"><LogOut size={16} /></span>
                   <span style={{ flex: 1 }}>
                     <span className="bz-menu-title">Log out</span>
-                    {savedAccounts.length > 1 && (
-                      <span className="bz-menu-sub" style={{ color: '#F87171' }}>
-                        Logs out current account only
-                      </span>
-                    )}
                   </span>
                 </button>
               </div>
