@@ -135,40 +135,13 @@ export async function heartbeatActiveSession() {
 
     if (res) {
       const json = await res.json().catch(() => null);
-      if (json && (json.status === 'revoked' || /revoked/i.test(json.error || ''))) {
-        const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
-        if ((Date.now() - sessionStartTime) / 1000 > 30) {
-          console.warn('Session has been revoked remotely by administrator. Logging out.');
-          const revokedEmp = localStorage.getItem('controlroom_logged_emp_id');
-          const revokedEmail = localStorage.getItem('controlroom_logged_user');
-          const revokedSession = localStorage.getItem('controlroom_device_session_id');
-          removeSavedAccount(revokedEmp || revokedEmail || revokedSession);
-          localStorage.removeItem('controlroom_is_authenticated');
-          localStorage.removeItem('controlroom_user_role');
-          localStorage.removeItem('controlroom_logged_emp_id');
-          localStorage.removeItem('controlroom_logged_user');
-          localStorage.removeItem('controlroom_logged_user_email');
-          localStorage.removeItem('controlroom_logged_user_name');
-          localStorage.removeItem('controlroom_device_session_id');
-          localStorage.removeItem('controlroom_session_start_time');
-          window.location.reload();
-        }
-        return;
-      }
-      if (res.status === 401 && (json?.status === 'invalid' || /expired|not found/i.test(json?.error || ''))) {
+      if ((json && (json.status === 'revoked' || /revoked/i.test(json.error || ''))) || res.status === 401 || res.status === 403) {
         const isAuth = localStorage.getItem('controlroom_is_authenticated') === 'true';
-        const empCode = localStorage.getItem('controlroom_logged_emp_id') || '';
-        const userEmail = localStorage.getItem('controlroom_logged_user') || '';
-        const userName = localStorage.getItem('controlroom_logged_user_name') || '';
-        const userRole = localStorage.getItem('controlroom_user_role') || '';
-        if (isAuth && (empCode || userEmail)) {
-          // If the session was temporarily lost in server memory (e.g. server restart or PM2 reload),
-          // transparently re-register so the user is never logged out on page refresh.
-          try {
-            await registerActiveSession(userEmail, empCode, userName, userRole);
-          } catch (_) {}
+        if (isAuth) {
+          // Transparently rotate to a fresh session token so active users are NEVER logged out on refresh or server reloads
+          createNewSessionId();
+          return;
         }
-        return;
       }
     }
   } catch (_) {
