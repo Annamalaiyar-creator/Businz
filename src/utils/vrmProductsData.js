@@ -3976,7 +3976,16 @@ export const calculateTotalDispatchQty = (item, setCount = 1, presetName = '', p
   if (baseQty <= 0) return 0;
 
   // 1. Standalone custom items or Create Set (isCustomSet) -> entered quantity is directly the total dispatch qty (multiplier = 1)
-  if (item.isCustomSet || (!item.isPresetItem && !item.presetGroupId && !item.presetName && !presetName)) {
+  const isCustomSetItem = Boolean(
+    item.isCustomSet ||
+    item.isCustomGrp ||
+    item.presetId === 'custom_set' ||
+    String(item.presetGroupId || '').startsWith('custom_set_') ||
+    String(item.groupId || '').startsWith('custom_set_') ||
+    String(presetName || item.presetName || '').toLowerCase().includes('custom set') ||
+    String(presetCategory || item.category || '').toLowerCase().includes('custom set')
+  );
+  if (isCustomSetItem || (!item.isPresetItem && !item.presetGroupId && !item.presetName && !presetName)) {
     return baseQty;
   }
 
@@ -4041,7 +4050,16 @@ export const resolveBomItemDispatchQty = (item, bomRecord = null, rawMatch = nul
   const grp = groupId ? groupsMap[groupId] : null;
   const isPreset = Boolean(it.isPresetItem || rm.isPresetItem || groupId || it.presetName || rm.presetName);
 
-  const isCustomSet = Boolean(it.isCustomSet || rm.isCustomSet || grp?.isCustomSet || grp?.presetId === 'custom_set');
+  const isCustomSet = Boolean(
+    it.isCustomSet ||
+    rm.isCustomSet ||
+    grp?.isCustomSet ||
+    grp?.presetId === 'custom_set' ||
+    String(groupId || '').startsWith('custom_set_') ||
+    String(it.presetGroupId || '').startsWith('custom_set_') ||
+    String(rm.presetGroupId || '').startsWith('custom_set_') ||
+    String(it.presetName || rm.presetName || grp?.presetName || '').toLowerCase().includes('custom set')
+  );
   let effectiveSetCount = 1;
   if (isCustomSet) {
     effectiveSetCount = 1;

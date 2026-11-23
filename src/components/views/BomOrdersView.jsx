@@ -1873,7 +1873,7 @@ export default function BomOrdersView(props) {
                 unitType: gUnit,
                 kitPrice: g.kitPrice != null ? String(g.kitPrice) : '',
                 gstRate: g.gstRate || '18%',
-                isCustomSet: Boolean(g.isCustomSet || g.presetId === 'custom_set')
+                isCustomSet: Boolean(g.isCustomSet || g.presetId === 'custom_set' || String(gid || '').startsWith('custom_set_') || String(g.presetName || '').toLowerCase().includes('custom set'))
               };
             }
           });
@@ -1893,7 +1893,7 @@ export default function BomOrdersView(props) {
                 unitType: gUnit,
                 kitPrice: g.kitPrice != null ? String(g.kitPrice) : '',
                 gstRate: g.gstRate || '18%',
-                isCustomSet: Boolean(g.isCustomSet || g.presetId === 'custom_set')
+                isCustomSet: Boolean(g.isCustomSet || g.presetId === 'custom_set' || String(gid || '').startsWith('custom_set_') || String(g.presetName || '').toLowerCase().includes('custom set'))
               };
             }
           });
@@ -1971,6 +1971,7 @@ export default function BomOrdersView(props) {
             rate: rateVal,
             gstRate: it.gstRate || '18%',
             isPresetItem: isPreset,
+            isCustomSet: Boolean(it.isCustomSet || (it.presetGroupId && restoredPresetGroups[it.presetGroupId]?.isCustomSet) || String(it.presetGroupId || '').startsWith('custom_set_') || String(it.presetName || '').toLowerCase().includes('custom set')),
             presetGroupId: it.presetGroupId || (isPreset && firstPresetGroup ? firstPresetGroup.groupId : null),
             presetName: it.presetName || (isPreset && firstPresetGroup ? firstPresetGroup.presetName : null)
           };

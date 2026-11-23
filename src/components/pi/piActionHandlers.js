@@ -268,7 +268,13 @@ export function createPiActionHandlers(ctx) {
       creditDays,
       remarks,
       unitValue: Math.round(totals.sub),
-      quantity: (piItems || []).reduce((acc, it) => acc + (parseFloat(it.qty) || 0), 0) || 1,
+      quantity: (() => {
+        const presetSetQty = Object.values(presetGroups || {}).reduce((acc, g) => acc + (parseFloat(g.setCount) || 1), 0);
+        const standaloneQty = (piItems || []).filter(it => !it.isPresetItem && !it.presetGroupId).reduce((acc, it) => acc + (parseFloat(it.qty) || 0), 0);
+        return Object.keys(presetGroups || {}).length > 0
+          ? (presetSetQty + standaloneQty)
+          : ((piItems || []).reduce((acc, it) => acc + (parseFloat(it.qty) || 0), 0) || 1);
+      })(),
       subtotal: totals.sub,
       taxTotal: totals.gst,
       grandTotal: totals.grand,
@@ -286,7 +292,14 @@ export function createPiActionHandlers(ctx) {
   const handleAddPresetItem = (groupId) => {
     const grp = (groupId && presetGroups[groupId]) || Object.values(presetGroups)[0];
     if (!grp) return;
+    const isCustomGrp = Boolean(
+      grp.isCustomSet ||
+      grp.presetId === 'custom_set' ||
+      String(grp.groupId || groupId || '').startsWith('custom_set_') ||
+      String(grp.presetName || '').toLowerCase().includes('custom set')
+    );
     const isDirectMult =
+      isCustomGrp ||
       grp.unit === 'kW' ||
       grp.unitType === 'kW' ||
       isRailPreset(grp.presetName, grp.category) ||
@@ -298,12 +311,14 @@ export function createPiActionHandlers(ctx) {
       category: '',
       uom: 'NOS',
       unit: 'NOS',
-      qty: String(1 * mult),
+      qty: isCustomGrp ? '1' : String(1 * mult),
       baseQty: 1,
+      totalDispatchQty: isCustomGrp ? '1' : undefined,
       rate: '0',
       gstRate: grp.gstRate || '18%',
       hsn: '',
       isPresetItem: true,
+      isCustomSet: isCustomGrp,
       presetGroupId: targetGid,
       presetName: grp.presetName
     };
@@ -943,17 +958,27 @@ export function createPiActionHandlers(ctx) {
         const isPreset = Boolean(it.isPresetItem || it.presetGroupId);
         const resolvedUom = String(it.uom || it.unit || 'NOS').trim().toUpperCase() || 'NOS';
         const grp = it.presetGroupId ? presetGroups[it.presetGroupId] : null;
-        const totalDisp = calculateTotalDispatchQty(
-          it,
-          grp?.setCount || 1,
-          grp?.presetName || it.presetName,
-          grp?.category || it.category
+        const isCustomGrp = Boolean(
+          it.isCustomSet ||
+          grp?.isCustomSet ||
+          grp?.presetId === 'custom_set' ||
+          String(it.presetGroupId || '').startsWith('custom_set_') ||
+          String(it.presetName || grp?.presetName || '').toLowerCase().includes('custom set')
         );
+        const totalDisp = isCustomGrp
+          ? (parseFloat(it.qty) || 0)
+          : calculateTotalDispatchQty(
+              { ...it, isCustomSet: isCustomGrp },
+              grp?.setCount || 1,
+              grp?.presetName || it.presetName,
+              grp?.category || it.category
+            );
         return {
           ...it,
           uom: resolvedUom,
           unit: resolvedUom,
           isPresetItem: isPreset,
+          isCustomSet: isCustomGrp,
           qtyPerSet: parseFloat(it.qty) || 0,
           totalDispatchQty: totalDisp,
           rate: isPreset ? '0' : String(it.rate || '0'),
@@ -997,7 +1022,13 @@ export function createPiActionHandlers(ctx) {
         creditDays,
         remarks,
         unitValue: Math.round(totals.sub),
-        quantity: piItems.reduce((acc, it) => acc + (parseFloat(it.qty) || 0), 0) || 1,
+        quantity: (() => {
+          const presetSetQty = Object.values(presetGroups || {}).reduce((acc, g) => acc + (parseFloat(g.setCount) || 1), 0);
+          const standaloneQty = (piItems || []).filter(it => !it.isPresetItem && !it.presetGroupId).reduce((acc, it) => acc + (parseFloat(it.qty) || 0), 0);
+          return Object.keys(presetGroups || {}).length > 0
+            ? (presetSetQty + standaloneQty)
+            : ((piItems || []).reduce((acc, it) => acc + (parseFloat(it.qty) || 0), 0) || 1);
+        })(),
         subtotal: totals.sub,
         kitSubtotal: totals.kitSubtotal,
         taxTotal: totals.gst,

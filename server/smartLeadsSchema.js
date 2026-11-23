@@ -54,6 +54,23 @@ export async function ensureSmartLeadsSchema() {
       ADD COLUMN IF NOT EXISTS sl_escalated_unassigned_3h_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS sl_escalated_2h_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS sl_escalated_48h_at TIMESTAMPTZ;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS public.lead_followups (
+      id TEXT PRIMARY KEY,
+      lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE CASCADE,
+      scheduled_at TIMESTAMPTZ NOT NULL,
+      completed_at TIMESTAMPTZ,
+      notes TEXT,
+      status TEXT DEFAULT 'Scheduled',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      created_by_user_id TEXT,
+      created_by_name TEXT,
+      assigned_to_user_id TEXT,
+      assigned_to_name TEXT
+    );
 
     ALTER TABLE public.lead_followups
       ADD COLUMN IF NOT EXISTS followup_type TEXT DEFAULT 'CALL',
