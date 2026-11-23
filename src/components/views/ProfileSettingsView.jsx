@@ -14,9 +14,9 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
   const [busy, setBusy] = useState(false);
 
   // Read stored user profile details
-  const storedName = localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('vrm_user_name') || 'Annamalaiyar';
-  const storedEmpCode = localStorage.getItem('controlroom_logged_user_emp_code') || localStorage.getItem('vrm_user_emp_code') || 'VRM-001';
-  const storedEmail = localStorage.getItem('controlroom_logged_user_email') || `${storedEmpCode.toLowerCase()}@businz.com`;
+  const storedEmpCode = localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_emp_code') || '';
+  const storedName = localStorage.getItem('controlroom_logged_user_name') || userRole || 'User';
+  const storedEmail = localStorage.getItem('controlroom_logged_user_email') || localStorage.getItem('controlroom_logged_user') || (storedEmpCode ? `${storedEmpCode.toLowerCase()}@businz.com` : 'user@businz.com');
 
   const [profile, setProfile] = useState({
     name: storedName,

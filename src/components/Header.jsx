@@ -63,86 +63,97 @@ export default function Header({
   }, []);
 
 
-  // Map userRole or logged_user_name to person's actual name
+  // Map userRole and logged_emp_id to person's actual name with strict role-affinity verification
   const storedName = localStorage.getItem('controlroom_logged_user_name');
-  let userName = (storedName && storedName !== 'undefined' && storedName !== 'null') ? storedName : '';
+  const storedEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+  const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
-  // If storedName was previously 'Executive Leadership (CEO)', heal it to actual CEO person name
-  if ((userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director') && (!userName || userName === 'Executive Leadership (CEO)' || userName === 'CEO')) {
-    try {
-      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && ((e.employee_code || '').toUpperCase().startsWith('CEO') || e.role === 'CEO' || e.role === 'Managing Director'));
-      if (match && (match.employee_name || match.name)) {
-        userName = match.employee_name || match.name;
+  let userName = '';
+  try {
+    const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+    const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+    const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+
+    // Check if storedEmpId matches an employee whose role is compatible with current userRole
+    let matchedEmp = null;
+    if (storedEmpId) {
+      const emp = allEmps.find(e => e && (e.employee_code === storedEmpId || e.code === storedEmpId));
+      if (emp) {
+        const empRole = String(emp.role || '').toLowerCase();
+        const curRole = String(userRole || '').toLowerCase();
+        const isCompatible = empRole === curRole ||
+          (curRole.includes('sales') && empRole.includes('sales')) ||
+          (curRole.includes('account') && empRole.includes('account')) ||
+          (curRole.includes('dispatch') && empRole.includes('dispatch')) ||
+          (curRole.includes('production') && empRole.includes('production')) ||
+          (curRole.includes('design') && empRole.includes('design')) ||
+          (curRole.includes('admin') && empRole.includes('admin'));
+        if (isCompatible) {
+          matchedEmp = emp;
+        }
       }
-    } catch(e) {}
-    if (!userName || userName === 'Executive Leadership (CEO)' || userName === 'CEO') {
-      userName = 'Velmurugan Rathinam';
     }
-    localStorage.setItem('controlroom_logged_user_name', userName);
+
+    if (!matchedEmp && storedEmail) {
+      const emp = allEmps.find(e => e && String(e.email || '').toLowerCase() === storedEmail);
+      if (emp && String(emp.role || '').toLowerCase() === String(userRole || '').toLowerCase()) {
+        matchedEmp = emp;
+      }
+    }
+
+    // If no employee matched for this role, lookup the canonical employee for userRole
+    if (!matchedEmp) {
+      matchedEmp = allEmps.find(e => e && e.role === userRole && (e.employee_name || e.name));
+    }
+
+    if (matchedEmp && (matchedEmp.employee_name || matchedEmp.name)) {
+      userName = matchedEmp.employee_name || matchedEmp.name;
+    }
+  } catch (_) {}
+
+  // Canonical role defaults if not discovered from employee directory
+  if (!userName || userName === 'Executive Leadership (CEO)' || userName === 'CEO') {
+    const norm = String(userRole || '').toLowerCase();
+    if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
+      userName = 'Velmurugan Rathinam';
+    } else if (norm.includes('technical administrator') || norm.includes('technical admin') || norm.includes('developer')) {
+      userName = 'Annamalaiyar';
+    } else if (norm === 'production head' || norm.includes('production head')) {
+      userName = 'Senthil Kumar';
+    } else if (norm === 'dispatch head' || norm.includes('dispatch head')) {
+      userName = 'Kalpana';
+    } else if (norm === 'accounts head' || norm === 'accounts') {
+      userName = 'Venkatesh';
+    } else if (norm.includes('accounts executive') || norm.includes('accounts lead')) {
+      userName = 'Priya';
+    } else if (norm === 'sales head') {
+      userName = 'Sales Head';
+    } else if (norm.includes('sales')) {
+      userName = (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName !== 'Executive Leadership (CEO)') ? storedName : 'Sales Executive';
+    } else if (norm.includes('design engineer')) {
+      userName = 'Dinesh';
+    } else if (norm.includes('design executive')) {
+      userName = 'Kavitha';
+    } else if (norm.includes('invoice') || norm.includes('billing')) {
+      userName = 'Anand';
+    } else if (norm.includes('bom')) {
+      userName = 'Balaji';
+    } else if (norm === 'hr' || norm.startsWith('hr')) {
+      userName = 'HR Operations';
+    } else if (norm.includes('procurement')) {
+      userName = 'Annamalaiyar';
+    } else {
+      userName = (storedName && storedName !== 'undefined' && storedName !== 'null') ? storedName : (userRole || 'Annamalaiyar');
+    }
   }
 
-  // If storedName was previously hardcoded as 'Vijay', heal it from registered employee record if available
-  if (userRole === 'Sales Head' && (!userName || userName.toLowerCase() === 'vijay' || userName.toLowerCase() === 'sales' || userName.toLowerCase() === 'sales head')) {
-    try {
-      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && e.role === 'Sales Head' && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-      if (match && (match.employee_name || match.name)) {
-        userName = match.employee_name || match.name;
-        localStorage.setItem('controlroom_logged_user_name', userName);
-      }
-    } catch(e) {}
-  }
-
-  if (!userName || userName === 'Executive Leadership (CEO)') {
-    try {
-      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const storedEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
-      const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
-      let match = null;
-      if (storedEmpId || storedEmail) {
-        match = allEmps.find(e => e && (
-          (storedEmpId && (e.employee_code === storedEmpId || e.code === storedEmpId)) ||
-          (storedEmail && (e.email || '').toLowerCase() === storedEmail)
-        ));
-      }
-      if (!match) {
-        match = allEmps.find(e => e && (e.role === userRole || (userRole.includes('Supervisor') && String(e.role).includes('Supervisor')) || (userRole.includes('Dispatch') && String(e.role).includes('Dispatch'))));
-      }
-      if (match && (match.employee_name || match.name)) {
-        userName = match.employee_name || match.name;
-      }
-    } catch(e) {}
-  }
-  if (!userName || userName === 'Executive Leadership (CEO)') {
-    if (userRole === 'Production Head') userName = 'Senthil Kumar';
-    else if (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director') userName = 'Velmurugan Rathinam';
-    else if (userRole === 'HR') userName = 'HR Operations';
-    else if (userRole === 'Technical Administrator') userName = 'Annamalaiyar';
-    else if (userRole === 'Dispatch Head') userName = 'Kalpana';
-    else if (userRole === 'Floor Supervisor') userName = 'Floor Supervisor';
-    else if (userRole === 'Floor Employee') userName = 'Floor Employee';
-    else if (userRole === 'Accounts Head') userName = 'Venkatesh';
-    else if (userRole === 'Accounts Executive') userName = 'Priya';
-    else if (userRole === 'Sales Head') userName = 'Sales Head';
-    else if (userRole === 'Sales Executive') userName = 'Sales Executive';
-    else if (userRole === 'Design Engineer') userName = 'Dinesh';
-    else if (userRole === 'Design Executive') userName = 'Kavitha';
-    else if (userRole === 'Invoice Executive' || userRole === 'Billing') userName = 'Anand';
-    else if (userRole === 'BOM Executive') userName = 'Balaji';
-    else if (userRole === 'Procurement Head' || userRole === 'Procurement Admin') userName = 'Annamalaiyar';
-    else userName = 'Annamalaiyar';
+  // Synchronize validated identity to localStorage so heartbeats and notifications stay accurate
+  if (userName && userName !== storedName) {
+    try { localStorage.setItem('controlroom_logged_user_name', userName); } catch (_) {}
   }
   const safeName = (userName && userName !== 'undefined' && userName !== 'null') ? userName : (userRole || 'Annamalaiyar');
   const avatarLetter = (safeName.charAt(0) || 'A').toUpperCase();
 
-  const storedEmail = localStorage.getItem('controlroom_logged_user');
   const userEmail = (storedEmail && storedEmail.includes('@'))
     ? storedEmail
     : `${safeName.toLowerCase().replace(/[^a-z0-9]/g, '')}@vrmstructures.in`;
