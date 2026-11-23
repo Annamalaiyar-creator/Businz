@@ -542,18 +542,17 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const isProcurementRole = role === 'Procurement Head' || role === 'Procurement Admin' || (role || '').includes('Procurement');
     const templateLabel = isProcurementRole ? 'PO Template' : 'Templates';
     const templateIcon = isProcurementRole ? ShoppingCart : Palette;
-    const templateBadge = isProcurementRole ? 'PO' : 'Studio';
 
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.label === 'PO Template' || i.targetTab === 'Templates'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
     const showTemplates = !hasTemplates && !isCeo && !isTechSupport && !isAccounts;
 
     if (sysSection) {
-      if (showTemplates) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
+      if (showTemplates) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon });
     } else if (showTemplates) {
       sections.push({
         category: 'SYSTEM & CONFIG',
-        items: [{ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge }]
+        items: [{ label: templateLabel, targetTab: 'Templates', icon: templateIcon }]
       });
     }
 
@@ -987,12 +986,12 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
                     )}
                   </div>
 
-                  {/* Badge pill in Expanded & Collapsed mode (Dark Slate Circle Badge matching reference image) */}
-                  {item.badge && (
+                  {/* Badge pill in Expanded & Collapsed mode (Strictly numeric counts only — no text badges) */}
+                  {item.badge && !isNaN(Number(item.badge)) && Number(item.badge) > 0 && (
                     <span style={{
-                      fontSize: collapsed ? '9.5px' : '11px',
+                      fontSize: collapsed ? '9px' : '11px',
                       fontWeight: '800',
-                      borderRadius: collapsed ? '6px' : '10px',
+                      borderRadius: collapsed ? '9999px' : '10px',
                       padding: collapsed ? '1px 4.5px' : '2px 8px',
                       lineHeight: '1.2',
                       minWidth: collapsed ? '16px' : '20px',
@@ -1001,8 +1000,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
                       color: '#FFFFFF',
                       boxShadow: '0 2px 4px rgba(15, 23, 42, 0.15)',
                       position: collapsed ? 'absolute' : 'static',
-                      top: collapsed ? '4px' : 'auto',
-                      right: collapsed ? '6px' : 'auto',
+                      top: collapsed ? '2px' : 'auto',
+                      right: collapsed ? '4px' : 'auto',
                       zIndex: collapsed ? 2 : 1
                     }}>
                       {item.badge}
