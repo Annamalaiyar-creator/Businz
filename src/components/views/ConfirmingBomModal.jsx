@@ -1518,18 +1518,27 @@ export default function ConfirmingBomModal({
                             if (!isPartBundle) {
                               return <span style={{ color: '#94A3B8', fontWeight: '700' }} title="Standalone product; entered quantity is direct total quantity">—</span>;
                             }
-                            const setCount = parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1;
-                            const dispQty = item.totalDispatchQty || calculateTotalDispatchQty(
-                              item,
-                              setCount,
-                              pInfo?.presetName || confirmingBomModal.presetName,
-                              item.category,
-                              pInfo?.unit || pInfo?.unitType || item.unit || item.uom
+                            const isCustomSet = Boolean(
+                              item.isCustomSet ||
+                              pInfo?.isCustomSet ||
+                              pInfo?.presetId === 'custom_set' ||
+                              String(item.presetGroupId || '').startsWith('custom_set_') ||
+                              String(pInfo?.presetName || confirmingBomModal.presetName || '').toLowerCase().includes('custom set')
                             );
+                            const setCount = isCustomSet ? 1 : (parseFloat(pInfo?.setCount || confirmingBomModal.presetSetCount || confirmingBomModal.setCount) || 1);
+                            const dispQty = isCustomSet
+                              ? itemQty
+                              : (item.totalDispatchQty || calculateTotalDispatchQty(
+                                  item,
+                                  setCount,
+                                  pInfo?.presetName || confirmingBomModal.presetName,
+                                  item.category,
+                                  pInfo?.unit || pInfo?.unitType || item.unit || item.uom
+                                ));
                             return (
                               <div>
                                 <span>{dispQty}</span>
-                                {dispQty !== itemQty && (
+                                {dispQty !== itemQty && !isCustomSet && (
                                   <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '600' }}>({itemQty} × {setCount})</div>
                                 )}
                               </div>

@@ -2583,14 +2583,23 @@ export default function BomConfirmAuditSection({ ctx }) {
                                 const isSub = Boolean(item.isSubPreset || item.subPresetName || item.subPresetId);
                                 const effectivePresetName = isSub ? item.subPresetName : (pInfo?.presetName || item.presetName || confirmingBomModal.presetName);
                                 const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (pInfo?.unitType || pInfo?.unit || item.unit || item.uom);
-                                const effectiveSetCount = isSub ? (item.subSetCount || 1) : (pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1);
-                                const totalDisp = calculateTotalDispatchQty(
-                                  { ...item, presetId: pInfo?.presetId || item.presetId },
-                                  effectiveSetCount,
-                                  effectivePresetName,
-                                  confirmingBomModal.category || item.category,
-                                  effectiveUnit
+                                const isCustomSet = Boolean(
+                                  item.isCustomSet ||
+                                  pInfo?.isCustomSet ||
+                                  pInfo?.presetId === 'custom_set' ||
+                                  String(item.presetGroupId || '').startsWith('custom_set_') ||
+                                  String(effectivePresetName || '').toLowerCase().includes('custom set')
                                 );
+                                const effectiveSetCount = isCustomSet ? 1 : (isSub ? (item.subSetCount || 1) : (pInfo?.setCount || confirmingBomModal.setCount || confirmingBomModal.presetSetCount || 1));
+                                const totalDisp = isCustomSet
+                                  ? (parseFloat(item.qty) || 0)
+                                  : calculateTotalDispatchQty(
+                                      { ...item, presetId: pInfo?.presetId || item.presetId, isCustomSet },
+                                      effectiveSetCount,
+                                      effectivePresetName,
+                                      confirmingBomModal.category || item.category,
+                                      effectiveUnit
+                                    );
                                 const isKw = isKwPreset(effectivePresetName, effectiveUnit, item);
                                 const isRail = isRailPreset(effectivePresetName, confirmingBomModal.category || item.category, item.subPresetName, item.name);
                                 const isTriangle = isTriangleDirectPreset(
@@ -2941,14 +2950,23 @@ export default function BomConfirmAuditSection({ ctx }) {
                               const isSub = Boolean(item.isSubPreset || item.subPresetName || item.subPresetId);
                               const effectivePresetName = isSub ? item.subPresetName : (pInfo?.presetName || item.presetName);
                               const effectiveUnit = isSub ? (item.subUnit || item.unit || 'Sets') : (pInfo?.unit || item.unit || item.uom);
-                              const effectiveSetCount = isSub ? (item.subSetCount || 1) : (pInfo?.setCount || 1);
-                              const calcTotalDisp = calculateTotalDispatchQty(
-                                { ...item, presetId: pInfo?.presetId || item.presetId },
-                                effectiveSetCount,
-                                effectivePresetName,
-                                confirmingBomModal.category || item.category,
-                                effectiveUnit
+                              const isCustomSet = Boolean(
+                                item.isCustomSet ||
+                                pInfo?.isCustomSet ||
+                                pInfo?.presetId === 'custom_set' ||
+                                String(item.presetGroupId || '').startsWith('custom_set_') ||
+                                String(effectivePresetName || '').toLowerCase().includes('custom set')
                               );
+                              const effectiveSetCount = isCustomSet ? 1 : (isSub ? (item.subSetCount || 1) : (pInfo?.setCount || 1));
+                              const calcTotalDisp = isCustomSet
+                                ? (parseFloat(item.qty) || 0)
+                                : calculateTotalDispatchQty(
+                                    { ...item, presetId: pInfo?.presetId || item.presetId, isCustomSet },
+                                    effectiveSetCount,
+                                    effectivePresetName,
+                                    confirmingBomModal.category || item.category,
+                                    effectiveUnit
+                                  );
                               const totalDisp = item.totalDispatchQty !== undefined && item.totalDispatchQty !== null && item.totalDispatchQty !== ''
                                 ? item.totalDispatchQty
                                 : calcTotalDisp;

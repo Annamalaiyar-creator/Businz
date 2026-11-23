@@ -534,6 +534,7 @@ export async function initPostgresDatabase() {
       `);
 
       const leadColumns = [
+        'estimated_value NUMERIC DEFAULT 0',
         'location TEXT',
         'product_requirement TEXT',
         'lead_created_by_id TEXT',

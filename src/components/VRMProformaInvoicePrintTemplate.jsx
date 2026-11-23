@@ -1037,7 +1037,8 @@ export function VRMProformaInvoicePrintSheet({
       grpMeta?.isCustomSet ||
       grpMeta?.presetId === 'custom_set' ||
       String(grpId || '').startsWith('custom_set_') ||
-      String(grpMeta?.groupId || '').startsWith('custom_set_')
+      String(grpMeta?.groupId || '').startsWith('custom_set_') ||
+      String(grpMeta?.presetName || it.presetName || '').toLowerCase().includes('custom set')
     );
     const isDirectPresetQty =
       isCustomSetItem ||
@@ -1047,7 +1048,7 @@ export function VRMProformaInvoicePrintSheet({
     const setMultiplier = isDirectPresetQty ? 1 : (parseFloat(grpMeta?.setCount || it.setCount || pi.presetSetCount || 1) || 1);
     const rawPerKit = parseFloat(it.qtyPerSet ?? it.baseQty ?? it.qty);
     const perKitQty = isCustomSetItem
-      ? ((parseFloat(grpMeta?.setCount || 1) || 1) > 1 ? Number((q / (parseFloat(grpMeta?.setCount || 1) || 1)).toFixed(2)) : q)
+      ? q
       : (!isNaN(rawPerKit) && rawPerKit > 0 ? rawPerKit : q);
     const rawTotalDisp = parseFloat(it.totalDispatchQty);
     const totalQty = isCustomSetItem
