@@ -7,54 +7,85 @@ import {
 } from './smartLeadsRules.js';
 
 export async function ensureSmartLeadsSchema() {
+  // 1. Ensure public.leads table exists before running column alterations
   await query(`
-    ALTER TABLE public.leads
-      ADD COLUMN IF NOT EXISTS estimated_value NUMERIC DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS estimated_kw NUMERIC,
-      ADD COLUMN IF NOT EXISTS category TEXT,
-      ADD COLUMN IF NOT EXISTS location TEXT,
-      ADD COLUMN IF NOT EXISTS product_requirement TEXT,
-      ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'Medium',
-      ADD COLUMN IF NOT EXISTS designation TEXT,
-      ADD COLUMN IF NOT EXISTS whatsapp TEXT,
-      ADD COLUMN IF NOT EXISTS email TEXT,
-      ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS last_activity_type TEXT,
-      ADD COLUMN IF NOT EXISTS converted_customer_id TEXT,
-      ADD COLUMN IF NOT EXISTS converted_customer_code TEXT,
-      ADD COLUMN IF NOT EXISTS is_converted BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS assigned_salesperson TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_to_user_id TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_to_name TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_to_role TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_by_user_id TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_by_name TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_by_role TEXT,
-      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS lead_created_by_id TEXT,
-      ADD COLUMN IF NOT EXISTS lead_created_by_name TEXT,
-      ADD COLUMN IF NOT EXISTS pipeline_stage TEXT,
-      ADD COLUMN IF NOT EXISTS lost_reason_id TEXT,
-      ADD COLUMN IF NOT EXISTS lost_remarks TEXT,
-      ADD COLUMN IF NOT EXISTS score INTEGER,
-      ADD COLUMN IF NOT EXISTS score_breakdown JSONB,
-      ADD COLUMN IF NOT EXISTS temperature TEXT,
-      ADD COLUMN IF NOT EXISTS territory TEXT,
-      ADD COLUMN IF NOT EXISTS next_action TEXT,
-      ADD COLUMN IF NOT EXISTS next_action_due_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS next_action_exception TEXT,
-      ADD COLUMN IF NOT EXISTS stage_changed_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS merged_into_lead_id TEXT,
-      ADD COLUMN IF NOT EXISTS sl_escalated_24h_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS customer_id TEXT,
-      ADD COLUMN IF NOT EXISTS customer_code TEXT,
-      ADD COLUMN IF NOT EXISTS last_qualifying_activity_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS first_qualifying_activity_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS sl_escalated_unassigned_3h_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS sl_escalated_2h_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS sl_escalated_48h_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS public.leads (
+      id TEXT PRIMARY KEY,
+      lead_number TEXT UNIQUE,
+      company_name TEXT NOT NULL,
+      contact_person TEXT,
+      designation TEXT,
+      phone TEXT,
+      whatsapp TEXT,
+      email TEXT,
+      source TEXT DEFAULT 'Manual',
+      status TEXT DEFAULT 'New',
+      assigned_salesperson TEXT,
+      estimated_kw NUMERIC DEFAULT 0,
+      estimated_value NUMERIC DEFAULT 0,
+      category TEXT,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
+
+  // 2. Add columns individually to prevent any single column failure from aborting others
+  const leadCols = [
+    'estimated_value NUMERIC DEFAULT 0',
+    'estimated_kw NUMERIC',
+    'category TEXT',
+    'location TEXT',
+    'product_requirement TEXT',
+    "priority TEXT DEFAULT 'Medium'",
+    'designation TEXT',
+    'whatsapp TEXT',
+    'email TEXT',
+    'last_activity_at TIMESTAMPTZ',
+    'last_activity_type TEXT',
+    'converted_customer_id TEXT',
+    'converted_customer_code TEXT',
+    'is_converted BOOLEAN DEFAULT FALSE',
+    'assigned_salesperson TEXT',
+    'assigned_to_user_id TEXT',
+    'assigned_to_name TEXT',
+    'assigned_to_role TEXT',
+    'assigned_by_user_id TEXT',
+    'assigned_by_name TEXT',
+    'assigned_by_role TEXT',
+    'assigned_at TIMESTAMPTZ',
+    'lead_created_by_id TEXT',
+    'lead_created_by_name TEXT',
+    'pipeline_stage TEXT',
+    'lost_reason_id TEXT',
+    'lost_remarks TEXT',
+    'score INTEGER',
+    'score_breakdown JSONB',
+    'temperature TEXT',
+    'territory TEXT',
+    'next_action TEXT',
+    'next_action_due_at TIMESTAMPTZ',
+    'next_action_exception TEXT',
+    'stage_changed_at TIMESTAMPTZ',
+    'deleted_at TIMESTAMPTZ',
+    'merged_into_lead_id TEXT',
+    'sl_escalated_24h_at TIMESTAMPTZ',
+    'customer_id TEXT',
+    'customer_code TEXT',
+    'last_qualifying_activity_at TIMESTAMPTZ',
+    'first_qualifying_activity_at TIMESTAMPTZ',
+    'sl_escalated_unassigned_3h_at TIMESTAMPTZ',
+    'sl_escalated_2h_at TIMESTAMPTZ',
+    'sl_escalated_48h_at TIMESTAMPTZ'
+  ];
+
+  for (const col of leadCols) {
+    try {
+      await query(`ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS ${col};`);
+    } catch (colErr) {
+      console.warn(`[Smart Leads Schema] Warning adding column ${col}:`, colErr.message);
+    }
+  }
 
   await query(`
     CREATE TABLE IF NOT EXISTS public.lead_followups (

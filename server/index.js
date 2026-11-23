@@ -279,6 +279,11 @@ try {
 
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
 initPostgresDatabase().then(() => {
+  if (process.env.ENABLE_SMART_LEADS !== 'false') {
+    import('./smartLeadsSchema.js').then(({ ensureSmartLeadsSchema }) => {
+      ensureSmartLeadsSchema().catch(err => console.warn('[Smart Leads Post-Init Schema Notice]:', err.message));
+    }).catch(() => {});
+  }
   if (!isOptimizationTestMode()) {
     loadDatabaseCustomers(true).then(list => {
       console.log(`✅ [Database Customers] Loaded ${list?.length || 0} authoritative customers from PostgreSQL.`);

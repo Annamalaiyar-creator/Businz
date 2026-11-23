@@ -628,36 +628,83 @@ function App() {
     localStorage.setItem('controlroom_is_authenticated', 'true');
     setIsAuthenticated(true);
 
-    // If an authenticated employee is already logged in, do NOT overwrite their personal credentials
+    // Check if current logged employee matches the new role; if not, resolve canonical identity for newRole
     const currentEmpId = localStorage.getItem('controlroom_logged_emp_id');
-    const currentUserName = localStorage.getItem('controlroom_logged_user_name');
+    let empMatchesRole = false;
 
-    if (!currentEmpId || !currentUserName) {
+    if (currentEmpId) {
+      try {
+        const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+        const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+        const currentEmp = allEmps.find(e => e && (e.employee_code === currentEmpId || e.code === currentEmpId));
+        if (currentEmp && (currentEmp.role === newRole || (newRole.toLowerCase().includes('sales') && String(currentEmp.role).toLowerCase().includes('sales')))) {
+          empMatchesRole = true;
+        }
+      } catch (_) {}
+    }
+
+    if (!empMatchesRole) {
       const norm = (newRole || '').toLowerCase();
-      if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
-        localStorage.setItem('controlroom_logged_emp_id', 'CEO-001');
-        let ceoName = 'Velmurugan Rathinam';
-        try {
-          const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-          const ceoEmp = storedEmps.find(e => e && ((e.employee_code || '').toUpperCase().startsWith('CEO') || e.role === 'CEO' || e.role === 'Managing Director'));
-          if (ceoEmp && (ceoEmp.employee_name || ceoEmp.name)) {
-            ceoName = ceoEmp.employee_name || ceoEmp.name;
-          }
-        } catch (_) {}
-        localStorage.setItem('controlroom_logged_user_name', ceoName);
-      } else if (norm.includes('tech support') || norm.includes('technical support')) {
-        localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
-        localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');
-      } else if (norm.includes('sales')) {
-        localStorage.setItem('controlroom_logged_emp_id', 'SE-1000');
-        localStorage.setItem('controlroom_logged_user_name', 'Annamalaiyar');
-      } else if (norm === 'hr' || norm.startsWith('hr')) {
-        localStorage.setItem('controlroom_logged_emp_id', 'HR-001');
-        localStorage.setItem('controlroom_logged_user_name', 'HR Operations');
-      } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
-        localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
-        localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
+      let newEmpId = '';
+      let newUserName = '';
+
+      try {
+        const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+        const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+        const match = allEmps.find(e => e && e.role === newRole && (e.employee_name || e.name));
+        if (match) {
+          newEmpId = match.employee_code || match.code || '';
+          newUserName = match.employee_name || match.name || '';
+        }
+      } catch (_) {}
+
+      if (!newUserName) {
+        if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
+          newEmpId = 'CEO-001';
+          newUserName = 'Velmurugan Rathinam';
+        } else if (norm.includes('tech support') || norm.includes('technical support')) {
+          newEmpId = 'TS-VRM001';
+          newUserName = 'Tech Support Specialist';
+        } else if (norm === 'sales head') {
+          newEmpId = 'SH-001';
+          newUserName = 'Sales Head';
+        } else if (norm.includes('sales')) {
+          newEmpId = 'SE-001';
+          newUserName = 'Sales Executive';
+        } else if (norm === 'hr' || norm.startsWith('hr')) {
+          newEmpId = 'HR-001';
+          newUserName = 'HR Operations';
+        } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
+          newEmpId = 'TA-001';
+          newUserName = 'Annamalaiyar';
+        } else if (norm.includes('accounts head') || norm === 'accounts') {
+          newEmpId = 'AH-001';
+          newUserName = 'Venkatesh';
+        } else if (norm.includes('accounts')) {
+          newEmpId = 'AE-001';
+          newUserName = 'Priya';
+        } else if (norm.includes('production')) {
+          newEmpId = 'PH-001';
+          newUserName = 'Senthil Kumar';
+        } else if (norm.includes('dispatch')) {
+          newEmpId = 'DH-001';
+          newUserName = 'Kalpana';
+        } else if (norm.includes('billing') || norm.includes('invoice')) {
+          newEmpId = 'INV-001';
+          newUserName = 'Anand';
+        } else if (norm.includes('design')) {
+          newEmpId = 'DE-001';
+          newUserName = 'Dinesh';
+        } else {
+          newEmpId = 'EMP-001';
+          newUserName = newRole;
+        }
       }
+
+      if (newEmpId) localStorage.setItem('controlroom_logged_emp_id', newEmpId);
+      if (newUserName) localStorage.setItem('controlroom_logged_user_name', newUserName);
     }
 
     // Reconnect notification socket immediately with the new role & credentials

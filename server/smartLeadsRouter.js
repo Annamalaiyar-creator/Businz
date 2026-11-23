@@ -270,6 +270,25 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     next();
   });
 
+  // Guarantee database schema & columns exist before executing any query
+  let isSchemaReady = false;
+  let schemaPromise = null;
+  router.use(async (req, res, next) => {
+    if (!isSchemaReady) {
+      if (!schemaPromise) {
+        schemaPromise = import('./smartLeadsSchema.js')
+          .then(m => m.ensureSmartLeadsSchema())
+          .then(() => { isSchemaReady = true; })
+          .catch(err => {
+            schemaPromise = null;
+            console.warn('[Smart Leads Router] On-demand schema ensure notice:', err.message);
+          });
+      }
+      await schemaPromise;
+    }
+    next();
+  });
+
   const wrap = (fn) => async (req, res) => {
     try {
       await fn(req, res);
