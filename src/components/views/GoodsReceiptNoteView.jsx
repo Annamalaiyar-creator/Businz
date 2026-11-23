@@ -23,15 +23,138 @@ import { CODE_TO_SALES_NAME } from '../pi/piHelpers';
 
 
 
-const formatGrnItem = (g) => {
+export const computeGrnValue = (g, livePOs = []) => {
+  if (!g) return '—';
+
+  // 1. If GRN already has items with rates, calculate exact accepted items value + tax
+  if (Array.isArray(g.items) && g.items.length > 0) {
+    let itemsVal = 0;
+    let hasItemRates = false;
+    g.items.forEach(it => {
+      if (it.isPoReference) return;
+      const qty = Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now !== undefined && it.now !== '' ? it.now : (it.receivedQty || 0)));
+      const rate = Number(it.rate || it.price || it.unitPrice || 0);
+      const taxPct = Number(it.tax !== undefined && it.tax !== '' ? it.tax : (it.gstRate || it.taxRate || 18));
+      if (rate > 0) hasItemRates = true;
+      const taxable = qty * rate;
+      const tax = taxable * (taxPct / 100);
+      itemsVal += (taxable + tax);
+    });
+
+    if (hasItemRates && itemsVal > 0) {
+      return `₹ ${itemsVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+  }
+
+  // 2. If PO reference exists, find the matching PO from livePOs or local storage cache
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const pRef = normalize(g.poRef || g.poNo || g.poId);
+
+  let matchedPO = null;
+  if (pRef) {
+    matchedPO = (Array.isArray(livePOs) ? livePOs : []).find(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      const pZohoId = normalize(p.zohoId);
+      return (pNo && pNo === pRef) || (pId && pId === pRef) || (pZohoId && pZohoId === pRef);
+    });
+
+    if (!matchedPO && typeof window !== 'undefined') {
+      try {
+        const rawSaved = localStorage.getItem('controlroom_po_store') || localStorage.getItem('purchase_orders_store');
+        if (rawSaved) {
+          const parsed = JSON.parse(rawSaved);
+          if (Array.isArray(parsed)) {
+            matchedPO = parsed.find(p => {
+              const pNo = normalize(p.poNo);
+              const pId = normalize(p.id);
+              const pZohoId = normalize(p.zohoId);
+              return (pNo && pNo === pRef) || (pId && pId === pRef) || (pZohoId && pZohoId === pRef);
+            });
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (matchedPO) {
+    const poGrandTotal = Number(String(matchedPO.grandTotal || matchedPO.total || matchedPO.val || 0).replace(/[^0-9.]/g, ''));
+    const isClosed = String(g.status || '').toUpperCase().includes('CLOSED') ||
+                     String(g.status || '').toUpperCase().includes('FULLY') ||
+                     String(matchedPO.status || '').toUpperCase().includes('CLOSED') ||
+                     String(matchedPO.status || '').toUpperCase().includes('FULLY');
+
+    // If fully received and PO grand total is known, GRN value strictly equals the PO grand total
+    if (isClosed && poGrandTotal > 0) {
+      return `₹ ${poGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    // Try calculating from matched PO line item rates
+    if (Array.isArray(matchedPO.items) && matchedPO.items.length > 0) {
+      let calcVal = 0;
+      let matchedAnyRate = false;
+
+      // Check if g.items can be matched with PO items
+      if (Array.isArray(g.items) && g.items.length > 0) {
+        g.items.forEach(git => {
+          if (git.isPoReference) return;
+          const gName = normalize(git.name || git.item);
+          const poItem = matchedPO.items.find(pit => normalize(pit.name || pit.item_name || pit.item) === gName || normalize(pit.sku) === normalize(git.sku)) || matchedPO.items[0];
+          if (poItem) {
+            const rate = Number(poItem.rate || poItem.price || poItem.unitPrice || 0);
+            const taxPct = Number(poItem.tax !== undefined && poItem.tax !== '' ? poItem.tax : (poItem.gstRate || poItem.taxRate || 18));
+            const recQty = Number(git.accepted !== undefined && git.accepted !== '' ? git.accepted : (git.now || git.receivedQty || 0));
+            if (rate > 0) matchedAnyRate = true;
+            const taxable = recQty * rate;
+            const tax = taxable * (taxPct / 100);
+            calcVal += (taxable + tax);
+          }
+        });
+      }
+
+      if (matchedAnyRate && calcVal > 0) {
+        return `₹ ${calcVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+    }
+
+    // If partial receipt but individual item rates are not mapped, proportionally calculate from PO Grand Total
+    const totalOrd = Number(matchedPO.totalOrderedQty || matchedPO.totalOrdered || (Array.isArray(matchedPO.items) ? matchedPO.items.reduce((s, it) => s + Number(it.qty || it.quantity || 0), 0) : 0));
+    const recCount = g.receivedQty !== undefined ? Number(g.receivedQty) : (Array.isArray(g.items) ? g.items.reduce((s, it) => s + Number(it.accepted !== undefined ? it.accepted : (it.now || 0)), 0) : 0);
+
+    if (poGrandTotal > 0 && totalOrd > 0 && recCount > 0) {
+      const proportional = (Math.min(recCount, totalOrd) / totalOrd) * poGrandTotal;
+      return `₹ ${proportional.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    if (poGrandTotal > 0) {
+      return `₹ ${poGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+  }
+
+  // 3. Fallback: If g.val is already explicitly set and NOT the old dummy multiplier (receivedCount * 1250)
+  const receivedCount = g.receivedQty !== undefined && g.receivedQty !== null
+    ? Number(g.receivedQty)
+    : (Array.isArray(g.items) ? g.items.reduce((s, it) => s + Number(it.accepted !== undefined ? it.accepted : (it.now || 0)), 0) : 0);
+
+  const dummyVal1 = `₹ ${(receivedCount * 1250).toLocaleString('en-IN')}`;
+  const dummyVal2 = `₹ ${receivedCount * 1250}`;
+
+  if (g.val && typeof g.val === 'string' && g.val.startsWith('₹') && !g.val.includes('NaN')) {
+    if (g.val !== dummyVal1 && g.val !== dummyVal2) {
+      return g.val;
+    }
+  }
+
+  return '—';
+};
+
+const formatGrnItem = (g, livePOs = []) => {
   if (!g) return null;
   const receivedCount = g.receivedQty !== undefined && g.receivedQty !== null
     ? Number(g.receivedQty)
     : (Array.isArray(g.items) ? g.items.reduce((s, it) => s + Number(it.accepted !== undefined ? it.accepted : (it.now || 0)), 0) : 0);
 
-  const rawVal = g.val !== undefined && g.val !== null
-    ? g.val
-    : `₹ ${(receivedCount * 1250).toLocaleString('en-IN')}`;
+  const resolvedVal = computeGrnValue(g, livePOs);
 
   return {
     id: g.grnNo || g.id || '—',
@@ -42,7 +165,8 @@ const formatGrnItem = (g) => {
     received: typeof g.received === 'string' && g.received.includes('Units') ? g.received : `${receivedCount} Units`,
     receivedQty: receivedCount,
     status: g.status || 'OPEN / PARTIALLY RECEIVED',
-    val: typeof rawVal === 'string' && rawVal.startsWith('₹') ? rawVal : `₹ ${Number(rawVal || 0).toLocaleString('en-IN')}`,
+    val: resolvedVal,
+    totalVal: resolvedVal,
     challanNo: g.challanNo || '',
     createdBy: g.createdBy || g.created_by || g.creator || '',
     receivedBy: g.receivedBy || '',
@@ -121,7 +245,7 @@ export default function GoodsReceiptNoteView(props) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(formatGrnItem).filter(Boolean);
+          return parsed.map(g => formatGrnItem(g, [])).filter(Boolean);
         }
       }
     } catch (_) {}
@@ -214,7 +338,7 @@ export default function GoodsReceiptNoteView(props) {
 
       const allMerged = Array.from(map.values());
       if (allMerged.length > 0) {
-        const formatted = allMerged.map(formatGrnItem).filter(Boolean);
+        const formatted = allMerged.map(g => formatGrnItem(g, livePOs)).filter(Boolean);
         setGrnList(formatted);
         try {
           localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(allMerged));
@@ -224,7 +348,14 @@ export default function GoodsReceiptNoteView(props) {
     } catch (err) {
       console.error('Error fetching GRNs:', err);
     }
-  }, []);
+  }, [livePOs]);
+
+  // Keep GRN values synchronized with live PO totals and line item rates
+  useEffect(() => {
+    if (Array.isArray(livePOs) && livePOs.length > 0) {
+      setGrnList(prev => prev.map(g => formatGrnItem(g, livePOs)));
+    }
+  }, [livePOs]);
 
   const getEffectiveGrnStatus = useCallback((grn) => {
     if (!grn) return 'OPEN / PARTIALLY RECEIVED';
@@ -794,6 +925,8 @@ export default function GoodsReceiptNoteView(props) {
                 sku: it.sku || `SKU-${101 + idx}`,
                 desc: it.description || it.desc || '',
                 uom: it.unit || it.uom || 'NOS',
+                rate: Number(it.rate !== undefined ? it.rate : (it.price !== undefined ? it.price : (it.unitPrice || it.unit_price || 0))),
+                tax: Number(it.tax !== undefined ? it.tax : (it.taxRate || it.tax_rate || it.gstRate || it.gst_rate || 18)),
                 ordered: ordered,
                 prev: prev,
                 remaining: remaining,
@@ -836,6 +969,8 @@ export default function GoodsReceiptNoteView(props) {
             sku: it.sku || `SKU-${101 + idx}`,
             desc: it.description || it.desc || '',
             uom: it.unit || it.uom || 'NOS',
+            rate: Number(it.rate !== undefined ? it.rate : (it.price !== undefined ? it.price : (it.unitPrice || it.unit_price || 0))),
+            tax: Number(it.tax !== undefined ? it.tax : (it.taxRate || it.tax_rate || it.gstRate || it.gst_rate || 18)),
             ordered: ordered,
             prev: prev,
             remaining: remaining,
@@ -911,7 +1046,7 @@ export default function GoodsReceiptNoteView(props) {
     // Subscribe to cloud updates for real-time multi-device sync
     const unsubscribe = subscribeToCloudStore('grn_store', (updatedCloudData) => {
       if (Array.isArray(updatedCloudData) && updatedCloudData.length > 0) {
-        const formatted = updatedCloudData.map(formatGrnItem).filter(Boolean);
+        const formatted = updatedCloudData.map(g => formatGrnItem(g, livePOs)).filter(Boolean);
         setGrnList(formatted);
         try {
           localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedCloudData));
@@ -987,6 +1122,8 @@ export default function GoodsReceiptNoteView(props) {
           sku: it.sku || `SKU-${101 + idx}`,
           desc: it.description || it.desc || '',
           uom: it.unit || it.uom || 'NOS',
+          rate: Number(it.rate !== undefined ? it.rate : (it.price !== undefined ? it.price : (it.unitPrice || it.unit_price || 0))),
+          tax: Number(it.tax !== undefined ? it.tax : (it.taxRate || it.tax_rate || it.gstRate || it.gst_rate || 18)),
           ordered: ordered,
           prev: prev,
           remaining: remaining,
@@ -1057,6 +1194,8 @@ export default function GoodsReceiptNoteView(props) {
             sku: it.sku || `SKU-${101 + idx}`,
             desc: it.description || it.desc || '',
             uom: it.unit || it.uom || 'NOS',
+            rate: Number(it.rate !== undefined ? it.rate : (it.price !== undefined ? it.price : (it.unitPrice || it.unit_price || 0))),
+            tax: Number(it.tax !== undefined ? it.tax : (it.taxRate || it.tax_rate || it.gstRate || it.gst_rate || 18)),
             ordered: ordered,
             prev: prev,
             remaining: remaining,
@@ -1254,6 +1393,8 @@ export default function GoodsReceiptNoteView(props) {
       if (it.isPoReference) {
         return {
           ...it,
+          rate: Number(it.rate || it.price || it.unitPrice || 0),
+          tax: Number(it.tax !== undefined ? it.tax : (it.gstRate || it.taxRate || 18)),
           now: 0,
           accepted: 0,
           rejected: 0,
@@ -1265,6 +1406,8 @@ export default function GoodsReceiptNoteView(props) {
       const acceptedVal = (it.accepted !== '' && it.accepted !== undefined && it.accepted !== null) ? Number(it.accepted) : nowVal;
       return {
         ...it,
+        rate: Number(it.rate || it.price || it.unitPrice || 0),
+        tax: Number(it.tax !== undefined ? it.tax : (it.gstRate || it.taxRate || 18)),
         now: nowVal,
         accepted: acceptedVal,
         rejected: Number(it.rejected || 0),
@@ -1300,6 +1443,32 @@ export default function GoodsReceiptNoteView(props) {
     const curRem = Math.max(0, curOrd - curRec);
     const isFull = (curOrd > 0 && curRec >= curOrd);
 
+    // Calculate accurate GRN value from PO line items & accepted quantities
+    const poRawTotal = Number(String(prevPO.grandTotal || prevPO.total || prevPO.val || 0).replace(/[^0-9.]/g, ''));
+    let calculatedGrnValue = processedItems.reduce((acc, it) => {
+      if (it.isPoReference) return acc;
+      const recQty = Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
+      const rate = Number(it.rate || it.price || it.unitPrice || 0);
+      const taxPct = Number(it.tax !== undefined && it.tax !== '' ? it.tax : (it.gstRate || it.taxRate || 18));
+      const lineTaxable = recQty * rate;
+      const lineTax = lineTaxable * (taxPct / 100);
+      return acc + lineTaxable + lineTax;
+    }, 0);
+
+    // If fully received and PO total is known, GRN value strictly equals the PO grand total
+    let finalGrnValFormatted = '—';
+    if (isFull && poRawTotal > 0) {
+      finalGrnValFormatted = `₹ ${poRawTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else if (calculatedGrnValue > 0) {
+      finalGrnValFormatted = `₹ ${calculatedGrnValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else if (poRawTotal > 0 && curOrd > 0) {
+      // Proportional to received quantity if item rate wasn't individually specified
+      const proportionalVal = (curRec / curOrd) * poRawTotal;
+      finalGrnValFormatted = `₹ ${proportionalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else if (poRawTotal > 0) {
+      finalGrnValFormatted = `₹ ${poRawTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
     const grnGeneratedId = getNextSequence('GRN', poReceivingHistory || []).code;
     const docsToAttach = grnDocs || [];
 
@@ -1322,7 +1491,9 @@ export default function GoodsReceiptNoteView(props) {
       inspectionRemarks: grnInspectionRemarks || '',
       items: processedItems,
       documents: docsToAttach,
-      status: isFull ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED'
+      status: isFull ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED',
+      val: finalGrnValFormatted,
+      totalVal: finalGrnValFormatted
     };
 
     const formattedGRN = {
@@ -1333,7 +1504,8 @@ export default function GoodsReceiptNoteView(props) {
       date: newGRNRecord.date,
       received: `${totalNow} Units`,
       status: newGRNRecord.status,
-      val: `₹ ${totalNow * 1250}`,
+      val: finalGrnValFormatted,
+      totalVal: finalGrnValFormatted,
       challanNo: newGRNRecord.challanNo,
       createdBy: newGRNRecord.createdBy,
       receivedBy: newGRNRecord.receivedBy,
@@ -1438,6 +1610,8 @@ export default function GoodsReceiptNoteView(props) {
       if (it.isPoReference) {
         return {
           ...it,
+          rate: Number(it.rate || it.price || it.unitPrice || 0),
+          tax: Number(it.tax !== undefined ? it.tax : (it.gstRate || it.taxRate || 18)),
           now: 0,
           accepted: 0,
           rejected: 0,
@@ -1450,6 +1624,8 @@ export default function GoodsReceiptNoteView(props) {
       const acceptedQty = it.isSplitChild ? Number(it.accepted !== undefined ? it.accepted : nowQty) : Math.max(1, (it.accepted && it.accepted > 0) ? it.accepted : nowQty);
       return {
         ...it,
+        rate: Number(it.rate || it.price || it.unitPrice || 0),
+        tax: Number(it.tax !== undefined ? it.tax : (it.gstRate || it.taxRate || 18)),
         ordered: ord,
         now: nowQty,
         accepted: acceptedQty,
@@ -1461,6 +1637,24 @@ export default function GoodsReceiptNoteView(props) {
 
     const totalAccepted = completedItems.reduce((acc, it) => acc + (it.isPoReference ? 0 : Number(it.accepted || 0)), 0);
     const docsToAttach = grnDocs || [];
+
+    const prevPO = livePOs.find(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo || p.zohoId === selectedGRNPo) || {};
+    const poRawTotal = Number(String(prevPO.grandTotal || prevPO.total || prevPO.val || 0).replace(/[^0-9.]/g, ''));
+    let calculatedGrnValue = completedItems.reduce((acc, it) => {
+      if (it.isPoReference) return acc;
+      const recQty = Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
+      const rate = Number(it.rate || it.price || it.unitPrice || 0);
+      const taxPct = Number(it.tax !== undefined && it.tax !== '' ? it.tax : (it.gstRate || it.taxRate || 18));
+      const lineTaxable = recQty * rate;
+      const lineTax = lineTaxable * (taxPct / 100);
+      return acc + lineTaxable + lineTax;
+    }, 0);
+
+    const fullValFormatted = (poRawTotal > 0)
+      ? `₹ ${poRawTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : (calculatedGrnValue > 0
+        ? `₹ ${calculatedGrnValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '—');
 
     const payload = {
       poRef: selectedGRNPo,
@@ -1502,7 +1696,9 @@ export default function GoodsReceiptNoteView(props) {
       inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
       items: completedItems,
       documents: docsToAttach,
-      status: 'CLOSED / FULLY RECEIVED'
+      status: 'CLOSED / FULLY RECEIVED',
+      val: fullValFormatted,
+      totalVal: fullValFormatted
     };
 
     const formattedGRN = {
@@ -1513,7 +1709,8 @@ export default function GoodsReceiptNoteView(props) {
       date: newGRNRecord.date,
       received: `${totalAccepted} Units`,
       status: 'CLOSED / FULLY RECEIVED',
-      val: `₹ ${totalAccepted * 1250}`,
+      val: fullValFormatted,
+      totalVal: fullValFormatted,
       challanNo: newGRNRecord.challanNo,
       createdBy: newGRNRecord.createdBy,
       receivedBy: newGRNRecord.receivedBy,
