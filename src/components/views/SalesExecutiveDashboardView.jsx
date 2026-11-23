@@ -9,7 +9,7 @@ import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { fetchCustomersDeduplicated } from '../../services/customerService';
 import { CeoKpiGrid } from './CeoExecutiveDashboardView';
-import { CODE_TO_SALES_NAME } from '../pi/piHelpers';
+import { CODE_TO_SALES_NAME, EMAIL_TO_SALES_NAME } from '../pi/piHelpers';
 
 // Fast shallow list equality check to prevent unnecessary React re-renders and visual data flickering
 function areItemListsEqual(prev, next, idKey = 'id') {
@@ -664,7 +664,11 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     const names = new Set();
     const addName = (n) => {
       if (n && typeof n === 'string' && n.trim() && n.trim() !== '—' && n.trim() !== 'Customer' && n.trim() !== 'Sales Rep') {
-        names.add(n.trim());
+        const trimmed = n.trim();
+        const resolved = trimmed.includes('@') && EMAIL_TO_SALES_NAME[trimmed.toLowerCase()]
+          ? EMAIL_TO_SALES_NAME[trimmed.toLowerCase()]
+          : trimmed;
+        names.add(resolved);
       }
     };
     opportunities.forEach(o => addName(o.assignedSalesperson || o.salesperson));
@@ -677,7 +681,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
     // Default core reps if dataset is empty
     if (names.size === 0) {
-      addName('Mohith J V');
+      addName('Mohith JV');
       if (loggedName) addName(loggedName);
       addName('Sanjai Kumar');
       addName('Kalaiselvi T');
@@ -691,8 +695,11 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     if (selectedExecutive === 'All') return true;
     if (!repName) return false;
     const target = selectedExecutive.toLowerCase().trim();
-    const cur = String(repName).toLowerCase().trim();
-    return cur.includes(target) || target.includes(cur);
+    const curRaw = String(repName).toLowerCase().trim();
+    const curResolved = curRaw.includes('@') && EMAIL_TO_SALES_NAME[curRaw]
+      ? EMAIL_TO_SALES_NAME[curRaw].toLowerCase().trim()
+      : curRaw;
+    return curResolved.includes(target) || target.includes(curResolved) || curRaw.includes(target) || target.includes(curRaw);
   }, [selectedExecutive]);
 
   // Filtered collections by Executive and Period

@@ -1161,12 +1161,11 @@ export default function PiListDashboardSection({ ctx }) {
                                 {/* Assigned to (Sales person name which tech support assigned to) */}
                                 <td style={{ padding: '12px 14px', color: '#1E293B', width: '180px', minWidth: '160px' }}>
                                   {(() => {
-                                    const assignedSp = pi.assignedSalesperson || pi.assignedToName || (
-                                      pi.salesPerson && !pi.salesPerson.toLowerCase().includes('support') && !pi.salesPerson.toLowerCase().includes('admin') && !pi.salesPerson.toLowerCase().includes('direct')
-                                        ? pi.salesPerson
-                                        : ''
+                                    const assignedSp = resolvePiSalesPersonName(pi);
+                                    const assignedCode = canonicalizeSalespersonCode(
+                                      pi.assignedSalespersonCode || pi.assignedToId || pi.salesPersonCode,
+                                      assignedSp || pi.salesPerson || pi.createdBy
                                     );
-                                    const assignedCode = pi.assignedSalespersonCode || pi.assignedToId || (assignedSp ? pi.salesPersonCode : '');
 
                                     if (assignedSp) {
                                       return (
@@ -1302,11 +1301,17 @@ export default function PiListDashboardSection({ ctx }) {
                                         </button>
                                       )}
                                     </div>
-                                    {pi.salesPersonCode && (
-                                      <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
-                                        {canonicalizeSalespersonCode(pi.salesPersonCode, pi.salesPerson || pi.createdBy)}
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const spCode = canonicalizeSalespersonCode(
+                                        pi.salesPersonCode || pi.assignedSalespersonCode || pi.createdById,
+                                        resolvePiSalesPersonName(pi) || pi.salesPerson || pi.createdBy
+                                      );
+                                      return spCode ? (
+                                        <div style={{ fontSize: '10px', color: '#64748B', fontFamily: 'monospace' }}>
+                                          {spCode}
+                                        </div>
+                                      ) : null;
+                                    })()}
                                   </div>
                                 </div>
                               </td>

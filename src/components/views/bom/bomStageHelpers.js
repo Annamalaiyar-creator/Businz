@@ -1,7 +1,7 @@
 import {
   Check, Truck, CreditCard, FileCheck, CheckSquare, PackageCheck, Receipt
 } from 'lucide-react';
-import { stripDataUrlsFromRecord } from '../../../utils/otherViewsShared';
+import { stripDataUrlsFromRecord } from '../../../utils/otherViewsShared.js';
 
 export const formatAppliedAtDate = (r) => {
   if (!r) return '—';
@@ -380,7 +380,7 @@ export const getOrderLifecycle = (row) => {
 };
 
 // Stage Stopwatch & Timestamp Audit helper for CEO view
-// Canonical Salesperson Code Normalizer  // Canonical Salesperson Code Normalizer
+// Canonical Salesperson Code Normalizer
 export const canonicalizeSalespersonCode = (rawCode, name) => {
   const c = String(rawCode || '').trim().toUpperCase();
   if (c.startsWith('TS-')) return c;
@@ -389,10 +389,15 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
   if (c === 'SE-020') return 'SE-006';
   if (c === 'SE-010') return 'SE-008';
   if (c === 'SE-VRM090') return 'SE-009';
-  if (String(name || '').toLowerCase().includes('mohith')) return 'SE-004';
-  if (String(name || '').toLowerCase().includes('sanjai') || String(name || '').toLowerCase().includes('sanjay')) return 'SE-002';
-  if (String(name || '').toLowerCase().includes('manoj')) return 'SE-001';
-  const lowerName = String(name || '').toLowerCase();
+  const lowerName = String(name || '').toLowerCase().trim();
+  if (EMAIL_TO_SALES_CODE[lowerName]) return EMAIL_TO_SALES_CODE[lowerName];
+  if (lowerName.includes('sales.s4')) return 'SE-004';
+  if (lowerName.includes('sales.s1')) return 'SE-001';
+  if (lowerName.includes('sales.s2')) return 'SE-007';
+  if (lowerName.includes('sales.s3')) return 'SE-005';
+  if (lowerName.includes('mohith')) return 'SE-004';
+  if (lowerName.includes('sanjai') || lowerName.includes('sanjay')) return 'SE-002';
+  if (lowerName.includes('manoj')) return 'SE-001';
   if (lowerName.includes('kumar') && lowerName.includes('vasanth')) return 'SE-003';
   if (c === 'SE-003' || c === 'SE-VRM006') return 'SE-003';
   if (c === 'SE-004' || c === 'SE-015') return 'SE-004';
@@ -423,7 +428,62 @@ export const CODE_TO_SALES_NAME = {
   'SE-1000': 'Annamalaiyar'
 };
 
-// Helper to resolve salesperson actual human name rather than role title
+// Canonical Salesperson Email to Display Name mapping
+export const EMAIL_TO_SALES_NAME = {
+  'sales.s1@vrmstructures.in': 'Manojraj Selvaraj',
+  'sales.s2@vrmstructures.in': 'PRASHANTH',
+  'sales.s3@vrmstructures.in': 'Shanthi',
+  'sales.s4@vrmstructures.in': 'Mohith JV',
+  'sanjaikumar3a@gmail.com': 'Sanjai kumar',
+  'sanjay@vrmstructures.in': 'Sanjai kumar',
+  'vasanthkumarsaravanan.work@gmail.com': 'Vasanth Kumar S',
+  'vasanthkumar1234@gmail.com': 'Vasanth Kumar S',
+  'dhanasekar@gmail.com': 'Dhana Sekar',
+  'projectsales@jashsun.com': 'Pavithra',
+  'velmuruganr@vrmstructures.in': 'Pavithra',
+  'mms@vrmstructures.in': 'KALAISELVI T',
+  'sales@vrmstructures.in': 'KALAISELVI T',
+  'sales@vrmstrutures.in': 'KALAISELVI T',
+  'kalpanaram17@vrmstructures.in': 'KalpanaRam',
+  'vasanth.support@vrmstructures.in': 'Vasanth',
+  'scm@vrmstructures.in': 'ARUN BOOPATHI M',
+  'arun@vrmstructures.in': 'ARUN BOOPATHI M',
+  'production@vrm.com': 'Senthil Kumar',
+  'dispatch@vrmstructures.in': 'Kalpana',
+  'dispatchhead@gmail.com': 'Kalpana',
+  'arannamalaiyar@gmail.com': 'Annamalaiyar',
+  'admin@businz.com': 'Admin User',
+  'bi@gmail.com': 'Billing',
+  'keerthana@vrmstructures.in': 'Keerthana'
+};
+
+// Canonical Salesperson Email to Employee Code mapping
+export const EMAIL_TO_SALES_CODE = {
+  'sales.s1@vrmstructures.in': 'SE-001',
+  'sales.s2@vrmstructures.in': 'SE-007',
+  'sales.s3@vrmstructures.in': 'SE-005',
+  'sales.s4@vrmstructures.in': 'SE-004',
+  'sanjaikumar3a@gmail.com': 'SE-002',
+  'sanjay@vrmstructures.in': 'SE-002',
+  'vasanthkumarsaravanan.work@gmail.com': 'SE-003',
+  'vasanthkumar1234@gmail.com': 'SE-003',
+  'dhanasekar@gmail.com': 'SE-006',
+  'projectsales@jashsun.com': 'SE-008',
+  'velmuruganr@vrmstructures.in': 'SE-008',
+  'mms@vrmstructures.in': 'SE-009',
+  'sales@vrmstructures.in': 'SE-009',
+  'sales@vrmstrutures.in': 'SE-009',
+  'kalpanaram17@vrmstructures.in': 'TS-001',
+  'vasanth.support@vrmstructures.in': 'TS-002',
+  'scm@vrmstructures.in': 'PR-001',
+  'arun@vrmstructures.in': 'PR-001',
+  'production@vrm.com': 'PH-001',
+  'dispatch@vrmstructures.in': 'DH-001',
+  'dispatchhead@gmail.com': 'DH-001',
+  'arannamalaiyar@gmail.com': 'TA-001'
+};
+
+// Helper to resolve salesperson actual human name rather than role title or raw email
 export const getCleanSalesPersonName = (rawName, code) => {
   let name = String(rawName || '').replace(/\s*\([^)]*\)/g, '').trim();
   const cleanCode = String(code || '').trim().toUpperCase();
@@ -435,6 +495,15 @@ export const getCleanSalesPersonName = (rawName, code) => {
     'se', 'sls', 'user', 'undefined', 'null', 'direct / admin'
   ];
 
+  if (name.includes('@')) {
+    const emailLower = name.toLowerCase();
+    if (EMAIL_TO_SALES_NAME[emailLower]) return EMAIL_TO_SALES_NAME[emailLower];
+    if (emailLower.includes('sales.s4')) return 'Mohith JV';
+    if (emailLower.includes('sales.s1')) return 'Manojraj Selvaraj';
+    if (emailLower.includes('sales.s2')) return 'PRASHANTH';
+    if (emailLower.includes('sales.s3')) return 'Shanthi';
+  }
+
   if (name.toLowerCase() === 'annamalai' || name.toLowerCase() === 'ar.annamalaiyar' || name.toLowerCase() === 'ar annamalaiyar') {
     return 'Annamalaiyar';
   }
@@ -443,7 +512,7 @@ export const getCleanSalesPersonName = (rawName, code) => {
   // and the record creator name is a non-sales user (e.g. KalpanaRam/Tech Support/Dispatch/Admin) or generic,
   // the true salesperson is the assigned sales executive!
   if (cleanCode && CODE_TO_SALES_NAME[cleanCode]) {
-    if (!name || nonSalesPersons.includes(name.toLowerCase())) {
+    if (!name || name.includes('@') || nonSalesPersons.includes(name.toLowerCase())) {
       return CODE_TO_SALES_NAME[cleanCode];
     }
   }
@@ -455,7 +524,7 @@ export const getCleanSalesPersonName = (rawName, code) => {
   if (cleanCode === 'SE-010') return 'Pavithra';
   if (cleanCode === 'SE-VRM090') return 'KALAISELVI T';
 
-  if (!name || nonSalesPersons.includes(name.toLowerCase())) {
+  if (!name || name.includes('@') || nonSalesPersons.includes(name.toLowerCase())) {
     try {
       const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       if (cleanCode) {
@@ -465,16 +534,38 @@ export const getCleanSalesPersonName = (rawName, code) => {
         });
         if (found && (found.employee_name || found.name)) return found.employee_name || found.name;
       }
+      if (name.includes('@')) {
+        const found = emps.find(e => (e.email || '').toLowerCase().trim() === name.toLowerCase());
+        if (found && (found.employee_name || found.name)) return found.employee_name || found.name;
+      }
       const salesEmp = emps.find(e => (e.role || '').toLowerCase().includes('sale'));
       if (salesEmp && (salesEmp.employee_name || salesEmp.name)) return salesEmp.employee_name || salesEmp.name;
     } catch (_) {}
 
     const storedName = (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_logged_emp_name') || '').trim();
-    if (storedName && !nonSalesPersons.includes(storedName.toLowerCase())) {
+    if (storedName && !storedName.includes('@') && !nonSalesPersons.includes(storedName.toLowerCase())) {
       return storedName;
     }
     return 'Annamalaiyar';
   }
+
+  // Final check: if name still contains '@', derive human name
+  if (name.includes('@')) {
+    const prefix = name.split('@')[0].toLowerCase();
+    if (prefix.includes('sales.s4')) return 'Mohith JV';
+    if (prefix.includes('sales.s1')) return 'Manojraj Selvaraj';
+    if (prefix.includes('sales.s2')) return 'PRASHANTH';
+    if (prefix.includes('sales.s3')) return 'Shanthi';
+    if (prefix.includes('mohith')) return 'Mohith JV';
+    if (prefix.includes('manoj')) return 'Manojraj Selvaraj';
+    if (prefix.includes('sanjai') || prefix.includes('sanjay')) return 'Sanjai kumar';
+    if (prefix.includes('vasanth')) return 'Vasanth Kumar S';
+    if (prefix.includes('dhana')) return 'Dhana Sekar';
+    if (prefix.includes('pavithra')) return 'Pavithra';
+    if (prefix.includes('kalai')) return 'KALAISELVI T';
+    return 'Sales Department';
+  }
+
   return name;
 };
 

@@ -20,6 +20,8 @@ import {
   GST_STATE_MAP,
   canonicalizeSalespersonCode,
   CODE_TO_SALES_NAME,
+  EMAIL_TO_SALES_NAME,
+  EMAIL_TO_SALES_CODE,
   resolvePiSalesPersonName
 } from './pi/piHelpers';
 import { createPiActionHandlers } from './pi/piActionHandlers';
@@ -30,7 +32,7 @@ import PiPackAndBulkModals from './pi/PiPackAndBulkModals';
 
 export { is5PctSolarProduct };
 export { PRESET_THEMES, getPresetTheme };
-export { GST_STATE_MAP, canonicalizeSalespersonCode, CODE_TO_SALES_NAME, resolvePiSalesPersonName };
+export { GST_STATE_MAP, canonicalizeSalespersonCode, CODE_TO_SALES_NAME, EMAIL_TO_SALES_NAME, EMAIL_TO_SALES_CODE, resolvePiSalesPersonName };
 
 export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procurement Head', onNavigateTab, targetPiNo, clearTargetPi }) {
   const isCeo = Boolean(
@@ -523,7 +525,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const getEffectiveSalesPerson = () => {
     const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
     if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
-    if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && currentEmpName.toLowerCase() !== 'vijay') return currentEmpName;
+    if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && currentEmpName.toLowerCase() !== 'vijay' && !currentEmpName.includes('@')) return currentEmpName;
+    const curEmail = (localStorage.getItem('controlroom_logged_email') || localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
+    if (curEmail && EMAIL_TO_SALES_NAME[curEmail]) return EMAIL_TO_SALES_NAME[curEmail];
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
@@ -536,10 +540,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         ));
         if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
       }
+      if (curEmail) {
+        const match = allEmps.find(e => e && String(e.email || '').toLowerCase().trim() === curEmail);
+        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      }
     } catch (_) {}
-    if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null') return currentEmpName;
-    const storedUser = localStorage.getItem('controlroom_logged_user');
-    if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') return storedUser.trim();
+    if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && !currentEmpName.includes('@')) return currentEmpName;
+    const storedUser = localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_logged_user');
+    if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') {
+      const trimmed = storedUser.trim();
+      if (trimmed.includes('@') && EMAIL_TO_SALES_NAME[trimmed.toLowerCase()]) return EMAIL_TO_SALES_NAME[trimmed.toLowerCase()];
+      if (!trimmed.includes('@')) return trimmed;
+    }
     if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
@@ -714,8 +726,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           return false;
         }
 
-        // 2. Email matching
-        if (piEmail && activeRep.emails.some(e => piEmail.includes(e))) {
+        // 2. Email matching (checks both piEmail and any email embedded in salesperson / createdBy)
+        if (activeRep.emails.some(e => (piEmail && piEmail.includes(e)) || piNameText.includes(e))) {
           return true;
         }
 
