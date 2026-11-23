@@ -9,6 +9,7 @@ import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { fetchCustomersDeduplicated } from '../../services/customerService';
 import { CeoKpiGrid } from './CeoExecutiveDashboardView';
+import { CODE_TO_SALES_NAME } from '../pi/piHelpers';
 
 // Fast shallow list equality check to prevent unnecessary React re-renders and visual data flickering
 function areItemListsEqual(prev, next, idKey = 'id') {
@@ -218,16 +219,23 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   const loggedUserName = (() => {
     if (typeof localStorage === 'undefined') return userRole || 'Sales Executive';
     const empId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
+    if (empId && CODE_TO_SALES_NAME[empId]) {
+      return CODE_TO_SALES_NAME[empId];
+    }
     if (empId) {
       try {
         const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
         const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
         const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-        const match = allEmps.find(e => e && (
+        // 1. Exact employee code match first
+        let match = allEmps.find(e => e && (
           String(e.employee_code || '').toUpperCase() === empId || 
-          String(e.code || '').toUpperCase() === empId ||
-          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === empId))
+          String(e.code || '').toUpperCase() === empId
         ));
+        // 2. Fallback to alias codes only if no exact match exists
+        if (!match) {
+          match = allEmps.find(e => e && Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === empId));
+        }
         if (match && (match.employee_name || match.name)) {
           return match.employee_name || match.name;
         }

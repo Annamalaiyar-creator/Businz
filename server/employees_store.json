@@ -121,7 +121,6 @@
     "dashboard_type": "Sales",
     "status": "Active",
     "alias_codes": [
-      "SE-004",
       "SE-VRM006"
     ],
     "department": "Sales & Marketing",
@@ -154,7 +153,6 @@
     "dashboard_type": "Sales",
     "status": "Active",
     "alias_codes": [
-      "SE-002",
       "SE-VRM003"
     ],
     "department": "Sales & Marketing",
