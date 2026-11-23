@@ -68,9 +68,26 @@ if (typeof window !== 'undefined' && typeof window.Storage !== 'undefined') {
           originalSetItem.call(this, key, value);
           return;
         } catch (_) {
-          // If the payload is still too large to fit in ~5MB LocalStorage:
-          // Under AGENTS.md Rule 1: Database is the authoritative source of truth; LocalStorage is only a cache.
-          // CRITICAL: NEVER touch authentication, role, emp_id or session keys.
+          // If still full, remove only large data caches (biggest first). Login/session keys and small
+          // settings are never removed — deleting them logged users out and changed the shown user name.
+          const isCriticalKey = (k) =>
+            /^(controlroom|businz)_(is_authenticated|user_role|logged_|device_session_id|session_|saved_accounts|active_tab|sidebar_)/.test(k) ||
+            k === 'controlroom_user' || k === 'controlroom_role' || k === 'controlroom_employees_list' || k === 'controlroom_registered_codes';
+          const largeCaches = [];
+          for (let i = 0; i < this.length; i++) {
+            const k = this.key(i);
+            if (!k || k === key || isCriticalKey(k)) continue;
+            const size = (this.getItem(k) || '').length;
+            if (size > 100000) largeCaches.push({ k, size });
+          }
+          largeCaches.sort((a, b) => b.size - a.size);
+          for (const { k } of largeCaches) {
+            try { this.removeItem(k); } catch (_) {}
+            try {
+              originalSetItem.call(this, key, value);
+              return;
+            } catch (_) {}
+          }
           console.warn(`[LocalStorage] Payload too large for cache: skipped "${key}" (Database remains authoritative source of truth).`);
           return;
         }
