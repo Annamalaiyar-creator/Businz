@@ -5,6 +5,7 @@ import {
   Settings
 } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
+import { CODE_TO_SALES_NAME } from './pi/piHelpers';
 
 export const filterCompletedBomNotifications = () => [];
 export const addLiveNotification = () => {};
@@ -45,46 +46,34 @@ export default function Header({
 
   // Map userRole and logged_emp_id to person's actual name with strict role-affinity verification
   const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
-  const storedEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+  const storedEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
   const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
   let userName = '';
-  // 1. Authoritative identity: Use the stored name from login if present and valid
-  if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName !== 'Executive Leadership (CEO)') {
-    userName = storedName;
-  } else {
+
+  // 1. Authoritative resolution: Canonical sales mapping first
+  if (storedEmpId && CODE_TO_SALES_NAME[storedEmpId]) {
+    userName = CODE_TO_SALES_NAME[storedEmpId];
+  }
+
+  // 2. Authoritative resolution: Check employee directory by canonical empId
+  if (!userName) {
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
 
-      // Match strictly by storedEmpId first (e.g. SE-007, SE-001, EMP-101)
       let matchedEmp = null;
       if (storedEmpId) {
-        const emp = allEmps.find(e => e && (e.employee_code === storedEmpId || e.code === storedEmpId));
-        if (emp) {
-          const empRole = String(emp.role || '').toLowerCase();
-          const curRole = String(userRole || '').toLowerCase();
-          const isCompatible = empRole === curRole ||
-            (curRole.includes('sales') && empRole.includes('sales')) ||
-            (curRole.includes('account') && empRole.includes('account')) ||
-            (curRole.includes('dispatch') && empRole.includes('dispatch')) ||
-            (curRole.includes('production') && empRole.includes('production')) ||
-            (curRole.includes('design') && empRole.includes('design')) ||
-            (curRole.includes('admin') && empRole.includes('admin'));
-          if (isCompatible) {
-            matchedEmp = emp;
-          }
-        }
+        matchedEmp = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === storedEmpId || 
+          String(e.code || '').toUpperCase() === storedEmpId ||
+          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === storedEmpId))
+        ));
       }
-
       if (!matchedEmp && storedEmail) {
-        const emp = allEmps.find(e => e && String(e.email || '').toLowerCase() === storedEmail);
-        if (emp && String(emp.role || '').toLowerCase() === String(userRole || '').toLowerCase()) {
-          matchedEmp = emp;
-        }
+        matchedEmp = allEmps.find(e => e && String(e.email || '').toLowerCase() === storedEmail);
       }
-
       // Only match by unique role for singular leadership positions (never for shared roles like Sales/Floor)
       if (!matchedEmp && userRole) {
         const normR = String(userRole).toLowerCase();
@@ -98,6 +87,16 @@ export default function Header({
         userName = matchedEmp.employee_name || matchedEmp.name;
       }
     } catch (_) {}
+  }
+
+  // 3. Fallback to storedName if employee directory lookup wasn't available
+  if (!userName && storedName && storedName !== 'undefined' && storedName !== 'null' && storedName !== 'Executive Leadership (CEO)' && storedName !== 'Sales Executive') {
+    userName = storedName;
+  }
+
+  // Auto-heal stored name in localStorage if it was previously corrupted to another person
+  if (userName && userName !== storedName) {
+    try { localStorage.setItem('controlroom_logged_user_name', userName); } catch (_) {}
   }
 
   // Canonical role defaults if not discovered from employee directory

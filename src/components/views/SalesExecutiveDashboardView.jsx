@@ -217,23 +217,27 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   const isManagementRole = userRole === 'Sales Head' || userRole === 'Management' || isCeoOrMd;
   const loggedUserName = (() => {
     if (typeof localStorage === 'undefined') return userRole || 'Sales Executive';
-    const stored = localStorage.getItem('controlroom_logged_user_name');
-    if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') {
-      return stored.trim();
+    const empId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
+    if (empId) {
+      try {
+        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+        const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+        const match = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === empId || 
+          String(e.code || '').toUpperCase() === empId ||
+          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === empId))
+        ));
+        if (match && (match.employee_name || match.name)) {
+          return match.employee_name || match.name;
+        }
+      } catch (_) {}
     }
-    try {
-      const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-      const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-      if (match && (match.employee_name || match.name)) {
-        return match.employee_name || match.name;
-      }
-    } catch (_) {}
-    if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null') {
-      return stored.trim();
+    const stored = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') {
+      return stored;
     }
-    return userRole === 'Sales Head' ? 'Sales Head' : 'Mohit JV';
+    return userRole || 'Sales Executive';
   })();
 
   // Dynamic mobile viewport detection (<= 768px)

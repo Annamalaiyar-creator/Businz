@@ -19,6 +19,7 @@ import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCl
 import { getNextSequence } from '../../utils/sequenceGenerator';
 import WhatsAppQrModal from './WhatsAppQrModal';
 import { extractGstRate } from '../../utils/gstHelper';
+import { CODE_TO_SALES_NAME } from '../pi/piHelpers';
 import {
   getCleanCurrentUserId,
   getCurrentSalesRepName,
@@ -306,14 +307,22 @@ export default function CrmQuotationsView({
 
   // Resolve currently logged in account user's name dynamically (matching Header & auth state)
   const getActiveUserName = () => {
+    const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
     const stored = localStorage.getItem('controlroom_logged_user_name');
     if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '' && stored.toLowerCase() !== 'vijay') return stored.trim();
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      if (curEmp) {
+        const match = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === curEmp || 
+          String(e.code || '').toUpperCase() === curEmp ||
+          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
+        ));
+        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      }
     } catch (_) {}
     if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '') return stored.trim();
     try {
@@ -324,7 +333,7 @@ export default function CrmQuotationsView({
     } catch (e) {}
     if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'CEO' || userRole === 'Technical Administrator') return 'Annamalaiyar';
-    return 'Mohit JV';
+    return userRole || 'Sales Executive';
   };
 
   // Full BOM-style Quote Form state

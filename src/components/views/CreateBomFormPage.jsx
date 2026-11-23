@@ -2716,22 +2716,22 @@ export default function CreateBomFormPage(props) {
                     })();
 
                     const loggedInOperatorName = (() => {
-                      const stored = localStorage.getItem('controlroom_logged_user_name');
-                      if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') return stored.trim();
-                      try {
-                        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-                        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-                        const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-                        const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-                        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
-                      } catch (_) {}
-                      if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null') return stored.trim();
-                      const storedUser = localStorage.getItem('controlroom_logged_user');
-                      if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') return storedUser.trim();
-                      if (userRole === 'Sales Head') return 'Sales Head';
-                      if (userRole === 'Accounts Head') return 'Venkatesh';
-                      if (userRole === 'Accounts Executive') return 'Priya';
-                      if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
+                      const empId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
+                      if (empId) {
+                        try {
+                          const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+                          const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+                          const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+                          const match = allEmps.find(e => e && (
+                            String(e.employee_code || '').toUpperCase() === empId || 
+                            String(e.code || '').toUpperCase() === empId ||
+                            (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === empId))
+                          ));
+                          if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+                        } catch (_) {}
+                      }
+                      const stored = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+                      if (stored && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') return stored;
                       return userRole || 'Sales Executive';
                     })();
                     const loggedInOperatorId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();

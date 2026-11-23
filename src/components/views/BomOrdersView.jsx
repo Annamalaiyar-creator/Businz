@@ -840,49 +840,39 @@ export default function BomOrdersView(props) {
     return { isValid: missingList.length === 0, missingList, errors };
   };
   const getEffectiveSalesPerson = () => {
-    const storedName = localStorage.getItem('controlroom_logged_user_name');
-    if (storedName && storedName.trim() && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') {
-      return storedName.trim();
-    }
+    const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
-      if (match && (match.employee_name || match.name)) {
-        return match.employee_name || match.name;
+      if (curEmp) {
+        const match = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === curEmp || 
+          String(e.code || '').toUpperCase() === curEmp ||
+          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
+        ));
+        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
       }
     } catch (_) {}
-    if (storedName && storedName.trim() && storedName !== 'undefined' && storedName !== 'null') {
-      return storedName.trim();
+    const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') {
+      return storedName;
     }
-    const storedUser = localStorage.getItem('controlroom_logged_user');
-    if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') {
-      return storedUser.trim();
-    }
-    const storedEmp = localStorage.getItem('controlroom_logged_emp_id');
-    if (storedEmp && storedEmp.trim() && storedEmp !== 'undefined' && storedEmp !== 'null') {
-      return storedEmp.trim();
-    }
-    if (userRole === 'Sales Head') return 'Sales Head';
-    if (userRole === 'Accounts Head') return 'Venkatesh';
-    if (userRole === 'Accounts Executive') return 'Priya';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
     if (userRole === 'Procurement Head') return 'ARUN BOOPATHI M';
     if (userRole === 'Production Head') return 'Senthil Kumar';
-    if (userRole === 'Sales Executive') {
-      const stored = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') || '' : '').trim();
-      if (stored && stored !== 'undefined' && stored !== 'null' && stored !== 'Sales Executive') return stored;
-      return 'Sales Executive';
-    }
+    if (userRole === 'Accounts Head') return 'Venkatesh';
+    if (userRole === 'Accounts Executive') return 'Priya';
     return userRole || 'Sales Executive';
   };
   const defaultSalesPersonName = getEffectiveSalesPerson();
   const [newBomSalesPerson, setNewBomSalesPerson] = useState(defaultSalesPersonName);
 
-  const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '').trim();
-  const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+  const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '').trim().toUpperCase();
+  const rawEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
+  const currentEmpName = (currentEmpId && CODE_TO_SALES_NAME[currentEmpId]) ? CODE_TO_SALES_NAME[currentEmpId] : rawEmpName;
   const currentUserName = props.currentUserName || props.userName || props.currentUser?.name || currentEmpName || defaultSalesPersonName || userRole;
 
   const curCode = (currentEmpId || '').trim().toUpperCase();
